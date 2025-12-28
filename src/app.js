@@ -656,66 +656,57 @@ const dashboardMenu = async (service) => {
  * Handles the update process with auto-restart
  */
 const handleUpdate = async () => {
-  const { spawn } = require('child_process');
+  const { spawn, execSync: exec } = require('child_process');
   const pkg = require('../package.json');
   const currentVersion = pkg.version;
   const spinner = ora('Checking for updates...').start();
   
   try {
-    const cliPath = path.resolve(__dirname, '..');
-    
-    // Get current commit
-    const beforeCommit = execSync('git rev-parse --short HEAD', { cwd: cliPath, stdio: 'pipe' }).toString().trim();
-    
-    // Fetch to check for updates
-    execSync('git fetch origin main', { cwd: cliPath, stdio: 'pipe' });
-    
-    // Check if behind
-    const behindCount = execSync('git rev-list HEAD..origin/main --count', { cwd: cliPath, stdio: 'pipe' }).toString().trim();
-    
-    if (parseInt(behindCount) === 0) {
-      spinner.succeed('Already up to date!');
-      console.log(chalk.cyan(`  Version: v${currentVersion}`));
-      console.log(chalk.gray(`  Commit: ${beforeCommit}`));
+    // Check latest version on npm
+    spinner.text = 'Checking npm registry...';
+    let latestVersion;
+    try {
+      latestVersion = exec('npm view hedgequantx version', { stdio: 'pipe' }).toString().trim();
+    } catch (e) {
+      spinner.fail('Cannot reach npm registry');
       return;
     }
     
-    // Stash local changes
-    spinner.text = 'Stashing local changes...';
-    try {
-      execSync('git stash --include-untracked', { cwd: cliPath, stdio: 'pipe' });
-    } catch (e) {
-      // If stash fails, reset
-      execSync('git checkout -- .', { cwd: cliPath, stdio: 'pipe' });
+    if (currentVersion === latestVersion) {
+      spinner.succeed('Already up to date!');
+      console.log(chalk.cyan(`  Version: v${currentVersion}`));
+      return;
     }
     
-    // Pull latest
-    spinner.text = 'Downloading updates...';
-    execSync('git pull origin main', { cwd: cliPath, stdio: 'pipe' });
-    const afterCommit = execSync('git rev-parse --short HEAD', { cwd: cliPath, stdio: 'pipe' }).toString().trim();
-    
-    // Install dependencies
-    spinner.text = 'Installing dependencies...';
+    // Update via npm
+    spinner.text = `Updating v${currentVersion} -> v${latestVersion}...`;
     try {
-      execSync('npm install --silent', { cwd: cliPath, stdio: 'pipe' });
-    } catch (e) { /* ignore */ }
-    
-    // Get new version
-    delete require.cache[require.resolve('../package.json')];
-    const newPkg = require('../package.json');
-    const newVersion = newPkg.version;
+      exec('npm install -g hedgequantx@latest', { stdio: 'pipe' });
+    } catch (e) {
+      // Try with sudo on Unix systems
+      if (process.platform !== 'win32') {
+        try {
+          exec('sudo npm install -g hedgequantx@latest', { stdio: 'pipe' });
+        } catch (e2) {
+          spinner.fail('Update failed - try manually: npm install -g hedgequantx@latest');
+          return;
+        }
+      } else {
+        spinner.fail('Update failed - try manually: npm install -g hedgequantx@latest');
+        return;
+      }
+    }
     
     spinner.succeed('CLI updated!');
     console.log();
-    console.log(chalk.green(`  Version: v${currentVersion} -> v${newVersion}`));
-    console.log(chalk.gray(`  Commits: ${beforeCommit} -> ${afterCommit} (${behindCount} new)`));
+    console.log(chalk.green(`  Version: v${currentVersion} -> v${latestVersion}`));
     console.log();
     console.log(chalk.cyan('  Restarting...'));
     console.log();
     
     // Restart CLI
-    const child = spawn(process.argv[0], [path.join(cliPath, 'bin', 'cli.js')], {
-      cwd: cliPath,
+    const cliPath = exec('npm root -g', { stdio: 'pipe' }).toString().trim();
+    const child = spawn(process.argv[0], [path.join(cliPath, 'hedgequantx', 'bin', 'cli.js')], {
       stdio: 'inherit',
       shell: true
     });
@@ -729,6 +720,7 @@ const handleUpdate = async () => {
     
   } catch (error) {
     spinner.fail('Update failed: ' + error.message);
+    console.log(chalk.yellow('  Try manually: npm install -g hedgequantx@latest'));
   }
 };
 
