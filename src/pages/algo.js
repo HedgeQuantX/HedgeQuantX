@@ -215,15 +215,57 @@ const selectSymbolMenu = async (service, account) => {
       filter: (input) => parseInt(input)
     }
   ]);
+
+  // Risk Management
+  console.log();
+  console.log(chalk.cyan.bold('  Risk Management'));
+  console.log(chalk.gray('  Set your daily target and maximum risk to auto-stop the algo.'));
+  console.log();
+
+  const { dailyTarget } = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'dailyTarget',
+      message: chalk.white.bold('Daily Target ($):'),
+      default: '500',
+      validate: (input) => {
+        const num = parseFloat(input);
+        if (isNaN(num) || num <= 0) {
+          return 'Please enter a valid amount greater than 0';
+        }
+        return true;
+      },
+      filter: (input) => parseFloat(input)
+    }
+  ]);
+
+  const { maxRisk } = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'maxRisk',
+      message: chalk.white.bold('Max Risk ($):'),
+      default: '200',
+      validate: (input) => {
+        const num = parseFloat(input);
+        if (isNaN(num) || num <= 0) {
+          return 'Please enter a valid amount greater than 0';
+        }
+        return true;
+      },
+      filter: (input) => parseFloat(input)
+    }
+  ]);
   
   // Confirmation
   console.log();
   console.log(chalk.gray(getSeparator()));
   console.log(chalk.white.bold('  Algo Configuration:'));
   console.log(chalk.gray(getSeparator()));
-  console.log(chalk.white(`  Account:   ${chalk.cyan(accountName)}`));
-  console.log(chalk.white(`  Symbol:    ${chalk.cyan(contract.name || selectedSymbol.value)}`));
-  console.log(chalk.white(`  Contracts: ${chalk.cyan(contracts)}`));
+  console.log(chalk.white(`  Account:      ${chalk.cyan(accountName)}`));
+  console.log(chalk.white(`  Symbol:       ${chalk.cyan(contract.name || selectedSymbol.value)}`));
+  console.log(chalk.white(`  Contracts:    ${chalk.cyan(contracts)}`));
+  console.log(chalk.white(`  Daily Target: ${chalk.green('$' + dailyTarget.toFixed(2))}`));
+  console.log(chalk.white(`  Max Risk:     ${chalk.red('$' + maxRisk.toFixed(2))}`));
   console.log(chalk.gray(getSeparator()));
   console.log();
   
@@ -244,13 +286,13 @@ const selectSymbolMenu = async (service, account) => {
     return;
   }
   
-  await launchAlgo(service, account, contract, contracts);
+  await launchAlgo(service, account, contract, contracts, dailyTarget, maxRisk);
 };
 
 /**
  * Launch Algo with HQX Server Connection
  */
-const launchAlgo = async (service, account, contract, numContracts) => {
+const launchAlgo = async (service, account, contract, numContracts, dailyTarget, maxRisk) => {
   const accountName = account.accountName || account.name || 'Account #' + account.accountId;
   const symbolName = contract.name || contract.symbol || contract.id;
   const symbol = contract.symbol || contract.id;
@@ -263,10 +305,11 @@ const launchAlgo = async (service, account, contract, numContracts) => {
   const hqxServer = new HQXServerService();
   let hqxConnected = false;
   let algoRunning = false;
+  let stopReason = null;
   
   // Activity logs
   const logs = [];
-  const MAX_LOGS = 12;
+  const MAX_LOGS = 10;
   
   // Stats
   let stats = {
@@ -300,6 +343,15 @@ const launchAlgo = async (service, account, contract, numContracts) => {
     console.log(chalk.white(`  Contracts: ${chalk.cyan(numContracts)}`));
     console.log(chalk.white(`  Mode:      ${hqxConnected ? chalk.green('LIVE') : chalk.yellow('OFFLINE')}`));
     console.log(chalk.gray(getSeparator()));
+
+    // Risk Management
+    console.log();
+    const targetProgress = Math.min(100, Math.max(0, (stats.pnl / dailyTarget) * 100));
+    const riskProgress = Math.min(100, (Math.abs(Math.min(0, stats.pnl)) / maxRisk) * 100);
+    console.log(chalk.white('  Target:  ') + chalk.green('$' + dailyTarget.toFixed(2)) + 
+      chalk.gray(' | Progress: ') + (targetProgress >= 100 ? chalk.green.bold(targetProgress.toFixed(1) + '%') : chalk.yellow(targetProgress.toFixed(1) + '%')));
+    console.log(chalk.white('  Risk:    ') + chalk.red('$' + maxRisk.toFixed(2)) + 
+      chalk.gray(' | Used: ') + (riskProgress >= 100 ? chalk.red.bold(riskProgress.toFixed(1) + '%') : chalk.cyan(riskProgress.toFixed(1) + '%')));
     
     // Stats bar
     console.log();
@@ -308,7 +360,7 @@ const launchAlgo = async (service, account, contract, numContracts) => {
       chalk.gray(' | Wins: ') + chalk.green(stats.wins) + 
       chalk.gray(' | Losses: ') + chalk.red(stats.losses) + 
       chalk.gray(' | Win Rate: ') + chalk.yellow(stats.winRate + '%') +
-      chalk.gray(' | P&L: ') + (stats.pnl >= 0 ? chalk.green('$' + stats.pnl.toFixed(2)) : chalk.red('-$' + Math.abs(stats.pnl).toFixed(2)))
+      chalk.gray(' | P&L: ') + (stats.pnl >= 0 ? chalk.green('+$' + stats.pnl.toFixed(2)) : chalk.red('-$' + Math.abs(stats.pnl).toFixed(2)))
     );
     console.log();
     
@@ -409,6 +461,27 @@ const launchAlgo = async (service, account, contract, numContracts) => {
       addLog('trade', `Closed -$${Math.abs(data.pnl).toFixed(2)} (${data.reason || 'stop_loss'})`);
     }
     stats.winRate = stats.trades > 0 ? ((stats.wins / stats.trades) * 100).toFixed(1) : '0.0';
+    
+    // Check daily target
+    if (stats.pnl >= dailyTarget) {
+      stopReason = 'target';
+      addLog('success', `Daily target reached! +$${stats.pnl.toFixed(2)}`);
+      algoRunning = false;
+      if (hqxConnected) {
+        hqxServer.stopAlgo();
+      }
+    }
+    
+    // Check max risk
+    if (stats.pnl <= -maxRisk) {
+      stopReason = 'risk';
+      addLog('error', `Max risk reached! -$${Math.abs(stats.pnl).toFixed(2)}`);
+      algoRunning = false;
+      if (hqxConnected) {
+        hqxServer.stopAlgo();
+      }
+    }
+    
     displayUI();
   });
   
@@ -431,13 +504,14 @@ const launchAlgo = async (service, account, contract, numContracts) => {
   // Start algo
   if (hqxConnected) {
     addLog('info', 'Starting HQX Ultra-Scalping...');
+    addLog('info', `Target: $${dailyTarget.toFixed(2)} | Risk: $${maxRisk.toFixed(2)}`);
     hqxServer.startAlgo({
       accountId: account.accountId,
       contractId: contract.id || contract.contractId,
       symbol: symbol,
       contracts: numContracts,
-      dailyTarget: 500,  // Default daily target
-      maxRisk: 200,      // Default max risk
+      dailyTarget: dailyTarget,
+      maxRisk: maxRisk,
       propfirm: account.propfirm || 'projectx',
       propfirmToken: service.getToken ? service.getToken() : null
     });
@@ -450,14 +524,44 @@ const launchAlgo = async (service, account, contract, numContracts) => {
   
   displayUI();
   
-  // Wait for X key to stop
-  await waitForStopKey();
+  // Wait for X key OR auto-stop (target/risk reached)
+  await new Promise((resolve) => {
+    // Check for auto-stop every 500ms
+    const checkInterval = setInterval(() => {
+      if (!algoRunning || stopReason) {
+        clearInterval(checkInterval);
+        if (process.stdin.isTTY && process.stdin.isRaw) {
+          process.stdin.setRawMode(false);
+        }
+        resolve();
+      }
+    }, 500);
+
+    // Also listen for X key
+    if (process.stdin.isTTY) {
+      readline.emitKeypressEvents(process.stdin);
+      process.stdin.setRawMode(true);
+      
+      const onKeypress = (str, key) => {
+        if (key && (key.name === 'x' || key.name === 'X' || (key.ctrl && key.name === 'c'))) {
+          clearInterval(checkInterval);
+          process.stdin.setRawMode(false);
+          process.stdin.removeListener('keypress', onKeypress);
+          resolve();
+        }
+      };
+      
+      process.stdin.on('keypress', onKeypress);
+    }
+  });
   
   // Stop algo
-  addLog('warning', 'Stopping algo...');
-  displayUI();
+  if (!stopReason) {
+    addLog('warning', 'Stopping algo...');
+    displayUI();
+  }
   
-  if (hqxConnected) {
+  if (hqxConnected && algoRunning) {
     hqxServer.stopAlgo();
   }
   
@@ -465,18 +569,27 @@ const launchAlgo = async (service, account, contract, numContracts) => {
   algoRunning = false;
   
   console.log();
-  console.log(chalk.green('  [OK] Algo stopped successfully'));
+  if (stopReason === 'target') {
+    console.log(chalk.green.bold('  [OK] Daily target reached! Algo stopped.'));
+  } else if (stopReason === 'risk') {
+    console.log(chalk.red.bold('  [X] Max risk reached! Algo stopped.'));
+  } else {
+    console.log(chalk.yellow('  [OK] Algo stopped by user'));
+  }
   console.log();
   
   // Final stats
   console.log(chalk.gray(getSeparator()));
   console.log(chalk.white.bold('  Session Summary'));
   console.log(chalk.gray(getSeparator()));
+  console.log(chalk.white(`  Daily Target:  ${chalk.green('$' + dailyTarget.toFixed(2))}`));
+  console.log(chalk.white(`  Max Risk:      ${chalk.red('$' + maxRisk.toFixed(2))}`));
+  console.log(chalk.white(`  Final P&L:     ${stats.pnl >= 0 ? chalk.green('+$' + stats.pnl.toFixed(2)) : chalk.red('-$' + Math.abs(stats.pnl).toFixed(2))}`));
+  console.log(chalk.gray(getSeparator()));
   console.log(chalk.white(`  Total Trades:  ${chalk.cyan(stats.trades)}`));
   console.log(chalk.white(`  Wins:          ${chalk.green(stats.wins)}`));
   console.log(chalk.white(`  Losses:        ${chalk.red(stats.losses)}`));
   console.log(chalk.white(`  Win Rate:      ${chalk.yellow(stats.winRate + '%')}`));
-  console.log(chalk.white(`  Total P&L:     ${stats.pnl >= 0 ? chalk.green('+$' + stats.pnl.toFixed(2)) : chalk.red('-$' + Math.abs(stats.pnl).toFixed(2))}`));
   console.log(chalk.gray(getSeparator()));
   console.log();
   
@@ -1032,11 +1145,40 @@ const launchCopyTrading = async (config) => {
     }
   }, 2000); // Check every 2 seconds
 
-  // Wait for stop key
-  await waitForStopKey();
+  // Wait for X key OR auto-stop (target/risk reached)
+  await new Promise((resolve) => {
+    // Check for auto-stop every 500ms
+    const checkInterval = setInterval(() => {
+      if (!isRunning || stopReason) {
+        clearInterval(checkInterval);
+        clearInterval(monitorInterval);
+        if (process.stdin.isTTY && process.stdin.isRaw) {
+          process.stdin.setRawMode(false);
+        }
+        resolve();
+      }
+    }, 500);
+
+    // Also listen for X key
+    if (process.stdin.isTTY) {
+      readline.emitKeypressEvents(process.stdin);
+      process.stdin.setRawMode(true);
+      
+      const onKeypress = (str, key) => {
+        if (key && (key.name === 'x' || key.name === 'X' || (key.ctrl && key.name === 'c'))) {
+          clearInterval(checkInterval);
+          clearInterval(monitorInterval);
+          process.stdin.setRawMode(false);
+          process.stdin.removeListener('keypress', onKeypress);
+          resolve();
+        }
+      };
+      
+      process.stdin.on('keypress', onKeypress);
+    }
+  });
 
   // Cleanup
-  clearInterval(monitorInterval);
   isRunning = false;
 
   console.log();
