@@ -193,17 +193,20 @@ const projectXMenu = async () => {
   console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PROPFIRM', innerWidth)) + chalk.cyan('║'));
   console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
   
-  // Display in 3 columns
+  // Display in 3 columns with fixed width alignment
   const rows = Math.ceil(numbered.length / numCols);
+  const maxNum = numbered.length;
+  const numWidth = maxNum >= 10 ? 4 : 3; // [XX] or [X]
+  
   for (let row = 0; row < rows; row++) {
     let line = '';
     for (let col = 0; col < numCols; col++) {
       const idx = row + col * rows;
       if (idx < numbered.length) {
         const item = numbered[idx];
-        const text = `[${item.num}] ${item.name}`;
-        const coloredText = chalk.cyan(`[${item.num}]`) + ' ' + chalk.white(item.name);
-        const textLen = text.length;
+        const numStr = item.num.toString().padStart(2, ' ');
+        const coloredText = chalk.cyan(`[${numStr}]`) + ' ' + chalk.white(item.name);
+        const textLen = 4 + 1 + item.name.length; // [XX] + space + name
         const padding = colWidth - textLen - 2;
         line += '  ' + coloredText + ' '.repeat(Math.max(0, padding));
       } else {
