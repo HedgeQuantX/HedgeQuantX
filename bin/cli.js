@@ -67,7 +67,9 @@ const mainMenu = async () => {
         { name: chalk.green('Tradovate'), value: 'tradovate' },
         new inquirer.Separator(),
         { name: chalk.red('Exit'), value: 'exit' }
-      ]
+      ],
+      pageSize: 10,
+      loop: false
     }
   ]);
 
@@ -91,7 +93,8 @@ const projectXMenu = async () => {
         new inquirer.Separator(),
         { name: chalk.yellow('< Back'), value: 'back' }
       ],
-      pageSize: 15
+      pageSize: 25,
+      loop: false
     }
   ]);
 
@@ -151,7 +154,9 @@ const dashboardMenu = async (service) => {
         new inquirer.Separator(),
         { name: chalk.cyan('Refresh CLI (git pull)'), value: 'refresh' },
         { name: chalk.yellow('Disconnect'), value: 'disconnect' }
-      ]
+      ],
+      pageSize: 10,
+      loop: false
     }
   ]);
 
