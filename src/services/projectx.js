@@ -13,7 +13,7 @@ const PROPFIRM_CONFIG = {
   topstep: {
     name: 'Topstep',
     userApi: 'userapi.topstepx.com',
-    gatewayApi: 'api.topstepx.projectx.com'
+    gatewayApi: 'gateway.topstepx.com'
   },
   alpha_futures: {
     name: 'Alpha Futures',

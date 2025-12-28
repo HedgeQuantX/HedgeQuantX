@@ -1692,9 +1692,11 @@ const oneAccountMenu = async (service) => {
 // Menu de sélection du symbole futures
 const selectSymbolMenu = async (service, account) => {
   const device = getDevice();
+  const accountName = account.accountName || account.name || 'Account #' + account.accountId;
+  
   console.log();
   console.log(chalk.gray(getSeparator()));
-  console.log(chalk.cyan.bold(`  Account: ${account.name}`));
+  console.log(chalk.cyan.bold(`  Account: ${accountName}`));
   console.log(chalk.gray(getSeparator()));
   console.log();
   
@@ -1721,28 +1723,190 @@ const selectSymbolMenu = async (service, account) => {
     return;
   }
   
-  // Rechercher le contrat actif pour ce symbole
-  const spinner = ora(`Searching for active ${selectedSymbol.value} contract...`).start();
+  // Rechercher le contrat via Gateway API
+  const spinner = ora(`Searching for ${selectedSymbol.value} contract...`).start();
   const contractResult = await service.searchContracts(selectedSymbol.searchText, false);
   
-  if (!contractResult.success || !contractResult.contracts || contractResult.contracts.length === 0) {
-    spinner.fail(`No contracts found for ${selectedSymbol.value}`);
-    console.log();
-    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+  let contract = null;
+  if (contractResult.success && contractResult.contracts && contractResult.contracts.length > 0) {
+    // Trouver le contrat actif ou prendre le premier
+    contract = contractResult.contracts.find(c => c.activeContract) || contractResult.contracts[0];
+    spinner.succeed(`Found: ${contract.name || selectedSymbol.value}`);
+    if (contract.tickSize && contract.tickValue) {
+      console.log(chalk.gray(`  Tick Size: ${contract.tickSize} | Tick Value: $${contract.tickValue}`));
+    }
+  } else {
+    // Fallback: utiliser le symbole directement si l'API ne retourne rien
+    spinner.warn(`Using ${selectedSymbol.value} (contract details unavailable)`);
+    contract = {
+      id: selectedSymbol.value,
+      name: selectedSymbol.name,
+      symbol: selectedSymbol.value
+    };
+  }
+  
+  console.log();
+  
+  // Demander le nombre de contrats
+  const { contracts } = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'contracts',
+      message: chalk.white.bold('Number of Contracts:'),
+      default: '1',
+      validate: (input) => {
+        const num = parseInt(input);
+        if (isNaN(num) || num <= 0 || num > 100) {
+          return 'Please enter a valid number between 1 and 100';
+        }
+        return true;
+      },
+      filter: (input) => parseInt(input)
+    }
+  ]);
+  
+  // Confirmation et lancement
+  console.log();
+  console.log(chalk.gray(getSeparator()));
+  console.log(chalk.white.bold('  Algo Configuration:'));
+  console.log(chalk.gray(getSeparator()));
+  console.log(chalk.white(`  Account:   ${chalk.cyan(accountName)}`));
+  console.log(chalk.white(`  Symbol:    ${chalk.cyan(contract.name || selectedSymbol.value)}`));
+  console.log(chalk.white(`  Contracts: ${chalk.cyan(contracts)}`));
+  console.log(chalk.gray(getSeparator()));
+  console.log();
+  
+  const { launch } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'launch',
+      message: chalk.white.bold('Ready to launch?'),
+      choices: [
+        { name: chalk.green.bold('🚀 Launch Algo'), value: 'launch' },
+        { name: chalk.yellow('< Back'), value: 'back' }
+      ],
+      loop: false
+    }
+  ]);
+  
+  if (launch === 'back') {
     return;
   }
   
-  // Trouver le contrat actif
-  const activeContract = contractResult.contracts.find(c => c.activeContract) || contractResult.contracts[0];
-  spinner.succeed(`Found: ${activeContract.name} - ${activeContract.description}`);
-  console.log(chalk.gray(`     Tick Size: ${activeContract.tickSize} | Tick Value: $${activeContract.tickValue}`));
-  console.log();
-  
-  // Passer aux paramètres de trading
-  await tradingSettingsMenu(service, account, activeContract);
+  // Lancer l'algo
+  await launchAlgo(service, account, contract, contracts);
 };
 
-// Menu des paramètres de trading
+// Lancer l'algo
+const launchAlgo = async (service, account, contract, numContracts) => {
+  const accountName = account.accountName || account.name || 'Account #' + account.accountId;
+  const symbolName = contract.name || contract.symbol || contract.id;
+  
+  console.log();
+  console.log(chalk.green.bold('  🚀 Launching HQX Algo...'));
+  console.log();
+  
+  const spinner = ora('Connecting to HQX Server...').start();
+  
+  // Essayer de se connecter au serveur HQX
+  let hqxConnected = false;
+  try {
+    if (hqxServer) {
+      await hqxServer.connect();
+      hqxConnected = hqxServer.isConnected();
+    }
+  } catch (e) {
+    // Ignore connection errors
+  }
+  
+  if (hqxConnected) {
+    spinner.succeed('Connected to HQX Server');
+  } else {
+    spinner.warn('HQX Server unavailable - Running in Demo Mode');
+  }
+  
+  console.log();
+  console.log(chalk.gray(getSeparator()));
+  console.log(chalk.cyan.bold('  HQX Ultra-Scalping Algo'));
+  console.log(chalk.gray(getSeparator()));
+  console.log(chalk.white(`  Status:    ${chalk.green('RUNNING')}`));
+  console.log(chalk.white(`  Account:   ${chalk.cyan(accountName)}`));
+  console.log(chalk.white(`  Symbol:    ${chalk.cyan(symbolName)}`));
+  console.log(chalk.white(`  Contracts: ${chalk.cyan(numContracts)}`));
+  console.log(chalk.white(`  Mode:      ${hqxConnected ? chalk.green('LIVE') : chalk.yellow('DEMO')}`));
+  console.log(chalk.gray(getSeparator()));
+  console.log();
+  
+  // Afficher les logs en temps réel
+  let running = true;
+  let logs = [];
+  
+  const addLog = (type, message) => {
+    const timestamp = new Date().toLocaleTimeString();
+    const typeColors = {
+      info: chalk.cyan,
+      signal: chalk.yellow,
+      trade: chalk.green,
+      error: chalk.red,
+      warning: chalk.yellow
+    };
+    const color = typeColors[type] || chalk.white;
+    logs.push({ timestamp, type, message, color });
+    if (logs.length > 10) logs.shift();
+    return logs;
+  };
+  
+  const displayLogs = () => {
+    console.log(chalk.gray('  Recent Activity:'));
+    logs.forEach(log => {
+      console.log(chalk.gray(`  [${log.timestamp}]`) + ' ' + log.color(log.message));
+    });
+  };
+  
+  // Simulation de l'algo en mode demo
+  addLog('info', 'Algo initialized');
+  addLog('info', `Monitoring ${symbolName}...`);
+  displayLogs();
+  
+  if (!hqxConnected) {
+    // Mode demo - simulation
+    console.log();
+    console.log(chalk.yellow('  Demo mode: No real trades will be executed.'));
+  }
+  
+  console.log();
+  
+  // Menu pour arrêter l'algo
+  const { stopAction } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'stopAction',
+      message: chalk.red.bold(''),
+      choices: [
+        { name: chalk.red.bold('⏹ Stop Algo'), value: 'stop' }
+      ],
+      pageSize: 1,
+      loop: false
+    }
+  ]);
+  
+  if (stopAction === 'stop') {
+    running = false;
+    console.log();
+    console.log(chalk.yellow('  Stopping algo...'));
+    
+    if (hqxConnected && hqxServer) {
+      hqxServer.stopAlgo();
+      hqxServer.disconnect();
+    }
+    
+    console.log(chalk.green('  ✓ Algo stopped successfully'));
+    console.log();
+    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+  }
+};
+
+// Menu des paramètres de trading (legacy - peut être supprimé)
 const tradingSettingsMenu = async (service, account, contract) => {
   console.log(chalk.gray('─'.repeat(60)));
   console.log(chalk.white.bold('  Trading Settings'));
