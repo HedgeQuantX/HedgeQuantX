@@ -354,22 +354,37 @@ const banner = async () => {
       verticalLayout: 'default'
     });
     
-    console.log(chalk.cyan(logoText));
+    // Remove trailing empty lines from logo
+    const logoLines = logoText.split('\n').filter(line => line.trim().length > 0);
+    console.log(chalk.cyan(logoLines.join('\n')));
     
     // Get logo width (first line length)
-    const logoWidth = logoText.split('\n')[0].length;
+    const logoWidth = logoLines[0].length;
     
-    console.log(chalk.gray('═'.repeat(logoWidth)));
+    // Helper to center text and pad to full width
+    const centerLine = (text, width) => {
+      const textLen = text.replace(/\x1b\[[0-9;]*m/g, '').length; // Remove ANSI codes for length calc
+      const leftPad = Math.floor((width - textLen) / 2);
+      const rightPad = width - textLen - leftPad;
+      return ' '.repeat(leftPad) + text + ' '.repeat(rightPad);
+    };
+    
+    console.log(chalk.cyan('╠' + '═'.repeat(logoWidth - 2) + '╣'));
     
     // Always show tagline centered
     const tagline = 'Prop Futures Algo Trading';
     const version = 'v1.0.0';
-    const fullText = tagline + '  ' + version;
-    const leftPad = Math.floor((logoWidth - fullText.length) / 2);
-    console.log(' '.repeat(leftPad) + chalk.yellow.bold(tagline) + '  ' + chalk.gray(version));
+    const taglineText = chalk.yellow.bold(tagline) + '  ' + chalk.gray(version);
+    const taglineLen = tagline.length + 2 + version.length;
+    const taglineLeftPad = Math.floor((logoWidth - 2 - taglineLen) / 2);
+    const taglineRightPad = logoWidth - 2 - taglineLen - taglineLeftPad;
+    console.log(chalk.cyan('║') + ' '.repeat(taglineLeftPad) + taglineText + ' '.repeat(taglineRightPad) + chalk.cyan('║'));
     
     // Show stats if connected
     if (statsInfo) {
+      // Separator between tagline and stats
+      console.log(chalk.cyan('╠' + '═'.repeat(logoWidth - 2) + '╣'));
+      
       const pnlColor = statsInfo.pnl >= 0 ? chalk.green : chalk.red;
       const pnlSign = statsInfo.pnl >= 0 ? '+' : '';
       
@@ -379,20 +394,19 @@ const banner = async () => {
       const balStr = `Balance: $${statsInfo.balance.toLocaleString()}`;
       const pnlStr = `P&L: ${pnlSign}$${statsInfo.pnl.toLocaleString()} (${statsInfo.pnlPercent}%)`;
       
-      // Calculate spacing for centered stats
-      const statsText = `${connStr}    ${accStr}    ${balStr}    ${pnlStr}`;
-      const statsLeftPad = Math.floor((logoWidth - statsText.length) / 2);
+      const statsLen = connStr.length + 4 + accStr.length + 4 + balStr.length + 4 + pnlStr.length;
+      const statsLeftPad = Math.floor((logoWidth - 2 - statsLen) / 2);
+      const statsRightPad = logoWidth - 2 - statsLen - statsLeftPad;
       
-      console.log(
-        ' '.repeat(Math.max(0, statsLeftPad)) +
+      console.log(chalk.cyan('║') + ' '.repeat(statsLeftPad) +
         chalk.white(connStr) + '    ' +
         chalk.white(accStr) + '    ' +
         chalk.green(balStr) + '    ' +
-        pnlColor(pnlStr)
+        pnlColor(pnlStr) + ' '.repeat(statsRightPad) + chalk.cyan('║')
       );
     }
     
-    console.log(chalk.gray('═'.repeat(logoWidth)));
+    console.log(chalk.cyan('╚' + '═'.repeat(logoWidth - 2) + '╝'));
     console.log();
   }
 };
