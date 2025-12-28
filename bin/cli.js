@@ -1647,8 +1647,8 @@ const oneAccountMenu = async (service) => {
     return;
   }
   
-  // Filtrer seulement les comptes actifs (status === 1)
-  const activeAccounts = result.accounts.filter(acc => acc.status === 1);
+  // Filtrer seulement les comptes actifs (status === 0 = Active)
+  const activeAccounts = result.accounts.filter(acc => acc.status === 0);
   
   if (activeAccounts.length === 0) {
     spinner.fail('No active accounts found');
