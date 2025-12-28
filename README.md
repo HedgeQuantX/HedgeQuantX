@@ -63,59 +63,31 @@ hedgequantx version
 
 ---
 
-## Supported Prop Firms
+## Supported Prop Firms (37)
 
-### ProjectX (19 firms)
+| ProjectX (19) | Rithmic (16) | Tradovate (2) |
+|---------------|--------------|---------------|
+| TopStep | Apex | Apex |
+| Alpha Futures | TopstepTrader | TakeProfitTrader |
+| TickTickTrader | MES Capital | |
+| Bulenox | Bulenox | |
+| TradeDay | TradeFundrr | |
+| Blusky | TheTradingPit | |
+| Goat Futures | FundedFuturesNetwork | |
+| The Futures Desk | PropShopTrader | |
+| DayTraders | 4PropTrader | |
+| E8 Futures | DayTraders.com | |
+| Blue Guardian Futures | 10XFutures | |
+| FuturesElite | LucidTrading | |
+| FXIFY | ThriveTrading | |
+| Hola Prime | LegendsTrading | |
+| Top One Futures | Earn2Trade | |
+| Funding Futures | Tradesea | |
+| TX3 Funding | | |
+| Lucid Trading | | |
+| Tradeify | | |
 
-| Firm | Status |
-|------|--------|
-| TopStep | Active |
-| Alpha Futures | Active |
-| TickTickTrader | Active |
-| Bulenox | Active |
-| TradeDay | Active |
-| Blusky | Active |
-| Goat Futures | Active |
-| The Futures Desk | Active |
-| DayTraders | Active |
-| E8 Futures | Active |
-| Blue Guardian Futures | Active |
-| FuturesElite | Active |
-| FXIFY | Active |
-| Hola Prime | Active |
-| Top One Futures | Active |
-| Funding Futures | Active |
-| TX3 Funding | Active |
-| Lucid Trading | Active |
-| Tradeify | Active |
-
-### Tradovate (2 firms)
-
-| Firm | Status |
-|------|--------|
-| Apex | Coming Soon |
-| TakeProfitTrader | Coming Soon |
-
-### Rithmic (16 firms)
-
-| Firm | Status |
-|------|--------|
-| Apex | Coming Soon |
-| TopstepTrader | Coming Soon |
-| MES Capital | Coming Soon |
-| Bulenox | Coming Soon |
-| TradeFundrr | Coming Soon |
-| TheTradingPit | Coming Soon |
-| FundedFuturesNetwork | Coming Soon |
-| PropShopTrader | Coming Soon |
-| 4PropTrader | Coming Soon |
-| DayTraders.com | Coming Soon |
-| 10XFutures | Coming Soon |
-| LucidTrading | Coming Soon |
-| ThriveTrading | Coming Soon |
-| LegendsTrading | Coming Soon |
-| Earn2Trade | Coming Soon |
-| Tradesea | Coming Soon |
+> **Note:** ProjectX firms are fully supported. Rithmic and Tradovate coming soon.
 
 ---
 
