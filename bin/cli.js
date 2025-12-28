@@ -251,7 +251,8 @@ const projectXPropfirms = [
 
 // Banner - Responsive for all devices
 const banner = async () => {
-  console.clear();
+  // Clear screen properly with ANSI escape codes
+  process.stdout.write('\x1b[2J\x1b[0f');
   const device = getDevice();
   
   // Get stats if connected
