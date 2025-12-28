@@ -518,12 +518,18 @@ const main = async () => {
                 const spinnerRefresh = ora('Updating CLI from GitHub...').start();
                 try {
                   const cliDir = path.resolve(__dirname, '..');
-                  execSync('git pull', { cwd: cliDir, stdio: 'pipe' });
+                  // Vérifier que c'est bien le repo HQX-CLI
+                  const gitRemote = execSync('git remote get-url origin', { cwd: cliDir, stdio: 'pipe' }).toString().trim();
+                  if (!gitRemote.includes('HQX-CLI')) {
+                    throw new Error('Not in HQX-CLI directory. Please run: cd ~/HQX-CLI && git pull');
+                  }
+                  execSync('git pull origin main', { cwd: cliDir, stdio: 'pipe' });
                   spinnerRefresh.succeed('CLI updated successfully!');
                   console.log(chalk.green('  Changes applied. Continue using the CLI.'));
                 } catch (err) {
                   spinnerRefresh.fail('Update failed');
                   console.log(chalk.red(`  Error: ${err.message}`));
+                  console.log(chalk.yellow('  Manual update: cd ~/HQX-CLI && git pull'));
                 }
                 console.log();
                 await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
