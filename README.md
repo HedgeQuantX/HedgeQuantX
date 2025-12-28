@@ -227,6 +227,7 @@ This software is for educational and informational purposes only. Trading future
 
 ## Support
 
+- Discord: [https://discord.gg/UBKCERctZu](https://discord.gg/UBKCERctZu)
 - GitHub Issues: [https://github.com/HedgeQuantX/HQX-CLI/issues](https://github.com/HedgeQuantX/HQX-CLI/issues)
 
 ---
