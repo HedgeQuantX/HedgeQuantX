@@ -335,11 +335,7 @@ class ProjectXService {
    */
   async getTradeHistory(accountId, days = 30) {
     try {
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - days);
-      
-      // Try UserAPI endpoint first: /Trade or /TradeHistory
+      // UserAPI: /Trade endpoint
       let response = await this._request(
         this.propfirm.userApi,
         `/Trade?accountId=${accountId}`,
@@ -350,38 +346,15 @@ class ProjectXService {
         return { success: true, trades: response.data };
       }
 
-      // Try alternative endpoint: /api/Trade/history
+      // UserAPI: /TradeHistory endpoint
       response = await this._request(
-        this.propfirm.gatewayApi,
-        `/api/Trade/history`,
-        'POST',
-        { 
-          accountId,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString()
-        }
+        this.propfirm.userApi,
+        `/TradeHistory?accountId=${accountId}`,
+        'GET'
       );
 
-      if (response.statusCode === 200) {
-        const trades = response.data.trades || response.data;
-        return { success: true, trades: Array.isArray(trades) ? trades : [] };
-      }
-
-      // Try /api/History/trades
-      response = await this._request(
-        this.propfirm.gatewayApi,
-        `/api/History/trades`,
-        'POST',
-        { 
-          accountId,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString()
-        }
-      );
-
-      if (response.statusCode === 200) {
-        const trades = response.data.trades || response.data;
-        return { success: true, trades: Array.isArray(trades) ? trades : [] };
+      if (response.statusCode === 200 && Array.isArray(response.data)) {
+        return { success: true, trades: response.data };
       }
 
       return { success: false, trades: [], error: 'Trade history not available' };
