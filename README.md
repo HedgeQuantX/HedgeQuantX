@@ -4,21 +4,63 @@
 
 A powerful command-line interface for connecting to prop trading firms and managing your futures trading accounts.
 
+[![npm version](https://img.shields.io/npm/v/hedgequantx.svg)](https://www.npmjs.com/package/hedgequantx)
+[![npm downloads](https://img.shields.io/npm/dm/hedgequantx.svg)](https://www.npmjs.com/package/hedgequantx)
+
 ---
 
 ## Features
 
-- Multi-platform connection support (ProjectX, Rithmic, Tradovate)
-- 19+ supported prop firms via ProjectX
-- Real-time account management
-- View positions, orders, and account stats
-- Secure authentication
+- Multi-platform support (ProjectX, Tradovate, Rithmic)
+- 37 supported prop firms
+- Multi-account connections
+- Real-time stats (balance, P&L, positions)
+- Secure encrypted session storage
+- Auto-update with restart
 
-## Supported Prop Firms (ProjectX)
+---
+
+## Installation
+
+### Option 1: NPM (Recommended)
+
+```bash
+npm install -g hedgequantx
+```
+
+### Option 2: Clone from GitHub
+
+```bash
+git clone https://github.com/HedgeQuantX/HQX-CLI.git
+cd HQX-CLI
+npm install
+npm link
+```
+
+---
+
+## Usage
+
+```bash
+# Launch CLI
+hedgequantx
+
+# Or use short alias
+hqx
+
+# Show version
+hedgequantx version
+```
+
+---
+
+## Supported Prop Firms
+
+### ProjectX (19 firms)
 
 | Firm | Status |
 |------|--------|
-| Topstep | Active |
+| TopStep | Active |
 | Alpha Futures | Active |
 | TickTickTrader | Active |
 | Bulenox | Active |
@@ -37,120 +79,73 @@ A powerful command-line interface for connecting to prop trading firms and manag
 | TX3 Funding | Active |
 | Lucid Trading | Active |
 | Tradeify | Active |
+
+### Tradovate (2 firms)
+
+| Firm | Status |
+|------|--------|
+| Apex | Coming Soon |
+| TakeProfitTrader | Coming Soon |
+
+### Rithmic (16 firms)
+
+| Firm | Status |
+|------|--------|
+| Apex | Coming Soon |
+| TopstepTrader | Coming Soon |
+| MES Capital | Coming Soon |
+| Bulenox | Coming Soon |
+| TradeFundrr | Coming Soon |
+| TheTradingPit | Coming Soon |
+| FundedFuturesNetwork | Coming Soon |
+| PropShopTrader | Coming Soon |
+| 4PropTrader | Coming Soon |
+| DayTraders.com | Coming Soon |
+| 10XFutures | Coming Soon |
+| LucidTrading | Coming Soon |
+| ThriveTrading | Coming Soon |
+| LegendsTrading | Coming Soon |
 | Earn2Trade | Coming Soon |
+| Tradesea | Coming Soon |
 
 ---
 
-## Installation
+## Dashboard Features
 
-### Prerequisites
-
-- Node.js >= 16.x
-- npm >= 8.x
-
-### Option 1: Install from GitHub
-
-```bash
-npm install -g github:HedgeQuantX/HQX-CLI
-```
-
-### Option 2: Clone and Install (Recommended)
-
-```bash
-git clone https://github.com/HedgeQuantX/HQX-CLI.git
-cd HQX-CLI
-npm install
-npm link
-```
-
----
-
-## Update
-
-To update the CLI to the latest version:
-
-```bash
-cd ~/HQX-CLI && git pull
-```
-
-That's it! Changes are applied immediately. No need to reinstall.
-
-### Option 3: Download and Install
-
-```bash
-# Download the package
-curl -L -o hedgequantx.tgz https://github.com/HedgeQuantX/HQX-CLI/releases/latest/download/hedgequantx-1.0.0.tgz
-
-# Install globally
-npm install -g hedgequantx.tgz
-```
-
----
-
-## Usage
-
-### Launch the CLI
-
-```bash
-hedgequantx
-```
-
-### CLI Commands
-
-```bash
-hedgequantx --version    # Show version
-hedgequantx --help       # Show help
-hedgequantx status       # Show system status
-```
-
----
-
-## Quick Start
-
-1. **Launch the CLI**
-   ```bash
-   hedgequantx
-   ```
-
-2. **Select your connection**
-   - ProjectX
-   - Rithmic (coming soon)
-   - Tradovate (coming soon)
-
-3. **Choose your prop firm**
-   - Select from the list of supported firms
-
-4. **Login with your credentials**
-   - Enter your username
-   - Enter your password
-
-5. **Access your dashboard**
-   - View Accounts
-   - View Positions
-   - View Orders
-   - User Info
+- **View Accounts** - List all trading accounts with balance and status
+- **View Positions** - Open positions with P&L
+- **View Orders** - Pending and filled orders
+- **View Stats** - Trading metrics, equity curve, P&L calendar
+- **User Info** - Account details
+- **Add Prop-Account** - Connect multiple prop firms
+- **Algo-Trading** - Automated trading (coming soon)
+- **Update HQX** - Auto-update with restart
 
 ---
 
 ## Screenshots
 
 ```
-██╗  ██╗███████╗██████╗  ██████╗ ███████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗██╗  ██╗
-██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝╚██╗██╔╝
-███████║█████╗  ██║  ██║██║  ███╗█████╗  ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║    ╚███╔╝ 
-██╔══██║██╔══╝  ██║  ██║██║   ██║██╔══╝  ██║▄▄ ██║██║   ██║██╔══██║██║╚██╗██║   ██║    ██╔██╗ 
-██║  ██║███████╗██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ██╔╝ ██╗
-╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝
-────────────────────────────────────────────────────────────────────────────────────────────
-  Prop Futures Algo Trading
-────────────────────────────────────────────────────────────────────────────────────────────
++==============================================================================================+
+|                                       HEDGEQUANTX                                            |
++==============================================================================================+
+|                              Prop Futures Algo Trading  v1.2.0                               |
++==============================================================================================+
+|         Connections: 1    Accounts: 2    Balance: $299,776    P&L: $-223 (-0.1%)             |
++==============================================================================================+
 
-? Choose Your Connection:
-  ❯ ProjectX
-    Rithmic
-    Tradovate
+? Dashboard:
+  > View Accounts
+    View Positions
+    View Orders
+    View Stats
+    User Info
+    Add Prop-Account
     ──────────────
-    Exit
+    Algo-Trading
+    ──────────────
+    Update HQX
+    Disconnect
 ```
 
 ---
@@ -159,46 +154,43 @@ hedgequantx status       # Show system status
 
 ```
 HQX-CLI/
-├── bin/
-│   └── cli.js              # Main CLI entry point
+├── bin/cli.js              # Entry point (48 lines)
 ├── src/
-│   ├── api/
-│   │   ├── projectx_userapi.json     # ProjectX User API spec
-│   │   └── projectx_gatewayapi.json  # ProjectX Gateway API spec
-│   └── services/
-│       └── projectx.js     # ProjectX API service
+│   ├── app.js              # Main router
+│   ├── config/             # PropFirms, constants
+│   ├── pages/              # accounts, orders, positions, stats, user
+│   ├── security/           # encryption, validation, rateLimit
+│   ├── services/           # projectx, session, hqx-server
+│   └── ui/                 # box, table, device helpers
 ├── package.json
-├── claude.md               # Development rules
 └── README.md
 ```
 
 ---
 
-## API Documentation
+## Security
 
-### ProjectX APIs
-
-- **UserAPI**: Authentication, account management, stats, trades
-  - Host: `userapi.[propfirm].projectx.com`
-  
-- **GatewayAPI**: Trading operations (orders, positions)
-  - Host: `api.[propfirm].projectx.com`
+- AES-256-GCM encrypted session storage
+- Machine-bound encryption keys
+- Input validation and sanitization
+- API rate limiting
+- Secure file permissions (0600)
 
 ---
 
-## Development
+## Update
 
-### Run in development mode
+The CLI has a built-in update feature:
+
+1. Select **Update HQX** from the dashboard
+2. CLI pulls latest changes from GitHub
+3. Installs dependencies
+4. Auto-restarts with new version
+
+Or manually:
 
 ```bash
-cd HQX-CLI
-npm run dev
-```
-
-### Run tests
-
-```bash
-npm test
+cd ~/HQX-CLI && git pull origin main
 ```
 
 ---
@@ -206,22 +198,18 @@ npm test
 ## Roadmap
 
 - [x] ProjectX integration
-- [x] Multi-propfirm support
+- [x] Multi-propfirm support (37 firms)
 - [x] Account viewing
 - [x] Position viewing
 - [x] Order viewing
+- [x] Stats with equity curve
+- [x] Encrypted sessions
+- [x] Multi-account connections
 - [ ] Rithmic integration
 - [ ] Tradovate integration
 - [ ] Algo trading engine
 - [ ] Real-time market data
 - [ ] Order placement
-- [ ] Strategy builder
-
----
-
-## Contributing
-
-Contributions are welcome! Please read our contributing guidelines before submitting a PR.
 
 ---
 
@@ -240,7 +228,7 @@ This software is for educational and informational purposes only. Trading future
 ## Support
 
 - GitHub Issues: [https://github.com/HedgeQuantX/HQX-CLI/issues](https://github.com/HedgeQuantX/HQX-CLI/issues)
-- Email: marat.himet@gmail.com
+- NPM: [https://www.npmjs.com/package/hedgequantx](https://www.npmjs.com/package/hedgequantx)
 
 ---
 
