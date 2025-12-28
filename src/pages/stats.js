@@ -57,6 +57,15 @@ const showStats = async (service) => {
     return;
   }
 
+  // Filter only active accounts (status === 0)
+  const activeAccounts = allAccountsData.filter(acc => acc.status === 0);
+  
+  if (activeAccounts.length === 0) {
+    spinner.fail('No active accounts found');
+    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+    return;
+  }
+
   // Collect stats
   let totalBalance = 0;
   let totalStartingBalance = 0;
@@ -68,7 +77,7 @@ const showStats = async (service) => {
 
   spinner.text = 'Fetching detailed stats...';
 
-  for (const account of allAccountsData) {
+  for (const account of activeAccounts) {
     const svc = account.service;
     const currentBalance = account.balance || 0;
     totalBalance += currentBalance;
@@ -137,7 +146,7 @@ const showStats = async (service) => {
     longTrades: 0, shortTrades: 0, longWins: 0, shortWins: 0
   };
   
-  for (const account of allAccountsData) {
+  for (const account of activeAccounts) {
     if (account.lifetimeStats) {
       const s = account.lifetimeStats;
       stats.totalTrades += s.totalTrades || 0;
@@ -218,7 +227,7 @@ const showStats = async (service) => {
   draw2ColHeader('ACCOUNT OVERVIEW', 'TRADING PERFORMANCE', boxWidth);
   
   console.log(chalk.cyan('\u2551') + fmtRow('Connections:', chalk.cyan(connections.count().toString() || '1'), col1) + chalk.cyan('\u2502') + fmtRow('Total Trades:', chalk.white(stats.totalTrades.toString()), col2) + chalk.cyan('\u2551'));
-  console.log(chalk.cyan('\u2551') + fmtRow('Total Accounts:', chalk.cyan(allAccountsData.length.toString()), col1) + chalk.cyan('\u2502') + fmtRow('Winning Trades:', chalk.green(stats.winningTrades.toString()), col2) + chalk.cyan('\u2551'));
+  console.log(chalk.cyan('\u2551') + fmtRow('Total Accounts:', chalk.cyan(activeAccounts.length.toString()), col1) + chalk.cyan('\u2502') + fmtRow('Winning Trades:', chalk.green(stats.winningTrades.toString()), col2) + chalk.cyan('\u2551'));
   console.log(chalk.cyan('\u2551') + fmtRow('Total Balance:', totalBalanceColor('$' + totalBalance.toLocaleString()), col1) + chalk.cyan('\u2502') + fmtRow('Losing Trades:', chalk.red(stats.losingTrades.toString()), col2) + chalk.cyan('\u2551'));
   console.log(chalk.cyan('\u2551') + fmtRow('Starting Balance:', chalk.white('$' + totalStartingBalance.toLocaleString()), col1) + chalk.cyan('\u2502') + fmtRow('Win Rate:', parseFloat(winRate) >= 50 ? chalk.green(winRate + '%') : chalk.yellow(winRate + '%'), col2) + chalk.cyan('\u2551'));
   console.log(chalk.cyan('\u2551') + fmtRow('Total P&L:', pnlColor('$' + totalPnL.toLocaleString() + ' (' + returnPercent + '%)'), col1) + chalk.cyan('\u2502') + fmtRow('Long Trades:', chalk.white(stats.longTrades + ' (' + longWinRate + '%)'), col2) + chalk.cyan('\u2551'));
