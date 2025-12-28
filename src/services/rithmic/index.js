@@ -5,7 +5,7 @@
 
 const EventEmitter = require('events');
 const { RithmicConnection } = require('./connection');
-const { proto, decodeAccountPnL } = require('./protobuf');
+const { proto, decodeAccountPnL, decodeInstrumentPnL } = require('./protobuf');
 const { RITHMIC_ENDPOINTS, RITHMIC_SYSTEMS, REQ, RES, STREAM } = require('./constants');
 
 class RithmicService extends EventEmitter {
@@ -18,7 +18,10 @@ class RithmicService extends EventEmitter {
     this.loginInfo = null;
     this.accounts = [];
     this.accountPnL = new Map(); // accountId -> pnl data
+    this.positions = new Map(); // symbol -> position data (from InstrumentPnLPositionUpdate)
+    this.orders = []; // Active orders
     this.user = null;
+    this.credentials = null; // Store for PNL connection
   }
 
   /**
@@ -82,10 +85,37 @@ class RithmicService extends EventEmitter {
           try {
             await this.fetchAccounts();
           } catch (e) {
-            // Accounts fetch failed, but login succeeded
-            console.log('Note: Could not fetch accounts');
+            // Accounts fetch failed, ignore
           }
-          resolve({ success: true });
+          
+          // Create default account if none found
+          if (this.accounts.length === 0) {
+            this.accounts = [{
+              accountId: username,
+              accountName: username,
+              fcmId: data.fcmId,
+              ibId: data.ibId,
+            }];
+          }
+          
+          // Store credentials for PNL connection
+          this.credentials = { username, password };
+          
+          // Format accounts for response
+          const formattedAccounts = this.accounts.map(acc => ({
+            accountId: acc.accountId,
+            accountName: acc.accountName || acc.accountId,
+            balance: this.propfirm.defaultBalance,
+            startingBalance: this.propfirm.defaultBalance,
+            profitAndLoss: 0,
+            status: 0
+          }));
+          
+          resolve({ 
+            success: true, 
+            user: this.user,
+            accounts: formattedAccounts
+          });
         });
 
         this.orderConn.once('loginFailed', (data) => {
@@ -290,12 +320,27 @@ class RithmicService extends EventEmitter {
       case RES.TRADE_ROUTES:
         this.onTradeRoutes(data);
         break;
+      case RES.SHOW_ORDERS:
+        this.onShowOrdersResponse(data);
+        break;
       case STREAM.EXCHANGE_NOTIFICATION:
         this.onExchangeNotification(data);
         break;
       case STREAM.ORDER_NOTIFICATION:
         this.onOrderNotification(data);
         break;
+    }
+  }
+
+  onShowOrdersResponse(data) {
+    try {
+      const res = proto.decode('ResponseShowOrders', data);
+      if (res.rpCode?.[0] === '0') {
+        // End of orders list
+        this.emit('ordersReceived');
+      }
+    } catch (e) {
+      // Ignore
     }
   }
 
@@ -386,7 +431,37 @@ class RithmicService extends EventEmitter {
   }
 
   onInstrumentPnLUpdate(data) {
-    // Handle instrument-level PnL if needed
+    // Handle instrument-level PnL - this contains position data
+    try {
+      const pos = decodeInstrumentPnL(data);
+      if (pos.symbol && pos.accountId) {
+        const key = `${pos.accountId}:${pos.symbol}:${pos.exchange}`;
+        // Net quantity can come from netQuantity field or calculated from buy/sell
+        const netQty = pos.netQuantity || pos.openPositionQuantity || ((pos.buyQty || 0) - (pos.sellQty || 0));
+        
+        if (netQty !== 0) {
+          // We have an open position
+          this.positions.set(key, {
+            accountId: pos.accountId,
+            symbol: pos.symbol,
+            exchange: pos.exchange || 'CME',
+            quantity: netQty,
+            averagePrice: pos.avgOpenFillPrice || 0,
+            openPnl: parseFloat(pos.openPositionPnl || pos.dayOpenPnl || 0),
+            closedPnl: parseFloat(pos.closedPositionPnl || pos.dayClosedPnl || 0),
+            dayPnl: parseFloat(pos.dayPnl || 0),
+            isSnapshot: pos.isSnapshot || false,
+          });
+        } else {
+          // Position closed
+          this.positions.delete(key);
+        }
+        
+        this.emit('positionUpdate', this.positions.get(key));
+      }
+    } catch (e) {
+      // Ignore decode errors
+    }
   }
 
   onExchangeNotification(data) {
@@ -415,6 +490,133 @@ class RithmicService extends EventEmitter {
    */
   async getUser() {
     return this.user;
+  }
+
+  /**
+   * Get positions via PNL_PLANT
+   * Positions are streamed via InstrumentPnLPositionUpdate (template 450)
+   */
+  async getPositions() {
+    // If PNL connection not established, try to connect
+    if (!this.pnlConn && this.credentials) {
+      await this.connectPnL(this.credentials.username, this.credentials.password);
+      // Request snapshot to populate positions
+      await this.requestPnLSnapshot();
+    }
+    
+    // Return cached positions
+    const positions = Array.from(this.positions.values()).map(pos => ({
+      symbol: pos.symbol,
+      exchange: pos.exchange,
+      quantity: pos.quantity,
+      averagePrice: pos.averagePrice,
+      unrealizedPnl: pos.openPnl,
+      realizedPnl: pos.closedPnl,
+      side: pos.quantity > 0 ? 'LONG' : 'SHORT',
+    }));
+    
+    return { success: true, positions };
+  }
+
+  /**
+   * Get orders via ORDER_PLANT
+   * Uses RequestShowOrders (template 320) -> ResponseShowOrders (template 321)
+   */
+  async getOrders() {
+    if (!this.orderConn || !this.loginInfo) {
+      return { success: true, orders: [] };
+    }
+
+    return new Promise((resolve) => {
+      const orders = [];
+      const timeout = setTimeout(() => {
+        resolve({ success: true, orders });
+      }, 3000);
+
+      // Listen for order notifications
+      const orderHandler = (notification) => {
+        // RithmicOrderNotification contains order details
+        if (notification.orderId) {
+          orders.push({
+            orderId: notification.orderId,
+            symbol: notification.symbol,
+            exchange: notification.exchange,
+            side: notification.transactionType === 1 ? 'BUY' : 'SELL',
+            quantity: notification.quantity,
+            filledQuantity: notification.filledQuantity || 0,
+            price: notification.price,
+            orderType: notification.orderType,
+            status: notification.status,
+          });
+        }
+      };
+
+      this.once('ordersReceived', () => {
+        clearTimeout(timeout);
+        this.removeListener('orderNotification', orderHandler);
+        resolve({ success: true, orders });
+      });
+
+      this.on('orderNotification', orderHandler);
+
+      // Send request
+      try {
+        for (const acc of this.accounts) {
+          this.orderConn.send('RequestShowOrders', {
+            templateId: REQ.SHOW_ORDERS,
+            userMsg: ['HQX'],
+            fcmId: acc.fcmId || this.loginInfo.fcmId,
+            ibId: acc.ibId || this.loginInfo.ibId,
+            accountId: acc.accountId,
+          });
+        }
+      } catch (e) {
+        clearTimeout(timeout);
+        resolve({ success: false, error: e.message, orders: [] });
+      }
+    });
+  }
+
+  /**
+   * Get order history
+   * Uses RequestShowOrderHistorySummary (template 324)
+   */
+  async getOrderHistory(date) {
+    if (!this.orderConn || !this.loginInfo) {
+      return { success: true, orders: [] };
+    }
+
+    // Default to today
+    const dateStr = date || new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    
+    return new Promise((resolve) => {
+      const orders = [];
+      const timeout = setTimeout(() => {
+        resolve({ success: true, orders });
+      }, 3000);
+
+      try {
+        for (const acc of this.accounts) {
+          this.orderConn.send('RequestShowOrderHistorySummary', {
+            templateId: REQ.SHOW_ORDER_HISTORY,
+            userMsg: ['HQX'],
+            fcmId: acc.fcmId || this.loginInfo.fcmId,
+            ibId: acc.ibId || this.loginInfo.ibId,
+            accountId: acc.accountId,
+            date: dateStr,
+          });
+        }
+        
+        // Wait for response
+        setTimeout(() => {
+          clearTimeout(timeout);
+          resolve({ success: true, orders });
+        }, 2000);
+      } catch (e) {
+        clearTimeout(timeout);
+        resolve({ success: false, error: e.message, orders: [] });
+      }
+    });
   }
 
   /**
@@ -477,8 +679,11 @@ class RithmicService extends EventEmitter {
     }
     this.accounts = [];
     this.accountPnL.clear();
+    this.positions.clear();
+    this.orders = [];
     this.loginInfo = null;
     this.user = null;
+    this.credentials = null;
   }
 }
 

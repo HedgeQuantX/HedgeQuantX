@@ -28,6 +28,36 @@ const PNL_FIELDS = {
   USECS: 150101,
 };
 
+// Instrument PnL Position Update field IDs
+const INSTRUMENT_PNL_FIELDS = {
+  TEMPLATE_ID: 154467,
+  IS_SNAPSHOT: 110121,
+  FCM_ID: 154013,
+  IB_ID: 154014,
+  ACCOUNT_ID: 154008,
+  SYMBOL: 110100,
+  EXCHANGE: 110101,
+  PRODUCT_CODE: 100749,
+  INSTRUMENT_TYPE: 110116,
+  FILL_BUY_QTY: 154041,
+  FILL_SELL_QTY: 154042,
+  ORDER_BUY_QTY: 154037,
+  ORDER_SELL_QTY: 154038,
+  BUY_QTY: 154260,
+  SELL_QTY: 154261,
+  AVG_OPEN_FILL_PRICE: 154434,
+  DAY_OPEN_PNL: 157954,
+  DAY_CLOSED_PNL: 157955,
+  DAY_PNL: 157956,
+  OPEN_POSITION_PNL: 156961,
+  OPEN_POSITION_QUANTITY: 156962,
+  CLOSED_POSITION_PNL: 156963,
+  CLOSED_POSITION_QUANTITY: 156964,
+  NET_QUANTITY: 156967,
+  SSBOE: 150100,
+  USECS: 150101,
+};
+
 /**
  * Read a varint from buffer
  */
@@ -159,6 +189,106 @@ function decodeAccountPnL(buffer) {
 }
 
 /**
+ * Manually decode InstrumentPnLPositionUpdate from raw bytes
+ */
+function decodeInstrumentPnL(buffer) {
+  const result = {};
+  let offset = 0;
+
+  while (offset < buffer.length) {
+    try {
+      const [tag, tagOffset] = readVarint(buffer, offset);
+      const wireType = tag & 0x7;
+      const fieldNumber = tag >>> 3;
+      offset = tagOffset;
+
+      switch (fieldNumber) {
+        case INSTRUMENT_PNL_FIELDS.TEMPLATE_ID:
+          [result.templateId, offset] = readVarint(buffer, offset);
+          break;
+        case INSTRUMENT_PNL_FIELDS.IS_SNAPSHOT:
+          const [isSnap, snapOffset] = readVarint(buffer, offset);
+          result.isSnapshot = isSnap !== 0;
+          offset = snapOffset;
+          break;
+        case INSTRUMENT_PNL_FIELDS.FCM_ID:
+          [result.fcmId, offset] = readLengthDelimited(buffer, offset);
+          break;
+        case INSTRUMENT_PNL_FIELDS.IB_ID:
+          [result.ibId, offset] = readLengthDelimited(buffer, offset);
+          break;
+        case INSTRUMENT_PNL_FIELDS.ACCOUNT_ID:
+          [result.accountId, offset] = readLengthDelimited(buffer, offset);
+          break;
+        case INSTRUMENT_PNL_FIELDS.SYMBOL:
+          [result.symbol, offset] = readLengthDelimited(buffer, offset);
+          break;
+        case INSTRUMENT_PNL_FIELDS.EXCHANGE:
+          [result.exchange, offset] = readLengthDelimited(buffer, offset);
+          break;
+        case INSTRUMENT_PNL_FIELDS.PRODUCT_CODE:
+          [result.productCode, offset] = readLengthDelimited(buffer, offset);
+          break;
+        case INSTRUMENT_PNL_FIELDS.BUY_QTY:
+          [result.buyQty, offset] = readVarint(buffer, offset);
+          break;
+        case INSTRUMENT_PNL_FIELDS.SELL_QTY:
+          [result.sellQty, offset] = readVarint(buffer, offset);
+          break;
+        case INSTRUMENT_PNL_FIELDS.FILL_BUY_QTY:
+          [result.fillBuyQty, offset] = readVarint(buffer, offset);
+          break;
+        case INSTRUMENT_PNL_FIELDS.FILL_SELL_QTY:
+          [result.fillSellQty, offset] = readVarint(buffer, offset);
+          break;
+        case INSTRUMENT_PNL_FIELDS.NET_QUANTITY:
+          [result.netQuantity, offset] = readVarint(buffer, offset);
+          break;
+        case INSTRUMENT_PNL_FIELDS.OPEN_POSITION_QUANTITY:
+          [result.openPositionQuantity, offset] = readVarint(buffer, offset);
+          break;
+        case INSTRUMENT_PNL_FIELDS.AVG_OPEN_FILL_PRICE:
+          // Double is 64-bit fixed
+          if (wireType === 1) {
+            result.avgOpenFillPrice = buffer.readDoubleLE(offset);
+            offset += 8;
+          } else {
+            offset = skipField(buffer, offset, wireType);
+          }
+          break;
+        case INSTRUMENT_PNL_FIELDS.OPEN_POSITION_PNL:
+          [result.openPositionPnl, offset] = readLengthDelimited(buffer, offset);
+          break;
+        case INSTRUMENT_PNL_FIELDS.CLOSED_POSITION_PNL:
+          [result.closedPositionPnl, offset] = readLengthDelimited(buffer, offset);
+          break;
+        case INSTRUMENT_PNL_FIELDS.DAY_PNL:
+          [result.dayPnl, offset] = readLengthDelimited(buffer, offset);
+          break;
+        case INSTRUMENT_PNL_FIELDS.DAY_OPEN_PNL:
+          [result.dayOpenPnl, offset] = readLengthDelimited(buffer, offset);
+          break;
+        case INSTRUMENT_PNL_FIELDS.DAY_CLOSED_PNL:
+          [result.dayClosedPnl, offset] = readLengthDelimited(buffer, offset);
+          break;
+        case INSTRUMENT_PNL_FIELDS.SSBOE:
+          [result.ssboe, offset] = readVarint(buffer, offset);
+          break;
+        case INSTRUMENT_PNL_FIELDS.USECS:
+          [result.usecs, offset] = readVarint(buffer, offset);
+          break;
+        default:
+          offset = skipField(buffer, offset, wireType);
+      }
+    } catch (error) {
+      break;
+    }
+  }
+
+  return result;
+}
+
+/**
  * Protobuf Handler class
  */
 class ProtobufHandler {
@@ -253,6 +383,7 @@ const proto = new ProtobufHandler();
 module.exports = {
   proto,
   decodeAccountPnL,
+  decodeInstrumentPnL,
   readVarint,
   readLengthDelimited,
   skipField,
