@@ -57,6 +57,14 @@ const showStats = async (service) => {
     return;
   }
 
+  // Remove duplicates by accountId
+  const seen = new Set();
+  allAccountsData = allAccountsData.filter(acc => {
+    if (seen.has(acc.accountId)) return false;
+    seen.add(acc.accountId);
+    return true;
+  });
+
   // Filter only active accounts (status === 0)
   const activeAccounts = allAccountsData.filter(acc => acc.status === 0);
   
@@ -219,6 +227,49 @@ const showStats = async (service) => {
   const longWinRate = stats.longTrades > 0 ? ((stats.longWins / stats.longTrades) * 100).toFixed(1) : '0.0';
   const shortWinRate = stats.shortTrades > 0 ? ((stats.shortWins / stats.shortTrades) * 100).toFixed(1) : '0.0';
   
+  // Advanced quantitative metrics
+  const tradePnLs = allTrades.map(t => t.profitAndLoss || t.pnl || 0);
+  const avgReturn = tradePnLs.length > 0 ? tradePnLs.reduce((a, b) => a + b, 0) / tradePnLs.length : 0;
+  
+  // Standard deviation
+  const variance = tradePnLs.length > 0 
+    ? tradePnLs.reduce((sum, pnl) => sum + Math.pow(pnl - avgReturn, 2), 0) / tradePnLs.length 
+    : 0;
+  const stdDev = Math.sqrt(variance);
+  
+  // Downside deviation (for Sortino)
+  const downsideReturns = tradePnLs.filter(pnl => pnl < 0);
+  const downsideVariance = downsideReturns.length > 0 
+    ? downsideReturns.reduce((sum, pnl) => sum + Math.pow(pnl, 2), 0) / downsideReturns.length 
+    : 0;
+  const downsideDev = Math.sqrt(downsideVariance);
+  
+  // Sharpe Ratio (simplified - assumes risk-free rate = 0)
+  const sharpeRatio = stdDev > 0 ? (avgReturn / stdDev).toFixed(2) : '0.00';
+  
+  // Sortino Ratio
+  const sortinoRatio = downsideDev > 0 ? (avgReturn / downsideDev).toFixed(2) : '0.00';
+  
+  // Max Drawdown
+  let maxDrawdown = 0;
+  let peak = totalStartingBalance;
+  let equity = totalStartingBalance;
+  tradePnLs.forEach(pnl => {
+    equity += pnl;
+    if (equity > peak) peak = equity;
+    const drawdown = (peak - equity) / peak * 100;
+    if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+  });
+  
+  // Expectancy (average profit per trade)
+  const expectancy = stats.totalTrades > 0 ? netPnL / stats.totalTrades : 0;
+  
+  // Risk/Reward Ratio
+  const riskRewardRatio = parseFloat(avgLoss) > 0 ? (parseFloat(avgWin) / parseFloat(avgLoss)).toFixed(2) : '0.00';
+  
+  // Calmar Ratio (return / max drawdown)
+  const calmarRatio = maxDrawdown > 0 ? (parseFloat(returnPercent) / maxDrawdown).toFixed(2) : '0.00';
+  
   const totalBalanceColor = totalBalance >= 0 ? chalk.green : chalk.red;
   const pnlColor = totalPnL >= 0 ? chalk.green : chalk.red;
   
@@ -245,6 +296,20 @@ const showStats = async (service) => {
   console.log(chalk.cyan('\u2551') + fmtRow('Gross Loss:', chalk.red('-$' + stats.totalLossAmount.toFixed(2)), col1) + chalk.cyan('\u2502') + fmtRow('Max Consec. Loss:', chalk.red(stats.maxConsecutiveLosses.toString()), col2) + chalk.cyan('\u2551'));
   console.log(chalk.cyan('\u2551') + fmtRow('Avg Win:', chalk.green('$' + avgWin), col1) + chalk.cyan('\u2502') + fmtRow('Best Trade:', chalk.green('$' + stats.bestTrade.toFixed(2)), col2) + chalk.cyan('\u2551'));
   console.log(chalk.cyan('\u2551') + fmtRow('Avg Loss:', chalk.red('-$' + avgLoss), col1) + chalk.cyan('\u2502') + fmtRow('Worst Trade:', chalk.red('$' + stats.worstTrade.toFixed(2)), col2) + chalk.cyan('\u2551'));
+  
+  // Quantitative Metrics
+  draw2ColSeparator(boxWidth);
+  draw2ColHeader('QUANTITATIVE METRICS', 'ADVANCED RATIOS', boxWidth);
+  
+  const sharpeColor = parseFloat(sharpeRatio) >= 1 ? chalk.green : parseFloat(sharpeRatio) >= 0.5 ? chalk.yellow : chalk.red;
+  const sortinoColor = parseFloat(sortinoRatio) >= 1.5 ? chalk.green : parseFloat(sortinoRatio) >= 0.5 ? chalk.yellow : chalk.red;
+  const ddColor = maxDrawdown <= 5 ? chalk.green : maxDrawdown <= 15 ? chalk.yellow : chalk.red;
+  const rrColor = parseFloat(riskRewardRatio) >= 2 ? chalk.green : parseFloat(riskRewardRatio) >= 1 ? chalk.yellow : chalk.red;
+  
+  console.log(chalk.cyan('\u2551') + fmtRow('Sharpe Ratio:', sharpeColor(sharpeRatio), col1) + chalk.cyan('\u2502') + fmtRow('Risk/Reward:', rrColor(riskRewardRatio), col2) + chalk.cyan('\u2551'));
+  console.log(chalk.cyan('\u2551') + fmtRow('Sortino Ratio:', sortinoColor(sortinoRatio), col1) + chalk.cyan('\u2502') + fmtRow('Calmar Ratio:', chalk.white(calmarRatio), col2) + chalk.cyan('\u2551'));
+  console.log(chalk.cyan('\u2551') + fmtRow('Max Drawdown:', ddColor(maxDrawdown.toFixed(2) + '%'), col1) + chalk.cyan('\u2502') + fmtRow('Expectancy:', expectancy >= 0 ? chalk.green('$' + expectancy.toFixed(2)) : chalk.red('$' + expectancy.toFixed(2)), col2) + chalk.cyan('\u2551'));
+  console.log(chalk.cyan('\u2551') + fmtRow('Std Deviation:', chalk.white('$' + stdDev.toFixed(2)), col1) + chalk.cyan('\u2502') + fmtRow('Avg Trade:', avgReturn >= 0 ? chalk.green('$' + avgReturn.toFixed(2)) : chalk.red('$' + avgReturn.toFixed(2)), col2) + chalk.cyan('\u2551'));
   
   drawBoxFooter(boxWidth);
   
