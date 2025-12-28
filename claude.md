@@ -1,68 +1,110 @@
-# HQX-CLI Development Rules
+# HQX-CLI Development Notes
 
-## STRICT RULES - Source Code Protection with Cython
+## Project Structure (v1.1.1)
 
-### Files to Compile as .so (Protected Binary)
+```
+HQX-CLI/
+├── bin/
+│   └── cli.js                 # Main entry point (2096 lines)
+│
+├── src/
+│   ├── api/                   # API specs (reference only)
+│   │   ├── projectx_gatewayapi.json
+│   │   └── projectx_userapi.json
+│   │
+│   ├── config/                # Configuration
+│   │   ├── index.js           # Exports all config
+│   │   ├── constants.js       # ACCOUNT_STATUS, ORDER_STATUS, FUTURES_SYMBOLS
+│   │   └── propfirms.js       # PropFirm list (Topstep, Alpha, etc.)
+│   │
+│   ├── pages/                 # UI Pages/Screens
+│   │   ├── index.js           # Exports all pages
+│   │   └── stats.js           # Stats page (289 lines)
+│   │
+│   ├── services/              # API Services
+│   │   ├── index.js           # Exports: ProjectXService, connections, storage
+│   │   ├── projectx.js        # ProjectX API client (369 lines)
+│   │   ├── session.js         # Multi-connection manager (143 lines)
+│   │   ├── hqx-server.js      # HQX Server service
+│   │   └── local-storage.js   # Local storage utils
+│   │
+│   └── ui/                    # UI Helpers
+│       ├── index.js           # Exports all UI functions
+│       ├── box.js             # ASCII box drawing (105 lines)
+│       ├── table.js           # 2-column tables (81 lines)
+│       └── device.js          # Terminal detection (85 lines)
+│
+├── package.json
+├── README.md
+└── claude.md                  # This file
+```
 
-Compile all algo/strategy files using Cython to protect the source code.
+## Module Responsibilities
 
-| Source File | Compiled Output |
-|-------------|-----------------|
-| `hqx/core/strategy.py` | `strategy.so` |
-| `hqx/core/signals.py` | `signals.so` |
-| `hqx/core/engine.py` | `engine.so` |
+### src/config/
+- `propfirms.js` - PropFirm API URLs (userApi, gatewayApi)
+- `constants.js` - Enums: ACCOUNT_STATUS, ACCOUNT_TYPE, ORDER_STATUS, ORDER_SIDE, FUTURES_SYMBOLS
 
-### Compilation Steps
+### src/ui/
+- `box.js` - drawBoxHeader(), drawBoxFooter(), drawBoxRow(), printLogo()
+- `table.js` - draw2ColHeader(), draw2ColRow(), draw2ColSeparator(), fmtRow()
+- `device.js` - getDevice(), getSeparator(), detectDevice()
 
-1. **Rename .py to .pyx**
-   ```bash
-   mv hqx/core/strategy.py hqx/core/strategy.pyx
-   mv hqx/core/signals.py hqx/core/signals.pyx
-   mv hqx/core/engine.py hqx/core/engine.pyx
-   ```
+### src/services/
+- `projectx.js` - API calls: login, getUser, getTradingAccounts, getPositions, getOrders, getTradeHistory, placeOrder
+- `session.js` - Multi-connection management, session persistence
+- `hqx-server.js` - HQX algo server communication
 
-2. **Create setup.py with cythonize**
-   ```python
-   from setuptools import setup
-   from Cython.Build import cythonize
+### src/pages/
+- `stats.js` - Stats page with metrics, equity curve, calendar
 
-   setup(
-       ext_modules=cythonize([
-           "hqx/core/strategy.pyx",
-           "hqx/core/signals.pyx",
-           "hqx/core/engine.pyx",
-       ], compiler_directives={'language_level': "3"})
-   )
-   ```
+### bin/cli.js
+- Main app loop
+- Menu navigation
+- All other pages (accounts, trading, settings, etc.)
 
-3. **Build with Cython**
-   ```bash
-   python setup.py build_ext --inplace
-   ```
+---
 
-4. **Delete original .pyx files after build**
-   ```bash
-   rm -f hqx/core/strategy.pyx
-   rm -f hqx/core/signals.pyx
-   rm -f hqx/core/engine.pyx
-   ```
+## API Endpoints
 
-5. **Update imports to use compiled .so modules**
-   - Imports remain the same: `from hqx.core import strategy, signals, engine`
-   - Python automatically loads `.so` files when `.py` is not present
+### UserAPI (userapi.topstepx.com)
+- POST `/Login` - Authentication
+- GET `/User` - User info
+- GET `/TradingAccount` - List accounts
 
-### Files to Keep as Normal Python (Visible is OK)
+### GatewayAPI (api.topstepx.com)
+- POST `/api/Trade/search` - Trade history (with startTimestamp, endTimestamp)
+- POST `/api/Order/place` - Place order
+- POST `/api/Order/cancel` - Cancel order
+- POST `/api/Position/searchOpen` - Open positions
+- POST `/api/Order/searchOpen` - Open orders
+- POST `/api/Contract/search` - Search contracts
 
-These files do NOT need protection and should remain as readable `.py`:
+---
 
-- `cli.py` - CLI interface
-- `config.py` - Configuration
-- `connectors/rithmic.py` - Rithmic connector
-- `connectors/projectx.py` - ProjectX connector
+## NPM Package
 
-### Important Notes
+- **Name:** hedgequantx
+- **Commands:** `hedgequantx` or `hqx`
+- **Registry:** https://www.npmjs.com/package/hedgequantx
 
-- The compiled `.so` files are **unreadable binary** - source code is protected
-- Never commit `.pyx` files to git after compilation
-- Always test imports after compilation
-- Add `*.so` to `.gitignore` if distributing source, or include them for binary distribution
+```bash
+npm install -g hedgequantx
+hqx
+```
+
+---
+
+## User Preferences
+
+1. **NO EMOJIS** - Use ASCII icons: [>], [X], [OK], [*]
+2. **NO MOCK DATA** - Only real API data, show "No data" if empty
+3. **Professional look** - Clean ASCII borders, aligned tables
+4. **Uppercase username** - Display as "Welcome, RHF!"
+
+---
+
+## Git Repository
+
+- **GitHub:** https://github.com/HedgeQuantX/HQX-CLI
+- **Branch:** main
