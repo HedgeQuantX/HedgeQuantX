@@ -384,44 +384,22 @@ class ProjectXService {
    */
   async getTradeHistory(accountId, days = 30) {
     try {
-      // Use UserAPI /Statistics/trades endpoint
+      // Use UserAPI /Statistics/trades endpoint (POST with accountId in body)
       const response = await this._request(
         this.propfirm.userApi,
         `/Statistics/trades`,
         'POST',
-        { accountId: accountId }
+        { accountId: parseInt(accountId) }
       );
 
       if (response.statusCode === 200 && response.data) {
-        const tradesData = Array.isArray(response.data) ? response.data : (response.data.trades || []);
-        if (tradesData.length > 0) {
-          const trades = tradesData.map(t => ({
-            ...t,
-            timestamp: t.creationTimestamp || t.timestamp || t.date || t.fillTime,
-            pnl: t.profitAndLoss || t.pnl || t.realizedPnl || 0
-          }));
-          return { success: true, trades: trades };
-        }
-      }
-
-      // Fallback: try /Statistics/daytrades
-      const dayTradesResponse = await this._request(
-        this.propfirm.userApi,
-        `/Statistics/daytrades`,
-        'POST',
-        { accountId: accountId }
-      );
-
-      if (dayTradesResponse.statusCode === 200 && dayTradesResponse.data) {
-        const tradesData = Array.isArray(dayTradesResponse.data) ? dayTradesResponse.data : (dayTradesResponse.data.trades || []);
-        if (tradesData.length > 0) {
-          const trades = tradesData.map(t => ({
-            ...t,
-            timestamp: t.creationTimestamp || t.timestamp || t.date || t.fillTime,
-            pnl: t.profitAndLoss || t.pnl || t.realizedPnl || 0
-          }));
-          return { success: true, trades: trades };
-        }
+        const tradesData = Array.isArray(response.data) ? response.data : (response.data.trades || response.data.items || []);
+        const trades = tradesData.map(t => ({
+          ...t,
+          timestamp: t.creationTimestamp || t.timestamp || t.date || t.fillTime || t.time,
+          pnl: t.profitAndLoss || t.pnl || t.realizedPnl || t.pl || 0
+        }));
+        return { success: true, trades: trades };
       }
 
       return { success: true, trades: [], error: 'No trade history available' };
@@ -429,9 +407,34 @@ class ProjectXService {
       return { success: true, trades: [], error: error.message };
     }
   }
+  
+  /**
+   * Récupérer les trades du jour via UserAPI /Statistics/daytrades
+   * @param {number} accountId 
+   * @returns {Promise<{success: boolean, trades?: array, error?: string}>}
+   */
+  async getDayTrades(accountId) {
+    try {
+      const response = await this._request(
+        this.propfirm.userApi,
+        `/Statistics/daytrades`,
+        'POST',
+        { accountId: parseInt(accountId) }
+      );
+
+      if (response.statusCode === 200 && response.data) {
+        const tradesData = Array.isArray(response.data) ? response.data : (response.data.trades || response.data.items || []);
+        return { success: true, trades: tradesData };
+      }
+
+      return { success: true, trades: [], error: 'No day trades available' };
+    } catch (error) {
+      return { success: true, trades: [], error: error.message };
+    }
+  }
 
   /**
-   * Récupérer les statistiques du jour via UserAPI
+   * Récupérer les statistiques du jour via UserAPI /Statistics/todaystats
    * @param {number} accountId 
    * @returns {Promise<{success: boolean, stats?: object, error?: string}>}
    */
@@ -441,7 +444,7 @@ class ProjectXService {
         this.propfirm.userApi,
         `/Statistics/todaystats`,
         'POST',
-        { accountId: accountId }
+        { accountId: parseInt(accountId) }
       );
 
       if (response.statusCode === 200 && response.data) {
@@ -454,7 +457,7 @@ class ProjectXService {
   }
 
   /**
-   * Récupérer les statistiques d'un jour spécifique via UserAPI
+   * Récupérer les statistiques d'un jour spécifique via UserAPI /Statistics/daystats
    * @param {number} accountId 
    * @param {string} date - Date au format YYYY-MM-DD
    * @returns {Promise<{success: boolean, stats?: object, error?: string}>}
@@ -465,7 +468,7 @@ class ProjectXService {
         this.propfirm.userApi,
         `/Statistics/daystats`,
         'POST',
-        { accountId: accountId, date: date }
+        { accountId: parseInt(accountId), date: date }
       );
 
       if (response.statusCode === 200 && response.data) {
@@ -478,7 +481,7 @@ class ProjectXService {
   }
 
   /**
-   * Récupérer les statistiques lifetime via UserAPI
+   * Récupérer les statistiques lifetime via UserAPI /Statistics/lifetimestats
    * @param {number} accountId 
    * @returns {Promise<{success: boolean, stats?: object, error?: string}>}
    */
@@ -488,7 +491,7 @@ class ProjectXService {
         this.propfirm.userApi,
         `/Statistics/lifetimestats`,
         'POST',
-        { accountId: accountId }
+        { accountId: parseInt(accountId) }
       );
 
       if (response.statusCode === 200 && response.data) {
@@ -501,7 +504,7 @@ class ProjectXService {
   }
 
   /**
-   * Récupérer les statistiques daily (par jour) via UserAPI
+   * Récupérer les statistiques daily (par jour) via UserAPI /Statistics/daily
    * @param {number} accountId 
    * @returns {Promise<{success: boolean, stats?: array, error?: string}>}
    */
@@ -511,20 +514,21 @@ class ProjectXService {
         this.propfirm.userApi,
         `/Statistics/daily`,
         'POST',
-        { accountId: accountId }
+        { accountId: parseInt(accountId) }
       );
 
       if (response.statusCode === 200 && response.data) {
-        return { success: true, stats: response.data };
+        const statsData = Array.isArray(response.data) ? response.data : (response.data.days || response.data.items || []);
+        return { success: true, stats: statsData };
       }
-      return { success: false, stats: null, error: 'Failed to get daily stats' };
+      return { success: false, stats: [], error: 'Failed to get daily stats' };
     } catch (error) {
-      return { success: false, stats: null, error: error.message };
+      return { success: false, stats: [], error: error.message };
     }
   }
 
   /**
-   * Récupérer les statistiques weekly via UserAPI
+   * Récupérer les statistiques weekly via UserAPI /Statistics/weekly
    * @param {number} accountId 
    * @returns {Promise<{success: boolean, stats?: array, error?: string}>}
    */
@@ -534,20 +538,21 @@ class ProjectXService {
         this.propfirm.userApi,
         `/Statistics/weekly`,
         'POST',
-        { accountId: accountId }
+        { accountId: parseInt(accountId) }
       );
 
       if (response.statusCode === 200 && response.data) {
-        return { success: true, stats: response.data };
+        const statsData = Array.isArray(response.data) ? response.data : (response.data.weeks || response.data.items || []);
+        return { success: true, stats: statsData };
       }
-      return { success: false, stats: null, error: 'Failed to get weekly stats' };
+      return { success: false, stats: [], error: 'Failed to get weekly stats' };
     } catch (error) {
-      return { success: false, stats: null, error: error.message };
+      return { success: false, stats: [], error: error.message };
     }
   }
 
   /**
-   * Récupérer les statistiques monthly via UserAPI
+   * Récupérer les statistiques monthly via UserAPI /Statistics/monthly
    * @param {number} accountId 
    * @returns {Promise<{success: boolean, stats?: array, error?: string}>}
    */
@@ -557,20 +562,21 @@ class ProjectXService {
         this.propfirm.userApi,
         `/Statistics/monthly`,
         'POST',
-        { accountId: accountId }
+        { accountId: parseInt(accountId) }
       );
 
       if (response.statusCode === 200 && response.data) {
-        return { success: true, stats: response.data };
+        const statsData = Array.isArray(response.data) ? response.data : (response.data.months || response.data.items || []);
+        return { success: true, stats: statsData };
       }
-      return { success: false, stats: null, error: 'Failed to get monthly stats' };
+      return { success: false, stats: [], error: 'Failed to get monthly stats' };
     } catch (error) {
-      return { success: false, stats: null, error: error.message };
+      return { success: false, stats: [], error: error.message };
     }
   }
 
   /**
-   * Récupérer win/loss average via UserAPI
+   * Récupérer win/loss average via UserAPI /Statistics/winlossavg
    * @param {number} accountId 
    * @returns {Promise<{success: boolean, stats?: object, error?: string}>}
    */
@@ -580,7 +586,7 @@ class ProjectXService {
         this.propfirm.userApi,
         `/Statistics/winlossavg`,
         'POST',
-        { accountId: accountId }
+        { accountId: parseInt(accountId) }
       );
 
       if (response.statusCode === 200 && response.data) {
@@ -593,7 +599,7 @@ class ProjectXService {
   }
 
   /**
-   * Récupérer profit factor via UserAPI
+   * Récupérer profit factor via UserAPI /Statistics/profitFactor
    * @param {number} accountId 
    * @returns {Promise<{success: boolean, stats?: object, error?: string}>}
    */
@@ -603,7 +609,7 @@ class ProjectXService {
         this.propfirm.userApi,
         `/Statistics/profitFactor`,
         'POST',
-        { accountId: accountId }
+        { accountId: parseInt(accountId) }
       );
 
       if (response.statusCode === 200 && response.data) {
