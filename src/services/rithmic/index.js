@@ -216,7 +216,7 @@ class RithmicService extends EventEmitter {
       await this.fetchAccounts();
     }
 
-    const tradingAccounts = this.accounts.map((acc, index) => {
+    let tradingAccounts = this.accounts.map((acc, index) => {
       const pnl = this.accountPnL.get(acc.accountId) || {};
       const balance = parseFloat(pnl.accountBalance || pnl.marginBalance || pnl.cashOnHand || 0) || this.propfirm.defaultBalance;
       const startingBalance = this.propfirm.defaultBalance;
@@ -235,6 +235,23 @@ class RithmicService extends EventEmitter {
         propfirm: this.propfirm.name,
       };
     });
+
+    // If no accounts but user is logged in, create a default account from login info
+    if (tradingAccounts.length === 0 && this.user) {
+      const userName = this.user.userName || 'Unknown';
+      tradingAccounts = [{
+        accountId: this.hashAccountId(userName),
+        rithmicAccountId: userName,
+        accountName: userName,
+        name: userName,
+        balance: this.propfirm.defaultBalance,
+        startingBalance: this.propfirm.defaultBalance,
+        profitAndLoss: 0,
+        status: 0, // Active
+        platform: 'Rithmic',
+        propfirm: this.propfirm.name,
+      }];
+    }
 
     return { success: true, accounts: tradingAccounts };
   }
