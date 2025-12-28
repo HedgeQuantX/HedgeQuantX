@@ -700,47 +700,163 @@ const showStats = async (service) => {
   let totalLossAmount = 0;
   let bestTrade = 0;
   let worstTrade = 0;
+  let totalVolume = 0;
+  let consecutiveWins = 0;
+  let consecutiveLosses = 0;
+  let maxConsecutiveWins = 0;
+  let maxConsecutiveLosses = 0;
+  let longTrades = 0;
+  let shortTrades = 0;
+  let longWins = 0;
+  let shortWins = 0;
 
-  // Note: Ces calculs sont approximatifs car l'API Orders ne retourne pas le P&L par trade
-  // Pour des stats précises, il faudrait utiliser un endpoint dédié aux trades historiques
+  // Analyser chaque trade pour les métriques
+  for (const trade of allTrades) {
+    const pnl = trade.profitAndLoss || trade.pnl || 0;
+    const size = trade.positionSize || trade.size || trade.quantity || 1;
+    const side = trade.side || trade.orderSide; // 1 = Buy/Long, 2 = Sell/Short
+    
+    totalVolume += Math.abs(size);
+    
+    // Comptage Long/Short
+    if (side === 1) {
+      longTrades++;
+      if (pnl > 0) longWins++;
+    } else if (side === 2) {
+      shortTrades++;
+      if (pnl > 0) shortWins++;
+    }
+    
+    if (pnl > 0) {
+      winningTrades++;
+      totalWinAmount += pnl;
+      consecutiveWins++;
+      consecutiveLosses = 0;
+      if (consecutiveWins > maxConsecutiveWins) maxConsecutiveWins = consecutiveWins;
+      if (pnl > bestTrade) bestTrade = pnl;
+    } else if (pnl < 0) {
+      losingTrades++;
+      totalLossAmount += Math.abs(pnl);
+      consecutiveLosses++;
+      consecutiveWins = 0;
+      if (consecutiveLosses > maxConsecutiveLosses) maxConsecutiveLosses = consecutiveLosses;
+      if (pnl < worstTrade) worstTrade = pnl;
+    }
+  }
+
   const totalTrades = allTrades.length;
+  const breakEvenTrades = totalTrades - winningTrades - losingTrades;
 
   spinner.succeed('Stats loaded');
   console.log();
   
+  const boxWidth = 57;
+  const innerWidth = boxWidth - 4; // 4 = 2 borders + 2 spaces
+  
+  // Helper function to center text
+  const centerText = (text, width) => {
+    const padding = Math.max(0, width - text.length);
+    const leftPad = Math.floor(padding / 2);
+    const rightPad = padding - leftPad;
+    return ' '.repeat(leftPad) + text + ' '.repeat(rightPad);
+  };
+  
   // ═══════════════════════════════════════════════════════
-  // TOTAL PORTFOLIO SUMMARY
+  // HQX STATS - MAIN SUMMARY
   // ═══════════════════════════════════════════════════════
-  console.log(chalk.yellow.bold('  ╔═══════════════════════════════════════════════════════╗'));
-  console.log(chalk.yellow.bold('  ║           PORTFOLIO SUMMARY                          ║'));
-  console.log(chalk.yellow.bold('  ╚═══════════════════════════════════════════════════════╝'));
+  console.log(chalk.cyan('  ╔' + '═'.repeat(boxWidth - 2) + '╗'));
+  console.log(chalk.cyan('  ║') + chalk.cyan.bold(centerText('HQX STATS', boxWidth - 2)) + chalk.cyan('║'));
+  console.log(chalk.cyan('  ╚' + '═'.repeat(boxWidth - 2) + '╝'));
   console.log();
   
-  console.log(chalk.white.bold('  Total Accounts:    ') + chalk.cyan(accountsResult.accounts.length));
+  const labelWidth = 20;
+  const formatLabel = (label) => label.padEnd(labelWidth);
+  
+  // Calculate additional metrics
+  const winRate = totalTrades > 0 ? ((winningTrades / totalTrades) * 100).toFixed(1) : '0.0';
+  const avgWin = winningTrades > 0 ? (totalWinAmount / winningTrades).toFixed(2) : '0.00';
+  const avgLoss = losingTrades > 0 ? (totalLossAmount / losingTrades).toFixed(2) : '0.00';
+  const profitFactor = totalLossAmount > 0 ? (totalWinAmount / totalLossAmount).toFixed(2) : totalWinAmount > 0 ? '∞' : '0.00';
+  const netPnL = totalWinAmount - totalLossAmount;
+  const avgTrade = totalTrades > 0 ? (netPnL / totalTrades).toFixed(2) : '0.00';
+  const maxDrawdown = totalStartingBalance > 0 ? Math.min(0, totalPnL) : 0;
+  const maxDrawdownPercent = totalStartingBalance > 0 ? ((maxDrawdown / totalStartingBalance) * 100).toFixed(2) : '0.00';
+  const returnPercent = totalStartingBalance > 0 ? ((totalPnL / totalStartingBalance) * 100).toFixed(2) : '0.00';
+  const expectancy = totalTrades > 0 ? ((winRate / 100 * parseFloat(avgWin)) - ((100 - winRate) / 100 * parseFloat(avgLoss))).toFixed(2) : '0.00';
+  const payoffRatio = parseFloat(avgLoss) > 0 ? (parseFloat(avgWin) / parseFloat(avgLoss)).toFixed(2) : '0.00';
+  const longWinRate = longTrades > 0 ? ((longWins / longTrades) * 100).toFixed(1) : '0.0';
+  const shortWinRate = shortTrades > 0 ? ((shortWins / shortTrades) * 100).toFixed(1) : '0.0';
+  
+  // Section: Account Overview
+  console.log(chalk.cyan.bold('  ACCOUNT OVERVIEW'));
+  console.log(chalk.gray('  ' + '─'.repeat(boxWidth - 4)));
+  console.log(chalk.white('  ' + formatLabel('Total Accounts:')) + chalk.cyan(accountsResult.accounts.length));
   
   const totalBalanceColor = totalBalance >= 0 ? chalk.green : chalk.red;
-  console.log(chalk.white.bold('  Total Balance:     ') + totalBalanceColor('$' + totalBalance.toLocaleString()));
+  console.log(chalk.white('  ' + formatLabel('Total Balance:')) + totalBalanceColor('$' + totalBalance.toLocaleString()));
   
   if (totalStartingBalance > 0) {
-    console.log(chalk.white.bold('  Starting Balance:  ') + chalk.white('$' + totalStartingBalance.toLocaleString()));
+    console.log(chalk.white('  ' + formatLabel('Starting Balance:')) + chalk.white('$' + totalStartingBalance.toLocaleString()));
     const pnlColor = totalPnL >= 0 ? chalk.green : chalk.red;
-    const pnlPercent = ((totalPnL / totalStartingBalance) * 100).toFixed(2);
-    console.log(chalk.white.bold('  Total P&L:         ') + pnlColor('$' + totalPnL.toLocaleString() + ' (' + pnlPercent + '%)'));
+    console.log(chalk.white('  ' + formatLabel('Total P&L:')) + pnlColor('$' + totalPnL.toLocaleString() + ' (' + returnPercent + '%)'));
   }
   
-  console.log(chalk.white.bold('  Open Positions:    ') + chalk.white(totalOpenPositions));
-  console.log(chalk.white.bold('  Open Orders:       ') + chalk.white(totalOpenOrders));
-  console.log(chalk.white.bold('  Total Trades:      ') + chalk.white(totalTrades));
+  console.log(chalk.white('  ' + formatLabel('Open Positions:')) + chalk.white(totalOpenPositions));
+  console.log(chalk.white('  ' + formatLabel('Open Orders:')) + chalk.white(totalOpenOrders));
+  console.log();
+  
+  // Section: Trading Performance
+  console.log(chalk.cyan.bold('  TRADING PERFORMANCE'));
+  console.log(chalk.gray('  ' + '─'.repeat(boxWidth - 4)));
+  console.log(chalk.white('  ' + formatLabel('Total Trades:')) + chalk.white(totalTrades));
+  console.log(chalk.white('  ' + formatLabel('Winning Trades:')) + chalk.green(winningTrades));
+  console.log(chalk.white('  ' + formatLabel('Losing Trades:')) + chalk.red(losingTrades));
+  console.log(chalk.white('  ' + formatLabel('Break Even:')) + chalk.gray(breakEvenTrades));
+  console.log(chalk.white('  ' + formatLabel('Win Rate:')) + (parseFloat(winRate) >= 50 ? chalk.green(winRate + '%') : chalk.yellow(winRate + '%')));
+  console.log(chalk.white('  ' + formatLabel('Long Trades:')) + chalk.white(longTrades) + chalk.gray(' (Win: ') + chalk.cyan(longWinRate + '%') + chalk.gray(')')); 
+  console.log(chalk.white('  ' + formatLabel('Short Trades:')) + chalk.white(shortTrades) + chalk.gray(' (Win: ') + chalk.cyan(shortWinRate + '%') + chalk.gray(')'));
+  console.log(chalk.white('  ' + formatLabel('Total Volume:')) + chalk.white(totalVolume + ' contracts'));
+  console.log();
+  
+  // Section: P&L Metrics
+  console.log(chalk.cyan.bold('  P&L METRICS'));
+  console.log(chalk.gray('  ' + '─'.repeat(boxWidth - 4)));
+  console.log(chalk.white('  ' + formatLabel('Net P&L:')) + (netPnL >= 0 ? chalk.green('$' + netPnL.toFixed(2)) : chalk.red('$' + netPnL.toFixed(2))));
+  console.log(chalk.white('  ' + formatLabel('Gross Profit:')) + chalk.green('$' + totalWinAmount.toFixed(2)));
+  console.log(chalk.white('  ' + formatLabel('Gross Loss:')) + chalk.red('-$' + totalLossAmount.toFixed(2)));
+  console.log(chalk.white('  ' + formatLabel('Avg Win:')) + chalk.green('$' + avgWin));
+  console.log(chalk.white('  ' + formatLabel('Avg Loss:')) + chalk.red('-$' + avgLoss));
+  console.log(chalk.white('  ' + formatLabel('Avg Trade:')) + (parseFloat(avgTrade) >= 0 ? chalk.green('$' + avgTrade) : chalk.red('$' + avgTrade)));
+  console.log(chalk.white('  ' + formatLabel('Best Trade:')) + chalk.green('$' + bestTrade.toFixed(2)));
+  console.log(chalk.white('  ' + formatLabel('Worst Trade:')) + chalk.red('$' + worstTrade.toFixed(2)));
+  console.log();
+  
+  // Section: Risk Metrics
+  console.log(chalk.cyan.bold('  RISK METRICS'));
+  console.log(chalk.gray('  ' + '─'.repeat(boxWidth - 4)));
+  console.log(chalk.white('  ' + formatLabel('Profit Factor:')) + (profitFactor === '∞' ? chalk.green(profitFactor) : parseFloat(profitFactor) >= 1.5 ? chalk.green(profitFactor) : parseFloat(profitFactor) >= 1 ? chalk.yellow(profitFactor) : chalk.red(profitFactor)));
+  console.log(chalk.white('  ' + formatLabel('Payoff Ratio:')) + (parseFloat(payoffRatio) >= 1 ? chalk.green(payoffRatio) : chalk.red(payoffRatio)));
+  console.log(chalk.white('  ' + formatLabel('Expectancy:')) + (parseFloat(expectancy) >= 0 ? chalk.green('$' + expectancy) : chalk.red('$' + expectancy)));
+  console.log(chalk.white('  ' + formatLabel('Max Drawdown:')) + chalk.red('$' + Math.abs(maxDrawdown).toFixed(2) + ' (' + maxDrawdownPercent + '%)'));
+  console.log(chalk.white('  ' + formatLabel('Return:')) + (parseFloat(returnPercent) >= 0 ? chalk.green(returnPercent + '%') : chalk.red(returnPercent + '%')));
+  console.log();
+  
+  // Section: Streaks
+  console.log(chalk.cyan.bold('  STREAKS'));
+  console.log(chalk.gray('  ' + '─'.repeat(boxWidth - 4)));
+  console.log(chalk.white('  ' + formatLabel('Max Consec. Wins:')) + chalk.green(maxConsecutiveWins));
+  console.log(chalk.white('  ' + formatLabel('Max Consec. Losses:')) + chalk.red(maxConsecutiveLosses));
   
   console.log();
-  console.log(chalk.gray('  ' + '═'.repeat(55)));
+  console.log(chalk.cyan('  ' + '═'.repeat(boxWidth)));
   
   // ═══════════════════════════════════════════════════════
   // INDIVIDUAL ACCOUNT STATS
   // ═══════════════════════════════════════════════════════
   console.log();
-  console.log(chalk.white.bold('  Individual Account Statistics:'));
-  console.log(chalk.gray('  ' + '─'.repeat(55)));
+  console.log(chalk.cyan('  ╔' + '═'.repeat(boxWidth - 2) + '╗'));
+  console.log(chalk.cyan('  ║') + chalk.cyan.bold(centerText('INDIVIDUAL ACCOUNTS', boxWidth - 2)) + chalk.cyan('║'));
+  console.log(chalk.cyan('  ╚' + '═'.repeat(boxWidth - 2) + '╝'));
 
   for (const account of accountsResult.accounts) {
     const accountName = account.accountName || account.name || `Account #${account.accountId}`;
@@ -873,8 +989,8 @@ const algoTradingMenu = async (service) => {
 const oneAccountMenu = async (service) => {
   const spinner = ora('Fetching active accounts...').start();
   
-  // Récupérer les comptes via GatewayAPI (seulement les actifs)
-  const result = await service.searchAccounts(true);
+  // Récupérer les comptes via getTradingAccounts (plus fiable)
+  const result = await service.getTradingAccounts();
   
   if (!result.success || !result.accounts || result.accounts.length === 0) {
     spinner.fail('No active accounts found');
@@ -884,7 +1000,18 @@ const oneAccountMenu = async (service) => {
     return;
   }
   
-  spinner.succeed(`Found ${result.accounts.length} active account(s)`);
+  // Filtrer seulement les comptes actifs (status === 1)
+  const activeAccounts = result.accounts.filter(acc => acc.status === 1);
+  
+  if (activeAccounts.length === 0) {
+    spinner.fail('No active accounts found');
+    console.log(chalk.yellow('  You need at least one active trading account (status: Active).'));
+    console.log();
+    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+    return;
+  }
+  
+  spinner.succeed(`Found ${activeAccounts.length} active account(s)`);
   console.log();
   
   // Afficher les comptes actifs

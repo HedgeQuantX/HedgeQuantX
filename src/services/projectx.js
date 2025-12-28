@@ -343,14 +343,20 @@ class ProjectXService {
         { onlyActiveAccounts }
       );
 
-      if (response.statusCode === 200 && response.data.success) {
-        return { success: true, accounts: response.data.accounts };
-      } else {
-        return { 
-          success: false, 
-          error: response.data.errorMessage || 'Failed to search accounts' 
-        };
+      // L'API peut retourner soit { success, accounts } soit directement { accounts }
+      if (response.statusCode === 200) {
+        const accounts = response.data.accounts || response.data;
+        if (Array.isArray(accounts)) {
+          return { success: true, accounts };
+        } else if (response.data.success !== false && accounts) {
+          return { success: true, accounts: Array.isArray(accounts) ? accounts : [] };
+        }
       }
+      
+      return { 
+        success: false, 
+        error: response.data?.errorMessage || 'Failed to search accounts' 
+      };
     } catch (error) {
       return { success: false, error: error.message };
     }
