@@ -532,10 +532,19 @@ const banner = async () => {
     
     // Remove trailing empty lines from logo
     const logoLines = logoText.split('\n').filter(line => line.trim().length > 0);
-    console.log(chalk.cyan(logoLines.join('\n')));
     
     // Get logo width (first line length)
     const logoWidth = logoLines[0].length;
+    
+    // Draw top border
+    console.log(chalk.cyan('╔' + '═'.repeat(logoWidth - 2) + '╗'));
+    
+    // Draw logo lines inside box
+    logoLines.forEach(line => {
+      // Pad line to fit inside box
+      const paddedLine = line.padEnd(logoWidth - 2);
+      console.log(chalk.cyan('║') + chalk.cyan(paddedLine) + chalk.cyan('║'));
+    });
     
     // Helper to center text and pad to full width
     const centerLine = (text, width) => {
