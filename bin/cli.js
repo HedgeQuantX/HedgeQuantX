@@ -1671,7 +1671,30 @@ const main = async () => {
                       spinnerRefresh.succeed('CLI updated!');
                       console.log(chalk.green(`  Updated: ${beforeCommit} → ${afterCommit}`));
                       console.log(chalk.green(`  ${behindCount} new commit(s) applied.`));
-                      console.log(chalk.yellow('  Restart CLI to apply all changes.'));
+                      console.log();
+                      
+                      // Ask user if they want to restart
+                      const { restart } = await inquirer.prompt([
+                        {
+                          type: 'confirm',
+                          name: 'restart',
+                          message: chalk.yellow('Restart CLI to apply changes?'),
+                          default: true
+                        }
+                      ]);
+                      
+                      if (restart) {
+                        console.log(chalk.cyan('  Restarting...'));
+                        // Spawn new process and exit current one
+                        const { spawn } = require('child_process');
+                        const child = spawn(process.argv[0], process.argv.slice(1), {
+                          cwd: cliDir,
+                          detached: true,
+                          stdio: 'inherit'
+                        });
+                        child.unref();
+                        process.exit(0);
+                      }
                     } else {
                       spinnerRefresh.succeed('Already up to date!');
                       console.log(chalk.cyan(`  Current version: ${beforeCommit}`));
