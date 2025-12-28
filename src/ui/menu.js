@@ -28,18 +28,23 @@ const createBoxMenu = async (title, items, options = {}) => {
     // Clear screen and move cursor to top
     process.stdout.write('\x1b[2J\x1b[H');
     
-    // Reprint banner if needed (simplified)
     const version = require('../../package.json').version;
-    const figlet = require('figlet');
+    
+    // Full ASCII logo
+    const logo = [
+      '██╗  ██╗███████╗██████╗  ██████╗ ███████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗██╗  ██╗',
+      '██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝╚██╗██╔╝',
+      '███████║█████╗  ██║  ██║██║  ███╗█████╗  ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║    ╚███╔╝ ',
+      '██╔══██║██╔══╝  ██║  ██║██║   ██║██╔══╝  ██║▄▄ ██║██║   ██║██╔══██║██║╚██╗██║   ██║    ██╔██╗ ',
+      '██║  ██║███████╗██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ██╔╝ ██╗',
+      '╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝'
+    ];
     
     console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
     
-    const logoText = figlet.textSync('HEDGEQUANTX', { font: 'ANSI Shadow' });
-    logoText.split('\n').forEach(line => {
-      if (line.trim()) {
-        const padded = centerText(line, innerWidth);
-        console.log(chalk.cyan('║') + chalk.cyan(padded) + chalk.cyan('║'));
-      }
+    logo.forEach(line => {
+      const padded = centerText(line, innerWidth);
+      console.log(chalk.cyan('║') + chalk.cyan(padded) + chalk.cyan('║'));
     });
     
     console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
