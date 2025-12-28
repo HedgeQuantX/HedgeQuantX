@@ -169,10 +169,12 @@ let currentService = null;
 
 // ==================== UI HELPERS (Consistent ASCII Box Style) ====================
 
-// Get logo width for consistent box sizing
+// Get logo width for consistent box sizing (includes borders)
 const getLogoWidth = () => {
   const logoText = figlet.textSync('HEDGEQUANTX', { font: 'ANSI Shadow' });
-  return logoText.split('\n')[0].length;
+  const lines = logoText.split('\n').filter(line => line.trim().length > 0);
+  const maxWidth = Math.max(...lines.map(line => line.length));
+  return maxWidth + 2; // +2 for ║ borders
 };
 
 // Get visible length of text (excluding ANSI color codes)
@@ -533,28 +535,25 @@ const banner = async () => {
     // Remove trailing empty lines from logo
     const logoLines = logoText.split('\n').filter(line => line.trim().length > 0);
     
-    // Get logo width (first line length)
-    const logoWidth = logoLines[0].length;
+    // Get max width of all logo lines
+    const maxLogoWidth = Math.max(...logoLines.map(line => line.length));
+    
+    // Box width = logo width + 2 for borders
+    const boxWidth = maxLogoWidth + 2;
     
     // Draw top border
-    console.log(chalk.cyan('╔' + '═'.repeat(logoWidth - 2) + '╗'));
+    console.log(chalk.cyan('╔' + '═'.repeat(maxLogoWidth) + '╗'));
     
-    // Draw logo lines inside box
+    // Draw logo lines inside box - pad each line to max width
     logoLines.forEach(line => {
-      // Pad line to fit inside box
-      const paddedLine = line.padEnd(logoWidth - 2);
+      const paddedLine = line.padEnd(maxLogoWidth);
       console.log(chalk.cyan('║') + chalk.cyan(paddedLine) + chalk.cyan('║'));
     });
     
-    // Helper to center text and pad to full width
-    const centerLine = (text, width) => {
-      const textLen = text.replace(/\x1b\[[0-9;]*m/g, '').length; // Remove ANSI codes for length calc
-      const leftPad = Math.floor((width - textLen) / 2);
-      const rightPad = width - textLen - leftPad;
-      return ' '.repeat(leftPad) + text + ' '.repeat(rightPad);
-    };
+    // Inner width (content area between ║ and ║)
+    const innerWidth = maxLogoWidth;
     
-    console.log(chalk.cyan('╠' + '═'.repeat(logoWidth - 2) + '╣'));
+    console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
     
     // Always show tagline centered
     const tagline = 'Prop Futures Algo Trading';
@@ -562,14 +561,14 @@ const banner = async () => {
     const version = 'v' + pkg.version;
     const taglineText = chalk.yellow.bold(tagline) + '  ' + chalk.gray(version);
     const taglineLen = tagline.length + 2 + version.length;
-    const taglineLeftPad = Math.floor((logoWidth - 2 - taglineLen) / 2);
-    const taglineRightPad = logoWidth - 2 - taglineLen - taglineLeftPad;
+    const taglineLeftPad = Math.floor((innerWidth - taglineLen) / 2);
+    const taglineRightPad = innerWidth - taglineLen - taglineLeftPad;
     console.log(chalk.cyan('║') + ' '.repeat(taglineLeftPad) + taglineText + ' '.repeat(taglineRightPad) + chalk.cyan('║'));
     
     // Show stats if connected
     if (statsInfo) {
       // Separator between tagline and stats
-      console.log(chalk.cyan('╠' + '═'.repeat(logoWidth - 2) + '╣'));
+      console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
       
       const pnlColor = statsInfo.pnl >= 0 ? chalk.green : chalk.red;
       const pnlSign = statsInfo.pnl >= 0 ? '+' : '';
@@ -581,8 +580,8 @@ const banner = async () => {
       const pnlStr = `P&L: ${pnlSign}$${statsInfo.pnl.toLocaleString()} (${statsInfo.pnlPercent}%)`;
       
       const statsLen = connStr.length + 4 + accStr.length + 4 + balStr.length + 4 + pnlStr.length;
-      const statsLeftPad = Math.floor((logoWidth - 2 - statsLen) / 2);
-      const statsRightPad = logoWidth - 2 - statsLen - statsLeftPad;
+      const statsLeftPad = Math.floor((innerWidth - statsLen) / 2);
+      const statsRightPad = innerWidth - statsLen - statsLeftPad;
       
       console.log(chalk.cyan('║') + ' '.repeat(statsLeftPad) +
         chalk.white(connStr) + '    ' +
@@ -592,7 +591,7 @@ const banner = async () => {
       );
     }
     
-    console.log(chalk.cyan('╚' + '═'.repeat(logoWidth - 2) + '╝'));
+    console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
     console.log();
   }
 };
