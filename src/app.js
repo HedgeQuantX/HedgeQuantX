@@ -158,7 +158,7 @@ const loginPrompt = async (propfirmName) => {
       }
     },
     {
-      type: 'password',
+      type: 'input',
       name: 'password',
       message: chalk.white.bold('Password:'),
       validate: (input) => {
