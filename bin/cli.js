@@ -2266,18 +2266,13 @@ const handleUpdate = async () => {
         ]);
         
         if (restart) {
-          console.log(chalk.cyan('  Restarting...'));
           console.log();
-          // Use execSync to restart in the same terminal
-          const { execSync } = require('child_process');
-          try {
-            execSync(`node "${path.join(cliDir, 'bin', 'cli.js')}"`, {
-              cwd: cliDir,
-              stdio: 'inherit'
-            });
-          } catch (e) {
-            // User exited the restarted CLI, exit cleanly
-          }
+          console.log(chalk.green('  ✓ Update complete!'));
+          console.log();
+          console.log(chalk.yellow('  Please restart the CLI to apply changes:'));
+          console.log(chalk.cyan('    hedgequantx'));
+          console.log(chalk.gray('    or: node bin/cli.js'));
+          console.log();
           process.exit(0);
         }
       } else {
