@@ -204,27 +204,80 @@ const dashboardMenu = async (service) => {
 };
 
 /**
- * Handles the update process
+ * Handles the update process with auto-restart
  */
 const handleUpdate = async () => {
+  const { spawn } = require('child_process');
+  const pkg = require('../package.json');
+  const currentVersion = pkg.version;
   const spinner = ora('Checking for updates...').start();
   
   try {
     const cliPath = path.resolve(__dirname, '..');
     
+    // Get current commit
+    const beforeCommit = execSync('git rev-parse --short HEAD', { cwd: cliPath, stdio: 'pipe' }).toString().trim();
+    
+    // Fetch to check for updates
+    execSync('git fetch origin main', { cwd: cliPath, stdio: 'pipe' });
+    
+    // Check if behind
+    const behindCount = execSync('git rev-list HEAD..origin/main --count', { cwd: cliPath, stdio: 'pipe' }).toString().trim();
+    
+    if (parseInt(behindCount) === 0) {
+      spinner.succeed('Already up to date!');
+      console.log(chalk.cyan(`  Version: v${currentVersion}`));
+      console.log(chalk.gray(`  Commit: ${beforeCommit}`));
+      return;
+    }
+    
     // Stash local changes
+    spinner.text = 'Stashing local changes...';
     try {
-      execSync('git stash', { cwd: cliPath, stdio: 'pipe' });
-    } catch (e) { /* ignore */ }
+      execSync('git stash --include-untracked', { cwd: cliPath, stdio: 'pipe' });
+    } catch (e) {
+      // If stash fails, reset
+      execSync('git checkout -- .', { cwd: cliPath, stdio: 'pipe' });
+    }
     
     // Pull latest
+    spinner.text = 'Downloading updates...';
     execSync('git pull origin main', { cwd: cliPath, stdio: 'pipe' });
+    const afterCommit = execSync('git rev-parse --short HEAD', { cwd: cliPath, stdio: 'pipe' }).toString().trim();
     
+    // Install dependencies
     spinner.text = 'Installing dependencies...';
-    execSync('npm install', { cwd: cliPath, stdio: 'pipe' });
+    try {
+      execSync('npm install --silent', { cwd: cliPath, stdio: 'pipe' });
+    } catch (e) { /* ignore */ }
     
-    spinner.succeed('Updated successfully! Please restart the CLI.');
-    process.exit(0);
+    // Get new version
+    delete require.cache[require.resolve('../package.json')];
+    const newPkg = require('../package.json');
+    const newVersion = newPkg.version;
+    
+    spinner.succeed('CLI updated!');
+    console.log();
+    console.log(chalk.green(`  Version: v${currentVersion} -> v${newVersion}`));
+    console.log(chalk.gray(`  Commits: ${beforeCommit} -> ${afterCommit} (${behindCount} new)`));
+    console.log();
+    console.log(chalk.cyan('  Restarting...'));
+    console.log();
+    
+    // Restart CLI
+    const child = spawn(process.argv[0], [path.join(cliPath, 'bin', 'cli.js')], {
+      cwd: cliPath,
+      stdio: 'inherit',
+      shell: true
+    });
+    
+    child.on('exit', (code) => {
+      process.exit(code);
+    });
+    
+    // Stop current process loop
+    return 'restart';
+    
   } catch (error) {
     spinner.fail('Update failed: ' + error.message);
   }
@@ -291,7 +344,8 @@ const run = async () => {
           await inquirer.prompt([{ type: 'input', name: 'c', message: 'Press Enter...' }]);
           break;
         case 'update':
-          await handleUpdate();
+          const updateResult = await handleUpdate();
+          if (updateResult === 'restart') return; // Stop loop, new process spawned
           break;
         case 'disconnect':
           connections.disconnectAll();
