@@ -328,7 +328,30 @@ class ProjectXService {
   }
 
   /**
-   * Récupérer l'historique des trades d'un compte
+   * Rechercher les comptes via UserAPI
+   * @param {boolean} onlyActiveAccounts 
+   * @returns {Promise<{success: boolean, accounts?: array, error?: string}>}
+   */
+  async searchAccounts(onlyActiveAccounts = true) {
+    try {
+      // UserAPI: use getTradingAccounts as primary method
+      const result = await this.getTradingAccounts();
+      if (result.success && result.accounts) {
+        if (onlyActiveAccounts) {
+          // Filter only active accounts (status 0 = Active)
+          const activeAccounts = result.accounts.filter(a => a.status === 0);
+          return { success: true, accounts: activeAccounts };
+        }
+        return { success: true, accounts: result.accounts };
+      }
+      return { success: false, error: 'Failed to search accounts' };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Récupérer l'historique des trades d'un compte via UserAPI
    * @param {number} accountId 
    * @param {number} days - Nombre de jours d'historique (default: 30)
    * @returns {Promise<{success: boolean, trades?: array, error?: string}>}
@@ -363,40 +386,7 @@ class ProjectXService {
     }
   }
 
-  // ==================== GATEWAY API (Trading) ====================
-
-  /**
-   * Rechercher les comptes via GatewayAPI
-   * @param {boolean} onlyActiveAccounts 
-   * @returns {Promise<{success: boolean, accounts?: array, error?: string}>}
-   */
-  async searchAccounts(onlyActiveAccounts = true) {
-    try {
-      const response = await this._request(
-        this.propfirm.gatewayApi,
-        '/api/Account/search',
-        'POST',
-        { onlyActiveAccounts }
-      );
-
-      // L'API peut retourner soit { success, accounts } soit directement { accounts }
-      if (response.statusCode === 200) {
-        const accounts = response.data.accounts || response.data;
-        if (Array.isArray(accounts)) {
-          return { success: true, accounts };
-        } else if (response.data.success !== false && accounts) {
-          return { success: true, accounts: Array.isArray(accounts) ? accounts : [] };
-        }
-      }
-      
-      return { 
-        success: false, 
-        error: response.data?.errorMessage || 'Failed to search accounts' 
-      };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  }
+  // ==================== GATEWAY API (Trading Only) ====================
 
   /**
    * Placer un ordre via GatewayAPI
