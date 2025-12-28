@@ -1,5 +1,6 @@
 /**
- * Services Module Exports
+ * @fileoverview Services module exports
+ * @module services
  */
 
 const { ProjectXService } = require('./projectx');
