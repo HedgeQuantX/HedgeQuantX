@@ -167,6 +167,71 @@ const connections = {
 // Session courante (pour compatibilité)
 let currentService = null;
 
+// ==================== UI HELPERS (Consistent ASCII Box Style) ====================
+
+// Get logo width for consistent box sizing
+const getLogoWidth = () => {
+  const logoText = figlet.textSync('HEDGEQUANTX', { font: 'ANSI Shadow' });
+  return logoText.split('\n')[0].length;
+};
+
+// Center text in a given width
+const centerText = (text, width) => {
+  const len = text.replace(/\x1b\[[0-9;]*m/g, '').length;
+  const padding = Math.max(0, width - len);
+  const leftPad = Math.floor(padding / 2);
+  const rightPad = padding - leftPad;
+  return ' '.repeat(leftPad) + text + ' '.repeat(rightPad);
+};
+
+// Pad text to width (for columns)
+const padText = (text, width) => {
+  const len = text.replace(/\x1b\[[0-9;]*m/g, '').length;
+  return text + ' '.repeat(Math.max(0, width - len));
+};
+
+// Format a row with label and value
+const formatRow = (label, value, labelWidth = 18, totalWidth = 40) => {
+  const valLen = value.replace(/\x1b\[[0-9;]*m/g, '').length;
+  const valWidth = totalWidth - labelWidth - 1;
+  return chalk.white(label.padEnd(labelWidth)) + value + ' '.repeat(Math.max(0, valWidth - valLen));
+};
+
+// Draw box header
+const drawBoxHeader = (title, width) => {
+  console.log(chalk.cyan('╔' + '═'.repeat(width - 2) + '╗'));
+  console.log(chalk.cyan('║') + chalk.cyan.bold(centerText(title, width - 2)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '═'.repeat(width - 2) + '╣'));
+};
+
+// Draw box footer
+const drawBoxFooter = (width) => {
+  console.log(chalk.cyan('╚' + '═'.repeat(width - 2) + '╝'));
+};
+
+// Draw 2-column header
+const draw2ColHeader = (title1, title2, width) => {
+  const colWidth = Math.floor((width - 3) / 2);
+  const header1 = centerText(title1, colWidth);
+  const header2 = centerText(title2, colWidth);
+  console.log(chalk.cyan('║') + chalk.cyan.bold(header1) + chalk.cyan('│') + chalk.cyan.bold(header2) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '─'.repeat(colWidth) + '┼' + '─'.repeat(colWidth) + '╣'));
+};
+
+// Draw 2-column row
+const draw2ColRow = (col1, col2, width) => {
+  const colWidth = Math.floor((width - 3) / 2);
+  const c1 = padText(col1, colWidth);
+  const c2 = padText(col2 || '', colWidth);
+  console.log(chalk.cyan('║') + c1 + chalk.cyan('│') + c2 + chalk.cyan('║'));
+};
+
+// Draw separator between 2-column sections
+const draw2ColSeparator = (width) => {
+  const colWidth = Math.floor((width - 3) / 2);
+  console.log(chalk.cyan('╠' + '═'.repeat(colWidth) + '╪' + '═'.repeat(colWidth) + '╣'));
+};
+
 // ==================== DEVICE DETECTION & RESPONSIVE ====================
 
 /**
@@ -694,6 +759,8 @@ const ACCOUNT_TYPE = {
 // Afficher les comptes (toutes connexions)
 const showAccounts = async (service) => {
   const spinner = ora('Fetching accounts...').start();
+  const boxWidth = getLogoWidth();
+  const colWidth = Math.floor((boxWidth - 3) / 2);
   
   // Collecter les comptes de TOUTES les connexions
   let allAccountsData = [];
@@ -711,9 +778,7 @@ const showAccounts = async (service) => {
             });
           });
         }
-      } catch (e) {
-        // Ignore errors
-      }
+      } catch (e) {}
     }
   } else if (service) {
     const result = await service.getTradingAccounts();
@@ -726,58 +791,54 @@ const showAccounts = async (service) => {
   console.log();
   
   if (allAccountsData.length === 0) {
-    console.log(chalk.yellow('  No accounts found.'));
+    drawBoxHeader('ACCOUNTS', boxWidth);
+    draw2ColRow(chalk.yellow('No accounts found.'), '', boxWidth);
+    drawBoxFooter(boxWidth);
   } else {
-    // Afficher le nombre de connexions
-    const totalConnections = connections.count() || 1;
-    console.log(chalk.white.bold(`  Your Trading Accounts (${totalConnections} connection${totalConnections > 1 ? 's' : ''}):`));
-    console.log(chalk.gray('  ' + '─'.repeat(50)));
+    const totalConns = connections.count() || 1;
+    drawBoxHeader(`ACCOUNTS (${allAccountsData.length} accounts, ${totalConns} connection${totalConns > 1 ? 's' : ''})`, boxWidth);
     
-    // Grouper par PropFirm
-    const groupedByPropfirm = {};
-    allAccountsData.forEach(account => {
-      const key = account.propfirm || 'Unknown';
-      if (!groupedByPropfirm[key]) {
-        groupedByPropfirm[key] = [];
-      }
-      groupedByPropfirm[key].push(account);
-    });
-    
-    // Afficher par groupe
-    for (const [propfirm, accounts] of Object.entries(groupedByPropfirm)) {
-      console.log(chalk.magenta.bold(`\n  ${propfirm}`));
-      console.log(chalk.gray('  ' + '─'.repeat(40)));
+    // Display 2 accounts per row
+    for (let i = 0; i < allAccountsData.length; i += 2) {
+      const acc1 = allAccountsData[i];
+      const acc2 = allAccountsData[i + 1];
       
-      // Tri des comptes
-      const sortedAccounts = [...accounts].sort((a, b) => {
-        const statusOrder = { 0: 0, 1: 1, 2: 2, 6: 3, 7: 4, 3: 5, 4: 6, 5: 7 };
-        const statusA = statusOrder[a.status] !== undefined ? statusOrder[a.status] : 99;
-        const statusB = statusOrder[b.status] !== undefined ? statusOrder[b.status] : 99;
-        if (statusA !== statusB) return statusA - statusB;
-        
-        const typeOrder = { 2: 0, 3: 1, 1: 2, 0: 3 };
-        const typeA = typeOrder[a.type] !== undefined ? typeOrder[a.type] : 99;
-        const typeB = typeOrder[b.type] !== undefined ? typeOrder[b.type] : 99;
-        return typeA - typeB;
-      });
-
-      sortedAccounts.forEach((account, index) => {
-        console.log(chalk.cyan(`    ${index + 1}. ${account.accountName || account.name || `Account #${account.accountId}`}`));
-        
-        if (account.balance !== undefined) {
-          const balanceColor = account.balance >= 0 ? chalk.green : chalk.red;
-          console.log(`       Balance: ${balanceColor('$' + account.balance.toLocaleString())}`);
-        }
-        
-        const statusInfo = ACCOUNT_STATUS[account.status] || { text: `Unknown (${account.status})`, color: 'gray' };
-        console.log(`       Status: ${chalk[statusInfo.color](statusInfo.text)}`);
-
-        const typeInfo = ACCOUNT_TYPE[account.type] || { text: `Unknown (${account.type})`, color: 'white' };
-        console.log(`       Type: ${chalk[typeInfo.color](typeInfo.text)}`);
-        
-        console.log();
-      });
+      const name1 = acc1.accountName || acc1.name || `Account #${acc1.accountId}`;
+      const name2 = acc2 ? (acc2.accountName || acc2.name || `Account #${acc2.accountId}`) : '';
+      
+      // Account name header
+      draw2ColHeader(name1.substring(0, colWidth - 4), name2.substring(0, colWidth - 4), boxWidth);
+      
+      // PropFirm
+      const pf1 = formatRow('PropFirm:', chalk.magenta(acc1.propfirm), 12, colWidth);
+      const pf2 = acc2 ? formatRow('PropFirm:', chalk.magenta(acc2.propfirm), 12, colWidth) : '';
+      draw2ColRow(pf1, pf2, boxWidth);
+      
+      // Balance
+      const bal1 = formatRow('Balance:', acc1.balance >= 0 ? chalk.green('$' + acc1.balance.toLocaleString()) : chalk.red('$' + acc1.balance.toLocaleString()), 12, colWidth);
+      const bal2 = acc2 ? formatRow('Balance:', acc2.balance >= 0 ? chalk.green('$' + acc2.balance.toLocaleString()) : chalk.red('$' + acc2.balance.toLocaleString()), 12, colWidth) : '';
+      draw2ColRow(bal1, bal2, boxWidth);
+      
+      // Status
+      const st1 = ACCOUNT_STATUS[acc1.status] || { text: 'Unknown', color: 'gray' };
+      const st2 = acc2 ? (ACCOUNT_STATUS[acc2.status] || { text: 'Unknown', color: 'gray' }) : null;
+      const status1 = formatRow('Status:', chalk[st1.color](st1.text), 12, colWidth);
+      const status2 = acc2 ? formatRow('Status:', chalk[st2.color](st2.text), 12, colWidth) : '';
+      draw2ColRow(status1, status2, boxWidth);
+      
+      // Type
+      const tp1 = ACCOUNT_TYPE[acc1.type] || { text: 'Unknown', color: 'white' };
+      const tp2 = acc2 ? (ACCOUNT_TYPE[acc2.type] || { text: 'Unknown', color: 'white' }) : null;
+      const type1 = formatRow('Type:', chalk[tp1.color](tp1.text), 12, colWidth);
+      const type2 = acc2 ? formatRow('Type:', chalk[tp2.color](tp2.text), 12, colWidth) : '';
+      draw2ColRow(type1, type2, boxWidth);
+      
+      if (i + 2 < allAccountsData.length) {
+        draw2ColSeparator(boxWidth);
+      }
     }
+    
+    drawBoxFooter(boxWidth);
   }
   
   console.log();
@@ -786,25 +847,73 @@ const showAccounts = async (service) => {
 
 // Afficher les infos utilisateur
 const showUserInfo = async (service) => {
+  const boxWidth = getLogoWidth();
   const spinner = ora('Fetching user info...').start();
   
-  const result = await service.getUser();
+  // Collecter les infos de TOUTES les connexions
+  let allUsers = [];
   
-  if (result.success && result.user) {
-    spinner.succeed('User info loaded');
-    console.log();
-    
-    const user = result.user;
-    console.log(chalk.white.bold('  User Information:'));
-    console.log(chalk.gray('  ' + '─'.repeat(50)));
-    console.log(chalk.white(`  Username:   ${user.userName || 'N/A'}`));
-    console.log(chalk.white(`  Name:       ${user.firstName || ''} ${user.lastName || ''}`));
-    console.log(chalk.white(`  Email:      ${user.email || 'N/A'}`));
-    console.log(chalk.white(`  User ID:    ${user.userId || 'N/A'}`));
-    console.log();
+  if (connections.count() > 0) {
+    for (const conn of connections.getAll()) {
+      try {
+        const result = await conn.service.getUser();
+        if (result.success && result.user) {
+          allUsers.push({
+            ...result.user,
+            propfirm: conn.propfirm || conn.type
+          });
+        }
+      } catch (e) {}
+    }
+  } else if (service) {
+    const result = await service.getUser();
+    if (result.success && result.user) {
+      allUsers.push({
+        ...result.user,
+        propfirm: service.getPropfirmName()
+      });
+    }
+  }
+  
+  spinner.succeed('User info loaded');
+  console.log();
+  
+  if (allUsers.length === 0) {
+    drawBoxHeader('USER INFO', boxWidth);
+    console.log(chalk.cyan('║') + padText(chalk.yellow('  No user information available.'), boxWidth - 2) + chalk.cyan('║'));
+    drawBoxFooter(boxWidth);
   } else {
-    spinner.fail('Failed to fetch user info');
-    console.log(chalk.red(`  Error: ${result.error}`));
+    drawBoxHeader(`USER INFO (${allUsers.length} connection${allUsers.length > 1 ? 's' : ''})`, boxWidth);
+    
+    allUsers.forEach((user, index) => {
+      // PropFirm header
+      const pfHeader = `── ${user.propfirm} ──`;
+      console.log(chalk.cyan('║') + chalk.magenta.bold(centerText(pfHeader, boxWidth - 2)) + chalk.cyan('║'));
+      
+      // Username
+      const usernameRow = formatRow('Username:', chalk.cyan(user.userName || 'N/A'), 14, boxWidth - 4);
+      console.log(chalk.cyan('║') + '  ' + usernameRow + chalk.cyan('║'));
+      
+      // Full Name
+      const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'N/A';
+      const nameRow = formatRow('Name:', chalk.white(fullName), 14, boxWidth - 4);
+      console.log(chalk.cyan('║') + '  ' + nameRow + chalk.cyan('║'));
+      
+      // Email
+      const emailRow = formatRow('Email:', chalk.white(user.email || 'N/A'), 14, boxWidth - 4);
+      console.log(chalk.cyan('║') + '  ' + emailRow + chalk.cyan('║'));
+      
+      // User ID
+      const userIdRow = formatRow('User ID:', chalk.gray(user.userId || 'N/A'), 14, boxWidth - 4);
+      console.log(chalk.cyan('║') + '  ' + userIdRow + chalk.cyan('║'));
+      
+      // Separator between users if there are more
+      if (index < allUsers.length - 1) {
+        console.log(chalk.cyan('╠' + '─'.repeat(boxWidth - 2) + '╣'));
+      }
+    });
+    
+    drawBoxFooter(boxWidth);
   }
   
   console.log();
@@ -813,50 +922,109 @@ const showUserInfo = async (service) => {
 
 // Afficher les positions
 const showPositions = async (service) => {
-  // D'abord récupérer les comptes
-  const accountsResult = await service.getTradingAccounts();
+  const boxWidth = getLogoWidth();
+  const colWidth = Math.floor((boxWidth - 3) / 2);
   
-  if (!accountsResult.success || !accountsResult.accounts || accountsResult.accounts.length === 0) {
-    console.log(chalk.yellow('  No accounts available to check positions.'));
-    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
-    return;
+  // Collecter les positions de TOUTES les connexions
+  let allPositions = [];
+  
+  if (connections.count() > 0) {
+    for (const conn of connections.getAll()) {
+      try {
+        const accountsResult = await conn.service.getTradingAccounts();
+        if (accountsResult.success && accountsResult.accounts) {
+          for (const account of accountsResult.accounts) {
+            const result = await conn.service.getPositions(account.accountId);
+            if (result.success && result.positions) {
+              allPositions = allPositions.concat(result.positions.map(p => ({
+                ...p,
+                accountName: account.accountName || account.name || `Account #${account.accountId}`,
+                propfirm: conn.propfirm || conn.type
+              })));
+            }
+          }
+        }
+      } catch (e) {}
+    }
+  } else if (service) {
+    const accountsResult = await service.getTradingAccounts();
+    if (accountsResult.success && accountsResult.accounts) {
+      for (const account of accountsResult.accounts) {
+        const result = await service.getPositions(account.accountId);
+        if (result.success && result.positions) {
+          allPositions = allPositions.concat(result.positions.map(p => ({
+            ...p,
+            accountName: account.accountName || account.name || `Account #${account.accountId}`,
+            propfirm: service.getPropfirmName()
+          })));
+        }
+      }
+    }
   }
 
   const spinner = ora('Fetching positions...').start();
-  
-  let allPositions = [];
-  for (const account of accountsResult.accounts) {
-    const result = await service.getPositions(account.accountId);
-    if (result.success && result.positions) {
-      allPositions = allPositions.concat(result.positions.map(p => ({
-        ...p,
-        accountName: account.accountName || account.name || `Account #${account.accountId}`
-      })));
-    }
-  }
-  
   spinner.succeed('Positions loaded');
   console.log();
   
   if (allPositions.length === 0) {
-    console.log(chalk.yellow('  No open positions.'));
+    drawBoxHeader('OPEN POSITIONS', boxWidth);
+    draw2ColRow(chalk.yellow('No open positions.'), '', boxWidth);
+    drawBoxFooter(boxWidth);
   } else {
-    console.log(chalk.white.bold('  Open Positions:'));
-    console.log(chalk.gray('  ' + '─'.repeat(50)));
+    drawBoxHeader(`OPEN POSITIONS (${allPositions.length})`, boxWidth);
     
-    allPositions.forEach((pos, index) => {
-      console.log(chalk.cyan(`  ${index + 1}. ${pos.symbolId || pos.contractId || 'Unknown'}`));
-      console.log(chalk.white(`     Account: ${pos.accountName}`));
-      console.log(chalk.white(`     Size: ${pos.positionSize || pos.size || 0}`));
-      if (pos.averagePrice) {
-        console.log(chalk.white(`     Avg Price: $${pos.averagePrice}`));
+    // Display 2 positions per row
+    for (let i = 0; i < allPositions.length; i += 2) {
+      const pos1 = allPositions[i];
+      const pos2 = allPositions[i + 1];
+      
+      const symbol1 = pos1.symbolId || pos1.contractId || 'Unknown';
+      const symbol2 = pos2 ? (pos2.symbolId || pos2.contractId || 'Unknown') : '';
+      
+      // Symbol header
+      draw2ColHeader(symbol1.substring(0, colWidth - 4), symbol2.substring(0, colWidth - 4), boxWidth);
+      
+      // Account
+      const acc1 = formatRow('Account:', chalk.cyan(pos1.accountName.substring(0, 15)), 12, colWidth);
+      const acc2 = pos2 ? formatRow('Account:', chalk.cyan(pos2.accountName.substring(0, 15)), 12, colWidth) : '';
+      draw2ColRow(acc1, acc2, boxWidth);
+      
+      // PropFirm
+      const pf1 = formatRow('PropFirm:', chalk.magenta(pos1.propfirm), 12, colWidth);
+      const pf2 = pos2 ? formatRow('PropFirm:', chalk.magenta(pos2.propfirm), 12, colWidth) : '';
+      draw2ColRow(pf1, pf2, boxWidth);
+      
+      // Size
+      const size1 = pos1.positionSize || pos1.size || 0;
+      const size2 = pos2 ? (pos2.positionSize || pos2.size || 0) : 0;
+      const sizeColor1 = size1 > 0 ? chalk.green : (size1 < 0 ? chalk.red : chalk.white);
+      const sizeColor2 = size2 > 0 ? chalk.green : (size2 < 0 ? chalk.red : chalk.white);
+      const sz1 = formatRow('Size:', sizeColor1(size1.toString()), 12, colWidth);
+      const sz2 = pos2 ? formatRow('Size:', sizeColor2(size2.toString()), 12, colWidth) : '';
+      draw2ColRow(sz1, sz2, boxWidth);
+      
+      // Avg Price
+      const price1 = pos1.averagePrice ? '$' + pos1.averagePrice.toFixed(2) : 'N/A';
+      const price2 = pos2 && pos2.averagePrice ? '$' + pos2.averagePrice.toFixed(2) : 'N/A';
+      const pr1 = formatRow('Avg Price:', chalk.white(price1), 12, colWidth);
+      const pr2 = pos2 ? formatRow('Avg Price:', chalk.white(price2), 12, colWidth) : '';
+      draw2ColRow(pr1, pr2, boxWidth);
+      
+      // P&L
+      const pnl1 = pos1.profitAndLoss || 0;
+      const pnl2 = pos2 ? (pos2.profitAndLoss || 0) : 0;
+      const pnlColor1 = pnl1 >= 0 ? chalk.green : chalk.red;
+      const pnlColor2 = pnl2 >= 0 ? chalk.green : chalk.red;
+      const pnlStr1 = formatRow('P&L:', pnlColor1((pnl1 >= 0 ? '+' : '') + '$' + pnl1.toFixed(2)), 12, colWidth);
+      const pnlStr2 = pos2 ? formatRow('P&L:', pnlColor2((pnl2 >= 0 ? '+' : '') + '$' + pnl2.toFixed(2)), 12, colWidth) : '';
+      draw2ColRow(pnlStr1, pnlStr2, boxWidth);
+      
+      if (i + 2 < allPositions.length) {
+        draw2ColSeparator(boxWidth);
       }
-      if (pos.profitAndLoss !== undefined) {
-        const pnlColor = pos.profitAndLoss >= 0 ? chalk.green : chalk.red;
-        console.log(pnlColor(`     P&L: $${pos.profitAndLoss.toFixed(2)}`));
-      }
-      console.log();
-    });
+    }
+    
+    drawBoxFooter(boxWidth);
   }
   
   console.log();
@@ -865,58 +1033,129 @@ const showPositions = async (service) => {
 
 // Afficher les ordres
 const showOrders = async (service) => {
-  const accountsResult = await service.getTradingAccounts();
+  const boxWidth = getLogoWidth();
+  const colWidth = Math.floor((boxWidth - 3) / 2);
   
-  if (!accountsResult.success || !accountsResult.accounts || accountsResult.accounts.length === 0) {
-    console.log(chalk.yellow('  No accounts available to check orders.'));
-    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
-    return;
+  // Order status mapping
+  const ORDER_STATUS = {
+    0: { text: 'Pending', color: 'gray' },
+    1: { text: 'Open', color: 'yellow' },
+    2: { text: 'Filled', color: 'green' },
+    3: { text: 'Cancelled', color: 'red' }
+  };
+  
+  // Order side mapping
+  const ORDER_SIDE = {
+    1: { text: 'BUY', color: 'green' },
+    2: { text: 'SELL', color: 'red' }
+  };
+  
+  // Collecter les ordres de TOUTES les connexions
+  let allOrders = [];
+  
+  if (connections.count() > 0) {
+    for (const conn of connections.getAll()) {
+      try {
+        const accountsResult = await conn.service.getTradingAccounts();
+        if (accountsResult.success && accountsResult.accounts) {
+          for (const account of accountsResult.accounts) {
+            const result = await conn.service.getOrders(account.accountId);
+            if (result.success && result.orders) {
+              allOrders = allOrders.concat(result.orders.map(o => ({
+                ...o,
+                accountName: account.accountName || account.name || `Account #${account.accountId}`,
+                propfirm: conn.propfirm || conn.type
+              })));
+            }
+          }
+        }
+      } catch (e) {}
+    }
+  } else if (service) {
+    const accountsResult = await service.getTradingAccounts();
+    if (accountsResult.success && accountsResult.accounts) {
+      for (const account of accountsResult.accounts) {
+        const result = await service.getOrders(account.accountId);
+        if (result.success && result.orders) {
+          allOrders = allOrders.concat(result.orders.map(o => ({
+            ...o,
+            accountName: account.accountName || account.name || `Account #${account.accountId}`,
+            propfirm: service.getPropfirmName()
+          })));
+        }
+      }
+    }
   }
 
   const spinner = ora('Fetching orders...').start();
-  
-  let allOrders = [];
-  for (const account of accountsResult.accounts) {
-    const result = await service.getOrders(account.accountId);
-    if (result.success && result.orders) {
-      allOrders = allOrders.concat(result.orders.map(o => ({
-        ...o,
-        accountName: account.accountName || account.name || `Account #${account.accountId}`
-      })));
-    }
-  }
-  
   spinner.succeed('Orders loaded');
   console.log();
   
-  if (allOrders.length === 0) {
-    console.log(chalk.yellow('  No recent orders.'));
+  // Limit to recent 20 orders
+  const recentOrders = allOrders.slice(0, 20);
+  
+  if (recentOrders.length === 0) {
+    drawBoxHeader('ORDERS', boxWidth);
+    draw2ColRow(chalk.yellow('No recent orders.'), '', boxWidth);
+    drawBoxFooter(boxWidth);
   } else {
-    console.log(chalk.white.bold('  Recent Orders:'));
-    console.log(chalk.gray('  ' + '─'.repeat(50)));
+    drawBoxHeader(`ORDERS (${recentOrders.length} of ${allOrders.length})`, boxWidth);
     
-    allOrders.slice(0, 10).forEach((order, index) => {
-      const statusColors = {
-        0: chalk.gray,
-        1: chalk.yellow,
-        2: chalk.green,
-        3: chalk.red
-      };
-      const statusNames = {
-        0: 'Pending',
-        1: 'Open',
-        2: 'Filled',
-        3: 'Cancelled'
-      };
-      const statusColor = statusColors[order.status] || chalk.white;
-      const statusName = statusNames[order.status] || 'Unknown';
+    // Display 2 orders per row
+    for (let i = 0; i < recentOrders.length; i += 2) {
+      const ord1 = recentOrders[i];
+      const ord2 = recentOrders[i + 1];
       
-      console.log(chalk.cyan(`  ${index + 1}. ${order.symbolId || 'Unknown'}`));
-      console.log(chalk.white(`     Account: ${order.accountName}`));
-      console.log(chalk.white(`     Size: ${order.positionSize || order.size || 0}`));
-      console.log(statusColor(`     Status: ${statusName}`));
-      console.log();
-    });
+      const symbol1 = ord1.symbolId || 'Unknown';
+      const symbol2 = ord2 ? (ord2.symbolId || 'Unknown') : '';
+      
+      // Symbol header
+      draw2ColHeader(symbol1.substring(0, colWidth - 4), symbol2.substring(0, colWidth - 4), boxWidth);
+      
+      // Account
+      const acc1 = formatRow('Account:', chalk.cyan(ord1.accountName.substring(0, 15)), 12, colWidth);
+      const acc2 = ord2 ? formatRow('Account:', chalk.cyan(ord2.accountName.substring(0, 15)), 12, colWidth) : '';
+      draw2ColRow(acc1, acc2, boxWidth);
+      
+      // PropFirm
+      const pf1 = formatRow('PropFirm:', chalk.magenta(ord1.propfirm), 12, colWidth);
+      const pf2 = ord2 ? formatRow('PropFirm:', chalk.magenta(ord2.propfirm), 12, colWidth) : '';
+      draw2ColRow(pf1, pf2, boxWidth);
+      
+      // Side (Buy/Sell)
+      const side1 = ORDER_SIDE[ord1.side || ord1.orderSide] || { text: 'N/A', color: 'white' };
+      const side2 = ord2 ? (ORDER_SIDE[ord2.side || ord2.orderSide] || { text: 'N/A', color: 'white' }) : null;
+      const sd1 = formatRow('Side:', chalk[side1.color](side1.text), 12, colWidth);
+      const sd2 = ord2 ? formatRow('Side:', chalk[side2.color](side2.text), 12, colWidth) : '';
+      draw2ColRow(sd1, sd2, boxWidth);
+      
+      // Size
+      const size1 = ord1.positionSize || ord1.size || ord1.quantity || 0;
+      const size2 = ord2 ? (ord2.positionSize || ord2.size || ord2.quantity || 0) : 0;
+      const sz1 = formatRow('Size:', chalk.white(size1.toString()), 12, colWidth);
+      const sz2 = ord2 ? formatRow('Size:', chalk.white(size2.toString()), 12, colWidth) : '';
+      draw2ColRow(sz1, sz2, boxWidth);
+      
+      // Price
+      const price1 = ord1.price ? '$' + ord1.price.toFixed(2) : 'Market';
+      const price2 = ord2 && ord2.price ? '$' + ord2.price.toFixed(2) : (ord2 ? 'Market' : '');
+      const pr1 = formatRow('Price:', chalk.white(price1), 12, colWidth);
+      const pr2 = ord2 ? formatRow('Price:', chalk.white(price2), 12, colWidth) : '';
+      draw2ColRow(pr1, pr2, boxWidth);
+      
+      // Status
+      const st1 = ORDER_STATUS[ord1.status] || { text: 'Unknown', color: 'gray' };
+      const st2 = ord2 ? (ORDER_STATUS[ord2.status] || { text: 'Unknown', color: 'gray' }) : null;
+      const status1 = formatRow('Status:', chalk[st1.color](st1.text), 12, colWidth);
+      const status2 = ord2 ? formatRow('Status:', chalk[st2.color](st2.text), 12, colWidth) : '';
+      draw2ColRow(status1, status2, boxWidth);
+      
+      if (i + 2 < recentOrders.length) {
+        draw2ColSeparator(boxWidth);
+      }
+    }
+    
+    drawBoxFooter(boxWidth);
   }
   
   console.log();
