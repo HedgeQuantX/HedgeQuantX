@@ -30,7 +30,7 @@ const algoTradingMenu = async (service) => {
       message: chalk.white.bold('Select Mode:'),
       choices: [
         { name: chalk.cyan('One Account'), value: 'one_account' },
-        { name: chalk.gray('Copy Trading (Coming Soon)'), value: 'copy_trading', disabled: 'Coming Soon' },
+        { name: chalk.green('Copy Trading'), value: 'copy_trading' },
         new inquirer.Separator(),
         { name: chalk.yellow('< Back'), value: 'back' }
       ],
@@ -44,7 +44,7 @@ const algoTradingMenu = async (service) => {
       await oneAccountMenu(service);
       break;
     case 'copy_trading':
-      // Disabled - Coming Soon
+      await copyTradingMenu();
       break;
     case 'back':
       return 'back';
@@ -506,6 +506,447 @@ const executeSignal = async (service, account, contract, numContracts, signal) =
     }
   } catch (error) {
     console.log(chalk.red(`  [X] Order error: ${error.message}`));
+  }
+};
+
+/**
+ * Copy Trading Menu
+ */
+const copyTradingMenu = async () => {
+  console.log();
+  console.log(chalk.gray(getSeparator()));
+  console.log(chalk.green.bold('  Copy Trading Setup'));
+  console.log(chalk.gray(getSeparator()));
+  console.log();
+
+  // Get all active accounts from all connections
+  const allAccounts = await connections.getAllAccounts();
+  const activeAccounts = allAccounts.filter(acc => acc.status === 0);
+
+  if (activeAccounts.length < 2) {
+    console.log(chalk.red('  [X] You need at least 2 active accounts for copy trading.'));
+    console.log(chalk.gray('      Connect more prop firm accounts first.'));
+    console.log();
+    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+    return;
+  }
+
+  // Step 1: Select Lead Account
+  console.log(chalk.cyan.bold('  Step 1: Select Lead Account'));
+  console.log(chalk.gray('  The lead account is the master account whose trades will be copied.'));
+  console.log();
+
+  const leadChoices = activeAccounts.map(acc => ({
+    name: chalk.cyan(`${acc.accountName || acc.name} - ${acc.propfirm} - $${acc.balance.toLocaleString()}`),
+    value: acc
+  }));
+  leadChoices.push(new inquirer.Separator());
+  leadChoices.push({ name: chalk.yellow('< Back'), value: 'back' });
+
+  const { leadAccount } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'leadAccount',
+      message: chalk.white.bold('Lead Account:'),
+      choices: leadChoices,
+      pageSize: 15,
+      loop: false
+    }
+  ]);
+
+  if (leadAccount === 'back') return;
+
+  // Step 2: Select Follower Account
+  console.log();
+  console.log(chalk.cyan.bold('  Step 2: Select Follower Account'));
+  console.log(chalk.gray('  The follower account will copy trades from the lead account.'));
+  console.log();
+
+  const followerChoices = activeAccounts
+    .filter(acc => acc.accountId !== leadAccount.accountId)
+    .map(acc => ({
+      name: chalk.cyan(`${acc.accountName || acc.name} - ${acc.propfirm} - $${acc.balance.toLocaleString()}`),
+      value: acc
+    }));
+  followerChoices.push(new inquirer.Separator());
+  followerChoices.push({ name: chalk.yellow('< Back'), value: 'back' });
+
+  const { followerAccount } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'followerAccount',
+      message: chalk.white.bold('Follower Account:'),
+      choices: followerChoices,
+      pageSize: 15,
+      loop: false
+    }
+  ]);
+
+  if (followerAccount === 'back') return;
+
+  // Step 3: Select Lead Symbol
+  console.log();
+  console.log(chalk.cyan.bold('  Step 3: Configure Lead Symbol'));
+  console.log();
+
+  const { leadSymbol } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'leadSymbol',
+      message: chalk.white.bold('Lead Symbol:'),
+      choices: FUTURES_SYMBOLS.map(s => ({
+        name: chalk.cyan(s.name),
+        value: s
+      })),
+      pageSize: 15,
+      loop: false
+    }
+  ]);
+
+  const { leadContracts } = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'leadContracts',
+      message: chalk.white.bold('Lead Number of Contracts:'),
+      default: '1',
+      validate: (input) => {
+        const num = parseInt(input);
+        if (isNaN(num) || num <= 0 || num > 100) {
+          return 'Please enter a valid number between 1 and 100';
+        }
+        return true;
+      },
+      filter: (input) => parseInt(input)
+    }
+  ]);
+
+  // Step 4: Select Follower Symbol
+  console.log();
+  console.log(chalk.cyan.bold('  Step 4: Configure Follower Symbol'));
+  console.log();
+
+  const { followerSymbol } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'followerSymbol',
+      message: chalk.white.bold('Follower Symbol:'),
+      choices: FUTURES_SYMBOLS.map(s => ({
+        name: chalk.cyan(s.name),
+        value: s
+      })),
+      pageSize: 15,
+      loop: false
+    }
+  ]);
+
+  const { followerContracts } = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'followerContracts',
+      message: chalk.white.bold('Follower Number of Contracts:'),
+      default: '1',
+      validate: (input) => {
+        const num = parseInt(input);
+        if (isNaN(num) || num <= 0 || num > 100) {
+          return 'Please enter a valid number between 1 and 100';
+        }
+        return true;
+      },
+      filter: (input) => parseInt(input)
+    }
+  ]);
+
+  // Configuration Summary
+  console.log();
+  console.log(chalk.gray(getSeparator()));
+  console.log(chalk.white.bold('  Copy Trading Configuration'));
+  console.log(chalk.gray(getSeparator()));
+  console.log();
+  console.log(chalk.white('  LEAD ACCOUNT'));
+  console.log(chalk.white(`    Account:   ${chalk.cyan(leadAccount.accountName || leadAccount.name)}`));
+  console.log(chalk.white(`    PropFirm:  ${chalk.magenta(leadAccount.propfirm)}`));
+  console.log(chalk.white(`    Symbol:    ${chalk.cyan(leadSymbol.name)}`));
+  console.log(chalk.white(`    Contracts: ${chalk.cyan(leadContracts)}`));
+  console.log();
+  console.log(chalk.white('  FOLLOWER ACCOUNT'));
+  console.log(chalk.white(`    Account:   ${chalk.cyan(followerAccount.accountName || followerAccount.name)}`));
+  console.log(chalk.white(`    PropFirm:  ${chalk.magenta(followerAccount.propfirm)}`));
+  console.log(chalk.white(`    Symbol:    ${chalk.cyan(followerSymbol.name)}`));
+  console.log(chalk.white(`    Contracts: ${chalk.cyan(followerContracts)}`));
+  console.log();
+  console.log(chalk.gray(getSeparator()));
+  console.log();
+
+  const { launch } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'launch',
+      message: chalk.white.bold('Ready to launch Copy Trading?'),
+      choices: [
+        { name: chalk.green.bold('[>] Launch Copy Trading'), value: 'launch' },
+        { name: chalk.yellow('< Back'), value: 'back' }
+      ],
+      loop: false
+    }
+  ]);
+
+  if (launch === 'back') return;
+
+  // Launch Copy Trading
+  await launchCopyTrading({
+    lead: {
+      account: leadAccount,
+      symbol: leadSymbol,
+      contracts: leadContracts,
+      service: leadAccount.service
+    },
+    follower: {
+      account: followerAccount,
+      symbol: followerSymbol,
+      contracts: followerContracts,
+      service: followerAccount.service
+    }
+  });
+};
+
+/**
+ * Launch Copy Trading
+ */
+const launchCopyTrading = async (config) => {
+  const { lead, follower } = config;
+
+  console.log();
+  console.log(chalk.green.bold('  [>] Launching Copy Trading...'));
+  console.log();
+
+  let isRunning = true;
+  let lastLeadPosition = null;
+  const logs = [];
+  const MAX_LOGS = 15;
+
+  const stats = {
+    copiedTrades: 0,
+    leadTrades: 0,
+    followerTrades: 0,
+    errors: 0
+  };
+
+  const addLog = (type, message) => {
+    const timestamp = new Date().toLocaleTimeString();
+    logs.push({ timestamp, type, message });
+    if (logs.length > MAX_LOGS) logs.shift();
+  };
+
+  const displayUI = () => {
+    console.clear();
+    console.log();
+    console.log(chalk.gray(getSeparator()));
+    console.log(chalk.green.bold('  HQX Copy Trading'));
+    console.log(chalk.gray(getSeparator()));
+    console.log(chalk.white(`  Status: ${isRunning ? chalk.green('RUNNING') : chalk.red('STOPPED')}`));
+    console.log(chalk.gray(getSeparator()));
+    console.log();
+
+    // Lead info
+    console.log(chalk.white.bold('  LEAD'));
+    console.log(chalk.white(`    ${chalk.cyan(lead.account.accountName)} @ ${chalk.magenta(lead.account.propfirm)}`));
+    console.log(chalk.white(`    ${chalk.cyan(lead.symbol.value)} x ${lead.contracts}`));
+    console.log();
+
+    // Follower info
+    console.log(chalk.white.bold('  FOLLOWER'));
+    console.log(chalk.white(`    ${chalk.cyan(follower.account.accountName)} @ ${chalk.magenta(follower.account.propfirm)}`));
+    console.log(chalk.white(`    ${chalk.cyan(follower.symbol.value)} x ${follower.contracts}`));
+    console.log();
+
+    // Stats
+    console.log(chalk.gray(getSeparator()));
+    console.log(chalk.white('  Stats: ') +
+      chalk.gray('Lead Trades: ') + chalk.cyan(stats.leadTrades) +
+      chalk.gray(' | Copied: ') + chalk.green(stats.copiedTrades) +
+      chalk.gray(' | Errors: ') + chalk.red(stats.errors)
+    );
+    console.log(chalk.gray(getSeparator()));
+
+    // Logs
+    console.log(chalk.white.bold('  Activity Log'));
+    console.log(chalk.gray(getSeparator()));
+
+    if (logs.length === 0) {
+      console.log(chalk.gray('  Monitoring lead account for trades...'));
+    } else {
+      const typeColors = {
+        info: chalk.cyan,
+        success: chalk.green,
+        trade: chalk.green.bold,
+        copy: chalk.yellow.bold,
+        error: chalk.red,
+        warning: chalk.yellow
+      };
+
+      logs.forEach(log => {
+        const color = typeColors[log.type] || chalk.white;
+        const icon = log.type === 'trade' ? '[>]' :
+                     log.type === 'copy' ? '[+]' :
+                     log.type === 'error' ? '[X]' :
+                     log.type === 'success' ? '[OK]' : '[.]';
+        console.log(chalk.gray(`  [${log.timestamp}]`) + ' ' + color(`${icon} ${log.message}`));
+      });
+    }
+
+    console.log(chalk.gray(getSeparator()));
+    console.log();
+    console.log(chalk.yellow('  Press X to stop copy trading...'));
+    console.log();
+  };
+
+  addLog('info', 'Copy trading initialized');
+  addLog('info', `Monitoring ${lead.account.accountName} for position changes`);
+  displayUI();
+
+  // Position monitoring loop
+  const monitorInterval = setInterval(async () => {
+    if (!isRunning) return;
+
+    try {
+      // Get lead positions
+      const leadPositions = await lead.service.getPositions(lead.account.rithmicAccountId || lead.account.accountId);
+      
+      let currentLeadPosition = null;
+      if (leadPositions.success && leadPositions.positions) {
+        currentLeadPosition = leadPositions.positions.find(p => 
+          p.symbol === lead.symbol.value || 
+          p.symbol?.includes(lead.symbol.searchText)
+        );
+      }
+
+      // Detect position changes
+      const hadPosition = lastLeadPosition && lastLeadPosition.quantity !== 0;
+      const hasPosition = currentLeadPosition && currentLeadPosition.quantity !== 0;
+
+      if (!hadPosition && hasPosition) {
+        // New position opened
+        stats.leadTrades++;
+        const side = currentLeadPosition.quantity > 0 ? 'LONG' : 'SHORT';
+        addLog('trade', `Lead opened ${side} ${Math.abs(currentLeadPosition.quantity)} @ ${currentLeadPosition.averagePrice || 'MKT'}`);
+        
+        // Copy to follower
+        await copyTradeToFollower(follower, currentLeadPosition, 'open');
+        stats.copiedTrades++;
+        displayUI();
+
+      } else if (hadPosition && !hasPosition) {
+        // Position closed
+        addLog('trade', `Lead closed position`);
+        
+        // Close follower position
+        await copyTradeToFollower(follower, lastLeadPosition, 'close');
+        stats.copiedTrades++;
+        displayUI();
+
+      } else if (hadPosition && hasPosition && lastLeadPosition.quantity !== currentLeadPosition.quantity) {
+        // Position size changed
+        const diff = currentLeadPosition.quantity - lastLeadPosition.quantity;
+        const action = diff > 0 ? 'added' : 'reduced';
+        addLog('trade', `Lead ${action} ${Math.abs(diff)} contracts`);
+        
+        // Adjust follower position
+        await copyTradeToFollower(follower, { ...currentLeadPosition, quantityChange: diff }, 'adjust');
+        stats.copiedTrades++;
+        displayUI();
+      }
+
+      lastLeadPosition = currentLeadPosition ? { ...currentLeadPosition } : null;
+
+    } catch (error) {
+      stats.errors++;
+      addLog('error', `Monitor error: ${error.message}`);
+      displayUI();
+    }
+  }, 2000); // Check every 2 seconds
+
+  // Wait for stop key
+  await waitForStopKey();
+
+  // Cleanup
+  isRunning = false;
+  clearInterval(monitorInterval);
+
+  console.log();
+  console.log(chalk.green('  [OK] Copy trading stopped'));
+  console.log();
+  console.log(chalk.gray(getSeparator()));
+  console.log(chalk.white.bold('  Session Summary'));
+  console.log(chalk.gray(getSeparator()));
+  console.log(chalk.white(`  Lead Trades:   ${chalk.cyan(stats.leadTrades)}`));
+  console.log(chalk.white(`  Copied Trades: ${chalk.green(stats.copiedTrades)}`));
+  console.log(chalk.white(`  Errors:        ${chalk.red(stats.errors)}`));
+  console.log(chalk.gray(getSeparator()));
+  console.log();
+
+  await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+};
+
+/**
+ * Copy trade to follower account
+ */
+const copyTradeToFollower = async (follower, position, action) => {
+  try {
+    const service = follower.service;
+    const accountId = follower.account.rithmicAccountId || follower.account.accountId;
+
+    if (action === 'open') {
+      // Open new position
+      const side = position.quantity > 0 ? 0 : 1; // 0=Buy, 1=Sell
+      const result = await service.placeOrder({
+        accountId: accountId,
+        symbol: follower.symbol.value,
+        exchange: 'CME',
+        size: follower.contracts,
+        side: side,
+        type: 2 // Market
+      });
+
+      if (result.success) {
+        console.log(chalk.green(`  [+] Follower: Opened ${side === 0 ? 'LONG' : 'SHORT'} ${follower.contracts} ${follower.symbol.value}`));
+      } else {
+        throw new Error(result.error || 'Order failed');
+      }
+
+    } else if (action === 'close') {
+      // Close position
+      const result = await service.closePosition(accountId, follower.symbol.value);
+
+      if (result.success) {
+        console.log(chalk.green(`  [+] Follower: Closed position`));
+      } else {
+        throw new Error(result.error || 'Close failed');
+      }
+
+    } else if (action === 'adjust') {
+      // Adjust position size
+      const side = position.quantityChange > 0 ? 0 : 1;
+      const size = Math.abs(position.quantityChange);
+      const adjustedSize = Math.round(size * (follower.contracts / Math.abs(position.quantity - position.quantityChange)));
+
+      if (adjustedSize > 0) {
+        const result = await service.placeOrder({
+          accountId: accountId,
+          symbol: follower.symbol.value,
+          exchange: 'CME',
+          size: adjustedSize,
+          side: side,
+          type: 2
+        });
+
+        if (result.success) {
+          console.log(chalk.green(`  [+] Follower: Adjusted by ${side === 0 ? '+' : '-'}${adjustedSize}`));
+        }
+      }
+    }
+
+  } catch (error) {
+    console.log(chalk.red(`  [X] Follower error: ${error.message}`));
   }
 };
 
