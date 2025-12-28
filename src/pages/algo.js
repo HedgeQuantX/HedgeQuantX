@@ -519,6 +519,55 @@ const copyTradingMenu = async () => {
   console.log(chalk.gray(getSeparator()));
   console.log();
 
+  // Check market status first
+  const marketSpinner = ora('Checking market status...').start();
+  
+  // Use a simple market hours check
+  const now = new Date();
+  const utcDay = now.getUTCDay();
+  const utcHour = now.getUTCHours();
+  const isDST = (() => {
+    const jan = new Date(now.getFullYear(), 0, 1);
+    const jul = new Date(now.getFullYear(), 6, 1);
+    return now.getTimezoneOffset() < Math.max(jan.getTimezoneOffset(), jul.getTimezoneOffset());
+  })();
+  const ctOffset = isDST ? 5 : 6;
+  const ctHour = (utcHour - ctOffset + 24) % 24;
+  const ctDay = utcHour < ctOffset ? (utcDay + 6) % 7 : utcDay;
+
+  let marketClosed = false;
+  let marketMessage = '';
+
+  if (ctDay === 6) {
+    marketClosed = true;
+    marketMessage = 'Market closed (Saturday)';
+  } else if (ctDay === 0 && ctHour < 17) {
+    marketClosed = true;
+    marketMessage = 'Market opens Sunday 5:00 PM CT';
+  } else if (ctDay === 5 && ctHour >= 16) {
+    marketClosed = true;
+    marketMessage = 'Market closed (Friday after 4PM CT)';
+  } else if (ctHour === 16 && ctDay >= 1 && ctDay <= 4) {
+    marketClosed = true;
+    marketMessage = 'Daily maintenance (4:00-5:00 PM CT)';
+  }
+
+  if (marketClosed) {
+    marketSpinner.fail('Market is CLOSED');
+    console.log();
+    console.log(chalk.red.bold('  [X] ' + marketMessage));
+    console.log();
+    console.log(chalk.gray('  Futures markets (CME) trading hours:'));
+    console.log(chalk.gray('  Sunday 5:00 PM CT - Friday 4:00 PM CT'));
+    console.log(chalk.gray('  Daily maintenance: 4:00 PM - 5:00 PM CT'));
+    console.log();
+    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+    return;
+  }
+
+  marketSpinner.succeed('Market is OPEN - Ready to trade!');
+  console.log();
+
   // Get all active accounts from all connections
   const allAccounts = await connections.getAllAccounts();
   const activeAccounts = allAccounts.filter(acc => acc.status === 0);
