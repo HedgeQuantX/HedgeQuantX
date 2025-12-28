@@ -579,6 +579,27 @@ class RithmicService extends EventEmitter {
   }
 
   /**
+   * Get lifetime stats (stub for Rithmic - not available via API)
+   */
+  async getLifetimeStats(accountId) {
+    return { success: true, stats: null };
+  }
+
+  /**
+   * Get daily stats (stub for Rithmic - not available via API)
+   */
+  async getDailyStats(accountId) {
+    return { success: true, stats: [] };
+  }
+
+  /**
+   * Get trade history (stub for Rithmic)
+   */
+  async getTradeHistory(accountId, days = 30) {
+    return { success: true, trades: [] };
+  }
+
+  /**
    * Get order history
    * Uses RequestShowOrderHistorySummary (template 324)
    */

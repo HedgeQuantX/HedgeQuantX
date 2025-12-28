@@ -258,6 +258,86 @@ class TradovateService extends EventEmitter {
   }
 
   /**
+   * Get orders for an account
+   */
+  async getOrders(accountId) {
+    try {
+      const orders = await this._request(API_PATHS.ORDER_LIST, 'GET');
+      const filtered = accountId 
+        ? orders.filter(o => o.accountId === accountId)
+        : orders;
+      return { 
+        success: true, 
+        orders: filtered.map(o => ({
+          orderId: o.id,
+          accountId: o.accountId,
+          symbol: o.contractId,
+          side: o.action === 'Buy' ? 0 : 1,
+          quantity: o.orderQty,
+          filledQuantity: o.filledQty || 0,
+          price: o.price,
+          status: o.ordStatus === 'Working' ? 1 : (o.ordStatus === 'Filled' ? 2 : 0),
+          orderType: o.orderType,
+        }))
+      };
+    } catch (error) {
+      return { success: false, error: error.message, orders: [] };
+    }
+  }
+
+  /**
+   * Get order history
+   */
+  async getOrderHistory(days = 30) {
+    try {
+      const orders = await this._request(API_PATHS.ORDER_LIST, 'GET');
+      return { success: true, orders };
+    } catch (error) {
+      return { success: false, error: error.message, orders: [] };
+    }
+  }
+
+  /**
+   * Get lifetime stats (stub - Tradovate doesn't provide this directly)
+   */
+  async getLifetimeStats(accountId) {
+    return { success: true, stats: null };
+  }
+
+  /**
+   * Get daily stats (stub - Tradovate doesn't provide this directly)
+   */
+  async getDailyStats(accountId) {
+    return { success: true, stats: [] };
+  }
+
+  /**
+   * Get trade history
+   */
+  async getTradeHistory(accountId, days = 30) {
+    try {
+      const fills = await this.getFills();
+      const filtered = accountId 
+        ? fills.filter(f => f.accountId === accountId)
+        : fills;
+      return { 
+        success: true, 
+        trades: filtered.map(f => ({
+          tradeId: f.id,
+          accountId: f.accountId,
+          symbol: f.contractId,
+          side: f.action === 'Buy' ? 0 : 1,
+          quantity: f.qty,
+          price: f.price,
+          timestamp: f.timestamp,
+        }))
+      };
+    } catch (error) {
+      return { success: false, error: error.message, trades: [] };
+    }
+  }
+
+  /**
    * Check market hours (same logic as ProjectX)
    */
   checkMarketHours() {

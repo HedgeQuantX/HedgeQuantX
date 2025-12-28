@@ -117,27 +117,33 @@ const showStats = async (service) => {
     const ordResult = await svc.getOrders(account.accountId);
     if (ordResult.success) totalOpenOrders += ordResult.orders.filter(o => o.status === 1).length;
     
-    // Lifetime stats
-    const lifetimeResult = await svc.getLifetimeStats(account.accountId);
-    if (lifetimeResult.success && lifetimeResult.stats) {
-      account.lifetimeStats = lifetimeResult.stats;
+    // Lifetime stats (if available)
+    if (typeof svc.getLifetimeStats === 'function') {
+      const lifetimeResult = await svc.getLifetimeStats(account.accountId);
+      if (lifetimeResult.success && lifetimeResult.stats) {
+        account.lifetimeStats = lifetimeResult.stats;
+      }
     }
     
-    // Daily stats
-    const dailyResult = await svc.getDailyStats(account.accountId);
-    if (dailyResult.success && dailyResult.stats) {
-      account.dailyStats = dailyResult.stats;
-      allDailyStats = allDailyStats.concat(dailyResult.stats);
+    // Daily stats (if available)
+    if (typeof svc.getDailyStats === 'function') {
+      const dailyResult = await svc.getDailyStats(account.accountId);
+      if (dailyResult.success && dailyResult.stats) {
+        account.dailyStats = dailyResult.stats;
+        allDailyStats = allDailyStats.concat(dailyResult.stats);
+      }
     }
     
-    // Trade history
-    const tradesResult = await svc.getTradeHistory(account.accountId, 30);
-    if (tradesResult.success && tradesResult.trades.length > 0) {
-      allTrades = allTrades.concat(tradesResult.trades.map(t => ({
-        ...t,
-        accountName: account.accountName,
-        propfirm: account.propfirm
-      })));
+    // Trade history (if available)
+    if (typeof svc.getTradeHistory === 'function') {
+      const tradesResult = await svc.getTradeHistory(account.accountId, 30);
+      if (tradesResult.success && tradesResult.trades.length > 0) {
+        allTrades = allTrades.concat(tradesResult.trades.map(t => ({
+          ...t,
+          accountName: account.accountName,
+          propfirm: account.propfirm
+        })));
+      }
     }
   }
 
