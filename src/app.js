@@ -359,19 +359,24 @@ const rithmicMenu = async () => {
 
     if (result.success) {
       spinner.text = 'Fetching accounts...';
-      await service.getTradingAccounts();
+      const accResult = await service.getTradingAccounts();
       
       connections.add('rithmic', service, service.propfirm.name);
       currentService = service;
       currentPlatform = 'rithmic';
-      spinner.succeed(`Connected to ${service.propfirm.name}`);
+      spinner.succeed(`Connected to ${service.propfirm.name} (${accResult.accounts?.length || 0} accounts)`);
+      
+      // Small pause to see the success message
+      await new Promise(r => setTimeout(r, 1500));
       return service;
     } else {
       spinner.fail(result.error || 'Authentication failed');
+      await new Promise(r => setTimeout(r, 2000));
       return null;
     }
   } catch (error) {
-    spinner.fail(error.message);
+    spinner.fail(`Connection error: ${error.message}`);
+    await new Promise(r => setTimeout(r, 2000));
     return null;
   }
 };
@@ -583,10 +588,14 @@ const dashboardMenu = async (service) => {
   console.log(chalk.cyan('║') + chalk.white.bold(centerText('DASHBOARD', innerWidth)) + chalk.cyan('║'));
   console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
   
-  // Connection info
-  const connInfo = chalk.green('Connected to ' + service.propfirm.name);
-  const connLen = ('Connected to ' + service.propfirm.name).length;
-  console.log(chalk.cyan('║') + '  ' + connInfo + ' '.repeat(innerWidth - connLen - 2) + chalk.cyan('║'));
+  // Connection info - show all active connections
+  const allConns = connections.getAll();
+  if (allConns.length > 0) {
+    const connNames = allConns.map(c => c.propfirm || c.type).join(', ');
+    const connText = `Connected to ${connNames}`;
+    const connInfo = chalk.green(connText);
+    console.log(chalk.cyan('║') + '  ' + connInfo + ' '.repeat(Math.max(0, innerWidth - connText.length - 2)) + chalk.cyan('║'));
+  }
   
   if (user) {
     const userInfo = 'Welcome, ' + user.userName.toUpperCase() + '!';
