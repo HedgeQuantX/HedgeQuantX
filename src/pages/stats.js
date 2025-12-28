@@ -368,7 +368,7 @@ const showStats = async (service) => {
   
   drawBoxFooter(boxWidth);
   
-  // HQX Score - Spider/Radar Chart
+  // HQX Score
   console.log();
   drawBoxHeader('HQX SCORE', boxWidth);
   
@@ -384,69 +384,44 @@ const showStats = async (service) => {
   
   // Overall HQX Score
   const hqxScore = Math.round((winRateScore + profitFactorScore + consistencyScore + riskScore + volumeScore + returnScore) / 6);
-  
-  // Draw ASCII spider chart
-  const chartWidth = Math.min(50, Math.floor(innerWidth / 2) - 4);
-  const centerX = Math.floor(chartWidth / 2);
-  const centerY = 6;
-  const maxRadius = 5;
-  
-  // Scores for 6 axes
-  const scores = [
-    { name: 'Win Rate', value: winRateScore, short: 'WR' },
-    { name: 'Profit Factor', value: profitFactorScore, short: 'PF' },
-    { name: 'Consistency', value: consistencyScore, short: 'CS' },
-    { name: 'Risk Mgmt', value: riskScore, short: 'RM' },
-    { name: 'Volume', value: volumeScore, short: 'VL' },
-    { name: 'Returns', value: returnScore, short: 'RT' }
-  ];
-  
-  // Create simple spider visualization
-  const spiderLines = [];
-  spiderLines.push('');
-  spiderLines.push(`                    Win Rate: ${winRateScore.toFixed(0)}%`);
-  spiderLines.push(`                        /\\`);
-  spiderLines.push(`         Returns       /  \\       Profit Factor`);
-  spiderLines.push(`          ${returnScore.toFixed(0)}%  \\    /    \\    /  ${profitFactorScore.toFixed(0)}%`);
-  spiderLines.push(`                  \\  /      \\  /`);
-  spiderLines.push(`                   \\/________\\/`);
-  spiderLines.push(`                   /\\        /\\`);
-  spiderLines.push(`                  /  \\      /  \\`);
-  spiderLines.push(`         Volume  /    \\    /    \\  Consistency`);
-  spiderLines.push(`          ${volumeScore.toFixed(0)}%       \\  /        ${consistencyScore.toFixed(0)}%`);
-  spiderLines.push(`                        \\/`);
-  spiderLines.push(`                    Risk Mgmt: ${riskScore.toFixed(0)}%`);
-  spiderLines.push('');
-  
-  // Score color
   const scoreColor = hqxScore >= 70 ? chalk.green : hqxScore >= 50 ? chalk.yellow : chalk.red;
   const scoreGrade = hqxScore >= 90 ? 'S' : hqxScore >= 80 ? 'A' : hqxScore >= 70 ? 'B' : hqxScore >= 60 ? 'C' : hqxScore >= 50 ? 'D' : 'F';
   
-  // Display spider chart on left, score on right
-  const scoreDisplay = [
-    '',
-    '',
-    '  ╔═══════════════════╗',
-    '  ║    HQX SCORE      ║',
-    '  ╠═══════════════════╣',
-    `  ║                   ║`,
-    `  ║     ${scoreColor(hqxScore.toString().padStart(3))} / 100     ║`,
-    `  ║     Grade: ${scoreColor(scoreGrade)}      ║`,
-    `  ║                   ║`,
-    '  ╚═══════════════════╝',
-    '',
-    '',
-    '',
-    ''
+  // Progress bar helper
+  const makeBar = (score, width = 20) => {
+    const filled = Math.round((score / 100) * width);
+    const empty = width - filled;
+    const color = score >= 70 ? chalk.green : score >= 50 ? chalk.yellow : chalk.red;
+    return color('█'.repeat(filled)) + chalk.gray('░'.repeat(empty));
+  };
+  
+  // Metrics with progress bars
+  const metrics = [
+    { name: 'Win Rate', score: winRateScore },
+    { name: 'Profit Factor', score: profitFactorScore },
+    { name: 'Consistency', score: consistencyScore },
+    { name: 'Risk Management', score: riskScore },
+    { name: 'Volume', score: volumeScore },
+    { name: 'Returns', score: returnScore }
   ];
   
-  for (let i = 0; i < Math.max(spiderLines.length, scoreDisplay.length); i++) {
-    const left = (spiderLines[i] || '').padEnd(Math.floor(innerWidth / 2));
-    const right = (scoreDisplay[i] || '').padEnd(Math.floor(innerWidth / 2));
-    const line = left + right;
+  const barWidth = 30;
+  const labelWidth = 18;
+  
+  // Display overall score
+  const overallLine = `  OVERALL SCORE: ${scoreColor(hqxScore.toString())} / 100  [Grade: ${scoreColor(scoreGrade)}]`;
+  const overallVisLen = overallLine.replace(/\x1b\[[0-9;]*m/g, '').length;
+  console.log(chalk.cyan('\u2551') + overallLine + ' '.repeat(innerWidth - overallVisLen) + chalk.cyan('\u2551'));
+  console.log(chalk.cyan('\u2551') + chalk.gray('─'.repeat(innerWidth)) + chalk.cyan('\u2551'));
+  
+  // Display each metric
+  for (const metric of metrics) {
+    const label = ('  ' + metric.name + ':').padEnd(labelWidth);
+    const bar = makeBar(metric.score, barWidth);
+    const pct = (metric.score.toFixed(0) + '%').padStart(5);
+    const line = label + bar + ' ' + pct;
     const visLen = line.replace(/\x1b\[[0-9;]*m/g, '').length;
-    const pad = innerWidth - visLen;
-    console.log(chalk.cyan('\u2551') + line + ' '.repeat(Math.max(0, pad)) + chalk.cyan('\u2551'));
+    console.log(chalk.cyan('\u2551') + chalk.white(label) + bar + ' ' + chalk.white(pct) + ' '.repeat(innerWidth - visLen) + chalk.cyan('\u2551'));
   }
   
   drawBoxFooter(boxWidth);
