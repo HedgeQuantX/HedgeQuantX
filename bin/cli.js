@@ -152,6 +152,8 @@ const dashboardMenu = async (service) => {
         { name: chalk.green('View Stats'), value: 'stats' },
         { name: chalk.green('User Info'), value: 'userinfo' },
         new inquirer.Separator(),
+        { name: chalk.magenta('Algo-Trading'), value: 'algotrading' },
+        new inquirer.Separator(),
         { name: chalk.cyan('Refresh CLI (git pull)'), value: 'refresh' },
         { name: chalk.yellow('Disconnect'), value: 'disconnect' }
       ],
@@ -396,10 +398,99 @@ const showStats = async (service) => {
     return;
   }
 
+  // Variables pour les totaux
+  let totalBalance = 0;
+  let totalStartingBalance = 0;
+  let totalPnL = 0;
+  let allTrades = [];
+  let totalOpenPositions = 0;
+  let totalOpenOrders = 0;
+
+  spinner.text = 'Fetching detailed stats...';
+
+  // Collecter les données de tous les comptes
+  for (const account of accountsResult.accounts) {
+    totalBalance += account.balance || 0;
+    
+    // Starting Balance estimation
+    const accountName = account.accountName || '';
+    let startingBalance = 0;
+    if (accountName.includes('150')) startingBalance = 150000;
+    else if (accountName.includes('100')) startingBalance = 100000;
+    else if (accountName.includes('50')) startingBalance = 50000;
+    else if (accountName.includes('25')) startingBalance = 25000;
+    totalStartingBalance += startingBalance;
+    
+    // Positions
+    const posResult = await service.getPositions(account.accountId);
+    if (posResult.success && posResult.positions) {
+      totalOpenPositions += posResult.positions.length;
+    }
+    
+    // Orders
+    const ordersResult = await service.getOrders(account.accountId);
+    if (ordersResult.success && ordersResult.orders) {
+      totalOpenOrders += ordersResult.orders.filter(o => o.status === 1).length;
+      
+      // Collecter les trades (ordres remplis)
+      const filledOrders = ordersResult.orders.filter(o => o.status === 2);
+      allTrades = allTrades.concat(filledOrders.map(o => ({
+        ...o,
+        accountName: account.accountName
+      })));
+    }
+  }
+
+  totalPnL = totalBalance - totalStartingBalance;
+
+  // Calculer les métriques de trading
+  let winningTrades = 0;
+  let losingTrades = 0;
+  let totalWinAmount = 0;
+  let totalLossAmount = 0;
+  let bestTrade = 0;
+  let worstTrade = 0;
+
+  // Note: Ces calculs sont approximatifs car l'API Orders ne retourne pas le P&L par trade
+  // Pour des stats précises, il faudrait utiliser un endpoint dédié aux trades historiques
+  const totalTrades = allTrades.length;
+
   spinner.succeed('Stats loaded');
   console.log();
-  console.log(chalk.white.bold('  Account Statistics:'));
+  
+  // ═══════════════════════════════════════════════════════
+  // TOTAL PORTFOLIO SUMMARY
+  // ═══════════════════════════════════════════════════════
+  console.log(chalk.yellow.bold('  ╔═══════════════════════════════════════════════════════╗'));
+  console.log(chalk.yellow.bold('  ║           PORTFOLIO SUMMARY                          ║'));
+  console.log(chalk.yellow.bold('  ╚═══════════════════════════════════════════════════════╝'));
+  console.log();
+  
+  console.log(chalk.white.bold('  Total Accounts:    ') + chalk.cyan(accountsResult.accounts.length));
+  
+  const totalBalanceColor = totalBalance >= 0 ? chalk.green : chalk.red;
+  console.log(chalk.white.bold('  Total Balance:     ') + totalBalanceColor('$' + totalBalance.toLocaleString()));
+  
+  if (totalStartingBalance > 0) {
+    console.log(chalk.white.bold('  Starting Balance:  ') + chalk.white('$' + totalStartingBalance.toLocaleString()));
+    const pnlColor = totalPnL >= 0 ? chalk.green : chalk.red;
+    const pnlPercent = ((totalPnL / totalStartingBalance) * 100).toFixed(2);
+    console.log(chalk.white.bold('  Total P&L:         ') + pnlColor('$' + totalPnL.toLocaleString() + ' (' + pnlPercent + '%)'));
+  }
+  
+  console.log(chalk.white.bold('  Open Positions:    ') + chalk.white(totalOpenPositions));
+  console.log(chalk.white.bold('  Open Orders:       ') + chalk.white(totalOpenOrders));
+  console.log(chalk.white.bold('  Total Trades:      ') + chalk.white(totalTrades));
+  
+  console.log();
   console.log(chalk.gray('  ' + '═'.repeat(55)));
+  
+  // ═══════════════════════════════════════════════════════
+  // INDIVIDUAL ACCOUNT STATS
+  // ═══════════════════════════════════════════════════════
+  console.log();
+  console.log(chalk.white.bold('  Individual Account Statistics:'));
+  console.log(chalk.gray('  ' + '─'.repeat(55)));
 
   for (const account of accountsResult.accounts) {
     const accountName = account.accountName || account.name || `Account #${account.accountId}`;
@@ -419,7 +510,7 @@ const showStats = async (service) => {
     console.log(`     Status:         ${chalk[statusInfo.color](statusInfo.text)}`);
     console.log(`     Type:           ${chalk[typeInfo.color](typeInfo.text)}`);
     
-    // Starting Balance (si disponible, sinon estimation basée sur le nom du compte)
+    // Starting Balance
     let startingBalance = null;
     if (accountName.includes('150')) startingBalance = 150000;
     else if (accountName.includes('100')) startingBalance = 100000;
@@ -434,7 +525,7 @@ const showStats = async (service) => {
       console.log(`     P&L:            ${pnlColor('$' + pnl.toLocaleString() + ' (' + pnlPercent + '%)')}`);
     }
     
-    // Récupérer les positions ouvertes pour ce compte
+    // Positions
     const posResult = await service.getPositions(account.accountId);
     if (posResult.success && posResult.positions) {
       const openPositions = posResult.positions.length;
@@ -452,11 +543,13 @@ const showStats = async (service) => {
       }
     }
     
-    // Récupérer les ordres ouverts pour ce compte
+    // Orders
     const ordersResult = await service.getOrders(account.accountId);
     if (ordersResult.success && ordersResult.orders) {
       const openOrders = ordersResult.orders.filter(o => o.status === 1).length;
+      const filledOrders = ordersResult.orders.filter(o => o.status === 2).length;
       console.log(`     Open Orders:    ${chalk.white(openOrders)}`);
+      console.log(`     Filled Trades:  ${chalk.white(filledOrders)}`);
     }
   }
   
@@ -464,6 +557,67 @@ const showStats = async (service) => {
   console.log(chalk.gray('  ' + '═'.repeat(55)));
   console.log();
   await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+};
+
+// Menu Algo-Trading
+const algoTradingMenu = async (service) => {
+  console.log();
+  console.log(chalk.gray('─'.repeat(60)));
+  console.log(chalk.magenta.bold('  Algo-Trading'));
+  console.log(chalk.gray('─'.repeat(60)));
+  console.log();
+
+  const { action } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'action',
+      message: chalk.white.bold('Algo-Trading Options:'),
+      choices: [
+        { name: chalk.green('Start Strategy'), value: 'start' },
+        { name: chalk.green('Stop Strategy'), value: 'stop' },
+        { name: chalk.green('View Active Strategies'), value: 'view' },
+        { name: chalk.green('Strategy Settings'), value: 'settings' },
+        { name: chalk.green('Backtest'), value: 'backtest' },
+        new inquirer.Separator(),
+        { name: chalk.yellow('< Back'), value: 'back' }
+      ],
+      pageSize: 10,
+      loop: false
+    }
+  ]);
+
+  switch (action) {
+    case 'start':
+      console.log();
+      console.log(chalk.yellow('  Strategy engine coming soon...'));
+      console.log(chalk.gray('  This feature will allow you to run automated trading strategies.'));
+      break;
+    case 'stop':
+      console.log();
+      console.log(chalk.yellow('  No active strategies to stop.'));
+      break;
+    case 'view':
+      console.log();
+      console.log(chalk.yellow('  No active strategies.'));
+      break;
+    case 'settings':
+      console.log();
+      console.log(chalk.yellow('  Strategy settings coming soon...'));
+      break;
+    case 'backtest':
+      console.log();
+      console.log(chalk.yellow('  Backtesting engine coming soon...'));
+      break;
+    case 'back':
+      return 'back';
+  }
+
+  if (action !== 'back') {
+    console.log();
+    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+  }
+  
+  return action;
 };
 
 // Fonction principale
@@ -518,6 +672,16 @@ const main = async () => {
                 break;
               case 'userinfo':
                 await showUserInfo(currentService);
+                break;
+              case 'algotrading':
+                let algoRunning = true;
+                while (algoRunning) {
+                  banner();
+                  const algoResult = await algoTradingMenu(currentService);
+                  if (algoResult === 'back') {
+                    algoRunning = false;
+                  }
+                }
                 break;
               case 'refresh':
                 const spinnerRefresh = ora('Updating CLI from GitHub...').start();
