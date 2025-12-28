@@ -2288,6 +2288,9 @@ const algoLogsScreen = async (service) => {
 
 // Fonction pour gérer les mises à jour
 const handleUpdate = async () => {
+  const pkg = require('../package.json');
+  const currentVersion = pkg.version;
+  
   const spinnerRefresh = ora('Checking for updates...').start();
   try {
     const cliDir = path.resolve(__dirname, '..');
@@ -2323,9 +2326,15 @@ const handleUpdate = async () => {
         execSync('git pull origin main', { cwd: cliDir, stdio: 'pipe' });
         const afterCommit = execSync('git rev-parse --short HEAD', { cwd: cliDir, stdio: 'pipe' }).toString().trim();
         
+        // Re-read package.json to get new version
+        delete require.cache[require.resolve('../package.json')];
+        const newPkg = require('../package.json');
+        const newVersion = newPkg.version;
+        
         spinnerRefresh.succeed('CLI updated!');
-        console.log(chalk.green(`  Updated: ${beforeCommit} → ${afterCommit}`));
-        console.log(chalk.green(`  ${behindCount} new commit(s) applied.`));
+        console.log();
+        console.log(chalk.green(`  Version: v${currentVersion} → v${newVersion}`));
+        console.log(chalk.gray(`  Commits: ${beforeCommit} → ${afterCommit} (${behindCount} new)`));
         console.log();
         
         // Ask user if they want to restart
@@ -2351,12 +2360,12 @@ const handleUpdate = async () => {
         }
       } else {
         spinnerRefresh.succeed('Already up to date!');
-        console.log(chalk.cyan(`  Current version: ${beforeCommit}`));
-        console.log(chalk.gray('  No updates available.'));
+        console.log(chalk.cyan(`  Version: v${currentVersion}`));
+        console.log(chalk.gray(`  Commit: ${beforeCommit}`));
       }
     } else {
       spinnerRefresh.succeed('Data refreshed');
-      console.log(chalk.cyan('  Local dev mode. Session still active.'));
+      console.log(chalk.cyan(`  Version: v${currentVersion} (local dev mode)`));
     }
     
     // Refresh user data
