@@ -18,7 +18,6 @@ const { validateUsername, validatePassword, maskSensitive } = require('./securit
 // Pages
 const { showStats } = require('./pages/stats');
 const { showAccounts } = require('./pages/accounts');
-const { showUserInfo } = require('./pages/user');
 const { algoTradingMenu } = require('./pages/algo');
 
 // Current service reference
@@ -288,10 +287,8 @@ const dashboardMenu = async (service) => {
   };
   
   menuRow(chalk.cyan('[1] View Accounts'), chalk.cyan('[2] View Stats'));
-  menuRow(chalk.cyan('[3] User Info'), chalk.green('[+] Add Prop-Account'));
-  console.log(chalk.cyan('╠' + '─'.repeat(innerWidth) + '╣'));
-  menuRow(chalk.magenta('[A] Algo-Trading'), chalk.yellow('[U] Update HQX'));
-  menuRow(chalk.red('[X] Disconnect'), '');
+  menuRow(chalk.cyan('[+] Add Prop-Account'), chalk.cyan('[A] Algo-Trading'));
+  menuRow(chalk.yellow('[U] Update HQX'), chalk.red('[X] Disconnect'));
   
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
   console.log();
@@ -300,9 +297,9 @@ const dashboardMenu = async (service) => {
     {
       type: 'input',
       name: 'action',
-      message: chalk.cyan('Enter choice (1/2/3/+/A/U/X):'),
+      message: chalk.cyan('Enter choice (1/2/+/A/U/X):'),
       validate: (input) => {
-        const valid = ['1', '2', '3', '+', 'a', 'A', 'u', 'U', 'x', 'X'];
+        const valid = ['1', '2', '+', 'a', 'A', 'u', 'U', 'x', 'X'];
         if (valid.includes(input)) return true;
         return 'Please enter a valid option';
       }
@@ -313,7 +310,6 @@ const dashboardMenu = async (service) => {
   const actionMap = {
     '1': 'accounts',
     '2': 'stats',
-    '3': 'userinfo',
     '+': 'add_prop_account',
     'a': 'algotrading',
     'A': 'algotrading',
@@ -450,9 +446,6 @@ const run = async () => {
 
         case 'stats':
           await showStats(currentService);
-          break;
-        case 'userinfo':
-          await showUserInfo(currentService);
           break;
         case 'add_prop_account':
           const newService = await projectXMenu();
