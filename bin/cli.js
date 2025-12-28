@@ -250,9 +250,41 @@ const projectXPropfirms = [
 ];
 
 // Banner - Responsive for all devices
-const banner = () => {
+const banner = async () => {
   console.clear();
   const device = getDevice();
+  
+  // Get stats if connected
+  let statsInfo = null;
+  if (connections.count() > 0) {
+    try {
+      const allAccounts = await connections.getAllAccounts();
+      let totalBalance = 0;
+      let totalStartingBalance = 0;
+      
+      allAccounts.forEach(account => {
+        totalBalance += account.balance || 0;
+        const name = account.accountName || '';
+        if (name.includes('150')) totalStartingBalance += 150000;
+        else if (name.includes('100')) totalStartingBalance += 100000;
+        else if (name.includes('50')) totalStartingBalance += 50000;
+        else if (name.includes('25')) totalStartingBalance += 25000;
+      });
+      
+      const pnl = totalBalance - totalStartingBalance;
+      const pnlPercent = totalStartingBalance > 0 ? ((pnl / totalStartingBalance) * 100).toFixed(1) : '0.0';
+      
+      statsInfo = {
+        connections: connections.count(),
+        accounts: allAccounts.length,
+        balance: totalBalance,
+        pnl: pnl,
+        pnlPercent: pnlPercent
+      };
+    } catch (e) {
+      // Ignore errors
+    }
+  }
   
   if (device.isMobile) {
     // 📱 MOBILE: Ultra compact
@@ -260,7 +292,11 @@ const banner = () => {
     console.log(chalk.cyan.bold(' ┌───────────────────┐'));
     console.log(chalk.cyan.bold(' │   HEDGEQUANTX     │'));
     console.log(chalk.cyan.bold(' │   ═══════════     │'));
-    console.log(chalk.yellow.bold(' │   Algo Trading    │'));
+    if (statsInfo) {
+      console.log(chalk.cyan.bold(' │') + chalk.green(` $${(statsInfo.balance/1000).toFixed(0)}K`) + chalk.gray(' | ') + chalk.cyan(`${statsInfo.accounts} acc`) + chalk.cyan.bold('  │'));
+    } else {
+      console.log(chalk.yellow.bold(' │   Algo Trading    │'));
+    }
     console.log(chalk.cyan.bold(' └───────────────────┘'));
     console.log();
     
@@ -276,40 +312,69 @@ const banner = () => {
       )
     );
     console.log(chalk.gray(getSeparator()));
-    console.log(chalk.yellow.bold('  Prop Futures Algo Trading'));
+    if (statsInfo) {
+      const pnlColor = statsInfo.pnl >= 0 ? chalk.green : chalk.red;
+      console.log(
+        chalk.white(`  Conn: ${chalk.cyan(statsInfo.connections)}`) +
+        chalk.gray(' | ') +
+        chalk.white(`Acc: ${chalk.cyan(statsInfo.accounts)}`) +
+        chalk.gray(' | ') +
+        chalk.white(`Bal: ${chalk.green('$' + statsInfo.balance.toLocaleString())}`) +
+        chalk.gray(' | ') +
+        chalk.white(`P&L: ${pnlColor((statsInfo.pnl >= 0 ? '+' : '') + '$' + statsInfo.pnl.toLocaleString())}`)
+      );
+    } else {
+      console.log(chalk.yellow.bold('  Prop Futures Algo Trading'));
+    }
     console.log(chalk.gray(getSeparator()));
-    console.log();
-    
-  } else if (device.isLargeDesktop) {
-    // 🖥️ LARGE DESKTOP: Full with extra info
-    console.log(
-      chalk.cyan(
-        figlet.textSync('HEDGEQUANTX', {
-          font: 'ANSI Shadow',
-          horizontalLayout: 'default',
-          verticalLayout: 'default'
-        })
-      )
-    );
-    console.log(chalk.gray('═'.repeat(70)));
-    console.log(chalk.yellow.bold('  Prop Futures Algo Trading') + chalk.gray('                         v1.0.0'));
-    console.log(chalk.gray('═'.repeat(70)));
     console.log();
     
   } else {
-    // 💻 DESKTOP: Standard
-    console.log(
-      chalk.cyan(
-        figlet.textSync('HEDGEQUANTX', {
-          font: 'ANSI Shadow',
-          horizontalLayout: 'default',
-          verticalLayout: 'default'
-        })
-      )
-    );
-    console.log(chalk.gray(getSeparator()));
-    console.log(chalk.yellow.bold('  Prop Futures Algo Trading'));
-    console.log(chalk.gray(getSeparator()));
+    // 💻 DESKTOP & LARGE DESKTOP
+    const logoText = figlet.textSync('HEDGEQUANTX', {
+      font: 'ANSI Shadow',
+      horizontalLayout: 'default',
+      verticalLayout: 'default'
+    });
+    
+    console.log(chalk.cyan(logoText));
+    
+    // Get logo width (first line length)
+    const logoWidth = logoText.split('\n')[0].length;
+    
+    console.log(chalk.gray('═'.repeat(logoWidth)));
+    
+    if (statsInfo) {
+      const pnlColor = statsInfo.pnl >= 0 ? chalk.green : chalk.red;
+      const pnlSign = statsInfo.pnl >= 0 ? '+' : '';
+      
+      // Build info line
+      const connStr = `Connections: ${statsInfo.connections}`;
+      const accStr = `Accounts: ${statsInfo.accounts}`;
+      const balStr = `Balance: $${statsInfo.balance.toLocaleString()}`;
+      const pnlStr = `P&L: ${pnlSign}$${statsInfo.pnl.toLocaleString()} (${statsInfo.pnlPercent}%)`;
+      
+      // Calculate spacing
+      const totalTextLen = connStr.length + accStr.length + balStr.length + pnlStr.length;
+      const availableSpace = logoWidth - totalTextLen - 8; // 8 for margins
+      const gap = Math.max(2, Math.floor(availableSpace / 3));
+      const spacer = ' '.repeat(gap);
+      
+      console.log(
+        chalk.white('  ' + connStr) + spacer +
+        chalk.white(accStr) + spacer +
+        chalk.green(balStr) + spacer +
+        pnlColor(pnlStr)
+      );
+    } else {
+      // Not connected - show tagline centered
+      const tagline = 'Prop Futures Algo Trading';
+      const version = 'v1.0.0';
+      const padding = logoWidth - tagline.length - version.length - 4;
+      console.log(chalk.yellow.bold('  ' + tagline) + ' '.repeat(padding) + chalk.gray(version));
+    }
+    
+    console.log(chalk.gray('═'.repeat(logoWidth)));
     console.log();
   }
 };
@@ -1807,7 +1872,7 @@ const algoLogsScreen = async (service) => {
 
 // Fonction principale
 const main = async () => {
-  banner();
+  await banner();
 
   let running = true;
   
@@ -1818,7 +1883,7 @@ const main = async () => {
       case 'projectx':
         const propfirm = await projectXMenu();
         if (propfirm === 'back') {
-          banner();
+          await banner();
           continue;
         }
 
@@ -1843,7 +1908,7 @@ const main = async () => {
           // Dashboard loop
           let connected = true;
           while (connected) {
-            banner();
+            await banner();
             const action = await dashboardMenu(currentService);
             
             switch (action) {
@@ -1865,7 +1930,7 @@ const main = async () => {
               case 'algotrading':
                 let algoRunning = true;
                 while (algoRunning) {
-                  banner();
+                  await banner();
                   const algoResult = await algoTradingMenu(currentService);
                   if (algoResult === 'back') {
                     algoRunning = false;
@@ -1968,7 +2033,7 @@ const main = async () => {
                 connections.disconnectAll();
                 currentService = null;
                 connected = false;
-                banner();
+                await banner();
                 console.log(chalk.yellow('  All connections disconnected.'));
                 console.log();
                 break;
@@ -1979,7 +2044,7 @@ const main = async () => {
           console.log(chalk.red(`  Error: ${loginResult.error}`));
           console.log();
           await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
-          banner();
+          await banner();
         }
         break;
 
@@ -1989,7 +2054,7 @@ const main = async () => {
         console.log(chalk.gray('Feature coming soon!'));
         console.log();
         await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
-        banner();
+        await banner();
         break;
 
       case 'tradovate':
@@ -1998,7 +2063,7 @@ const main = async () => {
         console.log(chalk.gray('Feature coming soon!'));
         console.log();
         await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
-        banner();
+        await banner();
         break;
 
       case 'exit':
