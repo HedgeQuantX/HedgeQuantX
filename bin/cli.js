@@ -4,6 +4,8 @@ const chalk = require('chalk');
 const figlet = require('figlet');
 const inquirer = require('inquirer');
 const ora = require('ora');
+const { execSync } = require('child_process');
+const path = require('path');
 const { program } = require('commander');
 const { ProjectXService } = require('../src/services/projectx');
 
@@ -147,6 +149,7 @@ const dashboardMenu = async (service) => {
         { name: chalk.green('View Stats'), value: 'stats' },
         { name: chalk.green('User Info'), value: 'userinfo' },
         new inquirer.Separator(),
+        { name: chalk.cyan('Refresh CLI (git pull)'), value: 'refresh' },
         { name: chalk.yellow('Disconnect'), value: 'disconnect' }
       ]
     }
@@ -510,6 +513,20 @@ const main = async () => {
                 break;
               case 'userinfo':
                 await showUserInfo(currentService);
+                break;
+              case 'refresh':
+                const spinnerRefresh = ora('Updating CLI from GitHub...').start();
+                try {
+                  const cliDir = path.resolve(__dirname, '..');
+                  execSync('git pull', { cwd: cliDir, stdio: 'pipe' });
+                  spinnerRefresh.succeed('CLI updated successfully!');
+                  console.log(chalk.green('  Changes applied. Continue using the CLI.'));
+                } catch (err) {
+                  spinnerRefresh.fail('Update failed');
+                  console.log(chalk.red(`  Error: ${err.message}`));
+                }
+                console.log();
+                await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
                 break;
               case 'disconnect':
                 currentService.logout();
