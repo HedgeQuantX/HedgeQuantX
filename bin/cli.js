@@ -949,7 +949,7 @@ const showUserInfo = async (service) => {
 const showPositions = async (service) => {
   const spinner = ora('Fetching positions...').start();
   const boxWidth = getLogoWidth();
-  const colWidth = Math.floor((boxWidth - 3) / 2);
+  const { col1, col2 } = getColWidths(boxWidth);
   
   // Collecter les positions de TOUTES les connexions
   let allPositions = [];
@@ -991,9 +991,18 @@ const showPositions = async (service) => {
   spinner.succeed('Positions loaded');
   console.log();
   
+  // Helper to format row for positions
+  const fmtRow = (label, value, colW) => {
+    const labelStr = ' ' + label.padEnd(12);
+    const valueVisible = (value || '').toString().replace(/\x1b\[[0-9;]*m/g, '');
+    const totalVisible = labelStr.length + valueVisible.length;
+    const padding = Math.max(0, colW - totalVisible);
+    return chalk.white(labelStr) + value + ' '.repeat(padding);
+  };
+  
   if (allPositions.length === 0) {
     drawBoxHeader('OPEN POSITIONS', boxWidth);
-    draw2ColRow(chalk.yellow('No open positions.'), '', boxWidth);
+    draw2ColRowRaw(chalk.yellow('  No open positions.'), '', boxWidth);
     drawBoxFooter(boxWidth);
   } else {
     drawBoxHeader(`OPEN POSITIONS (${allPositions.length})`, boxWidth);
@@ -1007,42 +1016,25 @@ const showPositions = async (service) => {
       const symbol2 = pos2 ? (pos2.symbolId || pos2.contractId || 'Unknown') : '';
       
       // Symbol header
-      draw2ColHeader(symbol1.substring(0, colWidth - 4), symbol2.substring(0, colWidth - 4), boxWidth);
+      draw2ColHeader(symbol1.substring(0, col1 - 4), symbol2.substring(0, col2 - 4), boxWidth);
       
-      // Account
-      const acc1 = formatRow('Account:', chalk.cyan(pos1.accountName.substring(0, 15)), 12, colWidth);
-      const acc2 = pos2 ? formatRow('Account:', chalk.cyan(pos2.accountName.substring(0, 15)), 12, colWidth) : '';
-      draw2ColRow(acc1, acc2, boxWidth);
-      
-      // PropFirm
-      const pf1 = formatRow('PropFirm:', chalk.magenta(pos1.propfirm), 12, colWidth);
-      const pf2 = pos2 ? formatRow('PropFirm:', chalk.magenta(pos2.propfirm), 12, colWidth) : '';
-      draw2ColRow(pf1, pf2, boxWidth);
-      
-      // Size
+      // Position details
       const size1 = pos1.positionSize || pos1.size || 0;
       const size2 = pos2 ? (pos2.positionSize || pos2.size || 0) : 0;
       const sizeColor1 = size1 > 0 ? chalk.green : (size1 < 0 ? chalk.red : chalk.white);
       const sizeColor2 = size2 > 0 ? chalk.green : (size2 < 0 ? chalk.red : chalk.white);
-      const sz1 = formatRow('Size:', sizeColor1(size1.toString()), 12, colWidth);
-      const sz2 = pos2 ? formatRow('Size:', sizeColor2(size2.toString()), 12, colWidth) : '';
-      draw2ColRow(sz1, sz2, boxWidth);
-      
-      // Avg Price
       const price1 = pos1.averagePrice ? '$' + pos1.averagePrice.toFixed(2) : 'N/A';
       const price2 = pos2 && pos2.averagePrice ? '$' + pos2.averagePrice.toFixed(2) : 'N/A';
-      const pr1 = formatRow('Avg Price:', chalk.white(price1), 12, colWidth);
-      const pr2 = pos2 ? formatRow('Avg Price:', chalk.white(price2), 12, colWidth) : '';
-      draw2ColRow(pr1, pr2, boxWidth);
-      
-      // P&L
       const pnl1 = pos1.profitAndLoss || 0;
       const pnl2 = pos2 ? (pos2.profitAndLoss || 0) : 0;
       const pnlColor1 = pnl1 >= 0 ? chalk.green : chalk.red;
       const pnlColor2 = pnl2 >= 0 ? chalk.green : chalk.red;
-      const pnlStr1 = formatRow('P&L:', pnlColor1((pnl1 >= 0 ? '+' : '') + '$' + pnl1.toFixed(2)), 12, colWidth);
-      const pnlStr2 = pos2 ? formatRow('P&L:', pnlColor2((pnl2 >= 0 ? '+' : '') + '$' + pnl2.toFixed(2)), 12, colWidth) : '';
-      draw2ColRow(pnlStr1, pnlStr2, boxWidth);
+      
+      console.log(chalk.cyan('║') + fmtRow('Account:', chalk.cyan(pos1.accountName.substring(0, 15)), col1) + chalk.cyan('│') + (pos2 ? fmtRow('Account:', chalk.cyan(pos2.accountName.substring(0, 15)), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('PropFirm:', chalk.magenta(pos1.propfirm), col1) + chalk.cyan('│') + (pos2 ? fmtRow('PropFirm:', chalk.magenta(pos2.propfirm), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('Size:', sizeColor1(size1.toString()), col1) + chalk.cyan('│') + (pos2 ? fmtRow('Size:', sizeColor2(size2.toString()), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('Avg Price:', chalk.white(price1), col1) + chalk.cyan('│') + (pos2 ? fmtRow('Avg Price:', chalk.white(price2), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('P&L:', pnlColor1((pnl1 >= 0 ? '+' : '') + '$' + pnl1.toFixed(2)), col1) + chalk.cyan('│') + (pos2 ? fmtRow('P&L:', pnlColor2((pnl2 >= 0 ? '+' : '') + '$' + pnl2.toFixed(2)), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
       
       if (i + 2 < allPositions.length) {
         draw2ColSeparator(boxWidth);
@@ -1060,7 +1052,7 @@ const showPositions = async (service) => {
 const showOrders = async (service) => {
   const spinner = ora('Fetching orders...').start();
   const boxWidth = getLogoWidth();
-  const colWidth = Math.floor((boxWidth - 3) / 2);
+  const { col1, col2 } = getColWidths(boxWidth);
   
   // Order status mapping
   const ORDER_STATUS = {
@@ -1119,9 +1111,18 @@ const showOrders = async (service) => {
   // Limit to recent 20 orders
   const recentOrders = allOrders.slice(0, 20);
   
+  // Helper to format row for orders
+  const fmtRow = (label, value, colW) => {
+    const labelStr = ' ' + label.padEnd(12);
+    const valueVisible = (value || '').toString().replace(/\x1b\[[0-9;]*m/g, '');
+    const totalVisible = labelStr.length + valueVisible.length;
+    const padding = Math.max(0, colW - totalVisible);
+    return chalk.white(labelStr) + value + ' '.repeat(padding);
+  };
+  
   if (recentOrders.length === 0) {
     drawBoxHeader('ORDERS', boxWidth);
-    draw2ColRow(chalk.yellow('No recent orders.'), '', boxWidth);
+    draw2ColRowRaw(chalk.yellow('  No recent orders.'), '', boxWidth);
     drawBoxFooter(boxWidth);
   } else {
     drawBoxHeader(`ORDERS (${recentOrders.length} of ${allOrders.length})`, boxWidth);
@@ -1135,45 +1136,23 @@ const showOrders = async (service) => {
       const symbol2 = ord2 ? (ord2.symbolId || 'Unknown') : '';
       
       // Symbol header
-      draw2ColHeader(symbol1.substring(0, colWidth - 4), symbol2.substring(0, colWidth - 4), boxWidth);
+      draw2ColHeader(symbol1.substring(0, col1 - 4), symbol2.substring(0, col2 - 4), boxWidth);
       
-      // Account
-      const acc1 = formatRow('Account:', chalk.cyan(ord1.accountName.substring(0, 15)), 12, colWidth);
-      const acc2 = ord2 ? formatRow('Account:', chalk.cyan(ord2.accountName.substring(0, 15)), 12, colWidth) : '';
-      draw2ColRow(acc1, acc2, boxWidth);
-      
-      // PropFirm
-      const pf1 = formatRow('PropFirm:', chalk.magenta(ord1.propfirm), 12, colWidth);
-      const pf2 = ord2 ? formatRow('PropFirm:', chalk.magenta(ord2.propfirm), 12, colWidth) : '';
-      draw2ColRow(pf1, pf2, boxWidth);
-      
-      // Side (Buy/Sell)
+      // Order details
       const side1 = ORDER_SIDE[ord1.side || ord1.orderSide] || { text: 'N/A', color: 'white' };
       const side2 = ord2 ? (ORDER_SIDE[ord2.side || ord2.orderSide] || { text: 'N/A', color: 'white' }) : null;
-      const sd1 = formatRow('Side:', chalk[side1.color](side1.text), 12, colWidth);
-      const sd2 = ord2 ? formatRow('Side:', chalk[side2.color](side2.text), 12, colWidth) : '';
-      draw2ColRow(sd1, sd2, boxWidth);
-      
-      // Size
-      const size1 = ord1.positionSize || ord1.size || ord1.quantity || 0;
-      const size2 = ord2 ? (ord2.positionSize || ord2.size || ord2.quantity || 0) : 0;
-      const sz1 = formatRow('Size:', chalk.white(size1.toString()), 12, colWidth);
-      const sz2 = ord2 ? formatRow('Size:', chalk.white(size2.toString()), 12, colWidth) : '';
-      draw2ColRow(sz1, sz2, boxWidth);
-      
-      // Price
-      const price1 = ord1.price ? '$' + ord1.price.toFixed(2) : 'Market';
-      const price2 = ord2 && ord2.price ? '$' + ord2.price.toFixed(2) : (ord2 ? 'Market' : '');
-      const pr1 = formatRow('Price:', chalk.white(price1), 12, colWidth);
-      const pr2 = ord2 ? formatRow('Price:', chalk.white(price2), 12, colWidth) : '';
-      draw2ColRow(pr1, pr2, boxWidth);
-      
-      // Status
       const st1 = ORDER_STATUS[ord1.status] || { text: 'Unknown', color: 'gray' };
       const st2 = ord2 ? (ORDER_STATUS[ord2.status] || { text: 'Unknown', color: 'gray' }) : null;
-      const status1 = formatRow('Status:', chalk[st1.color](st1.text), 12, colWidth);
-      const status2 = ord2 ? formatRow('Status:', chalk[st2.color](st2.text), 12, colWidth) : '';
-      draw2ColRow(status1, status2, boxWidth);
+      const size1 = ord1.positionSize || ord1.size || ord1.quantity || 0;
+      const size2 = ord2 ? (ord2.positionSize || ord2.size || ord2.quantity || 0) : 0;
+      const price1 = ord1.price ? '$' + ord1.price.toFixed(2) : 'Market';
+      const price2 = ord2 && ord2.price ? '$' + ord2.price.toFixed(2) : (ord2 ? 'Market' : '');
+      
+      console.log(chalk.cyan('║') + fmtRow('Account:', chalk.cyan(ord1.accountName.substring(0, 15)), col1) + chalk.cyan('│') + (ord2 ? fmtRow('Account:', chalk.cyan(ord2.accountName.substring(0, 15)), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('Side:', chalk[side1.color](side1.text), col1) + chalk.cyan('│') + (ord2 ? fmtRow('Side:', chalk[side2.color](side2.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('Size:', chalk.white(size1.toString()), col1) + chalk.cyan('│') + (ord2 ? fmtRow('Size:', chalk.white(size2.toString()), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('Price:', chalk.white(price1), col1) + chalk.cyan('│') + (ord2 ? fmtRow('Price:', chalk.white(price2), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('Status:', chalk[st1.color](st1.text), col1) + chalk.cyan('│') + (ord2 ? fmtRow('Status:', chalk[st2.color](st2.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
       
       if (i + 2 < recentOrders.length) {
         draw2ColSeparator(boxWidth);
