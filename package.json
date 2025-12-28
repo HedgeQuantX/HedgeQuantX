@@ -1,10 +1,11 @@
 {
   "name": "hedgequantx",
-  "version": "1.1.0",
-  "description": "Prop Futures Algo Trading",
+  "version": "1.1.1",
+  "description": "Prop Futures Algo Trading CLI - Connect to Topstep, Alpha Futures, and other prop firms",
   "main": "src/index.js",
   "bin": {
-    "hedgequantx": "./bin/cli.js"
+    "hedgequantx": "./bin/cli.js",
+    "hqx": "./bin/cli.js"
   },
   "scripts": {
     "start": "node bin/cli.js",
@@ -15,10 +16,30 @@
     "futures",
     "algo",
     "prop",
-    "cli"
+    "cli",
+    "topstep",
+    "projectx",
+    "prop-trading",
+    "algo-trading",
+    "futures-trading"
   ],
   "author": "HedgeQuantX",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HedgeQuantX/HQX-CLI.git"
+  },
+  "bugs": {
+    "url": "https://github.com/HedgeQuantX/HQX-CLI/issues"
+  },
+  "homepage": "https://github.com/HedgeQuantX/HQX-CLI#readme",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "files": [
+    "bin/",
+    "src/"
+  ],
   "dependencies": {
     "asciichart": "^1.5.25",
     "chalk": "^4.1.2",
