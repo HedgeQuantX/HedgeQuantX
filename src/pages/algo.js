@@ -581,8 +581,54 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
   // Stop algo
   if (!stopReason) {
     addLog('warning', 'Stopping algo...');
-    displayUI();
   }
+  
+  // Cancel all pending orders and close positions
+  addLog('info', 'Cancelling pending orders...');
+  displayUI();
+  
+  try {
+    // Cancel all orders
+    const cancelResult = await service.cancelAllOrders(account.accountId);
+    if (cancelResult.success) {
+      addLog('success', 'All pending orders cancelled');
+    } else {
+      addLog('warning', 'No pending orders to cancel');
+    }
+  } catch (e) {
+    addLog('warning', 'Could not cancel orders: ' + e.message);
+  }
+  
+  displayUI();
+  
+  // Close all positions for this symbol
+  addLog('info', 'Closing open positions...');
+  displayUI();
+  
+  try {
+    const positions = await service.getPositions(account.accountId);
+    if (positions.success && positions.positions) {
+      const symbolPos = positions.positions.find(p => 
+        p.symbol === symbol || 
+        p.contractId === (contract.id || contract.contractId)
+      );
+      
+      if (symbolPos && symbolPos.quantity !== 0) {
+        const closeResult = await service.closePosition(account.accountId, symbolPos.contractId || symbolPos.symbol);
+        if (closeResult.success) {
+          addLog('success', `Position closed: ${Math.abs(symbolPos.quantity)} ${symbol}`);
+        } else {
+          addLog('error', 'Failed to close position: ' + (closeResult.error || 'Unknown'));
+        }
+      } else {
+        addLog('info', 'No open position to close');
+      }
+    }
+  } catch (e) {
+    addLog('warning', 'Could not close positions: ' + e.message);
+  }
+  
+  displayUI();
   
   if (hqxConnected && algoRunning) {
     hqxServer.stopAlgo();

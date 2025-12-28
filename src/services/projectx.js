@@ -312,6 +312,43 @@ class ProjectXService {
   }
 
   /**
+   * Cancels all pending orders for an account
+   * @param {number|string} accountId - Account ID
+   * @returns {Promise<{success: boolean, cancelled?: number, error?: string}>}
+   */
+  async cancelAllOrders(accountId) {
+    try {
+      const id = validateAccountId(accountId);
+      
+      // First get all pending orders
+      const ordersResult = await this.getOrders(id);
+      if (!ordersResult.success || !ordersResult.orders) {
+        return { success: true, cancelled: 0 };
+      }
+      
+      // Filter pending orders (status = working/pending)
+      const pendingOrders = ordersResult.orders.filter(o => 
+        o.status === 'Working' || o.status === 'Pending' || o.status === 0 || o.status === 1
+      );
+      
+      if (pendingOrders.length === 0) {
+        return { success: true, cancelled: 0 };
+      }
+      
+      // Cancel each order
+      let cancelled = 0;
+      for (const order of pendingOrders) {
+        const result = await this.cancelOrder(order.orderId || order.id);
+        if (result.success) cancelled++;
+      }
+      
+      return { success: true, cancelled };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Closes a position
    * @param {number|string} accountId - Account ID
    * @param {string} contractId - Contract ID
