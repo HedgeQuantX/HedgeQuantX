@@ -361,6 +361,14 @@ const banner = async () => {
     
     console.log(chalk.gray('═'.repeat(logoWidth)));
     
+    // Always show tagline centered
+    const tagline = 'Prop Futures Algo Trading';
+    const version = 'v1.0.0';
+    const fullText = tagline + '  ' + version;
+    const leftPad = Math.floor((logoWidth - fullText.length) / 2);
+    console.log(' '.repeat(leftPad) + chalk.yellow.bold(tagline) + '  ' + chalk.gray(version));
+    
+    // Show stats if connected
     if (statsInfo) {
       const pnlColor = statsInfo.pnl >= 0 ? chalk.green : chalk.red;
       const pnlSign = statsInfo.pnl >= 0 ? '+' : '';
@@ -371,25 +379,17 @@ const banner = async () => {
       const balStr = `Balance: $${statsInfo.balance.toLocaleString()}`;
       const pnlStr = `P&L: ${pnlSign}$${statsInfo.pnl.toLocaleString()} (${statsInfo.pnlPercent}%)`;
       
-      // Calculate spacing
-      const totalTextLen = connStr.length + accStr.length + balStr.length + pnlStr.length;
-      const availableSpace = logoWidth - totalTextLen - 8; // 8 for margins
-      const gap = Math.max(2, Math.floor(availableSpace / 3));
-      const spacer = ' '.repeat(gap);
+      // Calculate spacing for centered stats
+      const statsText = `${connStr}    ${accStr}    ${balStr}    ${pnlStr}`;
+      const statsLeftPad = Math.floor((logoWidth - statsText.length) / 2);
       
       console.log(
-        chalk.white('  ' + connStr) + spacer +
-        chalk.white(accStr) + spacer +
-        chalk.green(balStr) + spacer +
+        ' '.repeat(Math.max(0, statsLeftPad)) +
+        chalk.white(connStr) + '    ' +
+        chalk.white(accStr) + '    ' +
+        chalk.green(balStr) + '    ' +
         pnlColor(pnlStr)
       );
-    } else {
-      // Not connected - show tagline centered
-      const tagline = 'Prop Futures Algo Trading';
-      const version = 'v1.0.0';
-      const fullText = tagline + '  ' + version;
-      const leftPad = Math.floor((logoWidth - fullText.length) / 2);
-      console.log(' '.repeat(leftPad) + chalk.yellow.bold(tagline) + '  ' + chalk.gray(version));
     }
     
     console.log(chalk.gray('═'.repeat(logoWidth)));
