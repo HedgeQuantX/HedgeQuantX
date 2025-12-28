@@ -1664,6 +1664,41 @@ const oneAccountMenu = async (service) => {
     return;
   }
   
+  // Vérifier si le marché est ouvert
+  const accountName = selectedAccount.accountName || selectedAccount.name || 'Account #' + selectedAccount.accountId;
+  console.log();
+  const marketSpinner = ora('Checking market status...').start();
+  
+  // Vérifier les heures de marché
+  const marketHours = service.checkMarketHours();
+  
+  // Vérifier aussi via l'API si le compte peut trader
+  const marketStatus = await service.getMarketStatus(selectedAccount.accountId);
+  
+  if (!marketHours.isOpen) {
+    marketSpinner.fail('Market is CLOSED');
+    console.log();
+    console.log(chalk.red.bold('  ⛔ ' + marketHours.message));
+    console.log();
+    console.log(chalk.gray('  Futures markets (CME) trading hours:'));
+    console.log(chalk.gray('  Sunday 5:00 PM CT - Friday 4:00 PM CT'));
+    console.log(chalk.gray('  Daily maintenance: 4:00 PM - 5:00 PM CT'));
+    console.log();
+    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+    return;
+  }
+  
+  if (marketStatus.success && !marketStatus.isOpen) {
+    marketSpinner.fail('Cannot trade on this account');
+    console.log();
+    console.log(chalk.red.bold('  ⛔ ' + marketStatus.message));
+    console.log();
+    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+    return;
+  }
+  
+  marketSpinner.succeed('Market is OPEN - Ready to trade!');
+  
   // Passer à la sélection du symbole
   await selectSymbolMenu(service, selectedAccount);
 };

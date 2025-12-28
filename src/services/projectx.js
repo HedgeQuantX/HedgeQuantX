@@ -412,6 +412,95 @@ class ProjectXService {
     }
   }
 
+  /**
+   * Vérifier si le marché est ouvert pour un compte
+   * @param {number} accountId 
+   * @returns {Promise<{success: boolean, isOpen?: boolean, message?: string, error?: string}>}
+   */
+  async getMarketStatus(accountId) {
+    try {
+      // Try to get account details which includes market status
+      const response = await this._request(
+        this.propfirm.userApi,
+        `/TradingAccount/${accountId}`,
+        'GET'
+      );
+
+      if (response.statusCode === 200 && response.data) {
+        const account = response.data;
+        // Check account status: 0 = Active, can trade
+        // Also check if there's a marketOpen or canTrade field
+        const isActive = account.status === 0;
+        const canTrade = account.canTrade !== false; // Default to true if not specified
+        const isOpen = isActive && canTrade;
+        
+        return { 
+          success: true, 
+          isOpen,
+          accountStatus: account.status,
+          message: isOpen ? 'Market is OPEN' : 'Market is CLOSED or account cannot trade'
+        };
+      }
+      
+      return { success: false, error: 'Failed to get market status' };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Vérifier les heures de marché (estimation basée sur les futures CME)
+   * Futures CME: Dimanche 17h CT - Vendredi 16h CT (avec pause 16h-17h chaque jour)
+   * @returns {{isOpen: boolean, message: string, nextOpen?: string, nextClose?: string}}
+   */
+  checkMarketHours() {
+    const now = new Date();
+    const utcDay = now.getUTCDay();
+    const utcHour = now.getUTCHours();
+    const utcMinute = now.getUTCMinutes();
+    
+    // Convert to CT (Central Time) - UTC-6 (CST) or UTC-5 (CDT)
+    // Using UTC-6 as approximation
+    let ctHour = utcHour - 6;
+    let ctDay = utcDay;
+    if (ctHour < 0) {
+      ctHour += 24;
+      ctDay = (ctDay + 6) % 7;
+    }
+    
+    // Market closed times:
+    // - Saturday all day
+    // - Sunday before 17:00 CT
+    // - Friday after 16:00 CT
+    // - Daily maintenance: 16:00-17:00 CT (Mon-Thu)
+    
+    let isOpen = true;
+    let message = 'Market is OPEN';
+    
+    // Saturday - closed
+    if (ctDay === 6) {
+      isOpen = false;
+      message = 'Market CLOSED (Weekend)';
+    }
+    // Sunday before 17:00 CT
+    else if (ctDay === 0 && ctHour < 17) {
+      isOpen = false;
+      message = 'Market CLOSED (Opens Sunday 5:00 PM CT)';
+    }
+    // Friday after 16:00 CT
+    else if (ctDay === 5 && ctHour >= 16) {
+      isOpen = false;
+      message = 'Market CLOSED (Weekend)';
+    }
+    // Daily maintenance 16:00-17:00 CT (Mon-Thu)
+    else if (ctDay >= 1 && ctDay <= 4 && ctHour === 16) {
+      isOpen = false;
+      message = 'Market CLOSED (Daily Maintenance 4:00-5:00 PM CT)';
+    }
+    
+    return { isOpen, message };
+  }
+
   // ==================== GATEWAY API (Trading Only) ====================
 
   /**
