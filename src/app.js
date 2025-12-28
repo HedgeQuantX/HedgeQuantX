@@ -26,26 +26,85 @@ const { showUserInfo } = require('./pages/user');
 let currentService = null;
 
 /**
- * Displays the application banner
+ * Displays the application banner with stats if connected
  */
 const banner = async () => {
   console.clear();
   const boxWidth = getLogoWidth();
+  const innerWidth = boxWidth - 2;
   const version = require('../package.json').version;
   
-  console.log(chalk.cyan('╔' + '═'.repeat(boxWidth - 2) + '╗'));
+  // Get stats if connected
+  let statsInfo = null;
+  if (connections.count() > 0) {
+    try {
+      const allAccounts = await connections.getAllAccounts();
+      let totalBalance = 0;
+      let totalStartingBalance = 0;
+      let totalPnl = 0;
+      
+      allAccounts.forEach(account => {
+        totalBalance += account.balance || 0;
+        totalStartingBalance += account.startingBalance || 0;
+        totalPnl += account.profitAndLoss || 0;
+      });
+      
+      const pnl = totalPnl !== 0 ? totalPnl : (totalBalance - totalStartingBalance);
+      const pnlPercent = totalStartingBalance > 0 ? ((pnl / totalStartingBalance) * 100).toFixed(1) : '0.0';
+      
+      statsInfo = {
+        connections: connections.count(),
+        accounts: allAccounts.length,
+        balance: totalBalance,
+        pnl: pnl,
+        pnlPercent: pnlPercent
+      };
+    } catch (e) {
+      // Ignore errors
+    }
+  }
+  
+  // Draw logo
+  console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
   
   const logoText = figlet.textSync('HEDGEQUANTX', { font: 'ANSI Shadow' });
   logoText.split('\n').forEach(line => {
     if (line.trim()) {
-      const padded = centerText(line, boxWidth - 2);
+      const padded = centerText(line, innerWidth);
       console.log(chalk.cyan('║') + chalk.cyan(padded) + chalk.cyan('║'));
     }
   });
   
-  console.log(chalk.cyan('╠' + '═'.repeat(boxWidth - 2) + '╣'));
-  console.log(chalk.cyan('║') + chalk.white(centerText(`Prop Futures Algo Trading  v${version}`, boxWidth - 2)) + chalk.cyan('║'));
-  console.log(chalk.cyan('╚' + '═'.repeat(boxWidth - 2) + '╝'));
+  // Tagline
+  console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+  console.log(chalk.cyan('║') + chalk.white(centerText(`Prop Futures Algo Trading  v${version}`, innerWidth)) + chalk.cyan('║'));
+  
+  // Stats bar if connected
+  if (statsInfo) {
+    console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+    
+    const pnlColor = statsInfo.pnl >= 0 ? chalk.green : chalk.red;
+    const pnlSign = statsInfo.pnl >= 0 ? '+' : '';
+    
+    const connStr = `Connections: ${statsInfo.connections}`;
+    const accStr = `Accounts: ${statsInfo.accounts}`;
+    const balStr = `Balance: $${statsInfo.balance.toLocaleString()}`;
+    const pnlStr = `P&L: $${statsInfo.pnl.toLocaleString()} (${pnlSign}${statsInfo.pnlPercent}%)`;
+    
+    const statsText = `${connStr}    ${accStr}    ${balStr}    ${pnlStr}`;
+    const statsLen = connStr.length + 4 + accStr.length + 4 + balStr.length + 4 + pnlStr.length;
+    const statsLeftPad = Math.floor((innerWidth - statsLen) / 2);
+    const statsRightPad = innerWidth - statsLen - statsLeftPad;
+    
+    console.log(chalk.cyan('║') + ' '.repeat(statsLeftPad) +
+      chalk.white(connStr) + '    ' +
+      chalk.white(accStr) + '    ' +
+      chalk.green(balStr) + '    ' +
+      pnlColor(pnlStr) + ' '.repeat(statsRightPad) + chalk.cyan('║')
+    );
+  }
+  
+  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
   console.log();
 };
 
@@ -302,6 +361,9 @@ const run = async () => {
 
   // Main loop
   while (true) {
+    // Refresh banner with stats
+    await banner();
+    
     if (!connections.isConnected()) {
       const choice = await mainMenu();
       
