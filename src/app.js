@@ -11,7 +11,8 @@ const { execSync } = require('child_process');
 const path = require('path');
 
 const { ProjectXService, connections } = require('./services');
-const { PROPFIRM_CHOICES, getPropFirmsByPlatform } = require('./config');
+const { RithmicService } = require('./services/rithmic');
+const { PROPFIRM_CHOICES, getPropFirmsByPlatform, getPropFirm } = require('./config');
 const { getDevice, getSeparator, printLogo, getLogoWidth, drawBoxHeader, drawBoxFooter, centerText, createBoxMenu } = require('./ui');
 const { validateUsername, validatePassword, maskSensitive } = require('./security');
 
@@ -22,6 +23,7 @@ const { algoTradingMenu } = require('./pages/algo');
 
 // Current service reference
 let currentService = null;
+let currentPlatform = null; // 'projectx' or 'rithmic'
 
 /**
  * Displays the application banner with stats if connected
@@ -257,6 +259,107 @@ const projectXMenu = async () => {
       await service.getUser();
       connections.add('projectx', service, service.propfirm.name);
       currentService = service;
+      currentPlatform = 'projectx';
+      spinner.succeed(`Connected to ${service.propfirm.name}`);
+      return service;
+    } else {
+      spinner.fail(result.error || 'Authentication failed');
+      return null;
+    }
+  } catch (error) {
+    spinner.fail(error.message);
+    return null;
+  }
+};
+
+/**
+ * Rithmic platform connection menu
+ */
+const rithmicMenu = async () => {
+  const propfirms = getPropFirmsByPlatform('Rithmic');
+  const boxWidth = getLogoWidth();
+  const innerWidth = boxWidth - 2;
+  const numCols = 3;
+  const colWidth = Math.floor(innerWidth / numCols);
+  
+  // Build numbered list
+  const numbered = propfirms.map((pf, i) => ({
+    num: i + 1,
+    key: pf.key,
+    name: pf.displayName,
+    systemName: pf.rithmicSystem
+  }));
+  
+  // PropFirm selection box
+  console.log();
+  console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
+  console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PROPFIRM (RITHMIC)', innerWidth)) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
+  
+  // Display in 3 columns with fixed width alignment
+  const rows = Math.ceil(numbered.length / numCols);
+  
+  for (let row = 0; row < rows; row++) {
+    let line = '';
+    for (let col = 0; col < numCols; col++) {
+      const idx = row + col * rows;
+      if (idx < numbered.length) {
+        const item = numbered[idx];
+        const numStr = item.num.toString().padStart(2, ' ');
+        const coloredText = chalk.cyan(`[${numStr}]`) + ' ' + chalk.white(item.name);
+        const textLen = 4 + 1 + item.name.length;
+        const padding = colWidth - textLen - 2;
+        line += '  ' + coloredText + ' '.repeat(Math.max(0, padding));
+      } else {
+        line += ' '.repeat(colWidth);
+      }
+    }
+    const lineLen = line.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const adjust = innerWidth - lineLen;
+    console.log(chalk.cyan('║') + line + ' '.repeat(Math.max(0, adjust)) + chalk.cyan('║'));
+  }
+  
+  console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
+  const backText = '  ' + chalk.red('[X] Back');
+  const backLen = '[X] Back'.length + 2;
+  console.log(chalk.cyan('║') + backText + ' '.repeat(innerWidth - backLen) + chalk.cyan('║'));
+  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
+  console.log();
+
+  const validInputs = numbered.map(n => n.num.toString());
+  validInputs.push('x', 'X');
+  
+  const { action } = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'action',
+      message: chalk.cyan(`Enter choice (1-${numbered.length}/X):`),
+      validate: (input) => {
+        if (validInputs.includes(input)) return true;
+        return `Please enter 1-${numbered.length} or X`;
+      }
+    }
+  ]);
+
+  if (action.toLowerCase() === 'x') return null;
+  
+  const selectedIdx = parseInt(action) - 1;
+  const selectedPropfirm = numbered[selectedIdx];
+
+  const credentials = await loginPrompt(selectedPropfirm.name);
+  const spinner = ora('Connecting to Rithmic...').start();
+
+  try {
+    const service = new RithmicService(selectedPropfirm.key);
+    const result = await service.login(credentials.username, credentials.password);
+
+    if (result.success) {
+      spinner.text = 'Fetching accounts...';
+      await service.getTradingAccounts();
+      
+      connections.add('rithmic', service, service.propfirm.name);
+      currentService = service;
+      currentPlatform = 'rithmic';
       spinner.succeed(`Connected to ${service.propfirm.name}`);
       return service;
     } else {
@@ -294,7 +397,7 @@ const mainMenu = async () => {
     console.log(chalk.cyan('║') + leftText + ' '.repeat(Math.max(0, leftPad)) + rightText + ' '.repeat(Math.max(0, rightPad)) + chalk.cyan('║'));
   };
   
-  menuRow(chalk.cyan('[1] ProjectX'), chalk.gray('[2] Rithmic (Coming Soon)'));
+  menuRow(chalk.cyan('[1] ProjectX'), chalk.cyan('[2] Rithmic'));
   menuRow(chalk.gray('[3] Tradovate (Coming Soon)'), chalk.red('[X] Exit'));
   
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
@@ -304,11 +407,11 @@ const mainMenu = async () => {
     {
       type: 'input',
       name: 'action',
-      message: chalk.cyan('Enter choice (1/X):'),
+      message: chalk.cyan('Enter choice (1/2/X):'),
       validate: (input) => {
-        const valid = ['1', 'x', 'X'];
+        const valid = ['1', '2', 'x', 'X'];
         if (valid.includes(input)) return true;
-        return 'Please enter 1 or X';
+        return 'Please enter 1, 2 or X';
       }
     }
   ]);
@@ -316,6 +419,7 @@ const mainMenu = async () => {
   // Map input to action
   const actionMap = {
     '1': 'projectx',
+    '2': 'rithmic',
     'x': 'exit',
     'X': 'exit'
   };
@@ -510,6 +614,11 @@ const run = async () => {
       
       if (choice === 'projectx') {
         const service = await projectXMenu();
+        if (service) currentService = service;
+      }
+      
+      if (choice === 'rithmic') {
+        const service = await rithmicMenu();
         if (service) currentService = service;
       }
     } else {
