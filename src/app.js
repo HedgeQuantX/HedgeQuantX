@@ -12,6 +12,7 @@ const path = require('path');
 
 const { ProjectXService, connections } = require('./services');
 const { RithmicService } = require('./services/rithmic');
+const { TradovateService } = require('./services/tradovate');
 const { PROPFIRM_CHOICES, getPropFirmsByPlatform, getPropFirm } = require('./config');
 const { getDevice, getSeparator, printLogo, getLogoWidth, drawBoxHeader, drawBoxFooter, centerText, createBoxMenu } = require('./ui');
 const { validateUsername, validatePassword, maskSensitive } = require('./security');
@@ -373,6 +374,88 @@ const rithmicMenu = async () => {
 };
 
 /**
+ * Tradovate platform connection menu
+ */
+const tradovateMenu = async () => {
+  const propfirms = getPropFirmsByPlatform('Tradovate');
+  const boxWidth = getLogoWidth();
+  const innerWidth = boxWidth - 2;
+  
+  // Build numbered list
+  const numbered = propfirms.map((pf, i) => ({
+    num: i + 1,
+    key: pf.key,
+    name: pf.displayName
+  }));
+  
+  // PropFirm selection box
+  console.log();
+  console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
+  console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PROPFIRM (TRADOVATE)', innerWidth)) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
+  
+  // Display propfirms
+  for (const item of numbered) {
+    const numStr = item.num.toString().padStart(2, ' ');
+    const text = '  ' + chalk.cyan(`[${numStr}]`) + ' ' + chalk.white(item.name);
+    const textLen = 4 + 1 + item.name.length + 2;
+    console.log(chalk.cyan('║') + text + ' '.repeat(innerWidth - textLen) + chalk.cyan('║'));
+  }
+  
+  console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
+  const backText = '  ' + chalk.red('[X] Back');
+  const backLen = '[X] Back'.length + 2;
+  console.log(chalk.cyan('║') + backText + ' '.repeat(innerWidth - backLen) + chalk.cyan('║'));
+  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
+  console.log();
+
+  const validInputs = numbered.map(n => n.num.toString());
+  validInputs.push('x', 'X');
+  
+  const { action } = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'action',
+      message: chalk.cyan(`Enter choice (1-${numbered.length}/X):`),
+      validate: (input) => {
+        if (validInputs.includes(input)) return true;
+        return `Please enter 1-${numbered.length} or X`;
+      }
+    }
+  ]);
+
+  if (action.toLowerCase() === 'x') return null;
+  
+  const selectedIdx = parseInt(action) - 1;
+  const selectedPropfirm = numbered[selectedIdx];
+
+  const credentials = await loginPrompt(selectedPropfirm.name);
+  const spinner = ora('Connecting to Tradovate...').start();
+
+  try {
+    const service = new TradovateService(selectedPropfirm.key);
+    const result = await service.login(credentials.username, credentials.password);
+
+    if (result.success) {
+      spinner.text = 'Fetching accounts...';
+      await service.getTradingAccounts();
+      
+      connections.add('tradovate', service, service.propfirm.name);
+      currentService = service;
+      currentPlatform = 'tradovate';
+      spinner.succeed(`Connected to ${service.propfirm.name}`);
+      return service;
+    } else {
+      spinner.fail(result.error || 'Authentication failed');
+      return null;
+    }
+  } catch (error) {
+    spinner.fail(error.message);
+    return null;
+  }
+};
+
+/**
  * Main connection menu
  */
 const mainMenu = async () => {
@@ -398,7 +481,7 @@ const mainMenu = async () => {
   };
   
   menuRow(chalk.cyan('[1] ProjectX'), chalk.cyan('[2] Rithmic'));
-  menuRow(chalk.gray('[3] Tradovate (Coming Soon)'), chalk.red('[X] Exit'));
+  menuRow(chalk.cyan('[3] Tradovate'), chalk.red('[X] Exit'));
   
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
   console.log();
@@ -407,11 +490,11 @@ const mainMenu = async () => {
     {
       type: 'input',
       name: 'action',
-      message: chalk.cyan('Enter choice (1/2/X):'),
+      message: chalk.cyan('Enter choice (1/2/3/X):'),
       validate: (input) => {
-        const valid = ['1', '2', 'x', 'X'];
+        const valid = ['1', '2', '3', 'x', 'X'];
         if (valid.includes(input)) return true;
-        return 'Please enter 1, 2 or X';
+        return 'Please enter 1, 2, 3 or X';
       }
     }
   ]);
@@ -420,6 +503,7 @@ const mainMenu = async () => {
   const actionMap = {
     '1': 'projectx',
     '2': 'rithmic',
+    '3': 'tradovate',
     'x': 'exit',
     'X': 'exit'
   };
@@ -619,6 +703,11 @@ const run = async () => {
       
       if (choice === 'rithmic') {
         const service = await rithmicMenu();
+        if (service) currentService = service;
+      }
+      
+      if (choice === 'tradovate') {
+        const service = await tradovateMenu();
         if (service) currentService = service;
       }
     } else {

@@ -179,6 +179,14 @@ const PROPFIRMS = {
     userApi: 'userapi.takeprofittrader.tradovate.com',
     gatewayApi: 'api.takeprofittrader.tradovate.com'
   },
+  myfundedfutures: {
+    id: 'myfundedfutures',
+    name: 'MyFundedFutures',
+    displayName: 'MyFundedFutures',
+    platform: 'Tradovate',
+    userApi: 'live.tradovateapi.com',
+    gatewayApi: 'live.tradovateapi.com'
+  },
 
   // ==================== Rithmic Platform ====================
   apex_rithmic: {
