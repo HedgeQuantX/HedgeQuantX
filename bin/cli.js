@@ -175,29 +175,27 @@ const getLogoWidth = () => {
   return logoText.split('\n')[0].length;
 };
 
+// Get visible length of text (excluding ANSI color codes)
+const visibleLength = (text) => {
+  return (text || '').replace(/\x1b\[[0-9;]*m/g, '').length;
+};
+
 // Center text in a given width
 const centerText = (text, width) => {
-  const len = text.replace(/\x1b\[[0-9;]*m/g, '').length;
+  const len = visibleLength(text);
   const padding = Math.max(0, width - len);
   const leftPad = Math.floor(padding / 2);
   const rightPad = padding - leftPad;
   return ' '.repeat(leftPad) + text + ' '.repeat(rightPad);
 };
 
-// Pad text to width (for columns)
+// Pad text to exact width (handles ANSI color codes)
 const padText = (text, width) => {
-  const len = text.replace(/\x1b\[[0-9;]*m/g, '').length;
-  return text + ' '.repeat(Math.max(0, width - len));
+  const len = visibleLength(text);
+  return (text || '') + ' '.repeat(Math.max(0, width - len));
 };
 
-// Format a row with label and value
-const formatRow = (label, value, labelWidth = 18, totalWidth = 40) => {
-  const valLen = value.replace(/\x1b\[[0-9;]*m/g, '').length;
-  const valWidth = totalWidth - labelWidth - 1;
-  return chalk.white(label.padEnd(labelWidth)) + value + ' '.repeat(Math.max(0, valWidth - valLen));
-};
-
-// Draw box header
+// Draw box header (full width)
 const drawBoxHeader = (title, width) => {
   console.log(chalk.cyan('╔' + '═'.repeat(width - 2) + '╗'));
   console.log(chalk.cyan('║') + chalk.cyan.bold(centerText(title, width - 2)) + chalk.cyan('║'));
@@ -209,27 +207,56 @@ const drawBoxFooter = (width) => {
   console.log(chalk.cyan('╚' + '═'.repeat(width - 2) + '╝'));
 };
 
-// Draw 2-column header
-const draw2ColHeader = (title1, title2, width) => {
-  const colWidth = Math.floor((width - 3) / 2);
-  const header1 = centerText(title1, colWidth);
-  const header2 = centerText(title2, colWidth);
-  console.log(chalk.cyan('║') + chalk.cyan.bold(header1) + chalk.cyan('│') + chalk.cyan.bold(header2) + chalk.cyan('║'));
-  console.log(chalk.cyan('╠' + '─'.repeat(colWidth) + '┼' + '─'.repeat(colWidth) + '╣'));
+// Calculate column widths for 2-column layout
+const getColWidths = (boxWidth) => {
+  const innerWidth = boxWidth - 2; // Remove outer ║ ║
+  const col1 = Math.floor((innerWidth - 1) / 2); // -1 for middle │
+  const col2 = innerWidth - 1 - col1;
+  return { col1, col2 };
 };
 
-// Draw 2-column row
-const draw2ColRow = (col1, col2, width) => {
-  const colWidth = Math.floor((width - 3) / 2);
-  const c1 = padText(col1, colWidth);
-  const c2 = padText(col2 || '', colWidth);
+// Draw 2-column header with titles
+const draw2ColHeader = (title1, title2, boxWidth) => {
+  const { col1, col2 } = getColWidths(boxWidth);
+  const h1 = centerText(title1, col1);
+  const h2 = centerText(title2, col2);
+  console.log(chalk.cyan('║') + chalk.cyan.bold(h1) + chalk.cyan('│') + chalk.cyan.bold(h2) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '─'.repeat(col1) + '┼' + '─'.repeat(col2) + '╣'));
+};
+
+// Draw 2-column data row with label:value pairs
+const draw2ColRow = (label1, value1, label2, value2, boxWidth) => {
+  const { col1, col2 } = getColWidths(boxWidth);
+  
+  // Build column 1
+  let c1 = '';
+  if (label1) {
+    c1 = ' ' + chalk.white(label1.padEnd(12)) + (value1 || '');
+  }
+  c1 = padText(c1, col1);
+  
+  // Build column 2
+  let c2 = '';
+  if (label2) {
+    c2 = ' ' + chalk.white(label2.padEnd(12)) + (value2 || '');
+  }
+  c2 = padText(c2, col2);
+  
+  console.log(chalk.cyan('║') + c1 + chalk.cyan('│') + c2 + chalk.cyan('║'));
+};
+
+// Draw 2-column row with raw content (already formatted)
+const draw2ColRowRaw = (content1, content2, boxWidth) => {
+  const { col1, col2 } = getColWidths(boxWidth);
+  const c1 = padText(content1 || '', col1);
+  const c2 = padText(content2 || '', col2);
   console.log(chalk.cyan('║') + c1 + chalk.cyan('│') + c2 + chalk.cyan('║'));
 };
 
 // Draw separator between 2-column sections
-const draw2ColSeparator = (width) => {
-  const colWidth = Math.floor((width - 3) / 2);
-  console.log(chalk.cyan('╠' + '═'.repeat(colWidth) + '╪' + '═'.repeat(colWidth) + '╣'));
+const draw2ColSeparator = (boxWidth) => {
+  const { col1, col2 } = getColWidths(boxWidth);
+  console.log(chalk.cyan('╠' + '═'.repeat(col1) + '╪' + '═'.repeat(col2) + '╣'));
 };
 
 // ==================== DEVICE DETECTION & RESPONSIVE ====================
@@ -467,6 +494,7 @@ const banner = async () => {
     
   } else if (device.isTablet) {
     // 📲 TABLET: Medium compact
+    const pkg = require('../package.json');
     console.log();
     console.log(
       chalk.cyan(
@@ -489,7 +517,7 @@ const banner = async () => {
         chalk.white(`P&L: ${pnlColor((statsInfo.pnl >= 0 ? '+' : '') + '$' + statsInfo.pnl.toLocaleString())}`)
       );
     } else {
-      console.log(chalk.yellow.bold('  Prop Futures Algo Trading'));
+      console.log(chalk.yellow.bold('  Prop Futures Algo Trading') + chalk.gray(`  v${pkg.version}`));
     }
     console.log(chalk.gray(getSeparator()));
     console.log();
@@ -761,7 +789,16 @@ const ACCOUNT_TYPE = {
 const showAccounts = async (service) => {
   const spinner = ora('Fetching accounts...').start();
   const boxWidth = getLogoWidth();
-  const colWidth = Math.floor((boxWidth - 3) / 2);
+  const { col1, col2 } = getColWidths(boxWidth);
+  
+  // Helper to format a row with label and value
+  const fmtRow = (label, value, colW) => {
+    const labelStr = ' ' + label.padEnd(12);
+    const valueVisible = (value || '').toString().replace(/\x1b\[[0-9;]*m/g, '');
+    const totalVisible = labelStr.length + valueVisible.length;
+    const padding = Math.max(0, colW - totalVisible);
+    return chalk.white(labelStr) + value + ' '.repeat(padding);
+  };
   
   // Collecter les comptes de TOUTES les connexions
   let allAccountsData = [];
@@ -793,7 +830,7 @@ const showAccounts = async (service) => {
   
   if (allAccountsData.length === 0) {
     drawBoxHeader('ACCOUNTS', boxWidth);
-    draw2ColRow(chalk.yellow('No accounts found.'), '', boxWidth);
+    draw2ColRowRaw(chalk.yellow('  No accounts found.'), '', boxWidth);
     drawBoxFooter(boxWidth);
   } else {
     const totalConns = connections.count() || 1;
@@ -808,31 +845,18 @@ const showAccounts = async (service) => {
       const name2 = acc2 ? (acc2.accountName || acc2.name || `Account #${acc2.accountId}`) : '';
       
       // Account name header
-      draw2ColHeader(name1.substring(0, colWidth - 4), name2.substring(0, colWidth - 4), boxWidth);
+      draw2ColHeader(name1.substring(0, col1 - 4), name2.substring(0, col2 - 4), boxWidth);
       
       // PropFirm
-      const pf1 = formatRow('PropFirm:', chalk.magenta(acc1.propfirm), 12, colWidth);
-      const pf2 = acc2 ? formatRow('PropFirm:', chalk.magenta(acc2.propfirm), 12, colWidth) : '';
-      draw2ColRow(pf1, pf2, boxWidth);
-      
-      // Balance
-      const bal1 = formatRow('Balance:', acc1.balance >= 0 ? chalk.green('$' + acc1.balance.toLocaleString()) : chalk.red('$' + acc1.balance.toLocaleString()), 12, colWidth);
-      const bal2 = acc2 ? formatRow('Balance:', acc2.balance >= 0 ? chalk.green('$' + acc2.balance.toLocaleString()) : chalk.red('$' + acc2.balance.toLocaleString()), 12, colWidth) : '';
-      draw2ColRow(bal1, bal2, boxWidth);
-      
-      // Status
       const st1 = ACCOUNT_STATUS[acc1.status] || { text: 'Unknown', color: 'gray' };
       const st2 = acc2 ? (ACCOUNT_STATUS[acc2.status] || { text: 'Unknown', color: 'gray' }) : null;
-      const status1 = formatRow('Status:', chalk[st1.color](st1.text), 12, colWidth);
-      const status2 = acc2 ? formatRow('Status:', chalk[st2.color](st2.text), 12, colWidth) : '';
-      draw2ColRow(status1, status2, boxWidth);
-      
-      // Type
       const tp1 = ACCOUNT_TYPE[acc1.type] || { text: 'Unknown', color: 'white' };
       const tp2 = acc2 ? (ACCOUNT_TYPE[acc2.type] || { text: 'Unknown', color: 'white' }) : null;
-      const type1 = formatRow('Type:', chalk[tp1.color](tp1.text), 12, colWidth);
-      const type2 = acc2 ? formatRow('Type:', chalk[tp2.color](tp2.text), 12, colWidth) : '';
-      draw2ColRow(type1, type2, boxWidth);
+      
+      console.log(chalk.cyan('║') + fmtRow('PropFirm:', chalk.magenta(acc1.propfirm), col1) + chalk.cyan('│') + (acc2 ? fmtRow('PropFirm:', chalk.magenta(acc2.propfirm), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('Balance:', acc1.balance >= 0 ? chalk.green('$' + acc1.balance.toLocaleString()) : chalk.red('$' + acc1.balance.toLocaleString()), col1) + chalk.cyan('│') + (acc2 ? fmtRow('Balance:', acc2.balance >= 0 ? chalk.green('$' + acc2.balance.toLocaleString()) : chalk.red('$' + acc2.balance.toLocaleString()), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('Status:', chalk[st1.color](st1.text), col1) + chalk.cyan('│') + (acc2 ? fmtRow('Status:', chalk[st2.color](st2.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('Type:', chalk[tp1.color](tp1.text), col1) + chalk.cyan('│') + (acc2 ? fmtRow('Type:', chalk[tp2.color](tp2.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
       
       if (i + 2 < allAccountsData.length) {
         draw2ColSeparator(boxWidth);
@@ -1417,23 +1441,17 @@ const showStats = async (service) => {
   spinner.succeed('Stats loaded');
   console.log();
   
-  // Get logo width for consistent sizing
-  const logoText = figlet.textSync('HEDGEQUANTX', { font: 'ANSI Shadow' });
-  const boxWidth = logoText.split('\n')[0].length;
-  const colWidth = Math.floor((boxWidth - 5) / 2); // 2 columns with separator
+  // Get box width and column widths
+  const boxWidth = getLogoWidth();
+  const { col1, col2 } = getColWidths(boxWidth);
   
-  // Helper function to center text
-  const centerText = (text, width) => {
-    const padding = Math.max(0, width - text.length);
-    const leftPad = Math.floor(padding / 2);
-    const rightPad = padding - leftPad;
-    return ' '.repeat(leftPad) + text + ' '.repeat(rightPad);
-  };
-  
-  // Helper to pad text to column width
-  const padCol = (text, width) => {
-    const len = text.replace(/\x1b\[[0-9;]*m/g, '').length;
-    return text + ' '.repeat(Math.max(0, width - len));
+  // Helper to format a row with label and value, padded to column width
+  const fmtRow = (label, value, colW) => {
+    const labelStr = ' ' + label.padEnd(18);
+    const valueVisible = (value || '').toString().replace(/\x1b\[[0-9;]*m/g, '');
+    const totalVisible = labelStr.length + valueVisible.length;
+    const padding = Math.max(0, colW - totalVisible);
+    return chalk.white(labelStr) + value + ' '.repeat(padding);
   };
   
   // Calculate additional metrics
@@ -1442,9 +1460,7 @@ const showStats = async (service) => {
   const avgLoss = losingTrades > 0 ? (totalLossAmount / losingTrades).toFixed(2) : '0.00';
   const profitFactor = totalLossAmount > 0 ? (totalWinAmount / totalLossAmount).toFixed(2) : totalWinAmount > 0 ? '∞' : '0.00';
   const netPnL = totalWinAmount - totalLossAmount;
-  const avgTrade = totalTrades > 0 ? (netPnL / totalTrades).toFixed(2) : '0.00';
   const maxDrawdown = totalStartingBalance > 0 ? Math.min(0, totalPnL) : 0;
-  const maxDrawdownPercent = totalStartingBalance > 0 ? ((maxDrawdown / totalStartingBalance) * 100).toFixed(2) : '0.00';
   const returnPercent = totalStartingBalance > 0 ? ((totalPnL / totalStartingBalance) * 100).toFixed(2) : '0.00';
   const expectancy = totalTrades > 0 ? ((winRate / 100 * parseFloat(avgWin)) - ((100 - winRate) / 100 * parseFloat(avgLoss))).toFixed(2) : '0.00';
   const payoffRatio = parseFloat(avgLoss) > 0 ? (parseFloat(avgWin) / parseFloat(avgLoss)).toFixed(2) : '0.00';
@@ -1455,116 +1471,43 @@ const showStats = async (service) => {
   const pnlColor = totalPnL >= 0 ? chalk.green : chalk.red;
   
   // ═══════════════════════════════════════════════════════
-  // HQX STATS - MAIN SUMMARY (Full logo width)
+  // HQX STATS - MAIN SUMMARY
   // ═══════════════════════════════════════════════════════
-  console.log(chalk.cyan('╔' + '═'.repeat(boxWidth - 2) + '╗'));
-  console.log(chalk.cyan('║') + chalk.cyan.bold(centerText('HQX STATS', boxWidth - 2)) + chalk.cyan('║'));
-  console.log(chalk.cyan('╠' + '═'.repeat(boxWidth - 2) + '╣'));
+  drawBoxHeader('HQX STATS', boxWidth);
+  draw2ColHeader('ACCOUNT OVERVIEW', 'TRADING PERFORMANCE', boxWidth);
   
-  // Two column headers: ACCOUNT OVERVIEW | TRADING PERFORMANCE
-  const header1 = centerText('ACCOUNT OVERVIEW', colWidth);
-  const header2 = centerText('TRADING PERFORMANCE', colWidth);
-  console.log(chalk.cyan('║') + chalk.cyan.bold(header1) + chalk.cyan('│') + chalk.cyan.bold(header2) + chalk.cyan('║'));
-  console.log(chalk.cyan('╠' + '─'.repeat(colWidth) + '┼' + '─'.repeat(colWidth) + '╣'));
-  
-  // Build rows side by side
-  const labelW = 18;
-  const valW = colWidth - labelW - 1;
-  
-  const fmtRow = (label, value) => {
-    const valStr = value.replace(/\x1b\[[0-9;]*m/g, '');
-    return chalk.white(label.padEnd(labelW)) + value + ' '.repeat(Math.max(0, valW - valStr.length));
-  };
-  
-  // Row 1: Connections | Total Trades
-  const r1c1 = fmtRow('Connections:', chalk.cyan(totalConnections.toString()));
-  const r1c2 = fmtRow('Total Trades:', chalk.white(totalTrades.toString()));
-  console.log(chalk.cyan('║') + r1c1 + chalk.cyan('│') + r1c2 + chalk.cyan('║'));
-  
-  // Row 2: Total Accounts | Winning Trades
-  const r2c1 = fmtRow('Total Accounts:', chalk.cyan(allAccountsData.length.toString()));
-  const r2c2 = fmtRow('Winning Trades:', chalk.green(winningTrades.toString()));
-  console.log(chalk.cyan('║') + r2c1 + chalk.cyan('│') + r2c2 + chalk.cyan('║'));
-  
-  // Row 3: Total Balance | Losing Trades
-  const r3c1 = fmtRow('Total Balance:', totalBalanceColor('$' + totalBalance.toLocaleString()));
-  const r3c2 = fmtRow('Losing Trades:', chalk.red(losingTrades.toString()));
-  console.log(chalk.cyan('║') + r3c1 + chalk.cyan('│') + r3c2 + chalk.cyan('║'));
-  
-  // Row 4: Starting Balance | Win Rate
-  const r4c1 = fmtRow('Starting Balance:', chalk.white('$' + totalStartingBalance.toLocaleString()));
-  const r4c2 = fmtRow('Win Rate:', parseFloat(winRate) >= 50 ? chalk.green(winRate + '%') : chalk.yellow(winRate + '%'));
-  console.log(chalk.cyan('║') + r4c1 + chalk.cyan('│') + r4c2 + chalk.cyan('║'));
-  
-  // Row 5: Total P&L | Long Trades
-  const r5c1 = fmtRow('Total P&L:', pnlColor('$' + totalPnL.toLocaleString() + ' (' + returnPercent + '%)'));
-  const r5c2 = fmtRow('Long Trades:', chalk.white(longTrades + ' (' + longWinRate + '%)'));
-  console.log(chalk.cyan('║') + r5c1 + chalk.cyan('│') + r5c2 + chalk.cyan('║'));
-  
-  // Row 6: Open Positions | Short Trades
-  const r6c1 = fmtRow('Open Positions:', chalk.white(totalOpenPositions.toString()));
-  const r6c2 = fmtRow('Short Trades:', chalk.white(shortTrades + ' (' + shortWinRate + '%)'));
-  console.log(chalk.cyan('║') + r6c1 + chalk.cyan('│') + r6c2 + chalk.cyan('║'));
-  
-  // Row 7: Open Orders | Volume
-  const r7c1 = fmtRow('Open Orders:', chalk.white(totalOpenOrders.toString()));
-  const r7c2 = fmtRow('Volume:', chalk.white(totalVolume + ' contracts'));
-  console.log(chalk.cyan('║') + r7c1 + chalk.cyan('│') + r7c2 + chalk.cyan('║'));
+  // Row 1-7: Account Overview | Trading Performance
+  console.log(chalk.cyan('║') + fmtRow('Connections:', chalk.cyan(totalConnections.toString()), col1) + chalk.cyan('│') + fmtRow('Total Trades:', chalk.white(totalTrades.toString()), col2) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + fmtRow('Total Accounts:', chalk.cyan(allAccountsData.length.toString()), col1) + chalk.cyan('│') + fmtRow('Winning Trades:', chalk.green(winningTrades.toString()), col2) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + fmtRow('Total Balance:', totalBalanceColor('$' + totalBalance.toLocaleString()), col1) + chalk.cyan('│') + fmtRow('Losing Trades:', chalk.red(losingTrades.toString()), col2) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + fmtRow('Starting Balance:', chalk.white('$' + totalStartingBalance.toLocaleString()), col1) + chalk.cyan('│') + fmtRow('Win Rate:', parseFloat(winRate) >= 50 ? chalk.green(winRate + '%') : chalk.yellow(winRate + '%'), col2) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + fmtRow('Total P&L:', pnlColor('$' + totalPnL.toLocaleString() + ' (' + returnPercent + '%)'), col1) + chalk.cyan('│') + fmtRow('Long Trades:', chalk.white(longTrades + ' (' + longWinRate + '%)'), col2) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + fmtRow('Open Positions:', chalk.white(totalOpenPositions.toString()), col1) + chalk.cyan('│') + fmtRow('Short Trades:', chalk.white(shortTrades + ' (' + shortWinRate + '%)'), col2) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + fmtRow('Open Orders:', chalk.white(totalOpenOrders.toString()), col1) + chalk.cyan('│') + fmtRow('Volume:', chalk.white(totalVolume + ' contracts'), col2) + chalk.cyan('║'));
   
   // ═══════════════════════════════════════════════════════
-  // P&L METRICS | RISK METRICS (side by side)
+  // P&L METRICS | RISK METRICS
   // ═══════════════════════════════════════════════════════
-  console.log(chalk.cyan('╔' + '═'.repeat(boxWidth - 2) + '╗'));
+  draw2ColSeparator(boxWidth);
+  draw2ColHeader('P&L METRICS', 'RISK METRICS', boxWidth);
   
-  // Headers
-  const pnlHeader = centerText('P&L METRICS', colWidth);
-  const riskHeader = centerText('RISK METRICS', colWidth);
-  console.log(chalk.cyan('║') + chalk.cyan.bold(pnlHeader) + chalk.cyan('│') + chalk.cyan.bold(riskHeader) + chalk.cyan('║'));
-  console.log(chalk.cyan('╠' + '─'.repeat(colWidth) + '┼' + '─'.repeat(colWidth) + '╣'));
-  
-  // Row 1: Net P&L | Profit Factor
-  const p1c1 = fmtRow('Net P&L:', netPnL >= 0 ? chalk.green('$' + netPnL.toFixed(2)) : chalk.red('$' + netPnL.toFixed(2)));
   const pfColor = profitFactor === '∞' ? chalk.green(profitFactor) : parseFloat(profitFactor) >= 1.5 ? chalk.green(profitFactor) : parseFloat(profitFactor) >= 1 ? chalk.yellow(profitFactor) : chalk.red(profitFactor);
-  const p1c2 = fmtRow('Profit Factor:', pfColor);
-  console.log(chalk.cyan('║') + p1c1 + chalk.cyan('│') + p1c2 + chalk.cyan('║'));
   
-  // Row 2: Gross Profit | Payoff Ratio
-  const p2c1 = fmtRow('Gross Profit:', chalk.green('$' + totalWinAmount.toFixed(2)));
-  const p2c2 = fmtRow('Payoff Ratio:', parseFloat(payoffRatio) >= 1 ? chalk.green(payoffRatio) : chalk.red(payoffRatio));
-  console.log(chalk.cyan('║') + p2c1 + chalk.cyan('│') + p2c2 + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + fmtRow('Net P&L:', netPnL >= 0 ? chalk.green('$' + netPnL.toFixed(2)) : chalk.red('$' + netPnL.toFixed(2)), col1) + chalk.cyan('│') + fmtRow('Profit Factor:', pfColor, col2) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + fmtRow('Gross Profit:', chalk.green('$' + totalWinAmount.toFixed(2)), col1) + chalk.cyan('│') + fmtRow('Payoff Ratio:', parseFloat(payoffRatio) >= 1 ? chalk.green(payoffRatio) : chalk.red(payoffRatio), col2) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + fmtRow('Gross Loss:', chalk.red('-$' + totalLossAmount.toFixed(2)), col1) + chalk.cyan('│') + fmtRow('Expectancy:', parseFloat(expectancy) >= 0 ? chalk.green('$' + expectancy) : chalk.red('$' + expectancy), col2) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + fmtRow('Avg Win:', chalk.green('$' + avgWin), col1) + chalk.cyan('│') + fmtRow('Max Drawdown:', chalk.red('$' + Math.abs(maxDrawdown).toFixed(2)), col2) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + fmtRow('Avg Loss:', chalk.red('-$' + avgLoss), col1) + chalk.cyan('│') + fmtRow('Return:', parseFloat(returnPercent) >= 0 ? chalk.green(returnPercent + '%') : chalk.red(returnPercent + '%'), col2) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + fmtRow('Best Trade:', chalk.green('$' + bestTrade.toFixed(2)), col1) + chalk.cyan('│') + fmtRow('Max Consec. Wins:', chalk.green(maxConsecutiveWins.toString()), col2) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + fmtRow('Worst Trade:', chalk.red('$' + worstTrade.toFixed(2)), col1) + chalk.cyan('│') + fmtRow('Max Consec. Loss:', chalk.red(maxConsecutiveLosses.toString()), col2) + chalk.cyan('║'));
   
-  // Row 3: Gross Loss | Expectancy
-  const p3c1 = fmtRow('Gross Loss:', chalk.red('-$' + totalLossAmount.toFixed(2)));
-  const p3c2 = fmtRow('Expectancy:', parseFloat(expectancy) >= 0 ? chalk.green('$' + expectancy) : chalk.red('$' + expectancy));
-  console.log(chalk.cyan('║') + p3c1 + chalk.cyan('│') + p3c2 + chalk.cyan('║'));
-  
-  // Row 4: Avg Win | Max Drawdown
-  const p4c1 = fmtRow('Avg Win:', chalk.green('$' + avgWin));
-  const p4c2 = fmtRow('Max Drawdown:', chalk.red('$' + Math.abs(maxDrawdown).toFixed(2)));
-  console.log(chalk.cyan('║') + p4c1 + chalk.cyan('│') + p4c2 + chalk.cyan('║'));
-  
-  // Row 5: Avg Loss | Return
-  const p5c1 = fmtRow('Avg Loss:', chalk.red('-$' + avgLoss));
-  const p5c2 = fmtRow('Return:', parseFloat(returnPercent) >= 0 ? chalk.green(returnPercent + '%') : chalk.red(returnPercent + '%'));
-  console.log(chalk.cyan('║') + p5c1 + chalk.cyan('│') + p5c2 + chalk.cyan('║'));
-  
-  // Row 6: Best Trade | Max Consec. Wins
-  const p6c1 = fmtRow('Best Trade:', chalk.green('$' + bestTrade.toFixed(2)));
-  const p6c2 = fmtRow('Max Consec. Wins:', chalk.green(maxConsecutiveWins.toString()));
-  console.log(chalk.cyan('║') + p6c1 + chalk.cyan('│') + p6c2 + chalk.cyan('║'));
-  
-  // Row 7: Worst Trade | Max Consec. Losses
-  const p7c1 = fmtRow('Worst Trade:', chalk.red('$' + worstTrade.toFixed(2)));
-  const p7c2 = fmtRow('Max Consec. Losses:', chalk.red(maxConsecutiveLosses.toString()));
-  console.log(chalk.cyan('║') + p7c1 + chalk.cyan('│') + p7c2 + chalk.cyan('║'));
+  drawBoxFooter(boxWidth);
   
   // ═══════════════════════════════════════════════════════
-  // INDIVIDUAL ACCOUNTS (side by side, 2 per row)
+  // INDIVIDUAL ACCOUNTS
   // ═══════════════════════════════════════════════════════
   console.log();
-  console.log(chalk.cyan('╔' + '═'.repeat(boxWidth - 2) + '╗'));
-  console.log(chalk.cyan('║') + chalk.cyan.bold(centerText('INDIVIDUAL ACCOUNTS', boxWidth - 2)) + chalk.cyan('║'));
-  console.log(chalk.cyan('╠' + '═'.repeat(boxWidth - 2) + '╣'));
+  drawBoxHeader('INDIVIDUAL ACCOUNTS', boxWidth);
 
   // Collect all account data first
   const accountsWithData = [];
@@ -1608,48 +1551,23 @@ const showStats = async (service) => {
     const acc2 = accountsWithData[i + 1];
     
     // Account names header
-    const name1 = centerText(acc1.name.substring(0, colWidth - 2), colWidth);
-    const name2 = acc2 ? centerText(acc2.name.substring(0, colWidth - 2), colWidth) : ' '.repeat(colWidth);
-    console.log(chalk.cyan('║') + chalk.cyan.bold(name1) + chalk.cyan('│') + chalk.cyan.bold(name2) + chalk.cyan('║'));
-    console.log(chalk.cyan('╠' + '─'.repeat(colWidth) + '┼' + '─'.repeat(colWidth) + '╣'));
+    draw2ColHeader(acc1.name.substring(0, col1 - 4), acc2 ? acc2.name.substring(0, col2 - 4) : '', boxWidth);
     
-    // PropFirm
-    const pf1 = fmtRow('PropFirm:', chalk.magenta(acc1.propfirm));
-    const pf2 = acc2 ? fmtRow('PropFirm:', chalk.magenta(acc2.propfirm)) : ' '.repeat(colWidth);
-    console.log(chalk.cyan('║') + pf1 + chalk.cyan('│') + pf2 + chalk.cyan('║'));
-    
-    // Balance
-    const bal1 = fmtRow('Balance:', acc1.balance >= 0 ? chalk.green('$' + acc1.balance.toLocaleString()) : chalk.red('$' + acc1.balance.toLocaleString()));
-    const bal2 = acc2 ? fmtRow('Balance:', acc2.balance >= 0 ? chalk.green('$' + acc2.balance.toLocaleString()) : chalk.red('$' + acc2.balance.toLocaleString())) : ' '.repeat(colWidth);
-    console.log(chalk.cyan('║') + bal1 + chalk.cyan('│') + bal2 + chalk.cyan('║'));
-    
-    // P&L
-    const pnl1 = fmtRow('P&L:', acc1.pnl >= 0 ? chalk.green('+$' + acc1.pnl.toLocaleString() + ' (' + acc1.pnlPercent + '%)') : chalk.red('$' + acc1.pnl.toLocaleString() + ' (' + acc1.pnlPercent + '%)'));
-    const pnl2 = acc2 ? fmtRow('P&L:', acc2.pnl >= 0 ? chalk.green('+$' + acc2.pnl.toLocaleString() + ' (' + acc2.pnlPercent + '%)') : chalk.red('$' + acc2.pnl.toLocaleString() + ' (' + acc2.pnlPercent + '%)')) : ' '.repeat(colWidth);
-    console.log(chalk.cyan('║') + pnl1 + chalk.cyan('│') + pnl2 + chalk.cyan('║'));
-    
-    // Status
-    const st1 = fmtRow('Status:', chalk[acc1.status.color](acc1.status.text));
-    const st2 = acc2 ? fmtRow('Status:', chalk[acc2.status.color](acc2.status.text)) : ' '.repeat(colWidth);
-    console.log(chalk.cyan('║') + st1 + chalk.cyan('│') + st2 + chalk.cyan('║'));
-    
-    // Type
-    const tp1 = fmtRow('Type:', chalk[acc1.type.color](acc1.type.text));
-    const tp2 = acc2 ? fmtRow('Type:', chalk[acc2.type.color](acc2.type.text)) : ' '.repeat(colWidth);
-    console.log(chalk.cyan('║') + tp1 + chalk.cyan('│') + tp2 + chalk.cyan('║'));
-    
-    // Positions & Orders
-    const po1 = fmtRow('Positions/Orders:', chalk.white(acc1.openPositions + '/' + acc1.openOrders));
-    const po2 = acc2 ? fmtRow('Positions/Orders:', chalk.white(acc2.openPositions + '/' + acc2.openOrders)) : ' '.repeat(colWidth);
-    console.log(chalk.cyan('║') + po1 + chalk.cyan('│') + po2 + chalk.cyan('║'));
+    // Data rows
+    console.log(chalk.cyan('║') + fmtRow('PropFirm:', chalk.magenta(acc1.propfirm), col1) + chalk.cyan('│') + (acc2 ? fmtRow('PropFirm:', chalk.magenta(acc2.propfirm), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+    console.log(chalk.cyan('║') + fmtRow('Balance:', acc1.balance >= 0 ? chalk.green('$' + acc1.balance.toLocaleString()) : chalk.red('$' + acc1.balance.toLocaleString()), col1) + chalk.cyan('│') + (acc2 ? fmtRow('Balance:', acc2.balance >= 0 ? chalk.green('$' + acc2.balance.toLocaleString()) : chalk.red('$' + acc2.balance.toLocaleString()), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+    console.log(chalk.cyan('║') + fmtRow('P&L:', acc1.pnl >= 0 ? chalk.green('+$' + acc1.pnl.toLocaleString() + ' (' + acc1.pnlPercent + '%)') : chalk.red('$' + acc1.pnl.toLocaleString() + ' (' + acc1.pnlPercent + '%)'), col1) + chalk.cyan('│') + (acc2 ? fmtRow('P&L:', acc2.pnl >= 0 ? chalk.green('+$' + acc2.pnl.toLocaleString() + ' (' + acc2.pnlPercent + '%)') : chalk.red('$' + acc2.pnl.toLocaleString() + ' (' + acc2.pnlPercent + '%)'), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+    console.log(chalk.cyan('║') + fmtRow('Status:', chalk[acc1.status.color](acc1.status.text), col1) + chalk.cyan('│') + (acc2 ? fmtRow('Status:', chalk[acc2.status.color](acc2.status.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+    console.log(chalk.cyan('║') + fmtRow('Type:', chalk[acc1.type.color](acc1.type.text), col1) + chalk.cyan('│') + (acc2 ? fmtRow('Type:', chalk[acc2.type.color](acc2.type.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+    console.log(chalk.cyan('║') + fmtRow('Pos/Orders:', chalk.white(acc1.openPositions + '/' + acc1.openOrders), col1) + chalk.cyan('│') + (acc2 ? fmtRow('Pos/Orders:', chalk.white(acc2.openPositions + '/' + acc2.openOrders), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
     
     // Separator between account pairs
     if (i + 2 < accountsWithData.length) {
-      console.log(chalk.cyan('╠' + '═'.repeat(colWidth) + '╪' + '═'.repeat(colWidth) + '╣'));
+      draw2ColSeparator(boxWidth);
     }
   }
   
-  console.log(chalk.cyan('╚' + '═'.repeat(boxWidth - 2) + '╝'));
+  drawBoxFooter(boxWidth);
   console.log();
   await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
 };
