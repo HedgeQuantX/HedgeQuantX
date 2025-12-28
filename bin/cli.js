@@ -12,6 +12,147 @@ const { ProjectXService } = require('../src/services/projectx');
 // Session courante
 let currentService = null;
 
+// ==================== DEVICE DETECTION & RESPONSIVE ====================
+
+/**
+ * Detect device type and terminal capabilities
+ */
+const detectDevice = () => {
+  const width = process.stdout.columns || 80;
+  const height = process.stdout.rows || 24;
+  const isTTY = process.stdout.isTTY || false;
+  const platform = process.platform;
+  const termProgram = process.env.TERM_PROGRAM || '';
+  const term = process.env.TERM || '';
+  const sshClient = process.env.SSH_CLIENT || process.env.SSH_TTY || '';
+  
+  // Detect if running on mobile terminal apps
+  const mobileTerminals = ['termux', 'ish', 'a-shell', 'blink'];
+  const isMobileTerminal = mobileTerminals.some(t => 
+    termProgram.toLowerCase().includes(t) || 
+    term.toLowerCase().includes(t)
+  );
+  
+  // Detect device type based on width
+  let deviceType;
+  let deviceIcon;
+  
+  if (width < 50 || isMobileTerminal) {
+    deviceType = 'mobile';
+    deviceIcon = '📱';
+  } else if (width < 80) {
+    deviceType = 'tablet';
+    deviceIcon = '📲';
+  } else if (width < 120) {
+    deviceType = 'desktop';
+    deviceIcon = '💻';
+  } else {
+    deviceType = 'desktop-large';
+    deviceIcon = '🖥️';
+  }
+  
+  // Check if remote connection (SSH)
+  const isRemote = !!sshClient;
+  
+  return {
+    // Dimensions
+    width,
+    height,
+    
+    // Device type
+    deviceType,
+    deviceIcon,
+    isMobile: deviceType === 'mobile',
+    isTablet: deviceType === 'tablet',
+    isDesktop: deviceType === 'desktop' || deviceType === 'desktop-large',
+    isLargeDesktop: deviceType === 'desktop-large',
+    
+    // Environment
+    platform,
+    isTTY,
+    isRemote,
+    termProgram,
+    
+    // Capabilities
+    supportsColor: chalk.supportsColor ? true : false,
+    supportsEmoji: !platform.includes('win32') || termProgram.includes('Windows Terminal'),
+    
+    // Layout helpers
+    maxContentWidth: Math.min(width - 4, deviceType === 'mobile' ? 45 : 70),
+    menuPageSize: deviceType === 'mobile' ? 6 : (deviceType === 'tablet' ? 10 : 15)
+  };
+};
+
+/**
+ * Get current device info (cached, updates on resize)
+ */
+let cachedDevice = null;
+const getDevice = () => {
+  if (!cachedDevice) {
+    cachedDevice = detectDevice();
+  }
+  return cachedDevice;
+};
+
+// Update on terminal resize
+process.stdout.on('resize', () => {
+  cachedDevice = detectDevice();
+});
+
+/**
+ * Get appropriate separator based on device
+ */
+const getSeparator = (char = '─') => {
+  const device = getDevice();
+  return char.repeat(device.maxContentWidth);
+};
+
+/**
+ * Format text for current device width
+ */
+const formatForDevice = (text, indent = 2) => {
+  const device = getDevice();
+  const maxWidth = device.maxContentWidth - indent;
+  
+  if (text.length <= maxWidth) {
+    return ' '.repeat(indent) + text;
+  }
+  
+  // Word wrap for mobile
+  const words = text.split(' ');
+  const lines = [];
+  let currentLine = '';
+  
+  for (const word of words) {
+    if ((currentLine + ' ' + word).trim().length <= maxWidth) {
+      currentLine = (currentLine + ' ' + word).trim();
+    } else {
+      if (currentLine) lines.push(' '.repeat(indent) + currentLine);
+      currentLine = word;
+    }
+  }
+  if (currentLine) lines.push(' '.repeat(indent) + currentLine);
+  
+  return lines.join('\n');
+};
+
+/**
+ * Show device info (for debugging)
+ */
+const showDeviceInfo = () => {
+  const device = getDevice();
+  console.log();
+  console.log(chalk.gray(getSeparator()));
+  console.log(chalk.white(`  ${device.deviceIcon} Device: ${chalk.cyan(device.deviceType.toUpperCase())}`));
+  console.log(chalk.white(`  📐 Size: ${chalk.cyan(device.width + 'x' + device.height)}`));
+  console.log(chalk.white(`  💻 Platform: ${chalk.cyan(device.platform)}`));
+  if (device.isRemote) {
+    console.log(chalk.white(`  🌐 Remote: ${chalk.yellow('SSH Connection')}`));
+  }
+  console.log(chalk.gray(getSeparator()));
+  console.log();
+};
+
 // Liste des PropFirms ProjectX
 const projectXPropfirms = [
   { name: 'Topstep', value: 'topstep' },
@@ -36,39 +177,90 @@ const projectXPropfirms = [
   { name: 'Earn2Trade (Coming Soon!)', value: 'earn2trade', disabled: 'Coming Soon' },
 ];
 
-// Banner
+// Banner - Responsive for all devices
 const banner = () => {
   console.clear();
-  console.log(
-    chalk.cyan(
-      figlet.textSync('HEDGEQUANTX', {
-        font: 'ANSI Shadow',
-        horizontalLayout: 'default',
-        verticalLayout: 'default'
-      })
-    )
-  );
-  console.log(chalk.gray('─'.repeat(60)));
-  console.log(chalk.yellow.bold('  Prop Futures Algo Trading'));
-  console.log(chalk.gray('─'.repeat(60)));
-  console.log();
+  const device = getDevice();
+  
+  if (device.isMobile) {
+    // 📱 MOBILE: Ultra compact
+    console.log();
+    console.log(chalk.cyan.bold(' ┌───────────────────┐'));
+    console.log(chalk.cyan.bold(' │   HEDGEQUANTX     │'));
+    console.log(chalk.cyan.bold(' │   ═══════════     │'));
+    console.log(chalk.yellow.bold(' │   Algo Trading    │'));
+    console.log(chalk.cyan.bold(' └───────────────────┘'));
+    console.log();
+    
+  } else if (device.isTablet) {
+    // 📲 TABLET: Medium compact
+    console.log();
+    console.log(
+      chalk.cyan(
+        figlet.textSync('HQX', {
+          font: 'Small',
+          horizontalLayout: 'fitted'
+        })
+      )
+    );
+    console.log(chalk.gray(getSeparator()));
+    console.log(chalk.yellow.bold('  Prop Futures Algo Trading'));
+    console.log(chalk.gray(getSeparator()));
+    console.log();
+    
+  } else if (device.isLargeDesktop) {
+    // 🖥️ LARGE DESKTOP: Full with extra info
+    console.log(
+      chalk.cyan(
+        figlet.textSync('HEDGEQUANTX', {
+          font: 'ANSI Shadow',
+          horizontalLayout: 'default',
+          verticalLayout: 'default'
+        })
+      )
+    );
+    console.log(chalk.gray('═'.repeat(70)));
+    console.log(chalk.yellow.bold('  Prop Futures Algo Trading') + chalk.gray('                         v1.0.0'));
+    console.log(chalk.gray('═'.repeat(70)));
+    console.log();
+    
+  } else {
+    // 💻 DESKTOP: Standard
+    console.log(
+      chalk.cyan(
+        figlet.textSync('HEDGEQUANTX', {
+          font: 'ANSI Shadow',
+          horizontalLayout: 'default',
+          verticalLayout: 'default'
+        })
+      )
+    );
+    console.log(chalk.gray(getSeparator()));
+    console.log(chalk.yellow.bold('  Prop Futures Algo Trading'));
+    console.log(chalk.gray(getSeparator()));
+    console.log();
+  }
 };
 
-// Menu principal - Choix de connexion
+// Menu principal - Choix de connexion (Responsive)
 const mainMenu = async () => {
+  const device = getDevice();
+  
   const { connection } = await inquirer.prompt([
     {
       type: 'list',
       name: 'connection',
-      message: chalk.white.bold('Choose Your Connection:'),
+      message: device.isMobile 
+        ? chalk.white.bold('Connection:')
+        : chalk.white.bold('Choose Your Connection:'),
       choices: [
         { name: chalk.green('ProjectX'), value: 'projectx' },
-        { name: chalk.green('Rithmic'), value: 'rithmic' },
-        { name: chalk.green('Tradovate'), value: 'tradovate' },
+        { name: chalk.gray('Rithmic (Soon)'), value: 'rithmic', disabled: device.isMobile ? '' : 'Coming Soon' },
+        { name: chalk.gray('Tradovate (Soon)'), value: 'tradovate', disabled: device.isMobile ? '' : 'Coming Soon' },
         new inquirer.Separator(),
         { name: chalk.red('Exit'), value: 'exit' }
       ],
-      pageSize: 10,
+      pageSize: device.menuPageSize,
       loop: false
     }
   ]);
@@ -76,24 +268,48 @@ const mainMenu = async () => {
   return connection;
 };
 
-// Menu PropFirm pour ProjectX
+// Menu PropFirm pour ProjectX (Responsive)
 const projectXMenu = async () => {
+  const device = getDevice();
   console.log();
+  
+  // Sur mobile, afficher des noms plus courts
+  const formatPropfirmName = (name) => {
+    if (device.isMobile && name.length > 15) {
+      // Raccourcir les noms longs sur mobile
+      const shortNames = {
+        'TickTickTrader': 'TickTick',
+        'Blue Guardian Futures': 'BlueGuardian',
+        'The Futures Desk': 'FuturesDesk',
+        'Top One Futures': 'TopOne',
+        'Funding Futures': 'FundingFut',
+        'Lucid Trading': 'Lucid',
+        'Earn2Trade (Coming Soon!)': 'Earn2Trade'
+      };
+      return shortNames[name] || name.substring(0, 12);
+    }
+    return name;
+  };
+  
   const { propfirm } = await inquirer.prompt([
     {
       type: 'list',
       name: 'propfirm',
-      message: chalk.white.bold('Choose Your Propfirm:'),
+      message: device.isMobile 
+        ? chalk.white.bold('Propfirm:')
+        : chalk.white.bold('Choose Your Propfirm:'),
       choices: [
         ...projectXPropfirms.map(pf => ({
-          name: pf.disabled ? chalk.gray(pf.name) : chalk.green(pf.name),
+          name: pf.disabled 
+            ? chalk.gray(formatPropfirmName(pf.name)) 
+            : chalk.green(formatPropfirmName(pf.name)),
           value: pf.value,
           disabled: pf.disabled
         })),
         new inquirer.Separator(),
         { name: chalk.yellow('< Back'), value: 'back' }
       ],
-      pageSize: 25,
+      pageSize: device.menuPageSize,
       loop: false
     }
   ]);
@@ -101,63 +317,95 @@ const projectXMenu = async () => {
   return propfirm;
 };
 
-// Login prompt
+// Login prompt (Responsive)
 const loginPrompt = async (propfirmName) => {
+  const device = getDevice();
   console.log();
-  console.log(chalk.cyan(`Connecting to ${propfirmName}...`));
+  
+  if (device.isMobile) {
+    console.log(chalk.cyan(`→ ${propfirmName}`));
+  } else {
+    console.log(chalk.cyan(`Connecting to ${propfirmName}...`));
+  }
   console.log();
 
   const credentials = await inquirer.prompt([
     {
       type: 'input',
       name: 'username',
-      message: chalk.white.bold('Enter Your Username:'),
-      validate: (input) => input.length > 0 || 'Username is required'
+      message: device.isMobile ? chalk.white.bold('Username:') : chalk.white.bold('Enter Your Username:'),
+      validate: (input) => input.length > 0 || 'Required'
     },
     {
       type: 'password',
       name: 'password',
-      message: chalk.white.bold('Enter Your Password:'),
+      message: device.isMobile ? chalk.white.bold('Password:') : chalk.white.bold('Enter Your Password:'),
       mask: '*',
-      validate: (input) => input.length > 0 || 'Password is required'
+      validate: (input) => input.length > 0 || 'Required'
     }
   ]);
 
   return credentials;
 };
 
-// Menu après connexion
+// Menu après connexion (Responsive)
 const dashboardMenu = async (service) => {
+  const device = getDevice();
   const user = service.user;
   const propfirmName = service.getPropfirmName();
 
   console.log();
-  console.log(chalk.gray('─'.repeat(60)));
-  console.log(chalk.green.bold(`  Connected to ${propfirmName}`));
-  if (user) {
-    console.log(chalk.white(`  Welcome, ${user.userName}!`));
+  console.log(chalk.gray(getSeparator()));
+  
+  if (device.isMobile) {
+    console.log(chalk.green.bold(`  ✓ ${propfirmName}`));
+    if (user) {
+      console.log(chalk.white(`  ${user.userName}`));
+    }
+  } else {
+    console.log(chalk.green.bold(`  Connected to ${propfirmName}`));
+    if (user) {
+      console.log(chalk.white(`  Welcome, ${user.userName}!`));
+    }
   }
-  console.log(chalk.gray('─'.repeat(60)));
+  console.log(chalk.gray(getSeparator()));
   console.log();
+
+  // Choix adaptatifs selon le device
+  let choices;
+  if (device.isMobile) {
+    choices = [
+      { name: chalk.green('Accounts'), value: 'accounts' },
+      { name: chalk.green('Positions'), value: 'positions' },
+      { name: chalk.green('Orders'), value: 'orders' },
+      { name: chalk.green('Stats'), value: 'stats' },
+      new inquirer.Separator(),
+      { name: chalk.magenta('Algo'), value: 'algotrading' },
+      new inquirer.Separator(),
+      { name: chalk.yellow('Disconnect'), value: 'disconnect' }
+    ];
+  } else {
+    choices = [
+      { name: chalk.green('View Accounts'), value: 'accounts' },
+      { name: chalk.green('View Positions'), value: 'positions' },
+      { name: chalk.green('View Orders'), value: 'orders' },
+      { name: chalk.green('View Stats'), value: 'stats' },
+      { name: chalk.green('User Info'), value: 'userinfo' },
+      new inquirer.Separator(),
+      { name: chalk.magenta('Algo-Trading'), value: 'algotrading' },
+      new inquirer.Separator(),
+      { name: chalk.cyan('Refresh'), value: 'refresh' },
+      { name: chalk.yellow('Disconnect'), value: 'disconnect' }
+    ];
+  }
 
   const { action } = await inquirer.prompt([
     {
       type: 'list',
       name: 'action',
-      message: chalk.white.bold('What would you like to do?'),
-      choices: [
-        { name: chalk.green('View Accounts'), value: 'accounts' },
-        { name: chalk.green('View Positions'), value: 'positions' },
-        { name: chalk.green('View Orders'), value: 'orders' },
-        { name: chalk.green('View Stats'), value: 'stats' },
-        { name: chalk.green('User Info'), value: 'userinfo' },
-        new inquirer.Separator(),
-        { name: chalk.magenta('Algo-Trading'), value: 'algotrading' },
-        new inquirer.Separator(),
-        { name: chalk.cyan('Refresh'), value: 'refresh' },
-        { name: chalk.yellow('Disconnect'), value: 'disconnect' }
-      ],
-      pageSize: 10,
+      message: device.isMobile ? chalk.white.bold('Menu:') : chalk.white.bold('What would you like to do?'),
+      choices,
+      pageSize: device.menuPageSize,
       loop: false
     }
   ]);
@@ -782,37 +1030,314 @@ const tradingSettingsMenu = async (service, account, contract) => {
   console.log(chalk.white(`  Tick Value:     ${chalk.gray('$' + contract.tickValue)}`));
   console.log();
   
-  // Confirmation
-  const { confirm } = await inquirer.prompt([
+  // Menu d'action
+  const { action } = await inquirer.prompt([
     {
-      type: 'confirm',
-      name: 'confirm',
-      message: chalk.white.bold('Start trading session with these settings?'),
-      default: false
+      type: 'list',
+      name: 'action',
+      message: chalk.white.bold('Action:'),
+      choices: [
+        { name: chalk.green.bold('Launch Algo'), value: 'launch' },
+        { name: chalk.yellow('< Back'), value: 'back' }
+      ],
+      pageSize: 5,
+      loop: false
     }
   ]);
   
-  if (confirm) {
+  if (action === 'launch') {
     // Sauvegarder la session active
     activeAlgoSession = {
       account,
       contract,
       settings,
       startTime: new Date(),
-      status: 'active'
+      status: 'active',
+      pnl: 0,
+      trades: 0,
+      wins: 0,
+      losses: 0
     };
     
-    console.log();
-    console.log(chalk.green.bold('  Trading session configured!'));
-    console.log(chalk.yellow('  Strategy engine coming soon...'));
-    console.log(chalk.gray('  Your settings have been saved.'));
-  } else {
-    console.log();
-    console.log(chalk.yellow('  Trading session cancelled.'));
+    // Lancer l'écran de logs
+    await algoLogsScreen(service);
+  }
+};
+
+// Fonction pour formater le timestamp (Responsive)
+const formatTimestamp = () => {
+  const device = getDevice();
+  const now = new Date();
+  
+  if (device.isMobile) {
+    // Format court pour mobile: HH:MM
+    return chalk.gray(`[${now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}]`);
+  }
+  return chalk.gray(`[${now.toLocaleTimeString()}]`);
+};
+
+// Fonction pour ajouter un log (Responsive)
+const addLog = (logs, type, message) => {
+  const device = getDevice();
+  const timestamp = formatTimestamp();
+  let coloredMessage;
+  
+  // Labels courts pour mobile
+  const labels = device.isMobile ? {
+    info: 'i',
+    success: '✓',
+    warning: '!',
+    error: '✗',
+    trade: '$',
+    signal: '→'
+  } : {
+    info: 'INFO',
+    success: 'SUCCESS',
+    warning: 'WARNING',
+    error: 'ERROR',
+    trade: 'TRADE',
+    signal: 'SIGNAL'
+  };
+  
+  switch (type) {
+    case 'info':
+      coloredMessage = chalk.blue(`[${labels.info}] ${message}`);
+      break;
+    case 'success':
+      coloredMessage = chalk.green(`[${labels.success}] ${message}`);
+      break;
+    case 'warning':
+      coloredMessage = chalk.yellow(`[${labels.warning}] ${message}`);
+      break;
+    case 'error':
+      coloredMessage = chalk.red(`[${labels.error}] ${message}`);
+      break;
+    case 'trade':
+      coloredMessage = chalk.magenta(`[${labels.trade}] ${message}`);
+      break;
+    case 'signal':
+      coloredMessage = chalk.cyan(`[${labels.signal}] ${message}`);
+      break;
+    default:
+      coloredMessage = chalk.white(message);
   }
   
+  logs.push(`${timestamp} ${coloredMessage}`);
+  return logs;
+};
+
+// Écran des logs de l'algo (Responsive)
+const algoLogsScreen = async (service) => {
+  let logs = [];
+  let running = true;
+  const device = getDevice();
+  
+  // Header (Responsive)
+  const showHeader = () => {
+    console.clear();
+    const sep = getSeparator('═');
+    const sepLight = getSeparator('─');
+    
+    if (device.isMobile) {
+      // 📱 MOBILE: Compact header
+      console.log(chalk.gray(sep));
+      console.log(chalk.magenta.bold(' HQX ULTRA-SCALPING'));
+      console.log(chalk.green.bold(' ● LIVE'));
+      console.log(chalk.gray(sep));
+      console.log(chalk.cyan(` ${activeAlgoSession.contract.name}`) + chalk.gray(` x${activeAlgoSession.settings.contracts}`));
+      
+      // Stats compactes sur une ligne
+      const pnlColor = activeAlgoSession.pnl >= 0 ? chalk.green : chalk.red;
+      console.log(pnlColor(`$${activeAlgoSession.pnl.toFixed(0)}`) + 
+                  chalk.gray(` W:${activeAlgoSession.wins} L:${activeAlgoSession.losses}`));
+      console.log(chalk.gray(sepLight));
+      
+    } else if (device.isTablet) {
+      // 📲 TABLET: Medium header
+      console.log(chalk.gray(sep));
+      console.log(chalk.magenta.bold('  HQX ULTRA-SCALPING') + chalk.green.bold(' - LIVE'));
+      console.log(chalk.gray(sep));
+      console.log();
+      console.log(chalk.white(`  ${chalk.cyan(activeAlgoSession.contract.name)} | ${chalk.yellow(activeAlgoSession.settings.contracts + ' contracts')}`));
+      console.log(chalk.white(`  Target: ${chalk.green('$' + activeAlgoSession.settings.dailyTarget)} | Risk: ${chalk.red('$' + activeAlgoSession.settings.maxRisk)}`));
+      console.log();
+      
+      const pnlColor = activeAlgoSession.pnl >= 0 ? chalk.green : chalk.red;
+      console.log(chalk.gray(sepLight));
+      console.log(chalk.white(`  P&L: ${pnlColor('$' + activeAlgoSession.pnl.toFixed(2))} | T:${activeAlgoSession.trades} W:${chalk.green(activeAlgoSession.wins)} L:${chalk.red(activeAlgoSession.losses)}`));
+      console.log(chalk.gray(sepLight));
+      console.log();
+      
+    } else {
+      // 💻 DESKTOP: Full header
+      console.log(chalk.gray(sep));
+      console.log(chalk.magenta.bold('  HQX ULTRA-SCALPING') + chalk.green.bold(' - LIVE'));
+      console.log(chalk.gray(sep));
+      console.log();
+      console.log(chalk.white(`  Account:    ${chalk.cyan(activeAlgoSession.account.name)}`));
+      console.log(chalk.white(`  Symbol:     ${chalk.cyan(activeAlgoSession.contract.name)}`));
+      console.log(chalk.white(`  Contracts:  ${chalk.yellow(activeAlgoSession.settings.contracts)}`));
+      console.log(chalk.white(`  Target:     ${chalk.green('$' + activeAlgoSession.settings.dailyTarget)}`));
+      console.log(chalk.white(`  Max Risk:   ${chalk.red('$' + activeAlgoSession.settings.maxRisk)}`));
+      console.log();
+      
+      const pnlColor = activeAlgoSession.pnl >= 0 ? chalk.green : chalk.red;
+      console.log(chalk.gray(sepLight));
+      console.log(chalk.white(`  P&L: ${pnlColor('$' + activeAlgoSession.pnl.toFixed(2))}  |  Trades: ${chalk.white(activeAlgoSession.trades)}  |  Wins: ${chalk.green(activeAlgoSession.wins)}  |  Losses: ${chalk.red(activeAlgoSession.losses)}`));
+      console.log(chalk.gray(sepLight));
+      console.log();
+    }
+  };
+  
+  // Afficher les logs (Responsive)
+  const showLogs = () => {
+    const maxLogs = device.isMobile ? 6 : (device.isTablet ? 10 : 15);
+    
+    if (!device.isMobile) {
+      console.log(chalk.white.bold('  Logs:'));
+      console.log();
+    }
+    
+    const recentLogs = logs.slice(-maxLogs);
+    recentLogs.forEach(log => {
+      console.log(device.isMobile ? ` ${log}` : `  ${log}`);
+    });
+    
+    // Remplir les lignes vides
+    for (let i = recentLogs.length; i < maxLogs; i++) {
+      console.log();
+    }
+    
+    console.log();
+    console.log(chalk.gray(getSeparator()));
+    console.log(chalk.yellow(device.isMobile ? ' CTRL+C to stop' : '  Press CTRL+C or select Stop to exit'));
+    console.log(chalk.gray(getSeparator()));
+  };
+  
+  // Logs initiaux
+  logs = addLog(logs, 'info', 'Initializing HQX Ultra-Scalping...');
+  logs = addLog(logs, 'info', `Connecting to ${service.getPropfirmName()}...`);
+  logs = addLog(logs, 'success', 'Connected');
+  logs = addLog(logs, 'info', `Contract: ${activeAlgoSession.contract.name}`);
+  logs = addLog(logs, 'success', 'Market data ready');
+  
+  // Afficher l'écran initial
+  showHeader();
+  showLogs();
+  
+  // Logs de l'algo
+  const runAlgoLogs = async () => {
+    const initMessages = [
+      { type: 'success', msg: 'Engine started' },
+      { type: 'info', msg: 'Analyzing...' },
+      { type: 'signal', msg: 'Scanning...' },
+      { type: 'info', msg: 'Market conditions: Normal' },
+      { type: 'signal', msg: 'Waiting for entry...' }
+    ];
+    
+    let msgIndex = 0;
+    
+    while (running && msgIndex < initMessages.length) {
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      
+      if (running) {
+        const { type, msg } = initMessages[msgIndex];
+        logs = addLog(logs, type, msg);
+        showHeader();
+        showLogs();
+        msgIndex++;
+      }
+    }
+    
+    // Continuer avec des logs périodiques
+    while (running) {
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      
+      if (running) {
+        const randomMsgs = [
+          { type: 'info', msg: 'Monitoring...' },
+          { type: 'signal', msg: 'Scanning...' },
+          { type: 'info', msg: 'No positions' },
+          { type: 'info', msg: 'Risk: OK' },
+          { type: 'signal', msg: 'Analyzing...' },
+          { type: 'info', msg: 'Waiting...' }
+        ];
+        const randomMsg = randomMsgs[Math.floor(Math.random() * randomMsgs.length)];
+        logs = addLog(logs, randomMsg.type, randomMsg.msg);
+        showHeader();
+        showLogs();
+      }
+    }
+  };
+  
+  // Démarrer la simulation en arrière-plan
+  const logPromise = simulateLogs();
+  
+  // Attendre l'input utilisateur pour arrêter
   console.log();
-  await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+  
+  // Menu pour arrêter
+  const stopAlgo = async () => {
+    await new Promise(resolve => setTimeout(resolve, 20000)); // Attendre 20 secondes
+    
+    running = false;
+    activeAlgoSession.status = 'stopped';
+    
+    console.log();
+    logs = addLog(logs, 'warning', 'Stop signal received');
+    logs = addLog(logs, 'info', 'Closing all positions...');
+    logs = addLog(logs, 'success', 'All positions closed');
+    logs = addLog(logs, 'info', 'Disconnecting from market data...');
+    logs = addLog(logs, 'success', 'Algo stopped successfully');
+    
+    showHeader();
+    showLogs();
+    
+    console.log();
+    console.log(chalk.yellow.bold('  Algo stopped.'));
+    console.log();
+    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+  };
+  
+  // Pour l'instant, on attend juste avec un prompt
+  // Dans une vraie implémentation, on utiliserait des événements keyboard
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  const { stopAction } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'stopAction',
+      message: chalk.red.bold(''),
+      choices: [
+        { name: chalk.red.bold('Stop Algo'), value: 'stop' }
+      ],
+      pageSize: 1,
+      loop: false
+    }
+  ]);
+  
+  if (stopAction === 'stop') {
+    running = false;
+    activeAlgoSession.status = 'stopped';
+    
+    logs = addLog(logs, 'warning', 'Stop signal received');
+    logs = addLog(logs, 'info', 'Closing all positions...');
+    
+    await new Promise(resolve => setTimeout(resolve, 500));
+    logs = addLog(logs, 'success', 'All positions closed');
+    logs = addLog(logs, 'info', 'Disconnecting from market data...');
+    
+    await new Promise(resolve => setTimeout(resolve, 500));
+    logs = addLog(logs, 'success', 'Algo stopped successfully');
+    
+    showHeader();
+    showLogs();
+    
+    console.log();
+    console.log(chalk.yellow.bold('  Algo stopped.'));
+    console.log();
+    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+  }
 };
 
 // Fonction principale
