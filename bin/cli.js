@@ -170,15 +170,43 @@ const showAccounts = async (service) => {
       console.log(chalk.white.bold('  Your Trading Accounts:'));
       console.log(chalk.gray('  ' + '─'.repeat(50)));
       
-      result.accounts.forEach((account, index) => {
+      // Tri des comptes: Active d'abord, puis par type
+      const sortedAccounts = [...result.accounts].sort((a, b) => {
+        // Status: Active (1) en premier
+        if (a.status !== b.status) return a.status - b.status;
+        // Type: trier par type
+        if (a.type !== b.type) return a.type - b.type;
+        return 0;
+      });
+
+      sortedAccounts.forEach((account, index) => {
         console.log(chalk.cyan(`  ${index + 1}. ${account.accountName || account.name || `Account #${account.accountId}`}`));
+        
         if (account.balance !== undefined) {
           console.log(chalk.white(`     Balance: $${account.balance.toLocaleString()}`));
         }
-        if (account.status !== undefined) {
-          const statusText = account.status === 1 ? chalk.green('Active') : chalk.red('Inactive');
-          console.log(chalk.white(`     Status: ${statusText}`));
-        }
+        
+        // Status mapping
+        const statusMap = {
+          1: { text: 'Active', color: chalk.green },
+          2: { text: 'Inactive', color: chalk.red },
+          3: { text: 'Pending', color: chalk.yellow },
+          4: { text: 'Suspended', color: chalk.red },
+          5: { text: 'Closed', color: chalk.gray }
+        };
+        const statusInfo = statusMap[account.status] || { text: `Unknown (${account.status})`, color: chalk.gray };
+        console.log(`     Status: ${statusInfo.color(statusInfo.text)}`);
+
+        // Type mapping
+        const typeMap = {
+          1: { text: 'Live', color: chalk.green },
+          2: { text: 'Evaluation', color: chalk.yellow },
+          3: { text: 'Sim', color: chalk.blue },
+          4: { text: 'Practice', color: chalk.gray }
+        };
+        const typeInfo = typeMap[account.type] || { text: `Type ${account.type}`, color: chalk.white };
+        console.log(`     Type: ${typeInfo.color(typeInfo.text)}`);
+        
         console.log();
       });
     }
