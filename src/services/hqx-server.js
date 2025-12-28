@@ -9,10 +9,14 @@ const crypto = require('crypto');
 const https = require('https');
 
 // HQX Server Configuration
+// In production, use your dedicated server URL
 const HQX_CONFIG = {
-  apiUrl: 'https://api.hedgequantx.com',
-  wsUrl: 'wss://ws.hedgequantx.com',
-  version: 'v1'
+  apiUrl: process.env.HQX_API_URL || 'http://localhost:3500',
+  wsUrl: process.env.HQX_WS_URL || 'ws://localhost:3500/ws',
+  version: 'v1',
+  // Production URLs (uncomment when deploying)
+  // apiUrl: 'https://api.hedgequantx.com',
+  // wsUrl: 'wss://ws.hedgequantx.com',
 };
 
 class HQXServerService {

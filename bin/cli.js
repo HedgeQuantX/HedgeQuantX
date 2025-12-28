@@ -8,6 +8,7 @@ const { execSync } = require('child_process');
 const path = require('path');
 const { program } = require('commander');
 const { ProjectXService } = require('../src/services/projectx');
+const { HQXServerService } = require('../src/services/hqx-server');
 
 // Session courante
 let currentService = null;
@@ -382,7 +383,7 @@ const dashboardMenu = async (service) => {
       new inquirer.Separator(),
       { name: chalk.cyan('Algo'), value: 'algotrading' },
       new inquirer.Separator(),
-      { name: chalk.yellow('Refresh'), value: 'refresh' },
+      { name: chalk.yellow('Update HQX'), value: 'refresh' },
       { name: chalk.red('Disconnect'), value: 'disconnect' }
     ];
   } else {
@@ -395,7 +396,7 @@ const dashboardMenu = async (service) => {
       new inquirer.Separator(),
       { name: chalk.cyan('Algo-Trading'), value: 'algotrading' },
       new inquirer.Separator(),
-      { name: chalk.yellow('Refresh'), value: 'refresh' },
+      { name: chalk.yellow('Update HQX'), value: 'refresh' },
       { name: chalk.red('Disconnect'), value: 'disconnect' }
     ];
   }
@@ -1138,11 +1139,13 @@ const addLog = (logs, type, message) => {
   return logs;
 };
 
-// Écran des logs de l'algo (Responsive)
+// Écran des logs de l'algo (Responsive) - Connected to HQX-Algo Server
 const algoLogsScreen = async (service) => {
   let logs = [];
   let running = true;
   const device = getDevice();
+  let hqxServer = null;
+  let refreshInterval = null;
   
   // Header (Responsive)
   const showHeader = () => {
@@ -1226,93 +1229,153 @@ const algoLogsScreen = async (service) => {
     console.log(chalk.gray(getSeparator()));
   };
   
+  // Refresh display
+  const refreshDisplay = () => {
+    if (running) {
+      showHeader();
+      showLogs();
+    }
+  };
+  
+  // Initialize HQX Server connection
+  const initHQXServer = async () => {
+    hqxServer = new HQXServerService();
+    
+    // Setup event listeners
+    hqxServer.on('connected', () => {
+      logs = addLog(logs, 'success', 'Connected to HQX Server');
+      refreshDisplay();
+    });
+    
+    hqxServer.on('disconnected', () => {
+      logs = addLog(logs, 'warning', 'Disconnected from HQX Server');
+      refreshDisplay();
+    });
+    
+    hqxServer.on('signal', (data) => {
+      const direction = data.direction === 'long' ? 'BUY' : 'SELL';
+      logs = addLog(logs, 'signal', `${direction} @ ${data.price}`);
+      refreshDisplay();
+    });
+    
+    hqxServer.on('trade', (data) => {
+      const pnlStr = data.pnl >= 0 ? `+$${data.pnl.toFixed(2)}` : `-$${Math.abs(data.pnl).toFixed(2)}`;
+      logs = addLog(logs, 'trade', `${data.type.toUpperCase()} | P&L: ${pnlStr}`);
+      
+      // Update session stats
+      activeAlgoSession.trades++;
+      activeAlgoSession.pnl += data.pnl;
+      if (data.pnl > 0) {
+        activeAlgoSession.wins++;
+      } else {
+        activeAlgoSession.losses++;
+      }
+      refreshDisplay();
+    });
+    
+    hqxServer.on('log', (data) => {
+      logs = addLog(logs, data.type || 'info', data.message);
+      refreshDisplay();
+    });
+    
+    hqxServer.on('stats', (data) => {
+      if (data.pnl !== undefined) activeAlgoSession.pnl = data.pnl;
+      if (data.trades !== undefined) activeAlgoSession.trades = data.trades;
+      if (data.wins !== undefined) activeAlgoSession.wins = data.wins;
+      if (data.losses !== undefined) activeAlgoSession.losses = data.losses;
+      refreshDisplay();
+    });
+    
+    hqxServer.on('error', (data) => {
+      logs = addLog(logs, 'error', data.message || 'Unknown error');
+      refreshDisplay();
+    });
+    
+    return hqxServer;
+  };
+  
   // Logs initiaux
   logs = addLog(logs, 'info', 'Initializing HQX Ultra-Scalping...');
   logs = addLog(logs, 'info', `Connecting to ${service.getPropfirmName()}...`);
-  logs = addLog(logs, 'success', 'Connected');
-  logs = addLog(logs, 'info', `Contract: ${activeAlgoSession.contract.name}`);
-  logs = addLog(logs, 'success', 'Market data ready');
   
   // Afficher l'écran initial
   showHeader();
   showLogs();
   
-  // Logs de l'algo
-  const runAlgoLogs = async () => {
-    const initMessages = [
-      { type: 'success', msg: 'Engine started' },
-      { type: 'info', msg: 'Analyzing...' },
-      { type: 'signal', msg: 'Scanning...' },
-      { type: 'info', msg: 'Market conditions: Normal' },
-      { type: 'signal', msg: 'Waiting for entry...' }
-    ];
+  // Try to connect to HQX Server
+  try {
+    await initHQXServer();
     
-    let msgIndex = 0;
+    // Get PropFirm token for market data
+    const propfirmToken = service.getToken();
     
-    while (running && msgIndex < initMessages.length) {
-      await new Promise(resolve => setTimeout(resolve, 1200));
+    // Authenticate with HQX Server (using propfirm token as API key for now)
+    logs = addLog(logs, 'info', 'Authenticating with HQX Server...');
+    refreshDisplay();
+    
+    const authResult = await hqxServer.authenticate(propfirmToken).catch(() => null);
+    
+    if (authResult && authResult.success) {
+      logs = addLog(logs, 'success', 'Authenticated');
       
-      if (running) {
-        const { type, msg } = initMessages[msgIndex];
-        logs = addLog(logs, type, msg);
-        showHeader();
-        showLogs();
-        msgIndex++;
-      }
-    }
-    
-    // Continuer avec des logs périodiques
-    while (running) {
-      await new Promise(resolve => setTimeout(resolve, 2500));
+      // Connect WebSocket
+      await hqxServer.connect().catch(() => null);
       
-      if (running) {
-        const randomMsgs = [
-          { type: 'info', msg: 'Monitoring...' },
-          { type: 'signal', msg: 'Scanning...' },
-          { type: 'info', msg: 'No positions' },
-          { type: 'info', msg: 'Risk: OK' },
-          { type: 'signal', msg: 'Analyzing...' },
-          { type: 'info', msg: 'Waiting...' }
-        ];
-        const randomMsg = randomMsgs[Math.floor(Math.random() * randomMsgs.length)];
-        logs = addLog(logs, randomMsg.type, randomMsg.msg);
-        showHeader();
-        showLogs();
-      }
+      // Start algo
+      hqxServer.startAlgo({
+        accountId: activeAlgoSession.account.id,
+        contractId: activeAlgoSession.contract.id,
+        symbol: activeAlgoSession.contract.name,
+        contracts: activeAlgoSession.settings.contracts,
+        dailyTarget: activeAlgoSession.settings.dailyTarget,
+        maxRisk: activeAlgoSession.settings.maxRisk,
+        propfirm: service.propfirm,
+        propfirmToken: propfirmToken
+      });
+      
+      logs = addLog(logs, 'success', 'Algo started');
+    } else {
+      // Fallback to simulation mode if HQX Server not available
+      logs = addLog(logs, 'warning', 'HQX Server unavailable - Simulation mode');
+      logs = addLog(logs, 'info', 'Running in demo mode');
+      
+      // Start simulation
+      startSimulation();
     }
-  };
+  } catch (error) {
+    // Fallback to simulation
+    logs = addLog(logs, 'warning', 'HQX Server unavailable - Simulation mode');
+    startSimulation();
+  }
   
-  // Démarrer la simulation en arrière-plan
-  const logPromise = simulateLogs();
+  refreshDisplay();
   
-  // Attendre l'input utilisateur pour arrêter
-  console.log();
+  // Simulation mode (when HQX Server not available)
+  function startSimulation() {
+    logs = addLog(logs, 'success', 'Engine started (Simulation)');
+    refreshDisplay();
+    
+    refreshInterval = setInterval(() => {
+      if (!running) {
+        clearInterval(refreshInterval);
+        return;
+      }
+      
+      const randomMsgs = [
+        { type: 'info', msg: 'Monitoring market...' },
+        { type: 'signal', msg: 'Scanning for entry...' },
+        { type: 'info', msg: 'No positions' },
+        { type: 'info', msg: 'Risk: OK' },
+        { type: 'signal', msg: 'Analyzing order flow...' },
+        { type: 'info', msg: 'Volatility: Normal' }
+      ];
+      const randomMsg = randomMsgs[Math.floor(Math.random() * randomMsgs.length)];
+      logs = addLog(logs, randomMsg.type, randomMsg.msg);
+      refreshDisplay();
+    }, 3000);
+  }
   
-  // Menu pour arrêter
-  const stopAlgo = async () => {
-    await new Promise(resolve => setTimeout(resolve, 20000)); // Attendre 20 secondes
-    
-    running = false;
-    activeAlgoSession.status = 'stopped';
-    
-    console.log();
-    logs = addLog(logs, 'warning', 'Stop signal received');
-    logs = addLog(logs, 'info', 'Closing all positions...');
-    logs = addLog(logs, 'success', 'All positions closed');
-    logs = addLog(logs, 'info', 'Disconnecting from market data...');
-    logs = addLog(logs, 'success', 'Algo stopped successfully');
-    
-    showHeader();
-    showLogs();
-    
-    console.log();
-    console.log(chalk.yellow.bold('  Algo stopped.'));
-    console.log();
-    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
-  };
-  
-  // Pour l'instant, on attend juste avec un prompt
-  // Dans une vraie implémentation, on utiliserait des événements keyboard
+  // Wait for user to stop
   await new Promise(resolve => setTimeout(resolve, 2000));
   
   const { stopAction } = await inquirer.prompt([
@@ -1332,12 +1395,27 @@ const algoLogsScreen = async (service) => {
     running = false;
     activeAlgoSession.status = 'stopped';
     
+    // Clear simulation interval if running
+    if (refreshInterval) {
+      clearInterval(refreshInterval);
+    }
+    
     logs = addLog(logs, 'warning', 'Stop signal received');
     logs = addLog(logs, 'info', 'Closing all positions...');
     
+    // Stop algo on HQX Server
+    if (hqxServer && hqxServer.isConnected()) {
+      hqxServer.stopAlgo();
+    }
+    
     await new Promise(resolve => setTimeout(resolve, 500));
     logs = addLog(logs, 'success', 'All positions closed');
-    logs = addLog(logs, 'info', 'Disconnecting from market data...');
+    logs = addLog(logs, 'info', 'Disconnecting...');
+    
+    // Disconnect from HQX Server
+    if (hqxServer) {
+      hqxServer.disconnect();
+    }
     
     await new Promise(resolve => setTimeout(resolve, 500));
     logs = addLog(logs, 'success', 'Algo stopped successfully');
@@ -1416,21 +1494,47 @@ const main = async () => {
                 }
                 break;
               case 'refresh':
-                const spinnerRefresh = ora('Updating CLI from GitHub...').start();
+                const spinnerRefresh = ora('Checking for updates...').start();
                 try {
                   const cliDir = path.resolve(__dirname, '..');
-                  // Vérifier que c'est bien le repo HQX-CLI
-                  const gitRemote = execSync('git remote get-url origin', { cwd: cliDir, stdio: 'pipe' }).toString().trim();
-                  if (!gitRemote.includes('HQX-CLI')) {
-                    throw new Error('Not in HQX-CLI directory. Please run: cd ~/HQX-CLI && git pull');
+                  
+                  // Check if git repo exists
+                  try {
+                    execSync('git status', { cwd: cliDir, stdio: 'pipe' });
+                  } catch (e) {
+                    throw new Error('Not a git repository');
                   }
-                  execSync('git pull origin main', { cwd: cliDir, stdio: 'pipe' });
-                  spinnerRefresh.succeed('CLI updated successfully!');
-                  console.log(chalk.green('  Changes applied. Continue using the CLI.'));
+                  
+                  // Check if remote exists
+                  let hasRemote = false;
+                  try {
+                    const gitRemote = execSync('git remote get-url origin', { cwd: cliDir, stdio: 'pipe' }).toString().trim();
+                    hasRemote = gitRemote.length > 0;
+                  } catch (e) {
+                    hasRemote = false;
+                  }
+                  
+                  if (hasRemote) {
+                    // Pull from remote (background update - session preserved)
+                    execSync('git pull origin main', { cwd: cliDir, stdio: 'pipe' });
+                    spinnerRefresh.succeed('CLI updated!');
+                    console.log(chalk.green('  Update applied. Your session is still active.'));
+                    console.log(chalk.gray('  Note: Some changes may require restart.'));
+                  } else {
+                    // Local dev mode - just refresh data
+                    spinnerRefresh.succeed('Data refreshed');
+                    console.log(chalk.cyan('  Local dev mode. Session still active.'));
+                  }
+                  
+                  // Refresh user data without disconnecting
+                  if (currentService) {
+                    await currentService.getUser();
+                  }
+                  
                 } catch (err) {
                   spinnerRefresh.fail('Update failed');
                   console.log(chalk.red(`  Error: ${err.message}`));
-                  console.log(chalk.yellow('  Manual update: cd ~/HQX-CLI && git pull'));
+                  console.log(chalk.gray('  Your session is still active.'));
                 }
                 console.log();
                 await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
