@@ -410,9 +410,10 @@ const run = async () => {
           if (updateResult === 'restart') return; // Stop loop, new process spawned
           break;
         case 'disconnect':
+          const connCount = connections.count();
           connections.disconnectAll();
           currentService = null;
-          console.log(chalk.yellow('Disconnected'));
+          console.log(chalk.yellow(`Disconnected ${connCount} connection${connCount > 1 ? 's' : ''}`));
           break;
         case 'exit':
           console.log(chalk.gray('Goodbye!'));
