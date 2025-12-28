@@ -262,17 +262,16 @@ const banner = async () => {
       const allAccounts = await connections.getAllAccounts();
       let totalBalance = 0;
       let totalStartingBalance = 0;
+      let totalPnl = 0;
       
       allAccounts.forEach(account => {
         totalBalance += account.balance || 0;
-        const name = account.accountName || '';
-        if (name.includes('150')) totalStartingBalance += 150000;
-        else if (name.includes('100')) totalStartingBalance += 100000;
-        else if (name.includes('50')) totalStartingBalance += 50000;
-        else if (name.includes('25')) totalStartingBalance += 25000;
+        totalStartingBalance += account.startingBalance || 0;
+        totalPnl += account.profitAndLoss || 0;
       });
       
-      const pnl = totalBalance - totalStartingBalance;
+      // Use API P&L if available, otherwise calculate
+      const pnl = totalPnl !== 0 ? totalPnl : (totalBalance - totalStartingBalance);
       const pnlPercent = totalStartingBalance > 0 ? ((pnl / totalStartingBalance) * 100).toFixed(1) : '0.0';
       
       statsInfo = {

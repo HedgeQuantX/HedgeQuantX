@@ -263,11 +263,42 @@ class ProjectXService {
       );
 
       if (response.statusCode === 200) {
+        // Debug: log first account fields to see what's available
+        if (response.data && response.data.length > 0) {
+          console.log('\n[DEBUG] Account fields:', Object.keys(response.data[0]));
+          console.log('[DEBUG] Account data:', JSON.stringify(response.data[0], null, 2));
+        }
         return { success: true, accounts: response.data };
       } else {
         return { 
           success: false, 
           error: response.data.errorMessage || 'Failed to get accounts' 
+        };
+      }
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+  
+  /**
+   * Récupérer les détails d'un compte spécifique
+   * @param {number} accountId 
+   * @returns {Promise<{success: boolean, account?: object, error?: string}>}
+   */
+  async getAccountDetails(accountId) {
+    try {
+      const response = await this._request(
+        this.propfirm.userApi,
+        `/TradingAccount/${accountId}`,
+        'GET'
+      );
+
+      if (response.statusCode === 200) {
+        return { success: true, account: response.data };
+      } else {
+        return { 
+          success: false, 
+          error: response.data.errorMessage || 'Failed to get account details' 
         };
       }
     } catch (error) {
