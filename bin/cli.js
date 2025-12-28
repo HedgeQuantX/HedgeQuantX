@@ -154,7 +154,7 @@ const dashboardMenu = async (service) => {
         new inquirer.Separator(),
         { name: chalk.magenta('Algo-Trading'), value: 'algotrading' },
         new inquirer.Separator(),
-        { name: chalk.cyan('Refresh CLI (git pull)'), value: 'refresh' },
+        { name: chalk.cyan('Refresh'), value: 'refresh' },
         { name: chalk.yellow('Disconnect'), value: 'disconnect' }
       ],
       pageSize: 10,
