@@ -377,83 +377,241 @@ class ProjectXService {
   }
 
   /**
-   * Récupérer l'historique des trades d'un compte via UserAPI
+   * Récupérer l'historique des trades d'un compte via UserAPI /Statistics/trades
    * @param {number} accountId 
    * @param {number} days - Nombre de jours d'historique (default: 30)
    * @returns {Promise<{success: boolean, trades?: array, error?: string}>}
    */
   async getTradeHistory(accountId, days = 30) {
     try {
-      // Calculate date range
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - days);
-      
-      const startDateStr = startDate.toISOString().split('T')[0];
-      const endDateStr = endDate.toISOString().split('T')[0];
-      
-      // Try multiple endpoints to get trade history
-      
-      // 1. Try /Trade endpoint with accountId
-      let response = await this._request(
+      // Use UserAPI /Statistics/trades endpoint
+      const response = await this._request(
         this.propfirm.userApi,
-        `/Trade?accountId=${accountId}`,
-        'GET'
-      );
-
-      if (response.statusCode === 200 && Array.isArray(response.data) && response.data.length > 0) {
-        return { success: true, trades: response.data };
-      }
-
-      // 2. Try /TradeHistory endpoint
-      response = await this._request(
-        this.propfirm.userApi,
-        `/TradeHistory?accountId=${accountId}`,
-        'GET'
-      );
-
-      if (response.statusCode === 200 && Array.isArray(response.data) && response.data.length > 0) {
-        return { success: true, trades: response.data };
-      }
-      
-      // 3. Try /Trade/history with date range
-      response = await this._request(
-        this.propfirm.userApi,
-        `/Trade/history?accountId=${accountId}&startDate=${startDateStr}&endDate=${endDateStr}`,
-        'GET'
-      );
-
-      if (response.statusCode === 200 && Array.isArray(response.data) && response.data.length > 0) {
-        return { success: true, trades: response.data };
-      }
-      
-      // 4. Try POST /Trade/search
-      response = await this._request(
-        this.propfirm.userApi,
-        `/Trade/search`,
+        `/Statistics/trades`,
         'POST',
-        { accountId, startDate: startDateStr, endDate: endDateStr }
+        { accountId: accountId }
       );
 
-      if (response.statusCode === 200 && Array.isArray(response.data) && response.data.length > 0) {
-        return { success: true, trades: response.data };
+      if (response.statusCode === 200 && response.data) {
+        const tradesData = Array.isArray(response.data) ? response.data : (response.data.trades || []);
+        if (tradesData.length > 0) {
+          const trades = tradesData.map(t => ({
+            ...t,
+            timestamp: t.creationTimestamp || t.timestamp || t.date || t.fillTime,
+            pnl: t.profitAndLoss || t.pnl || t.realizedPnl || 0
+          }));
+          return { success: true, trades: trades };
+        }
       }
-      
-      // 5. Try GatewayAPI for trade history
-      response = await this._request(
-        this.propfirm.gatewayApi,
-        `/api/Trade/history`,
+
+      // Fallback: try /Statistics/daytrades
+      const dayTradesResponse = await this._request(
+        this.propfirm.userApi,
+        `/Statistics/daytrades`,
         'POST',
-        { accountId, startDate: startDateStr, endDate: endDateStr }
+        { accountId: accountId }
       );
 
-      if (response.statusCode === 200 && response.data && response.data.trades) {
-        return { success: true, trades: response.data.trades };
+      if (dayTradesResponse.statusCode === 200 && dayTradesResponse.data) {
+        const tradesData = Array.isArray(dayTradesResponse.data) ? dayTradesResponse.data : (dayTradesResponse.data.trades || []);
+        if (tradesData.length > 0) {
+          const trades = tradesData.map(t => ({
+            ...t,
+            timestamp: t.creationTimestamp || t.timestamp || t.date || t.fillTime,
+            pnl: t.profitAndLoss || t.pnl || t.realizedPnl || 0
+          }));
+          return { success: true, trades: trades };
+        }
       }
 
       return { success: true, trades: [], error: 'No trade history available' };
     } catch (error) {
       return { success: true, trades: [], error: error.message };
+    }
+  }
+
+  /**
+   * Récupérer les statistiques du jour via UserAPI
+   * @param {number} accountId 
+   * @returns {Promise<{success: boolean, stats?: object, error?: string}>}
+   */
+  async getTodayStats(accountId) {
+    try {
+      const response = await this._request(
+        this.propfirm.userApi,
+        `/Statistics/todaystats`,
+        'POST',
+        { accountId: accountId }
+      );
+
+      if (response.statusCode === 200 && response.data) {
+        return { success: true, stats: response.data };
+      }
+      return { success: false, stats: null, error: 'Failed to get today stats' };
+    } catch (error) {
+      return { success: false, stats: null, error: error.message };
+    }
+  }
+
+  /**
+   * Récupérer les statistiques d'un jour spécifique via UserAPI
+   * @param {number} accountId 
+   * @param {string} date - Date au format YYYY-MM-DD
+   * @returns {Promise<{success: boolean, stats?: object, error?: string}>}
+   */
+  async getDayStats(accountId, date) {
+    try {
+      const response = await this._request(
+        this.propfirm.userApi,
+        `/Statistics/daystats`,
+        'POST',
+        { accountId: accountId, date: date }
+      );
+
+      if (response.statusCode === 200 && response.data) {
+        return { success: true, stats: response.data };
+      }
+      return { success: false, stats: null, error: 'Failed to get day stats' };
+    } catch (error) {
+      return { success: false, stats: null, error: error.message };
+    }
+  }
+
+  /**
+   * Récupérer les statistiques lifetime via UserAPI
+   * @param {number} accountId 
+   * @returns {Promise<{success: boolean, stats?: object, error?: string}>}
+   */
+  async getLifetimeStats(accountId) {
+    try {
+      const response = await this._request(
+        this.propfirm.userApi,
+        `/Statistics/lifetimestats`,
+        'POST',
+        { accountId: accountId }
+      );
+
+      if (response.statusCode === 200 && response.data) {
+        return { success: true, stats: response.data };
+      }
+      return { success: false, stats: null, error: 'Failed to get lifetime stats' };
+    } catch (error) {
+      return { success: false, stats: null, error: error.message };
+    }
+  }
+
+  /**
+   * Récupérer les statistiques daily (par jour) via UserAPI
+   * @param {number} accountId 
+   * @returns {Promise<{success: boolean, stats?: array, error?: string}>}
+   */
+  async getDailyStats(accountId) {
+    try {
+      const response = await this._request(
+        this.propfirm.userApi,
+        `/Statistics/daily`,
+        'POST',
+        { accountId: accountId }
+      );
+
+      if (response.statusCode === 200 && response.data) {
+        return { success: true, stats: response.data };
+      }
+      return { success: false, stats: null, error: 'Failed to get daily stats' };
+    } catch (error) {
+      return { success: false, stats: null, error: error.message };
+    }
+  }
+
+  /**
+   * Récupérer les statistiques weekly via UserAPI
+   * @param {number} accountId 
+   * @returns {Promise<{success: boolean, stats?: array, error?: string}>}
+   */
+  async getWeeklyStats(accountId) {
+    try {
+      const response = await this._request(
+        this.propfirm.userApi,
+        `/Statistics/weekly`,
+        'POST',
+        { accountId: accountId }
+      );
+
+      if (response.statusCode === 200 && response.data) {
+        return { success: true, stats: response.data };
+      }
+      return { success: false, stats: null, error: 'Failed to get weekly stats' };
+    } catch (error) {
+      return { success: false, stats: null, error: error.message };
+    }
+  }
+
+  /**
+   * Récupérer les statistiques monthly via UserAPI
+   * @param {number} accountId 
+   * @returns {Promise<{success: boolean, stats?: array, error?: string}>}
+   */
+  async getMonthlyStats(accountId) {
+    try {
+      const response = await this._request(
+        this.propfirm.userApi,
+        `/Statistics/monthly`,
+        'POST',
+        { accountId: accountId }
+      );
+
+      if (response.statusCode === 200 && response.data) {
+        return { success: true, stats: response.data };
+      }
+      return { success: false, stats: null, error: 'Failed to get monthly stats' };
+    } catch (error) {
+      return { success: false, stats: null, error: error.message };
+    }
+  }
+
+  /**
+   * Récupérer win/loss average via UserAPI
+   * @param {number} accountId 
+   * @returns {Promise<{success: boolean, stats?: object, error?: string}>}
+   */
+  async getWinLossAvg(accountId) {
+    try {
+      const response = await this._request(
+        this.propfirm.userApi,
+        `/Statistics/winlossavg`,
+        'POST',
+        { accountId: accountId }
+      );
+
+      if (response.statusCode === 200 && response.data) {
+        return { success: true, stats: response.data };
+      }
+      return { success: false, stats: null, error: 'Failed to get win/loss avg' };
+    } catch (error) {
+      return { success: false, stats: null, error: error.message };
+    }
+  }
+
+  /**
+   * Récupérer profit factor via UserAPI
+   * @param {number} accountId 
+   * @returns {Promise<{success: boolean, stats?: object, error?: string}>}
+   */
+  async getProfitFactor(accountId) {
+    try {
+      const response = await this._request(
+        this.propfirm.userApi,
+        `/Statistics/profitFactor`,
+        'POST',
+        { accountId: accountId }
+      );
+
+      if (response.statusCode === 200 && response.data) {
+        return { success: true, stats: response.data };
+      }
+      return { success: false, stats: null, error: 'Failed to get profit factor' };
+    } catch (error) {
+      return { success: false, stats: null, error: error.message };
     }
   }
   
@@ -778,6 +936,13 @@ class ProjectXService {
    */
   getPropfirmName() {
     return this.propfirm.name;
+  }
+
+  /**
+   * Getter pour le token
+   */
+  getToken() {
+    return this.token;
   }
 
   /**

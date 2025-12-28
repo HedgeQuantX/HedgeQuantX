@@ -175,7 +175,7 @@ const getLogoWidth = () => {
   const logoText = figlet.textSync('HEDGEQUANTX', { font: 'ANSI Shadow' });
   const lines = logoText.split('\n').filter(line => line.trim().length > 0);
   const maxWidth = Math.max(...lines.map(line => line.length));
-  return maxWidth + 2; // +2 for ║ borders
+  return maxWidth + 4; // +4 for ║ and space on each side
 };
 
 // Get visible length of text (excluding ANSI color codes)
@@ -186,7 +186,8 @@ const visibleLength = (text) => {
 // Center text in a given width
 const centerText = (text, width) => {
   const len = visibleLength(text);
-  const padding = Math.max(0, width - len);
+  if (len >= width) return text;
+  const padding = width - len;
   const leftPad = Math.floor(padding / 2);
   const rightPad = padding - leftPad;
   return ' '.repeat(leftPad) + text + ' '.repeat(rightPad);
@@ -195,27 +196,31 @@ const centerText = (text, width) => {
 // Pad text to exact width (handles ANSI color codes)
 const padText = (text, width) => {
   const len = visibleLength(text);
-  return (text || '') + ' '.repeat(Math.max(0, width - len));
+  if (len >= width) return text;
+  return (text || '') + ' '.repeat(width - len);
 };
 
 // Draw box header (full width)
 const drawBoxHeader = (title, width) => {
-  console.log(chalk.cyan('╔' + '═'.repeat(width - 2) + '╗'));
-  console.log(chalk.cyan('║') + chalk.cyan.bold(centerText(title, width - 2)) + chalk.cyan('║'));
-  console.log(chalk.cyan('╠' + '═'.repeat(width - 2) + '╣'));
+  const innerWidth = width - 2;
+  console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
+  console.log(chalk.cyan('║') + chalk.cyan.bold(centerText(title, innerWidth)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
 };
 
 // Draw box footer
 const drawBoxFooter = (width) => {
-  console.log(chalk.cyan('╚' + '═'.repeat(width - 2) + '╝'));
+  const innerWidth = width - 2;
+  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
 };
 
 // Calculate column widths for 2-column layout
+// Returns the inner width of each column (not including borders)
 const getColWidths = (boxWidth) => {
-  const innerWidth = boxWidth - 2; // Remove outer ║ ║
+  const innerWidth = boxWidth - 2; // Remove outer ║ and ║
   const col1 = Math.floor((innerWidth - 1) / 2); // -1 for middle │
-  const col2 = innerWidth - 1 - col1;
-  return { col1, col2 };
+  const col2 = innerWidth - 1 - col1; // Remaining width
+  return { col1, col2, innerWidth };
 };
 
 // Draw 2-column header with titles
@@ -230,22 +235,17 @@ const draw2ColHeader = (title1, title2, boxWidth) => {
 // Draw 2-column data row with label:value pairs
 const draw2ColRow = (label1, value1, label2, value2, boxWidth) => {
   const { col1, col2 } = getColWidths(boxWidth);
+  const labelWidth = 16;
   
   // Build column 1
-  let c1 = '';
-  if (label1) {
-    c1 = ' ' + chalk.white(label1.padEnd(12)) + (value1 || '');
-  }
-  c1 = padText(c1, col1);
+  let c1Content = ' ' + (label1 || '').padEnd(labelWidth) + (value1 || '');
+  c1Content = padText(c1Content, col1);
   
   // Build column 2
-  let c2 = '';
-  if (label2) {
-    c2 = ' ' + chalk.white(label2.padEnd(12)) + (value2 || '');
-  }
-  c2 = padText(c2, col2);
+  let c2Content = ' ' + (label2 || '').padEnd(labelWidth) + (value2 || '');
+  c2Content = padText(c2Content, col2);
   
-  console.log(chalk.cyan('║') + c1 + chalk.cyan('│') + c2 + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + c1Content + chalk.cyan('│') + c2Content + chalk.cyan('║'));
 };
 
 // Draw 2-column row with raw content (already formatted)
@@ -260,6 +260,18 @@ const draw2ColRowRaw = (content1, content2, boxWidth) => {
 const draw2ColSeparator = (boxWidth) => {
   const { col1, col2 } = getColWidths(boxWidth);
   console.log(chalk.cyan('╠' + '═'.repeat(col1) + '╪' + '═'.repeat(col2) + '╣'));
+};
+
+// Draw a single row inside a box (full width, no columns)
+const drawBoxRow = (content, boxWidth) => {
+  const innerWidth = boxWidth - 2;
+  console.log(chalk.cyan('║') + padText(content, innerWidth) + chalk.cyan('║'));
+};
+
+// Draw a separator line inside a box
+const drawBoxSeparator = (boxWidth) => {
+  const innerWidth = boxWidth - 2;
+  console.log(chalk.cyan('╠' + '─'.repeat(innerWidth) + '╣'));
 };
 
 // ==================== DEVICE DETECTION & RESPONSIVE ====================
@@ -1404,6 +1416,24 @@ const showStats = async (service) => {
       filledOrders = ordersResult.orders.filter(o => o.status === 2); // Filled orders
     }
     
+    // Get lifetime stats from API
+    if (accountService.getLifetimeStats) {
+      const lifetimeResult = await accountService.getLifetimeStats(account.accountId);
+      if (lifetimeResult.success && lifetimeResult.stats) {
+        const stats = lifetimeResult.stats;
+        // Store stats in account for later use
+        account.lifetimeStats = stats;
+      }
+    }
+    
+    // Get daily stats for calendar
+    if (accountService.getDailyStats) {
+      const dailyResult = await accountService.getDailyStats(account.accountId);
+      if (dailyResult.success && dailyResult.stats) {
+        account.dailyStats = Array.isArray(dailyResult.stats) ? dailyResult.stats : [];
+      }
+    }
+    
     // Trade History (for metrics calculation)
     const tradesResult = await accountService.getTradeHistory(account.accountId, 30);
     if (tradesResult.success && tradesResult.trades && tradesResult.trades.length > 0) {
@@ -1420,17 +1450,6 @@ const showStats = async (service) => {
         propfirm: account.propfirm
       })));
     }
-    
-    // Try to get account stats if available
-    if (accountService.getAccountStats) {
-      const statsResult = await accountService.getAccountStats(account.accountId);
-      if (statsResult.success && statsResult.stats) {
-        // Use stats from API if available
-        if (statsResult.stats.totalTrades) {
-          // Stats already available from API
-        }
-      }
-    }
   }
 
   // Calculate total P&L if not already set from API
@@ -1438,58 +1457,110 @@ const showStats = async (service) => {
     totalPnL = totalBalance - totalStartingBalance;
   }
 
-  // Calculer les métriques de trading
-  let winningTrades = 0;
-  let losingTrades = 0;
-  let totalWinAmount = 0;
-  let totalLossAmount = 0;
-  let bestTrade = 0;
-  let worstTrade = 0;
-  let totalVolume = 0;
-  let consecutiveWins = 0;
-  let consecutiveLosses = 0;
-  let maxConsecutiveWins = 0;
-  let maxConsecutiveLosses = 0;
-  let longTrades = 0;
-  let shortTrades = 0;
-  let longWins = 0;
-  let shortWins = 0;
-
-  // Analyser chaque trade pour les métriques
-  for (const trade of allTrades) {
-    const pnl = trade.profitAndLoss || trade.pnl || 0;
-    const size = trade.positionSize || trade.size || trade.quantity || 1;
-    const side = trade.side || trade.orderSide; // 1 = Buy/Long, 2 = Sell/Short
-    
-    totalVolume += Math.abs(size);
-    
-    // Comptage Long/Short
-    if (side === 1) {
-      longTrades++;
-      if (pnl > 0) longWins++;
-    } else if (side === 2) {
-      shortTrades++;
-      if (pnl > 0) shortWins++;
+  // Aggregate lifetime stats from all accounts
+  let aggregatedStats = {
+    totalTrades: 0,
+    winningTrades: 0,
+    losingTrades: 0,
+    totalWinAmount: 0,
+    totalLossAmount: 0,
+    bestTrade: 0,
+    worstTrade: 0,
+    totalVolume: 0,
+    maxConsecutiveWins: 0,
+    maxConsecutiveLosses: 0,
+    longTrades: 0,
+    shortTrades: 0,
+    profitFactor: 0,
+    avgWin: 0,
+    avgLoss: 0
+  };
+  
+  // Aggregate daily stats for calendar from all accounts
+  let allDailyStats = [];
+  
+  // First try to use lifetime stats from API
+  for (const account of allAccountsData) {
+    if (account.lifetimeStats) {
+      const s = account.lifetimeStats;
+      aggregatedStats.totalTrades += s.totalTrades || s.tradeCount || 0;
+      aggregatedStats.winningTrades += s.winningTrades || s.wins || s.winCount || 0;
+      aggregatedStats.losingTrades += s.losingTrades || s.losses || s.lossCount || 0;
+      aggregatedStats.totalWinAmount += s.totalWinAmount || s.grossProfit || s.totalProfit || 0;
+      aggregatedStats.totalLossAmount += Math.abs(s.totalLossAmount || s.grossLoss || s.totalLoss || 0);
+      aggregatedStats.bestTrade = Math.max(aggregatedStats.bestTrade, s.bestTrade || s.largestWin || s.maxWin || 0);
+      aggregatedStats.worstTrade = Math.min(aggregatedStats.worstTrade, s.worstTrade || s.largestLoss || s.maxLoss || 0);
+      aggregatedStats.totalVolume += s.totalVolume || s.volume || s.contracts || 0;
+      aggregatedStats.maxConsecutiveWins = Math.max(aggregatedStats.maxConsecutiveWins, s.maxConsecutiveWins || s.consecutiveWins || 0);
+      aggregatedStats.maxConsecutiveLosses = Math.max(aggregatedStats.maxConsecutiveLosses, s.maxConsecutiveLosses || s.consecutiveLosses || 0);
+      aggregatedStats.longTrades += s.longTrades || s.buyTrades || 0;
+      aggregatedStats.shortTrades += s.shortTrades || s.sellTrades || 0;
+      if (s.profitFactor) aggregatedStats.profitFactor = s.profitFactor;
+      if (s.avgWin || s.averageWin) aggregatedStats.avgWin = s.avgWin || s.averageWin;
+      if (s.avgLoss || s.averageLoss) aggregatedStats.avgLoss = s.avgLoss || s.averageLoss;
     }
     
-    if (pnl > 0) {
-      winningTrades++;
-      totalWinAmount += pnl;
-      consecutiveWins++;
-      consecutiveLosses = 0;
-      if (consecutiveWins > maxConsecutiveWins) maxConsecutiveWins = consecutiveWins;
-      if (pnl > bestTrade) bestTrade = pnl;
-    } else if (pnl < 0) {
-      losingTrades++;
-      totalLossAmount += Math.abs(pnl);
-      consecutiveLosses++;
-      consecutiveWins = 0;
-      if (consecutiveLosses > maxConsecutiveLosses) maxConsecutiveLosses = consecutiveLosses;
-      if (pnl < worstTrade) worstTrade = pnl;
+    // Collect daily stats
+    if (account.dailyStats && Array.isArray(account.dailyStats)) {
+      allDailyStats = allDailyStats.concat(account.dailyStats);
+    }
+  }
+  
+  // If no stats from API, calculate from trades
+  let winningTrades = aggregatedStats.winningTrades;
+  let losingTrades = aggregatedStats.losingTrades;
+  let totalWinAmount = aggregatedStats.totalWinAmount;
+  let totalLossAmount = aggregatedStats.totalLossAmount;
+  let bestTrade = aggregatedStats.bestTrade;
+  let worstTrade = aggregatedStats.worstTrade;
+  let totalVolume = aggregatedStats.totalVolume;
+  let maxConsecutiveWins = aggregatedStats.maxConsecutiveWins;
+  let maxConsecutiveLosses = aggregatedStats.maxConsecutiveLosses;
+  let longTrades = aggregatedStats.longTrades;
+  let shortTrades = aggregatedStats.shortTrades;
+  let longWins = 0;
+  let shortWins = 0;
+  
+  // If we have trades but no stats from API, calculate from trades
+  if (aggregatedStats.totalTrades === 0 && allTrades.length > 0) {
+    let consecutiveWins = 0;
+    let consecutiveLosses = 0;
+    
+    for (const trade of allTrades) {
+      const pnl = trade.profitAndLoss || trade.pnl || 0;
+      const size = trade.positionSize || trade.size || trade.quantity || 1;
+      const side = trade.side || trade.orderSide; // 0 = Buy/Long, 1 = Sell/Short (GatewayAPI)
+      
+      totalVolume += Math.abs(size);
+      
+      // Comptage Long/Short
+      if (side === 0) {
+        longTrades++;
+        if (pnl > 0) longWins++;
+      } else if (side === 1) {
+        shortTrades++;
+        if (pnl > 0) shortWins++;
+      }
+      
+      if (pnl > 0) {
+        winningTrades++;
+        totalWinAmount += pnl;
+        consecutiveWins++;
+        consecutiveLosses = 0;
+        if (consecutiveWins > maxConsecutiveWins) maxConsecutiveWins = consecutiveWins;
+        if (pnl > bestTrade) bestTrade = pnl;
+      } else if (pnl < 0) {
+        losingTrades++;
+        totalLossAmount += Math.abs(pnl);
+        consecutiveLosses++;
+        consecutiveWins = 0;
+        if (consecutiveLosses > maxConsecutiveLosses) maxConsecutiveLosses = consecutiveLosses;
+        if (pnl < worstTrade) worstTrade = pnl;
+      }
     }
   }
 
-  const totalTrades = allTrades.length;
+  const totalTrades = aggregatedStats.totalTrades > 0 ? aggregatedStats.totalTrades : allTrades.length;
   const breakEvenTrades = totalTrades - winningTrades - losingTrades;
 
   spinner.succeed('Stats loaded');
@@ -1563,10 +1634,13 @@ const showStats = async (service) => {
   console.log();
   drawBoxHeader('EQUITY CURVE', boxWidth);
   
+  const chartInnerWidth = boxWidth - 2; // Inner width between ║ and ║
+  const yAxisWidth = 10;                // Width for Y-axis labels (e.g., "  $150K ")
+  const chartAreaWidth = chartInnerWidth - yAxisWidth - 4; // -4 for margins
+  const chartHeight = 10;
+  
   // Generate equity curve data from trades or simulate based on balance
   let equityData = [];
-  const innerWidth = boxWidth - 4; // Leave space for borders and padding
-  const chartHeight = 10;
   
   if (allTrades.length > 0) {
     // Build equity curve from actual trades
@@ -1598,17 +1672,18 @@ const showStats = async (service) => {
     equityData = [totalStartingBalance || 150000, totalBalance || 150000];
   }
   
-  // Limit data points for chart width
-  if (equityData.length > innerWidth - 10) {
-    const step = Math.ceil(equityData.length / (innerWidth - 10));
+  // Limit data points to fit chart width
+  const maxDataPoints = chartAreaWidth - 5;
+  if (equityData.length > maxDataPoints) {
+    const step = Math.ceil(equityData.length / maxDataPoints);
     equityData = equityData.filter((_, i) => i % step === 0);
   }
   
-  // Generate ASCII chart
+  // Generate ASCII chart with fixed width
   const chartConfig = {
     height: chartHeight,
     colors: [asciichart.green],
-    format: (x) => ('$' + (x / 1000).toFixed(0) + 'K').padStart(8)
+    format: (x) => ('$' + (x / 1000).toFixed(0) + 'K').padStart(yAxisWidth)
   };
   
   // Check if equity went down (red) or up (green)
@@ -1618,28 +1693,42 @@ const showStats = async (service) => {
   
   const chart = asciichart.plot(equityData, chartConfig);
   
-  // Print chart with borders
+  // Print chart with borders - ensure each line fits exactly
   const chartLines = chart.split('\n');
   chartLines.forEach(line => {
-    const paddedLine = '  ' + line;
-    const lineLen = paddedLine.replace(/\x1b\[[0-9;]*m/g, '').length;
-    const padding = Math.max(0, boxWidth - 2 - lineLen);
-    console.log(chalk.cyan('║') + paddedLine + ' '.repeat(padding) + chalk.cyan('║'));
+    // Calculate visible length
+    const lineVisLen = visibleLength(line);
+    
+    // Add left margin and truncate/pad to fit
+    let chartLine = '  ' + line;
+    const chartLineVisLen = visibleLength(chartLine);
+    
+    if (chartLineVisLen > chartInnerWidth) {
+      // Truncate if too long (shouldn't happen with proper sizing)
+      const excess = chartLineVisLen - chartInnerWidth;
+      chartLine = '  ' + line.substring(0, line.length - excess);
+    } else if (chartLineVisLen < chartInnerWidth) {
+      // Pad if too short
+      chartLine = chartLine + ' '.repeat(chartInnerWidth - chartLineVisLen);
+    }
+    
+    console.log(chalk.cyan('║') + chartLine + chalk.cyan('║'));
   });
+  
+  // Chart legend separator
+  console.log(chalk.cyan('╠' + '─'.repeat(chartInnerWidth) + '╣'));
   
   // Chart legend
   const startVal = '$' + (equityData[0] / 1000).toFixed(1) + 'K';
   const endVal = '$' + (equityData[equityData.length - 1] / 1000).toFixed(1) + 'K';
   const changeVal = equityData[equityData.length - 1] - equityData[0];
   const changePercent = ((changeVal / equityData[0]) * 100).toFixed(2);
-  const changeColor = changeVal >= 0 ? chalk.green : chalk.red;
   const changeStr = changeVal >= 0 ? '+' : '';
   
-  const legendText = `  Start: ${startVal}  |  Current: ${endVal}  |  Change: ${changeStr}$${(changeVal/1000).toFixed(1)}K (${changeStr}${changePercent}%)`;
-  const legendLen = legendText.replace(/\x1b\[[0-9;]*m/g, '').length;
-  const legendPad = Math.max(0, boxWidth - 2 - legendLen);
-  console.log(chalk.cyan('╠' + '─'.repeat(boxWidth - 2) + '╣'));
-  console.log(chalk.cyan('║') + chalk.gray(legendText) + ' '.repeat(legendPad) + chalk.cyan('║'));
+  const legendContent = `  Start: ${startVal}  |  Current: ${endVal}  |  Change: ${changeStr}$${(changeVal/1000).toFixed(1)}K (${changeStr}${changePercent}%)`;
+  const legendVisLen = visibleLength(legendContent);
+  const legendPad = Math.max(0, chartInnerWidth - legendVisLen);
+  console.log(chalk.cyan('║') + chalk.gray(legendContent) + ' '.repeat(legendPad) + chalk.cyan('║'));
   
   drawBoxFooter(boxWidth);
   
@@ -1649,7 +1738,7 @@ const showStats = async (service) => {
   console.log();
   drawBoxHeader('P&L CALENDAR', boxWidth);
   
-  // Build daily P&L data from trades
+  // Build daily P&L data
   const dailyPnL = {};
   const now = new Date();
   const currentMonth = now.getMonth();
@@ -1662,51 +1751,43 @@ const showStats = async (service) => {
     dailyPnL[dateKey] = 0;
   }
   
-  // Aggregate P&L by day from trades
-  allTrades.forEach(trade => {
-    const tradeDate = trade.timestamp || trade.fillTime || trade.createdAt || trade.date;
-    if (tradeDate) {
-      const d = new Date(tradeDate);
-      if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
-        const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        const pnl = trade.profitAndLoss || trade.pnl || trade.realizedPnL || 0;
-        dailyPnL[dateKey] = (dailyPnL[dateKey] || 0) + pnl;
-      }
-    }
-  });
-  
-  // If no trade data, simulate based on total P&L distributed across trading days
-  const hasTrades = allTrades.length > 0 && Object.values(dailyPnL).some(v => v !== 0);
-  if (!hasTrades && totalPnL !== 0) {
-    // Distribute total P&L across weekdays (Mon-Fri) up to today
-    const tradingDays = [];
-    for (let d = 1; d <= Math.min(now.getDate(), daysInMonth); d++) {
-      const date = new Date(currentYear, currentMonth, d);
-      const dayOfWeek = date.getDay();
-      if (dayOfWeek >= 1 && dayOfWeek <= 5) { // Mon-Fri
-        tradingDays.push(d);
-      }
-    }
-    
-    if (tradingDays.length > 0) {
-      // Create realistic distribution with some variation
-      const avgDaily = totalPnL / tradingDays.length;
-      let remaining = totalPnL;
-      
-      tradingDays.forEach((d, idx) => {
-        const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-        if (idx === tradingDays.length - 1) {
-          dailyPnL[dateKey] = remaining;
-        } else {
-          // Add variation: +/- 50% of average
-          const variation = (Math.random() - 0.5) * avgDaily;
-          const dayPnL = avgDaily + variation;
-          dailyPnL[dateKey] = Math.round(dayPnL * 100) / 100;
-          remaining -= dailyPnL[dateKey];
+  // First, try to use daily stats from API (allDailyStats collected earlier)
+  let hasDailyStatsFromAPI = false;
+  if (allDailyStats && allDailyStats.length > 0) {
+    allDailyStats.forEach(stat => {
+      const statDate = stat.date || stat.day || stat.tradingDate;
+      if (statDate) {
+        const d = new Date(statDate);
+        if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
+          const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          const pnl = stat.profitAndLoss || stat.pnl || stat.realizedPnl || stat.netPnl || 0;
+          dailyPnL[dateKey] = (dailyPnL[dateKey] || 0) + pnl;
+          if (pnl !== 0) hasDailyStatsFromAPI = true;
         }
-      });
-    }
+      }
+    });
   }
+  
+  // If no daily stats from API, aggregate P&L by day from trades
+  if (!hasDailyStatsFromAPI) {
+    allTrades.forEach(trade => {
+      const tradeDate = trade.timestamp || trade.fillTime || trade.createdAt || trade.date || trade.creationTimestamp;
+      if (tradeDate) {
+        const d = new Date(tradeDate);
+        if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
+          const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          const pnl = trade.profitAndLoss || trade.pnl || trade.realizedPnL || 0;
+          dailyPnL[dateKey] = (dailyPnL[dateKey] || 0) + pnl;
+        }
+      }
+    });
+  }
+  
+  // Check if we have any real P&L data
+  const hasRealData = Object.values(dailyPnL).some(v => v !== 0);
+  
+  // If no real data, show message instead of simulating
+  // (We no longer simulate fake data - only show real P&L)
   
   // Get month name
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
@@ -1736,50 +1817,94 @@ const showStats = async (service) => {
     weeklyPnL[weekNum] += dailyPnL[dateKey] || 0;
   }
   
-  // Calendar header: Mon Tue Wed Thu Fri Sat Sun | Week
-  const dayHeaders = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const cellWidth = 9; // Width for each day cell
-  const weekColWidth = 12; // Width for week column
+  // Calendar layout - fixed column widths
   const calInnerWidth = boxWidth - 2;
+  const dayColWidth = 10;      // Width for each day column (enough for "31 +999")
+  const weekColWidth = 14;     // Width for week column (enough for "W1 +$9.9K")
+  const separatorWidth = 3;    // " │ " separator between days and week
+  const daysAreaWidth = dayColWidth * 7;
+  const totalWidth = daysAreaWidth + separatorWidth + weekColWidth;
+  const marginLeft = Math.floor((calInnerWidth - totalWidth) / 2);
+  const marginRight = calInnerWidth - totalWidth - marginLeft;
+  
+  // Helper to center text in column
+  const centerInCol = (text, width) => {
+    const len = visibleLength(text);
+    if (len >= width) return text;
+    const padL = Math.floor((width - len) / 2);
+    const padR = width - len - padL;
+    return ' '.repeat(padL) + text + ' '.repeat(padR);
+  };
+  
+  // Helper to pad text to width
+  const padToWidth = (text, width) => {
+    const len = visibleLength(text);
+    if (len >= width) return text;
+    return text + ' '.repeat(width - len);
+  };
   
   // Month title
   const monthTitle = `${monthName} ${currentYear}`;
   console.log(chalk.cyan('║') + chalk.yellow.bold(centerText(monthTitle, calInnerWidth)) + chalk.cyan('║'));
   console.log(chalk.cyan('╠' + '─'.repeat(calInnerWidth) + '╣'));
   
-  // Day headers row
-  let headerRow = ' ';
+  // Day headers row (Mon Tue Wed Thu Fri Sat Sun │ Week)
+  const dayHeaders = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  let headerLine = ' '.repeat(marginLeft);
   dayHeaders.forEach(day => {
-    headerRow += chalk.cyan(day.padStart(cellWidth - 1).padEnd(cellWidth));
+    headerLine += centerInCol(day, dayColWidth);
   });
-  headerRow += chalk.cyan('│') + chalk.cyan.bold(' Week'.padEnd(weekColWidth - 1));
-  const headerLen = headerRow.replace(/\x1b\[[0-9;]*m/g, '').length;
-  const headerPad = Math.max(0, calInnerWidth - headerLen);
-  console.log(chalk.cyan('║') + headerRow + ' '.repeat(headerPad) + chalk.cyan('║'));
-  console.log(chalk.cyan('╠' + '─'.repeat(calInnerWidth) + '╣'));
+  headerLine += ' │ ' + centerInCol('Week', weekColWidth - 1);
+  headerLine = padToWidth(headerLine, calInnerWidth);
+  console.log(chalk.cyan('║') + chalk.white(headerLine) + chalk.cyan('║'));
   
-  // Calendar grid
+  // Separator line under headers
+  let sepLine = ' '.repeat(marginLeft) + '─'.repeat(daysAreaWidth) + '─┼─' + '─'.repeat(weekColWidth - 1) + ' '.repeat(marginRight);
+  console.log(chalk.cyan('║') + chalk.cyan(sepLine) + chalk.cyan('║'));
+  
+  // Calendar grid - each week is TWO rows: day numbers, then P&L values
   let currentDay = 1;
   weekNum = 0;
   
   while (currentDay <= daysInMonth) {
-    let row = ' ';
+    // Row 1: Day numbers
+    let dayRow = ' '.repeat(marginLeft);
+    let dayNumbers = []; // Store day numbers for this week
     
     for (let col = 0; col < 7; col++) {
-      let cellContent = '';
-      
       if ((weekNum === 0 && col < firstDayMondayFirst) || currentDay > daysInMonth) {
-        // Empty cell
-        cellContent = ' '.repeat(cellWidth);
+        dayRow += centerInCol('', dayColWidth);
+        dayNumbers.push({ day: null, pnl: 0 });
       } else {
         const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
         const pnl = dailyPnL[dateKey] || 0;
         const isToday = currentDay === now.getDate();
         
-        // Format: day number + P&L
-        let dayStr = String(currentDay).padStart(2);
-        let pnlStr = '';
+        const dayStr = String(currentDay);
+        const dayColor = isToday ? chalk.cyan.bold : chalk.white;
         
+        dayRow += centerInCol(dayColor(dayStr), dayColWidth);
+        dayNumbers.push({ day: currentDay, pnl: pnl });
+        currentDay++;
+      }
+    }
+    
+    // Week label for day row
+    const weekLabel = `W${weekNum + 1}`;
+    dayRow += ' │ ' + centerInCol(chalk.gray(weekLabel), weekColWidth - 1);
+    dayRow = padToWidth(dayRow, calInnerWidth);
+    console.log(chalk.cyan('║') + dayRow + chalk.cyan('║'));
+    
+    // Row 2: P&L values
+    let pnlRow = ' '.repeat(marginLeft);
+    
+    for (let col = 0; col < 7; col++) {
+      const { day, pnl } = dayNumbers[col];
+      
+      if (day === null) {
+        pnlRow += centerInCol('', dayColWidth);
+      } else {
+        let pnlStr = '';
         if (pnl !== 0) {
           if (Math.abs(pnl) >= 1000) {
             pnlStr = (pnl >= 0 ? '+' : '') + (pnl / 1000).toFixed(0) + 'K';
@@ -1788,21 +1913,12 @@ const showStats = async (service) => {
           }
         }
         
-        // Color based on P&L
         const pnlColor = pnl > 0 ? chalk.green : (pnl < 0 ? chalk.red : chalk.gray);
-        const dayColor = isToday ? chalk.cyan.bold : chalk.white;
-        
-        // Build cell: "DD +XXX" or "DD -XXX"
-        const cellStr = dayStr + (pnlStr ? ' ' : '') + pnlStr;
-        cellContent = dayColor(dayStr) + (pnlStr ? pnlColor((' ' + pnlStr).padEnd(cellWidth - 2)) : ' '.repeat(cellWidth - 2));
-        
-        currentDay++;
+        pnlRow += centerInCol(pnlStr ? pnlColor(pnlStr) : '', dayColWidth);
       }
-      
-      row += cellContent;
     }
     
-    // Add weekly total column
+    // Week total for P&L row
     const weekPnL = weeklyPnL[weekNum] || 0;
     let weekStr = '';
     if (weekPnL !== 0) {
@@ -1813,18 +1929,23 @@ const showStats = async (service) => {
       }
     }
     const weekColor = weekPnL > 0 ? chalk.green : (weekPnL < 0 ? chalk.red : chalk.gray);
-    const weekLabel = `W${weekNum + 1}`;
+    pnlRow += ' │ ' + centerInCol(weekStr ? weekColor(weekStr) : '', weekColWidth - 1);
+    pnlRow = padToWidth(pnlRow, calInnerWidth);
+    console.log(chalk.cyan('║') + pnlRow + chalk.cyan('║'));
     
-    row += chalk.cyan('│') + chalk.gray((' ' + weekLabel).padEnd(4)) + weekColor(weekStr.padEnd(weekColWidth - 5));
-    
-    const rowLen = row.replace(/\x1b\[[0-9;]*m/g, '').length;
-    const rowPad = Math.max(0, calInnerWidth - rowLen);
-    console.log(chalk.cyan('║') + row + ' '.repeat(rowPad) + chalk.cyan('║'));
+    // Empty separator row between weeks (except after last week)
+    if (currentDay <= daysInMonth) {
+      let emptyRow = ' '.repeat(marginLeft) + ' '.repeat(daysAreaWidth) + ' │ ' + ' '.repeat(weekColWidth - 1) + ' '.repeat(marginRight);
+      emptyRow = padToWidth(emptyRow, calInnerWidth);
+      console.log(chalk.cyan('║') + emptyRow + chalk.cyan('║'));
+    }
     
     weekNum++;
   }
   
-  // Monthly total
+  // Monthly total separator and row
+  console.log(chalk.cyan('╠' + '─'.repeat(calInnerWidth) + '╣'));
+  
   const monthTotal = Object.values(dailyPnL).reduce((sum, val) => sum + val, 0);
   let monthTotalStr = '';
   if (Math.abs(monthTotal) >= 1000) {
@@ -1834,9 +1955,10 @@ const showStats = async (service) => {
   }
   const monthTotalColor = monthTotal > 0 ? chalk.green : (monthTotal < 0 ? chalk.red : chalk.white);
   
-  console.log(chalk.cyan('╠' + '─'.repeat(calInnerWidth) + '╣'));
-  const totalLine = `  Month Total: ${monthTotalStr}`;
-  console.log(chalk.cyan('║') + chalk.white.bold('  Month Total: ') + monthTotalColor(monthTotalStr) + ' '.repeat(Math.max(0, calInnerWidth - totalLine.length)) + chalk.cyan('║'));
+  const totalLabel = '  Month Total: ';
+  const totalContent = totalLabel + monthTotalStr;
+  const totalPadding = calInnerWidth - visibleLength(totalContent);
+  console.log(chalk.cyan('║') + chalk.white.bold(totalLabel) + monthTotalColor(monthTotalStr) + ' '.repeat(Math.max(0, totalPadding)) + chalk.cyan('║'));
   
   drawBoxFooter(boxWidth);
   
