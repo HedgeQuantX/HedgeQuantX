@@ -6,11 +6,12 @@
 
 const WebSocket = require('ws');
 const crypto = require('crypto');
-const https = require('https');
+const http = require('http');
 
 // HQX Server Configuration - Contabo Dedicated Server
 const HQX_CONFIG = {
-  apiUrl: process.env.HQX_API_URL || 'http://173.212.223.75:3500',
+  host: process.env.HQX_HOST || '173.212.223.75',
+  port: process.env.HQX_PORT || 3500,
   wsUrl: process.env.HQX_WS_URL || 'ws://173.212.223.75:3500/ws',
   version: 'v1'
 };
@@ -19,8 +20,10 @@ class HQXServerService {
   constructor() {
     this.ws = null;
     this.token = null;
+    this.refreshToken = null;
     this.apiKey = null;
     this.sessionId = null;
+    this.userId = null;
     this.connected = false;
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
@@ -39,16 +42,16 @@ class HQXServerService {
   }
 
   /**
-   * HTTPS request helper
+   * HTTP request helper
    */
   _request(endpoint, method = 'GET', data = null) {
     return new Promise((resolve, reject) => {
-      const url = new URL(`${HQX_CONFIG.apiUrl}/${HQX_CONFIG.version}${endpoint}`);
+      const postData = data ? JSON.stringify(data) : null;
       
       const options = {
-        hostname: url.hostname,
-        port: 443,
-        path: url.pathname,
+        hostname: HQX_CONFIG.host,
+        port: HQX_CONFIG.port,
+        path: `/${HQX_CONFIG.version}${endpoint}`,
         method: method,
         headers: {
           'Content-Type': 'application/json',
@@ -57,6 +60,10 @@ class HQXServerService {
         }
       };
 
+      if (postData) {
+        options.headers['Content-Length'] = Buffer.byteLength(postData);
+      }
+
       if (this.token) {
         options.headers['Authorization'] = `Bearer ${this.token}`;
       }
@@ -64,7 +71,7 @@ class HQXServerService {
         options.headers['X-API-Key'] = this.apiKey;
       }
 
-      const req = https.request(options, (res) => {
+      const req = http.request(options, (res) => {
         let body = '';
         res.on('data', chunk => body += chunk);
         res.on('end', () => {
@@ -83,8 +90,8 @@ class HQXServerService {
         reject(new Error('Request timeout'));
       });
 
-      if (data) {
-        req.write(JSON.stringify(data));
+      if (postData) {
+        req.write(postData);
       }
 
       req.end();
@@ -93,20 +100,30 @@ class HQXServerService {
 
   /**
    * Authenticate with HQX Server
+   * @param {string} userId - User identifier (can be device ID or API key)
+   * @param {string} propfirm - PropFirm name (optional)
    */
-  async authenticate(apiKey) {
+  async authenticate(userId, propfirm = 'unknown') {
     try {
+      const deviceId = this._generateDeviceId();
+      
       const response = await this._request('/auth/token', 'POST', {
-        apiKey: apiKey,
-        deviceId: this._generateDeviceId(),
+        userId: userId || deviceId,
+        deviceId: deviceId,
+        propfirm: propfirm,
         timestamp: Date.now()
       });
 
       if (response.statusCode === 200 && response.data.success) {
-        this.token = response.data.token;
-        this.apiKey = apiKey;
-        this.sessionId = response.data.sessionId;
-        return { success: true, sessionId: this.sessionId };
+        this.token = response.data.data.token;
+        this.refreshToken = response.data.data.refreshToken;
+        this.apiKey = response.data.data.apiKey;
+        this.sessionId = response.data.data.sessionId;
+        return { 
+          success: true, 
+          sessionId: this.sessionId,
+          apiKey: this.apiKey
+        };
       } else {
         return { 
           success: false, 

@@ -175,28 +175,79 @@ const loginPrompt = async (propfirmName) => {
  */
 const projectXMenu = async () => {
   const propfirms = getPropFirmsByPlatform('ProjectX');
+  const boxWidth = getLogoWidth();
+  const innerWidth = boxWidth - 2;
+  const numCols = 3;
+  const colWidth = Math.floor(innerWidth / numCols);
   
-  const { propfirm } = await inquirer.prompt([
+  // Build numbered list
+  const numbered = propfirms.map((pf, i) => ({
+    num: i + 1,
+    key: pf.key,
+    name: pf.displayName
+  }));
+  
+  // PropFirm selection box
+  console.log();
+  console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
+  console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PROPFIRM', innerWidth)) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
+  
+  // Display in 3 columns
+  const rows = Math.ceil(numbered.length / numCols);
+  for (let row = 0; row < rows; row++) {
+    let line = '';
+    for (let col = 0; col < numCols; col++) {
+      const idx = row + col * rows;
+      if (idx < numbered.length) {
+        const item = numbered[idx];
+        const text = `[${item.num}] ${item.name}`;
+        const coloredText = chalk.cyan(`[${item.num}]`) + ' ' + chalk.white(item.name);
+        const textLen = text.length;
+        const padding = colWidth - textLen - 2;
+        line += '  ' + coloredText + ' '.repeat(Math.max(0, padding));
+      } else {
+        line += ' '.repeat(colWidth);
+      }
+    }
+    // Adjust for exact width
+    const lineLen = line.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const adjust = innerWidth - lineLen;
+    console.log(chalk.cyan('║') + line + ' '.repeat(Math.max(0, adjust)) + chalk.cyan('║'));
+  }
+  
+  console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
+  const backText = '  ' + chalk.red('[X] Back');
+  const backLen = '[X] Back'.length + 2;
+  console.log(chalk.cyan('║') + backText + ' '.repeat(innerWidth - backLen) + chalk.cyan('║'));
+  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
+  console.log();
+
+  const validInputs = numbered.map(n => n.num.toString());
+  validInputs.push('x', 'X');
+  
+  const { action } = await inquirer.prompt([
     {
-      type: 'list',
-      name: 'propfirm',
-      message: chalk.white.bold('Select PropFirm:'),
-      choices: [
-        ...propfirms.map(pf => ({ name: chalk.cyan(pf.displayName), value: pf.key })),
-        new inquirer.Separator(),
-        { name: chalk.gray('Back'), value: 'back' }
-      ],
-      pageSize: 15
+      type: 'input',
+      name: 'action',
+      message: chalk.cyan(`Enter choice (1-${numbered.length}/X):`),
+      validate: (input) => {
+        if (validInputs.includes(input)) return true;
+        return `Please enter 1-${numbered.length} or X`;
+      }
     }
   ]);
 
-  if (propfirm === 'back') return null;
+  if (action.toLowerCase() === 'x') return null;
+  
+  const selectedIdx = parseInt(action) - 1;
+  const selectedPropfirm = numbered[selectedIdx];
 
-  const credentials = await loginPrompt(propfirms.find(p => p.key === propfirm).displayName);
+  const credentials = await loginPrompt(selectedPropfirm.name);
   const spinner = ora('Authenticating...').start();
 
   try {
-    const service = new ProjectXService(propfirm);
+    const service = new ProjectXService(selectedPropfirm.key);
     const result = await service.login(credentials.username, credentials.password);
 
     if (result.success) {
@@ -221,29 +272,52 @@ const projectXMenu = async () => {
 const mainMenu = async () => {
   const boxWidth = getLogoWidth();
   const innerWidth = boxWidth - 2;
+  const col1Width = Math.floor(innerWidth / 2);
+  const col2Width = innerWidth - col1Width;
   
   // Connection menu box
   console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
-  console.log(chalk.cyan('║') + chalk.white(centerText('SELECT PLATFORM', innerWidth)) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PLATFORM', innerWidth)) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
+  
+  // Menu row helper (2 columns)
+  const menuRow = (left, right) => {
+    const leftText = '  ' + left;
+    const rightText = right ? '  ' + right : '';
+    const leftLen = leftText.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const rightLen = rightText.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const leftPad = col1Width - leftLen;
+    const rightPad = col2Width - rightLen;
+    console.log(chalk.cyan('║') + leftText + ' '.repeat(Math.max(0, leftPad)) + rightText + ' '.repeat(Math.max(0, rightPad)) + chalk.cyan('║'));
+  };
+  
+  menuRow(chalk.cyan('[1] ProjectX'), chalk.gray('[2] Rithmic (Coming Soon)'));
+  menuRow(chalk.gray('[3] Tradovate (Coming Soon)'), chalk.red('[X] Exit'));
+  
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
   console.log();
 
-  const { connection } = await inquirer.prompt([
+  const { action } = await inquirer.prompt([
     {
-      type: 'list',
-      name: 'connection',
-      message: chalk.white.bold('Platform:'),
-      choices: [
-        { name: chalk.cyan('[1] ProjectX'), value: 'projectx' },
-        { name: chalk.gray('[2] Rithmic (Coming Soon)'), value: 'rithmic', disabled: 'Soon' },
-        { name: chalk.gray('[3] Tradovate (Coming Soon)'), value: 'tradovate', disabled: 'Soon' },
-        new inquirer.Separator(chalk.gray('─'.repeat(30))),
-        { name: chalk.red('[X] Exit'), value: 'exit' }
-      ]
+      type: 'input',
+      name: 'action',
+      message: chalk.cyan('Enter choice (1/X):'),
+      validate: (input) => {
+        const valid = ['1', 'x', 'X'];
+        if (valid.includes(input)) return true;
+        return 'Please enter 1 or X';
+      }
     }
   ]);
 
-  return connection;
+  // Map input to action
+  const actionMap = {
+    '1': 'projectx',
+    'x': 'exit',
+    'X': 'exit'
+  };
+
+  return actionMap[action] || 'exit';
 };
 
 /**

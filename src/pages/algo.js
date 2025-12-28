@@ -5,8 +5,10 @@
 const chalk = require('chalk');
 const ora = require('ora');
 const inquirer = require('inquirer');
+const readline = require('readline');
 
 const { connections } = require('../services');
+const { HQXServerService } = require('../services/hqx-server');
 const { FUTURES_SYMBOLS } = require('../config');
 const { getDevice, getSeparator } = require('../ui');
 
@@ -246,89 +248,291 @@ const selectSymbolMenu = async (service, account) => {
 };
 
 /**
- * Launch Algo
+ * Launch Algo with HQX Server Connection
  */
 const launchAlgo = async (service, account, contract, numContracts) => {
   const accountName = account.accountName || account.name || 'Account #' + account.accountId;
   const symbolName = contract.name || contract.symbol || contract.id;
+  const symbol = contract.symbol || contract.id;
   
   console.log();
   console.log(chalk.green.bold('  [>] Launching HQX Algo...'));
   console.log();
   
-  const spinner = ora('Connecting to HQX Server...').start();
-  
-  // Try to connect to HQX Server
+  // Initialize HQX Server connection
+  const hqxServer = new HQXServerService();
   let hqxConnected = false;
-  // TODO: Implement HQX Server connection
-  
-  spinner.warn('HQX Server unavailable - Running in Demo Mode');
-  
-  console.log();
-  console.log(chalk.gray(getSeparator()));
-  console.log(chalk.cyan.bold('  HQX Ultra-Scalping Algo'));
-  console.log(chalk.gray(getSeparator()));
-  console.log(chalk.white(`  Status:    ${chalk.green('RUNNING')}`));
-  console.log(chalk.white(`  Account:   ${chalk.cyan(accountName)}`));
-  console.log(chalk.white(`  Symbol:    ${chalk.cyan(symbolName)}`));
-  console.log(chalk.white(`  Contracts: ${chalk.cyan(numContracts)}`));
-  console.log(chalk.white(`  Mode:      ${hqxConnected ? chalk.green('LIVE') : chalk.yellow('DEMO')}`));
-  console.log(chalk.gray(getSeparator()));
-  console.log();
+  let algoRunning = false;
   
   // Activity logs
   const logs = [];
+  const MAX_LOGS = 12;
+  
+  // Stats
+  let stats = {
+    trades: 0,
+    wins: 0,
+    losses: 0,
+    pnl: 0,
+    signals: 0,
+    winRate: '0.0'
+  };
   
   const addLog = (type, message) => {
     const timestamp = new Date().toLocaleTimeString();
+    logs.push({ timestamp, type, message });
+    if (logs.length > MAX_LOGS) logs.shift();
+  };
+  
+  const clearScreen = () => {
+    console.clear();
+  };
+  
+  const displayUI = () => {
+    clearScreen();
+    console.log();
+    console.log(chalk.gray(getSeparator()));
+    console.log(chalk.cyan.bold('  HQX Ultra-Scalping Algo'));
+    console.log(chalk.gray(getSeparator()));
+    console.log(chalk.white(`  Status:    ${algoRunning ? chalk.green('RUNNING') : chalk.yellow('CONNECTING...')}`));
+    console.log(chalk.white(`  Account:   ${chalk.cyan(accountName)}`));
+    console.log(chalk.white(`  Symbol:    ${chalk.cyan(symbolName)}`));
+    console.log(chalk.white(`  Contracts: ${chalk.cyan(numContracts)}`));
+    console.log(chalk.white(`  Mode:      ${hqxConnected ? chalk.green('LIVE') : chalk.yellow('OFFLINE')}`));
+    console.log(chalk.gray(getSeparator()));
+    
+    // Stats bar
+    console.log();
+    console.log(chalk.white('  Stats: ') + 
+      chalk.gray('Trades: ') + chalk.cyan(stats.trades) + 
+      chalk.gray(' | Wins: ') + chalk.green(stats.wins) + 
+      chalk.gray(' | Losses: ') + chalk.red(stats.losses) + 
+      chalk.gray(' | Win Rate: ') + chalk.yellow(stats.winRate + '%') +
+      chalk.gray(' | P&L: ') + (stats.pnl >= 0 ? chalk.green('$' + stats.pnl.toFixed(2)) : chalk.red('-$' + Math.abs(stats.pnl).toFixed(2)))
+    );
+    console.log();
+    
+    // Activity logs
+    console.log(chalk.gray(getSeparator()));
+    console.log(chalk.white.bold('  Activity Log'));
+    console.log(chalk.gray(getSeparator()));
+    
     const typeColors = {
       info: chalk.cyan,
-      signal: chalk.yellow,
-      trade: chalk.green,
+      success: chalk.green,
+      signal: chalk.yellow.bold,
+      trade: chalk.green.bold,
       error: chalk.red,
       warning: chalk.yellow
     };
-    const color = typeColors[type] || chalk.white;
-    logs.push({ timestamp, type, message, color });
-    if (logs.length > 10) logs.shift();
-  };
-  
-  const displayLogs = () => {
-    console.log(chalk.gray('  Recent Activity:'));
-    logs.forEach(log => {
-      console.log(chalk.gray(`  [${log.timestamp}]`) + ' ' + log.color(log.message));
-    });
-  };
-  
-  addLog('info', 'Algo initialized');
-  addLog('info', `Monitoring ${symbolName}...`);
-  displayLogs();
-  
-  console.log();
-  console.log(chalk.yellow('  Demo mode: No real trades will be executed.'));
-  console.log();
-  
-  // Stop menu
-  const { stopAction } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'stopAction',
-      message: chalk.red.bold(''),
-      choices: [
-        { name: chalk.red.bold('[X] Stop Algo'), value: 'stop' }
-      ],
-      pageSize: 1,
-      loop: false
+    
+    if (logs.length === 0) {
+      console.log(chalk.gray('  Waiting for activity...'));
+    } else {
+      logs.forEach(log => {
+        const color = typeColors[log.type] || chalk.white;
+        const icon = log.type === 'signal' ? '[*]' : 
+                     log.type === 'trade' ? '[>]' : 
+                     log.type === 'error' ? '[X]' : 
+                     log.type === 'success' ? '[OK]' : '[.]';
+        console.log(chalk.gray(`  [${log.timestamp}]`) + ' ' + color(`${icon} ${log.message}`));
+      });
     }
-  ]);
+    
+    console.log(chalk.gray(getSeparator()));
+    console.log();
+    console.log(chalk.yellow('  Press X to stop algo...'));
+    console.log();
+  };
   
-  if (stopAction === 'stop') {
-    console.log();
-    console.log(chalk.yellow('  Stopping algo...'));
-    console.log(chalk.green('  [OK] Algo stopped successfully'));
-    console.log();
-    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+  // Connect to HQX Server
+  const spinner = ora('Authenticating with HQX Server...').start();
+  
+  try {
+    // Authenticate
+    const authResult = await hqxServer.authenticate(account.accountId.toString(), account.propfirm || 'projectx');
+    
+    if (!authResult.success) {
+      spinner.fail('Authentication failed: ' + (authResult.error || 'Unknown error'));
+      addLog('error', 'Authentication failed');
+      
+      // Fallback to offline mode
+      console.log(chalk.yellow('  Running in offline demo mode...'));
+      console.log();
+      await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+      return;
+    }
+    
+    spinner.text = 'Connecting to WebSocket...';
+    
+    // Connect WebSocket
+    const connectResult = await hqxServer.connect();
+    
+    if (connectResult.success) {
+      spinner.succeed('Connected to HQX Server');
+      hqxConnected = true;
+    } else {
+      throw new Error('WebSocket connection failed');
+    }
+    
+  } catch (error) {
+    spinner.warn('HQX Server unavailable - Running in offline mode');
+    hqxConnected = false;
   }
+  
+  // Setup event handlers
+  hqxServer.on('log', (data) => {
+    addLog(data.type || 'info', data.message);
+    displayUI();
+  });
+  
+  hqxServer.on('signal', (data) => {
+    stats.signals++;
+    const side = data.side === 'long' ? 'BUY' : 'SELL';
+    addLog('signal', `${side} Signal @ ${data.entry?.toFixed(2) || 'N/A'} | SL: ${data.stop?.toFixed(2) || 'N/A'} | TP: ${data.target?.toFixed(2) || 'N/A'}`);
+    displayUI();
+    
+    // Execute order via PropFirm API if connected
+    if (hqxConnected && service) {
+      executeSignal(service, account, contract, numContracts, data);
+    }
+  });
+  
+  hqxServer.on('trade', (data) => {
+    stats.trades++;
+    stats.pnl += data.pnl || 0;
+    if (data.pnl > 0) {
+      stats.wins++;
+      addLog('trade', `Closed +$${data.pnl.toFixed(2)} (${data.reason || 'take_profit'})`);
+    } else {
+      stats.losses++;
+      addLog('trade', `Closed -$${Math.abs(data.pnl).toFixed(2)} (${data.reason || 'stop_loss'})`);
+    }
+    stats.winRate = stats.trades > 0 ? ((stats.wins / stats.trades) * 100).toFixed(1) : '0.0';
+    displayUI();
+  });
+  
+  hqxServer.on('stats', (data) => {
+    stats = { ...stats, ...data };
+    displayUI();
+  });
+  
+  hqxServer.on('error', (data) => {
+    addLog('error', data.message || 'Unknown error');
+    displayUI();
+  });
+  
+  hqxServer.on('disconnected', () => {
+    hqxConnected = false;
+    addLog('warning', 'Disconnected from HQX Server');
+    displayUI();
+  });
+  
+  // Start algo
+  if (hqxConnected) {
+    addLog('info', 'Starting HQX Ultra-Scalping...');
+    hqxServer.startAlgo({
+      accountId: account.accountId,
+      contractId: contract.id || contract.contractId,
+      symbol: symbol,
+      contracts: numContracts,
+      dailyTarget: 500,  // Default daily target
+      maxRisk: 200,      // Default max risk
+      propfirm: account.propfirm || 'projectx',
+      propfirmToken: service.getToken ? service.getToken() : null
+    });
+    algoRunning = true;
+  } else {
+    addLog('warning', 'Running in offline demo mode');
+    addLog('info', 'No real trades will be executed');
+    algoRunning = true;
+  }
+  
+  displayUI();
+  
+  // Wait for X key to stop
+  await waitForStopKey();
+  
+  // Stop algo
+  addLog('warning', 'Stopping algo...');
+  displayUI();
+  
+  if (hqxConnected) {
+    hqxServer.stopAlgo();
+  }
+  
+  hqxServer.disconnect();
+  algoRunning = false;
+  
+  console.log();
+  console.log(chalk.green('  [OK] Algo stopped successfully'));
+  console.log();
+  
+  // Final stats
+  console.log(chalk.gray(getSeparator()));
+  console.log(chalk.white.bold('  Session Summary'));
+  console.log(chalk.gray(getSeparator()));
+  console.log(chalk.white(`  Total Trades:  ${chalk.cyan(stats.trades)}`));
+  console.log(chalk.white(`  Wins:          ${chalk.green(stats.wins)}`));
+  console.log(chalk.white(`  Losses:        ${chalk.red(stats.losses)}`));
+  console.log(chalk.white(`  Win Rate:      ${chalk.yellow(stats.winRate + '%')}`));
+  console.log(chalk.white(`  Total P&L:     ${stats.pnl >= 0 ? chalk.green('+$' + stats.pnl.toFixed(2)) : chalk.red('-$' + Math.abs(stats.pnl).toFixed(2))}`));
+  console.log(chalk.gray(getSeparator()));
+  console.log();
+  
+  await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+};
+
+/**
+ * Execute signal via PropFirm API
+ */
+const executeSignal = async (service, account, contract, numContracts, signal) => {
+  try {
+    const orderData = {
+      accountId: account.accountId,
+      contractId: contract.id || contract.contractId,
+      type: 2,  // Market order
+      side: signal.side === 'long' ? 0 : 1,  // 0=Buy, 1=Sell
+      size: numContracts
+    };
+    
+    // Place order via ProjectX Gateway API
+    const result = await service.placeOrder(orderData);
+    
+    if (result.success) {
+      console.log(chalk.green(`  [OK] Order executed: ${signal.side.toUpperCase()} ${numContracts} contracts`));
+    } else {
+      console.log(chalk.red(`  [X] Order failed: ${result.error || 'Unknown error'}`));
+    }
+  } catch (error) {
+    console.log(chalk.red(`  [X] Order error: ${error.message}`));
+  }
+};
+
+/**
+ * Wait for X key to stop
+ */
+const waitForStopKey = () => {
+  return new Promise((resolve) => {
+    // Enable raw mode to capture keypresses
+    if (process.stdin.isTTY) {
+      readline.emitKeypressEvents(process.stdin);
+      process.stdin.setRawMode(true);
+      
+      const onKeypress = (str, key) => {
+        if (key && (key.name === 'x' || key.name === 'X' || (key.ctrl && key.name === 'c'))) {
+          process.stdin.setRawMode(false);
+          process.stdin.removeListener('keypress', onKeypress);
+          resolve();
+        }
+      };
+      
+      process.stdin.on('keypress', onKeypress);
+    } else {
+      // Fallback: wait 30 seconds in non-TTY mode
+      setTimeout(resolve, 30000);
+    }
+  });
 };
 
 module.exports = { algoTradingMenu };
