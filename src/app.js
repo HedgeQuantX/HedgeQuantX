@@ -34,16 +34,17 @@ const banner = async () => {
   const innerWidth = boxWidth - 2;
   const version = require('../package.json').version;
   
-  // Get stats if connected
+  // Get stats if connected (only active accounts: status === 0)
   let statsInfo = null;
   if (connections.count() > 0) {
     try {
       const allAccounts = await connections.getAllAccounts();
+      const activeAccounts = allAccounts.filter(acc => acc.accountStatus === 0);
       let totalBalance = 0;
       let totalStartingBalance = 0;
       let totalPnl = 0;
       
-      allAccounts.forEach(account => {
+      activeAccounts.forEach(account => {
         totalBalance += account.balance || 0;
         totalStartingBalance += account.startingBalance || 0;
         totalPnl += account.profitAndLoss || 0;
@@ -54,7 +55,7 @@ const banner = async () => {
       
       statsInfo = {
         connections: connections.count(),
-        accounts: allAccounts.length,
+        accounts: activeAccounts.length,
         balance: totalBalance,
         pnl: pnl,
         pnlPercent: pnlPercent
