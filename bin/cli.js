@@ -12,19 +12,101 @@ const { program } = require('commander');
 const { ProjectXService } = require('../src/services/projectx');
 const { HQXServerService } = require('../src/services/hqx-server');
 
+// ==================== SESSION STORAGE ====================
+const SESSION_FILE = path.join(os.homedir(), '.hedgequantx', 'session.json');
+
+const sessionStorage = {
+  // Sauvegarder les sessions (tokens uniquement, pas les passwords)
+  save(sessions) {
+    try {
+      const dir = path.dirname(SESSION_FILE);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(SESSION_FILE, JSON.stringify(sessions, null, 2));
+    } catch (e) {
+      // Ignore errors
+    }
+  },
+  
+  // Charger les sessions
+  load() {
+    try {
+      if (fs.existsSync(SESSION_FILE)) {
+        return JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8'));
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+    return [];
+  },
+  
+  // Effacer les sessions
+  clear() {
+    try {
+      if (fs.existsSync(SESSION_FILE)) {
+        fs.unlinkSync(SESSION_FILE);
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+  }
+};
+
 // ==================== MULTI-CONNECTION MANAGER ====================
 // Stocke toutes les connexions actives (ProjectX, Rithmic, Tradovate)
 const connections = {
   services: [],      // Array of { type: 'projectx'|'rithmic'|'tradovate', service: ServiceInstance, propfirm: string }
   
   // Ajouter une connexion
-  add(type, service, propfirm = null) {
-    this.services.push({ type, service, propfirm, connectedAt: new Date() });
+  add(type, service, propfirm = null, token = null) {
+    this.services.push({ type, service, propfirm, token, connectedAt: new Date() });
+    // Sauvegarder la session
+    this.saveToStorage();
+  },
+  
+  // Sauvegarder toutes les sessions
+  saveToStorage() {
+    const sessions = this.services.map(conn => ({
+      type: conn.type,
+      propfirm: conn.propfirm,
+      token: conn.service.token || conn.token
+    }));
+    sessionStorage.save(sessions);
+  },
+  
+  // Restaurer les sessions depuis le stockage
+  async restoreFromStorage() {
+    const sessions = sessionStorage.load();
+    for (const session of sessions) {
+      try {
+        if (session.type === 'projectx' && session.token) {
+          const service = new ProjectXService(session.propfirm.toLowerCase().replace(/ /g, '_'));
+          service.token = session.token;
+          
+          // Vérifier si le token est encore valide
+          const userResult = await service.getUser();
+          if (userResult.success) {
+            this.services.push({
+              type: session.type,
+              service: service,
+              propfirm: session.propfirm,
+              token: session.token,
+              connectedAt: new Date()
+            });
+          }
+        }
+      } catch (e) {
+        // Session invalide, ignorer
+      }
+    }
+    return this.services.length > 0;
   },
   
   // Supprimer une connexion
   remove(index) {
     this.services.splice(index, 1);
+    this.saveToStorage();
   },
   
   // Obtenir toutes les connexions
@@ -78,6 +160,7 @@ const connections = {
       }
     });
     this.services = [];
+    sessionStorage.clear();
   }
 };
 
@@ -1916,9 +1999,156 @@ const algoLogsScreen = async (service) => {
   }
 };
 
+// Fonction pour gérer les mises à jour
+const handleUpdate = async () => {
+  const spinnerRefresh = ora('Checking for updates...').start();
+  try {
+    const cliDir = path.resolve(__dirname, '..');
+    
+    // Check if git repo exists
+    try {
+      execSync('git status', { cwd: cliDir, stdio: 'pipe' });
+    } catch (e) {
+      throw new Error('Not a git repository');
+    }
+    
+    // Check if remote exists
+    let hasRemote = false;
+    try {
+      const gitRemoteUrl = execSync('git remote get-url origin', { cwd: cliDir, stdio: 'pipe' }).toString().trim();
+      hasRemote = gitRemoteUrl.length > 0;
+    } catch (e) {
+      hasRemote = false;
+    }
+    
+    if (hasRemote) {
+      // Get current commit before pull
+      const beforeCommit = execSync('git rev-parse --short HEAD', { cwd: cliDir, stdio: 'pipe' }).toString().trim();
+      
+      // Fetch first to check if updates available
+      execSync('git fetch origin main', { cwd: cliDir, stdio: 'pipe' });
+      
+      // Check if we're behind
+      const behindCount = execSync('git rev-list HEAD..origin/main --count', { cwd: cliDir, stdio: 'pipe' }).toString().trim();
+      
+      if (parseInt(behindCount) > 0) {
+        // Pull from remote
+        execSync('git pull origin main', { cwd: cliDir, stdio: 'pipe' });
+        const afterCommit = execSync('git rev-parse --short HEAD', { cwd: cliDir, stdio: 'pipe' }).toString().trim();
+        
+        spinnerRefresh.succeed('CLI updated!');
+        console.log(chalk.green(`  Updated: ${beforeCommit} → ${afterCommit}`));
+        console.log(chalk.green(`  ${behindCount} new commit(s) applied.`));
+        console.log();
+        
+        // Ask user if they want to restart
+        const { restart } = await inquirer.prompt([
+          {
+            type: 'confirm',
+            name: 'restart',
+            message: chalk.yellow('Restart CLI to apply changes?'),
+            default: true
+          }
+        ]);
+        
+        if (restart) {
+          console.log(chalk.cyan('  Restarting...'));
+          const { spawn } = require('child_process');
+          const child = spawn(process.argv[0], process.argv.slice(1), {
+            cwd: cliDir,
+            detached: true,
+            stdio: 'inherit'
+          });
+          child.unref();
+          process.exit(0);
+        }
+      } else {
+        spinnerRefresh.succeed('Already up to date!');
+        console.log(chalk.cyan(`  Current version: ${beforeCommit}`));
+        console.log(chalk.gray('  No updates available.'));
+      }
+    } else {
+      spinnerRefresh.succeed('Data refreshed');
+      console.log(chalk.cyan('  Local dev mode. Session still active.'));
+    }
+    
+    // Refresh user data
+    if (currentService) {
+      await currentService.getUser();
+    }
+    
+  } catch (err) {
+    spinnerRefresh.fail('Update failed');
+    console.log(chalk.red(`  Error: ${err.message}`));
+    console.log(chalk.gray('  Your session is still active.'));
+  }
+  console.log();
+  await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+};
+
 // Fonction principale
 const main = async () => {
   await banner();
+
+  // Essayer de restaurer les sessions précédentes
+  const spinner = ora('Restoring session...').start();
+  const restored = await connections.restoreFromStorage();
+  
+  if (restored) {
+    spinner.succeed('Session restored!');
+    currentService = connections.services[0].service;
+    
+    // Aller directement au dashboard
+    let connected = true;
+    while (connected) {
+      await banner();
+      const action = await dashboardMenu(currentService);
+      
+      switch (action) {
+        case 'accounts':
+          await showAccounts(currentService);
+          break;
+        case 'positions':
+          await showPositions(currentService);
+          break;
+        case 'orders':
+          await showOrders(currentService);
+          break;
+        case 'stats':
+          await showStats(currentService);
+          break;
+        case 'userinfo':
+          await showUserInfo(currentService);
+          break;
+        case 'add_prop_account':
+          await addPropAccount();
+          break;
+        case 'algotrading':
+          let algoRunning = true;
+          while (algoRunning) {
+            await banner();
+            const algoResult = await algoTradingMenu(currentService);
+            if (algoResult === 'back') {
+              algoRunning = false;
+            }
+          }
+          break;
+        case 'refresh':
+          await handleUpdate();
+          break;
+        case 'disconnect':
+          connections.disconnectAll();
+          currentService = null;
+          connected = false;
+          await banner();
+          console.log(chalk.yellow('  All connections disconnected.'));
+          console.log();
+          break;
+      }
+    }
+  } else {
+    spinner.stop();
+  }
 
   let running = true;
   
@@ -1987,92 +2217,7 @@ const main = async () => {
                 await addPropAccount();
                 break;
               case 'refresh':
-                const spinnerRefresh = ora('Checking for updates...').start();
-                try {
-                  const cliDir = path.resolve(__dirname, '..');
-                  
-                  // Check if git repo exists
-                  try {
-                    execSync('git status', { cwd: cliDir, stdio: 'pipe' });
-                  } catch (e) {
-                    throw new Error('Not a git repository');
-                  }
-                  
-                  // Check if remote exists
-                  let hasRemote = false;
-                  let gitRemoteUrl = '';
-                  try {
-                    gitRemoteUrl = execSync('git remote get-url origin', { cwd: cliDir, stdio: 'pipe' }).toString().trim();
-                    hasRemote = gitRemoteUrl.length > 0;
-                  } catch (e) {
-                    hasRemote = false;
-                  }
-                  
-                  if (hasRemote) {
-                    // Get current commit before pull
-                    const beforeCommit = execSync('git rev-parse --short HEAD', { cwd: cliDir, stdio: 'pipe' }).toString().trim();
-                    
-                    // Fetch first to check if updates available
-                    execSync('git fetch origin main', { cwd: cliDir, stdio: 'pipe' });
-                    
-                    // Check if we're behind
-                    const behindCount = execSync('git rev-list HEAD..origin/main --count', { cwd: cliDir, stdio: 'pipe' }).toString().trim();
-                    
-                    if (parseInt(behindCount) > 0) {
-                      // Pull from remote
-                      const pullResult = execSync('git pull origin main', { cwd: cliDir, stdio: 'pipe' }).toString();
-                      const afterCommit = execSync('git rev-parse --short HEAD', { cwd: cliDir, stdio: 'pipe' }).toString().trim();
-                      
-                      spinnerRefresh.succeed('CLI updated!');
-                      console.log(chalk.green(`  Updated: ${beforeCommit} → ${afterCommit}`));
-                      console.log(chalk.green(`  ${behindCount} new commit(s) applied.`));
-                      console.log();
-                      
-                      // Ask user if they want to restart
-                      const { restart } = await inquirer.prompt([
-                        {
-                          type: 'confirm',
-                          name: 'restart',
-                          message: chalk.yellow('Restart CLI to apply changes?'),
-                          default: true
-                        }
-                      ]);
-                      
-                      if (restart) {
-                        console.log(chalk.cyan('  Restarting...'));
-                        // Spawn new process and exit current one
-                        const { spawn } = require('child_process');
-                        const child = spawn(process.argv[0], process.argv.slice(1), {
-                          cwd: cliDir,
-                          detached: true,
-                          stdio: 'inherit'
-                        });
-                        child.unref();
-                        process.exit(0);
-                      }
-                    } else {
-                      spinnerRefresh.succeed('Already up to date!');
-                      console.log(chalk.cyan(`  Current version: ${beforeCommit}`));
-                      console.log(chalk.gray('  No updates available.'));
-                    }
-                  } else {
-                    // Local dev mode - just refresh data
-                    spinnerRefresh.succeed('Data refreshed');
-                    console.log(chalk.cyan('  Local dev mode. Session still active.'));
-                  }
-                  
-                  // Refresh user data without disconnecting
-                  if (currentService) {
-                    await currentService.getUser();
-                  }
-                  
-                } catch (err) {
-                  spinnerRefresh.fail('Update failed');
-                  console.log(chalk.red(`  Error: ${err.message}`));
-                  console.log(chalk.gray('  Your session is still active.'));
-                }
-                console.log();
-                await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+                await handleUpdate();
                 break;
               case 'disconnect':
                 // Déconnecter toutes les connexions

@@ -263,11 +263,6 @@ class ProjectXService {
       );
 
       if (response.statusCode === 200) {
-        // Debug: log first account fields to see what's available
-        if (response.data && response.data.length > 0) {
-          console.log('\n[DEBUG] Account fields:', Object.keys(response.data[0]));
-          console.log('[DEBUG] Account data:', JSON.stringify(response.data[0], null, 2));
-        }
         return { success: true, accounts: response.data };
       } else {
         return { 
