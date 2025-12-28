@@ -2266,14 +2266,28 @@ const handleUpdate = async () => {
         ]);
         
         if (restart) {
+          console.log(chalk.cyan('  Restarting...'));
           console.log();
-          console.log(chalk.green('  ✓ Update complete!'));
-          console.log();
-          console.log(chalk.yellow('  Please restart the CLI to apply changes:'));
-          console.log(chalk.cyan('    hedgequantx'));
-          console.log(chalk.gray('    or: node bin/cli.js'));
-          console.log();
-          process.exit(0);
+          
+          // Clear require cache to reload modules
+          Object.keys(require.cache).forEach(key => {
+            delete require.cache[key];
+          });
+          
+          // Restart by spawning a new process and replacing current one
+          const { spawn } = require('child_process');
+          const child = spawn(process.argv[0], [path.join(cliDir, 'bin', 'cli.js')], {
+            cwd: cliDir,
+            stdio: 'inherit',
+            shell: true
+          });
+          
+          child.on('exit', (code) => {
+            process.exit(code);
+          });
+          
+          // Prevent current process from continuing
+          return;
         }
       } else {
         spinnerRefresh.succeed('Already up to date!');
