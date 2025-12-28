@@ -22,6 +22,7 @@ const {
   draw2ColSeparator,
   fmtRow
 } = require('./table');
+const { createBoxMenu } = require('./menu');
 
 module.exports = {
   // Device
@@ -44,5 +45,7 @@ module.exports = {
   draw2ColRow,
   draw2ColRowRaw,
   draw2ColSeparator,
-  fmtRow
+  fmtRow,
+  // Menu
+  createBoxMenu
 };

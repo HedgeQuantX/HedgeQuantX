@@ -12,7 +12,7 @@ const path = require('path');
 
 const { ProjectXService, connections } = require('./services');
 const { PROPFIRM_CHOICES, getPropFirmsByPlatform } = require('./config');
-const { getDevice, getSeparator, printLogo, getLogoWidth, drawBoxHeader, drawBoxFooter, centerText } = require('./ui');
+const { getDevice, getSeparator, printLogo, getLogoWidth, drawBoxHeader, drawBoxFooter, centerText, createBoxMenu } = require('./ui');
 const { validateUsername, validatePassword, maskSensitive } = require('./security');
 
 // Pages
@@ -235,48 +235,61 @@ const mainMenu = async () => {
  * @param {Object} service - Connected service
  */
 const dashboardMenu = async (service) => {
-  const device = getDevice();
   const user = service.user;
-  const boxWidth = getLogoWidth();
-  const innerWidth = boxWidth - 2;
-
-  // Dashboard header box
-  console.log();
-  console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
-  console.log(chalk.cyan('║') + chalk.white(centerText('DASHBOARD', innerWidth)) + chalk.cyan('║'));
-  console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
   
-  const connInfo = `Connected to ${service.propfirm.name}`;
-  const userInfo = user ? `Welcome, ${user.userName.toUpperCase()}!` : '';
-  
-  console.log(chalk.cyan('║') + chalk.green('  ' + connInfo.padEnd(innerWidth - 2)) + chalk.cyan('║'));
-  if (userInfo) {
-    console.log(chalk.cyan('║') + chalk.white('  ' + userInfo.padEnd(innerWidth - 2)) + chalk.cyan('║'));
+  // Build stats line
+  let statsLine = '';
+  if (connections.count() > 0) {
+    try {
+      const allAccounts = await connections.getAllAccounts();
+      const activeAccounts = allAccounts.filter(acc => acc.status === 0);
+      let totalBalance = 0;
+      let totalStartingBalance = 0;
+      let totalPnl = 0;
+      
+      activeAccounts.forEach(account => {
+        totalBalance += account.balance || 0;
+        totalStartingBalance += account.startingBalance || 0;
+        totalPnl += account.profitAndLoss || 0;
+      });
+      
+      const pnl = totalPnl !== 0 ? totalPnl : (totalBalance - totalStartingBalance);
+      const pnlPercent = totalStartingBalance > 0 ? ((pnl / totalStartingBalance) * 100).toFixed(1) : '0.0';
+      const pnlColor = pnl >= 0 ? chalk.green : chalk.red;
+      const pnlSign = pnl >= 0 ? '+' : '';
+      
+      statsLine = 
+        chalk.white(`Connections: ${chalk.cyan(connections.count())}`) + '    ' +
+        chalk.white(`Accounts: ${chalk.cyan(activeAccounts.length)}`) + '    ' +
+        chalk.white(`Balance: ${chalk.green('$' + totalBalance.toLocaleString())}`) + '    ' +
+        chalk.white(`P&L: ${pnlColor('$' + pnl.toLocaleString() + ' (' + pnlSign + pnlPercent + '%)')}`);
+    } catch (e) { /* ignore */ }
   }
-  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
-  console.log();
-
-  const { action } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'action',
-      message: chalk.white.bold('Select:'),
-      choices: [
-        { name: chalk.cyan('[1] View Accounts'), value: 'accounts' },
-        { name: chalk.cyan('[2] View Positions'), value: 'positions' },
-        { name: chalk.cyan('[3] View Orders'), value: 'orders' },
-        { name: chalk.cyan('[4] View Stats'), value: 'stats' },
-        { name: chalk.cyan('[5] User Info'), value: 'userinfo' },
-        { name: chalk.green('[+] Add Prop-Account'), value: 'add_prop_account' },
-        new inquirer.Separator(chalk.gray('─'.repeat(30))),
-        { name: chalk.magenta('[>] Algo-Trading'), value: 'algotrading' },
-        new inquirer.Separator(chalk.gray('─'.repeat(30))),
-        { name: chalk.yellow('[U] Update HQX'), value: 'update' },
-        { name: chalk.red('[X] Disconnect'), value: 'disconnect' }
-      ],
-      pageSize: 12
-    }
-  ]);
+  
+  const headerLines = [
+    chalk.green(`Connected to ${service.propfirm.name}`),
+    user ? chalk.white(`Welcome, ${user.userName.toUpperCase()}!`) : ''
+  ].filter(l => l);
+  
+  const menuItems = [
+    { label: '[1] View Accounts', value: 'accounts', color: chalk.cyan },
+    { label: '[2] View Positions', value: 'positions', color: chalk.cyan },
+    { label: '[3] View Orders', value: 'orders', color: chalk.cyan },
+    { label: '[4] View Stats', value: 'stats', color: chalk.cyan },
+    { label: '[5] User Info', value: 'userinfo', color: chalk.cyan },
+    { label: '[+] Add Prop-Account', value: 'add_prop_account', color: chalk.green },
+    { separator: true },
+    { label: '[>] Algo-Trading', value: 'algotrading', color: chalk.magenta },
+    { separator: true },
+    { label: '[U] Update HQX', value: 'update', color: chalk.yellow },
+    { label: '[X] Disconnect', value: 'disconnect', color: chalk.red }
+  ];
+  
+  const action = await createBoxMenu('DASHBOARD', menuItems, {
+    headerLines,
+    statsLine,
+    footerText: 'Use ↑↓ to navigate, Enter to select, Esc to quit'
+  });
 
   return action;
 };
