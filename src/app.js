@@ -39,7 +39,7 @@ const banner = async () => {
   if (connections.count() > 0) {
     try {
       const allAccounts = await connections.getAllAccounts();
-      const activeAccounts = allAccounts.filter(acc => acc.accountStatus === 0);
+      const activeAccounts = allAccounts.filter(acc => acc.status === 0);
       let totalBalance = 0;
       let totalStartingBalance = 0;
       let totalPnl = 0;
