@@ -18,8 +18,6 @@ const { validateUsername, validatePassword, maskSensitive } = require('./securit
 // Pages
 const { showStats } = require('./pages/stats');
 const { showAccounts } = require('./pages/accounts');
-const { showPositions } = require('./pages/positions');
-const { showOrders } = require('./pages/orders');
 const { showUserInfo } = require('./pages/user');
 const { algoTradingMenu } = require('./pages/algo');
 
@@ -275,32 +273,57 @@ const dashboardMenu = async (service) => {
     console.log(chalk.cyan('║') + '  ' + chalk.white(userInfo) + ' '.repeat(innerWidth - userInfo.length - 2) + chalk.cyan('║'));
   }
   
+  console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+  
+  // Menu options in 2 columns
+  const col1Width = Math.floor(innerWidth / 2);
+  const col2Width = innerWidth - col1Width;
+  
+  const menuRow = (left, right) => {
+    const leftText = '  ' + left;
+    const rightText = right ? '  ' + right : '';
+    const leftPad = col1Width - leftText.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const rightPad = col2Width - rightText.replace(/\x1b\[[0-9;]*m/g, '').length;
+    console.log(chalk.cyan('║') + leftText + ' '.repeat(Math.max(0, leftPad)) + rightText + ' '.repeat(Math.max(0, rightPad)) + chalk.cyan('║'));
+  };
+  
+  menuRow(chalk.cyan('[1] View Accounts'), chalk.cyan('[2] View Stats'));
+  menuRow(chalk.cyan('[3] User Info'), chalk.green('[+] Add Prop-Account'));
+  console.log(chalk.cyan('╠' + '─'.repeat(innerWidth) + '╣'));
+  menuRow(chalk.magenta('[A] Algo-Trading'), chalk.yellow('[U] Update HQX'));
+  menuRow(chalk.red('[X] Disconnect'), '');
+  
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
   console.log();
 
   const { action } = await inquirer.prompt([
     {
-      type: 'list',
+      type: 'input',
       name: 'action',
-      message: chalk.cyan('Select option:'),
-      choices: [
-        { name: chalk.cyan('[1] View Accounts'), value: 'accounts' },
-        { name: chalk.cyan('[2] View Positions'), value: 'positions' },
-        { name: chalk.cyan('[3] View Orders'), value: 'orders' },
-        { name: chalk.cyan('[4] View Stats'), value: 'stats' },
-        { name: chalk.cyan('[5] User Info'), value: 'userinfo' },
-        { name: chalk.green('[+] Add Prop-Account'), value: 'add_prop_account' },
-        new inquirer.Separator(chalk.gray('─'.repeat(40))),
-        { name: chalk.magenta('[>] Algo-Trading'), value: 'algotrading' },
-        new inquirer.Separator(chalk.gray('─'.repeat(40))),
-        { name: chalk.yellow('[U] Update HQX'), value: 'update' },
-        { name: chalk.red('[X] Disconnect'), value: 'disconnect' }
-      ],
-      pageSize: 12
+      message: chalk.cyan('Enter choice (1/2/3/+/A/U/X):'),
+      validate: (input) => {
+        const valid = ['1', '2', '3', '+', 'a', 'A', 'u', 'U', 'x', 'X'];
+        if (valid.includes(input)) return true;
+        return 'Please enter a valid option';
+      }
     }
   ]);
 
-  return action;
+  // Map input to action
+  const actionMap = {
+    '1': 'accounts',
+    '2': 'stats',
+    '3': 'userinfo',
+    '+': 'add_prop_account',
+    'a': 'algotrading',
+    'A': 'algotrading',
+    'u': 'update',
+    'U': 'update',
+    'x': 'disconnect',
+    'X': 'disconnect'
+  };
+
+  return actionMap[action] || 'accounts';
 };
 
 /**
@@ -424,12 +447,7 @@ const run = async () => {
         case 'accounts':
           await showAccounts(currentService);
           break;
-        case 'positions':
-          await showPositions(currentService);
-          break;
-        case 'orders':
-          await showOrders(currentService);
-          break;
+
         case 'stats':
           await showStats(currentService);
           break;
