@@ -526,6 +526,58 @@ class ProjectXService {
       return { success: false, contracts: [], error: error.message };
     }
   }
+
+  // ==================== MARKET STATUS ====================
+
+  /**
+   * Checks if futures market is open based on CME hours
+   * @returns {{isOpen: boolean, message: string}}
+   */
+  checkMarketHours() {
+    const now = new Date();
+    const utcDay = now.getUTCDay();
+    const utcHour = now.getUTCHours();
+    const utcMinute = now.getUTCMinutes();
+    
+    // CME Futures hours (in UTC):
+    // Open: Sunday 23:00 UTC (6:00 PM ET)
+    // Close: Friday 22:00 UTC (5:00 PM ET)
+    // Daily maintenance: 22:00-23:00 UTC (5:00-6:00 PM ET)
+    
+    // Saturday - closed all day
+    if (utcDay === 6) {
+      return { isOpen: false, message: 'Market closed - Weekend (Saturday)' };
+    }
+    
+    // Sunday before 23:00 UTC - closed
+    if (utcDay === 0 && utcHour < 23) {
+      return { isOpen: false, message: 'Market closed - Opens Sunday 6:00 PM ET' };
+    }
+    
+    // Friday after 22:00 UTC - closed
+    if (utcDay === 5 && utcHour >= 22) {
+      return { isOpen: false, message: 'Market closed - Weekend' };
+    }
+    
+    // Daily maintenance 22:00-23:00 UTC (except Friday close)
+    if (utcHour === 22 && utcDay !== 5) {
+      return { isOpen: false, message: 'Market closed - Daily maintenance (5:00-6:00 PM ET)' };
+    }
+    
+    return { isOpen: true, message: 'Market is open' };
+  }
+
+  /**
+   * Gets market status for an account
+   * @param {number|string} accountId - Account ID
+   * @returns {Promise<{success: boolean, isOpen: boolean, message: string}>}
+   */
+  async getMarketStatus(accountId) {
+    // For now, just use the time-based check
+    // Could be extended to check account-specific trading permissions
+    const hours = this.checkMarketHours();
+    return { success: true, isOpen: hours.isOpen, message: hours.message };
+  }
 }
 
 module.exports = { ProjectXService };
