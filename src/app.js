@@ -467,7 +467,7 @@ const mainMenu = async () => {
   // Connection menu box
   console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
   console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PLATFORM', innerWidth)) + chalk.cyan('║'));
-  console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
   
   // Menu row helper (2 columns)
   const menuRow = (left, right) => {
