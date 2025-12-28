@@ -66,15 +66,35 @@ const banner = async () => {
     }
   }
   
-  // Draw logo
+  // Draw logo with yellow X
   console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
   
-  const logoText = figlet.textSync('HEDGEQUANTX', { font: 'ANSI Shadow' });
-  logoText.split('\n').forEach(line => {
-    if (line.trim()) {
-      const padded = centerText(line, innerWidth);
-      console.log(chalk.cyan('║') + chalk.cyan(padded) + chalk.cyan('║'));
-    }
+  const logo = [
+    '██╗  ██╗███████╗██████╗  ██████╗ ███████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗',
+    '██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝',
+    '███████║█████╗  ██║  ██║██║  ███╗█████╗  ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║   ',
+    '██╔══██║██╔══╝  ██║  ██║██║   ██║██╔══╝  ██║▄▄ ██║██║   ██║██╔══██║██║╚██╗██║   ██║   ',
+    '██║  ██║███████╗██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ',
+    '╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   '
+  ];
+  const logoX = [
+    '██╗  ██╗',
+    '╚██╗██╔╝',
+    ' ╚███╔╝ ',
+    ' ██╔██╗ ',
+    '██╔╝ ██╗',
+    '╚═╝  ╚═╝'
+  ];
+  
+  logo.forEach((line, i) => {
+    const mainPart = chalk.cyan(line);
+    const xPart = chalk.yellow(logoX[i]);
+    const fullLine = mainPart + xPart;
+    const totalLen = line.length + logoX[i].length;
+    const padding = innerWidth - totalLen;
+    const leftPad = Math.floor(padding / 2);
+    const rightPad = padding - leftPad;
+    console.log(chalk.cyan('║') + ' '.repeat(leftPad) + fullLine + ' '.repeat(rightPad) + chalk.cyan('║'));
   });
   
   // Tagline
