@@ -383,6 +383,7 @@ const dashboardMenu = async (service) => {
       new inquirer.Separator(),
       { name: chalk.cyan('Algo'), value: 'algotrading' },
       new inquirer.Separator(),
+      { name: chalk.green('+ Add Prop-Account'), value: 'add_prop_account' },
       { name: chalk.yellow('Update HQX'), value: 'refresh' },
       { name: chalk.red('Disconnect'), value: 'disconnect' }
     ];
@@ -396,6 +397,7 @@ const dashboardMenu = async (service) => {
       new inquirer.Separator(),
       { name: chalk.cyan('Algo-Trading'), value: 'algotrading' },
       new inquirer.Separator(),
+      { name: chalk.green('+ Add Prop-Account'), value: 'add_prop_account' },
       { name: chalk.yellow('Update HQX'), value: 'refresh' },
       { name: chalk.red('Disconnect'), value: 'disconnect' }
     ];
@@ -630,6 +632,141 @@ const showOrders = async (service) => {
       console.log(statusColor(`     Status: ${statusName}`));
       console.log();
     });
+  }
+  
+  console.log();
+  await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+};
+
+// Ajouter un compte PropFirm supplémentaire
+const addPropAccount = async () => {
+  const device = getDevice();
+  console.log();
+  console.log(chalk.gray(getSeparator()));
+  console.log(chalk.green.bold('  + Add Prop-Account'));
+  console.log(chalk.gray(getSeparator()));
+  console.log();
+  
+  // Liste des PropFirms disponibles
+  const propfirmChoices = [
+    { name: chalk.cyan('Topstep'), value: 'topstep' },
+    { name: chalk.cyan('Alpha Futures'), value: 'alpha_futures' },
+    { name: chalk.cyan('TickTickTrader'), value: 'tickticktrader' },
+    { name: chalk.cyan('Bulenox'), value: 'bulenox' },
+    { name: chalk.cyan('TradeDay'), value: 'tradeday' },
+    { name: chalk.cyan('Blusky'), value: 'blusky' },
+    { name: chalk.cyan('Goat Futures'), value: 'goat_futures' },
+    { name: chalk.cyan('The Futures Desk'), value: 'futures_desk' },
+    { name: chalk.cyan('DayTraders'), value: 'daytraders' },
+    { name: chalk.cyan('E8 Futures'), value: 'e8_futures' },
+    { name: chalk.cyan('Blue Guardian Futures'), value: 'blue_guardian' },
+    { name: chalk.cyan('FuturesElite'), value: 'futures_elite' },
+    { name: chalk.cyan('FXIFY'), value: 'fxify' },
+    { name: chalk.cyan('Hola Prime'), value: 'hola_prime' },
+    { name: chalk.cyan('Top One Futures'), value: 'top_one_futures' },
+    { name: chalk.cyan('Funding Futures'), value: 'funding_futures' },
+    { name: chalk.cyan('TX3 Funding'), value: 'tx3_funding' },
+    { name: chalk.cyan('Lucid Trading'), value: 'lucid_trading' },
+    { name: chalk.cyan('Tradeify'), value: 'tradeify' },
+    new inquirer.Separator(),
+    { name: chalk.yellow('< Back'), value: 'back' }
+  ];
+  
+  const { propfirm } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'propfirm',
+      message: chalk.white.bold('Select PropFirm:'),
+      choices: propfirmChoices,
+      pageSize: device.menuPageSize,
+      loop: false
+    }
+  ]);
+  
+  if (propfirm === 'back') {
+    return;
+  }
+  
+  // Demander les credentials
+  console.log();
+  const credentials = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'username',
+      message: chalk.white('Username/Email:'),
+      validate: (input) => input.length > 0 || 'Username is required'
+    },
+    {
+      type: 'password',
+      name: 'password',
+      message: chalk.white('Password:'),
+      mask: '*',
+      validate: (input) => input.length > 0 || 'Password is required'
+    }
+  ]);
+  
+  // Tenter la connexion
+  const spinner = ora('Connecting to PropFirm...').start();
+  
+  try {
+    const ProjectXService = require('../src/services/projectx');
+    const newService = new ProjectXService(propfirm);
+    const loginResult = await newService.login(credentials.username, credentials.password);
+    
+    if (loginResult.success) {
+      await newService.getUser();
+      const accountsResult = await newService.getTradingAccounts();
+      
+      spinner.succeed('PropFirm account added!');
+      console.log();
+      console.log(chalk.green(`  Connected to ${newService.getPropfirmName()}`));
+      
+      if (accountsResult.success && accountsResult.accounts) {
+        console.log(chalk.cyan(`  Found ${accountsResult.accounts.length} trading account(s)`));
+        
+        // Sauvegarder les credentials (encrypted)
+        const configPath = path.join(os.homedir(), '.hedgequantx', 'accounts.json');
+        const configDir = path.dirname(configPath);
+        
+        if (!fs.existsSync(configDir)) {
+          fs.mkdirSync(configDir, { recursive: true });
+        }
+        
+        let accounts = [];
+        if (fs.existsSync(configPath)) {
+          try {
+            accounts = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+          } catch (e) {
+            accounts = [];
+          }
+        }
+        
+        // Ajouter le nouveau compte (éviter les doublons)
+        const existingIndex = accounts.findIndex(a => a.propfirm === propfirm && a.username === credentials.username);
+        const accountData = {
+          propfirm,
+          username: credentials.username,
+          // Note: En production, le password devrait être encrypté
+          addedAt: new Date().toISOString()
+        };
+        
+        if (existingIndex >= 0) {
+          accounts[existingIndex] = accountData;
+          console.log(chalk.yellow('  Account updated.'));
+        } else {
+          accounts.push(accountData);
+          console.log(chalk.green('  Account saved.'));
+        }
+        
+        fs.writeFileSync(configPath, JSON.stringify(accounts, null, 2));
+      }
+    } else {
+      spinner.fail('Connection failed');
+      console.log(chalk.red(`  Error: ${loginResult.error}`));
+    }
+  } catch (error) {
+    spinner.fail('Connection failed');
+    console.log(chalk.red(`  Error: ${error.message}`));
   }
   
   console.log();
@@ -1630,6 +1767,9 @@ const main = async () => {
                     algoRunning = false;
                   }
                 }
+                break;
+              case 'add_prop_account':
+                await addPropAccount();
                 break;
               case 'refresh':
                 const spinnerRefresh = ora('Checking for updates...').start();
