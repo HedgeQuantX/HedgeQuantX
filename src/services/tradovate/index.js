@@ -22,6 +22,7 @@ class TradovateService extends EventEmitter {
     this.isDemo = true; // Default to demo
     this.ws = null;
     this.renewalTimer = null;
+    this.credentials = null; // Store for session restore
   }
 
   /**
@@ -71,6 +72,7 @@ class TradovateService extends EventEmitter {
       this.userId = result.userId;
       this.tokenExpiration = new Date(result.expirationTime);
       this.user = { userName: result.name, userId: result.userId };
+      this.credentials = { username, password }; // Store for session restore
 
       // Setup token renewal
       this.setupTokenRenewal();
@@ -255,6 +257,25 @@ class TradovateService extends EventEmitter {
    */
   async getUser() {
     return this.user;
+  }
+
+  /**
+   * Get market status
+   */
+  async getMarketStatus(accountId) {
+    const marketHours = this.checkMarketHours();
+    return {
+      success: true,
+      isOpen: marketHours.isOpen,
+      message: marketHours.message,
+    };
+  }
+
+  /**
+   * Get token
+   */
+  getToken() {
+    return this.accessToken;
   }
 
   /**
@@ -510,6 +531,7 @@ class TradovateService extends EventEmitter {
     this.mdAccessToken = null;
     this.accounts = [];
     this.user = null;
+    this.credentials = null;
   }
 
   /**

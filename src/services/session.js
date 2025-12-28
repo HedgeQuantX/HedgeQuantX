@@ -8,6 +8,8 @@ const path = require('path');
 const os = require('os');
 const { encrypt, decrypt, maskSensitive } = require('../security');
 const { ProjectXService } = require('./projectx');
+const { RithmicService } = require('./rithmic');
+const { TradovateService } = require('./tradovate');
 
 const SESSION_DIR = path.join(os.homedir(), '.hedgequantx');
 const SESSION_FILE = path.join(SESSION_DIR, 'session.enc');
@@ -107,11 +109,22 @@ const connections = {
    * Saves all sessions to encrypted storage
    */
   saveToStorage() {
-    const sessions = this.services.map(conn => ({
-      type: conn.type,
-      propfirm: conn.propfirm,
-      token: conn.service.token || conn.token
-    }));
+    const sessions = this.services.map(conn => {
+      const session = {
+        type: conn.type,
+        propfirm: conn.propfirm,
+        propfirmKey: conn.service.propfirmKey || conn.propfirmKey,
+      };
+      
+      if (conn.type === 'projectx') {
+        session.token = conn.service.token || conn.token;
+      } else if (conn.type === 'rithmic' || conn.type === 'tradovate') {
+        // Save encrypted credentials for reconnection
+        session.credentials = conn.service.credentials;
+      }
+      
+      return session;
+    });
     storage.save(sessions);
   },
 
@@ -125,7 +138,7 @@ const connections = {
     for (const session of sessions) {
       try {
         if (session.type === 'projectx' && session.token) {
-          const propfirmKey = session.propfirm.toLowerCase().replace(/ /g, '_');
+          const propfirmKey = session.propfirmKey || session.propfirm.toLowerCase().replace(/ /g, '_');
           const service = new ProjectXService(propfirmKey);
           service.token = session.token;
 
@@ -136,7 +149,38 @@ const connections = {
               type: session.type,
               service,
               propfirm: session.propfirm,
+              propfirmKey: propfirmKey,
               token: session.token,
+              connectedAt: new Date()
+            });
+          }
+        } else if (session.type === 'rithmic' && session.credentials) {
+          const propfirmKey = session.propfirmKey || 'apex_rithmic';
+          const service = new RithmicService(propfirmKey);
+          
+          // Try to reconnect
+          const result = await service.login(session.credentials.username, session.credentials.password);
+          if (result.success) {
+            this.services.push({
+              type: session.type,
+              service,
+              propfirm: session.propfirm,
+              propfirmKey: propfirmKey,
+              connectedAt: new Date()
+            });
+          }
+        } else if (session.type === 'tradovate' && session.credentials) {
+          const propfirmKey = session.propfirmKey || 'tradovate';
+          const service = new TradovateService(propfirmKey);
+          
+          // Try to reconnect
+          const result = await service.login(session.credentials.username, session.credentials.password);
+          if (result.success) {
+            this.services.push({
+              type: session.type,
+              service,
+              propfirm: session.propfirm,
+              propfirmKey: propfirmKey,
               connectedAt: new Date()
             });
           }

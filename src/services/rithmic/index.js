@@ -600,6 +600,118 @@ class RithmicService extends EventEmitter {
   }
 
   /**
+   * Get market status
+   */
+  async getMarketStatus(accountId) {
+    const marketHours = this.checkMarketHours();
+    return {
+      success: true,
+      isOpen: marketHours.isOpen,
+      message: marketHours.message,
+    };
+  }
+
+  /**
+   * Get token (stub - Rithmic uses WebSocket, not tokens)
+   */
+  getToken() {
+    return this.loginInfo ? 'connected' : null;
+  }
+
+  /**
+   * Search contracts (stub - would need TICKER_PLANT)
+   */
+  async searchContracts(searchText) {
+    // Common futures contracts
+    const contracts = [
+      { symbol: 'ESH5', name: 'E-mini S&P 500 Mar 2025', exchange: 'CME' },
+      { symbol: 'NQH5', name: 'E-mini NASDAQ-100 Mar 2025', exchange: 'CME' },
+      { symbol: 'CLH5', name: 'Crude Oil Mar 2025', exchange: 'NYMEX' },
+      { symbol: 'GCG5', name: 'Gold Feb 2025', exchange: 'COMEX' },
+      { symbol: 'MESH5', name: 'Micro E-mini S&P 500 Mar 2025', exchange: 'CME' },
+      { symbol: 'MNQH5', name: 'Micro E-mini NASDAQ-100 Mar 2025', exchange: 'CME' },
+    ];
+    const search = searchText.toUpperCase();
+    return contracts.filter(c => c.symbol.includes(search) || c.name.toUpperCase().includes(search));
+  }
+
+  /**
+   * Place order via ORDER_PLANT
+   */
+  async placeOrder(orderData) {
+    if (!this.orderConn || !this.loginInfo) {
+      return { success: false, error: 'Not connected' };
+    }
+
+    try {
+      this.orderConn.send('RequestNewOrder', {
+        templateId: REQ.NEW_ORDER,
+        userMsg: ['HQX'],
+        fcmId: this.loginInfo.fcmId,
+        ibId: this.loginInfo.ibId,
+        accountId: orderData.accountId,
+        symbol: orderData.symbol,
+        exchange: orderData.exchange || 'CME',
+        quantity: orderData.size,
+        transactionType: orderData.side === 0 ? 1 : 2, // 1=Buy, 2=Sell
+        duration: 1, // DAY
+        orderType: orderData.type === 2 ? 1 : 2, // 1=Market, 2=Limit
+        price: orderData.price || 0,
+      });
+
+      return { success: true, message: 'Order submitted' };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Cancel order
+   */
+  async cancelOrder(orderId) {
+    if (!this.orderConn || !this.loginInfo) {
+      return { success: false, error: 'Not connected' };
+    }
+
+    try {
+      this.orderConn.send('RequestCancelOrder', {
+        templateId: REQ.CANCEL_ORDER,
+        userMsg: ['HQX'],
+        fcmId: this.loginInfo.fcmId,
+        ibId: this.loginInfo.ibId,
+        orderId: orderId,
+      });
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Close position (market order to flatten)
+   */
+  async closePosition(accountId, symbol) {
+    // Get current position
+    const positions = Array.from(this.positions.values());
+    const position = positions.find(p => p.accountId === accountId && p.symbol === symbol);
+
+    if (!position) {
+      return { success: false, error: 'Position not found' };
+    }
+
+    // Place opposite order
+    return this.placeOrder({
+      accountId,
+      symbol,
+      exchange: position.exchange,
+      size: Math.abs(position.quantity),
+      side: position.quantity > 0 ? 1 : 0, // Sell if long, Buy if short
+      type: 2, // Market
+    });
+  }
+
+  /**
    * Get order history
    * Uses RequestShowOrderHistorySummary (template 324)
    */
