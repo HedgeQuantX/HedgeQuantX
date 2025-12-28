@@ -188,6 +188,7 @@ const dashboardMenu = async (service) => {
         { name: chalk.cyan('View Orders'), value: 'orders' },
         { name: chalk.cyan('View Stats'), value: 'stats' },
         { name: chalk.cyan('User Info'), value: 'userinfo' },
+        { name: chalk.green('Add Prop-Account'), value: 'add_prop_account' },
         new inquirer.Separator(),
         { name: chalk.magenta('Algo-Trading'), value: 'algotrading' },
         new inquirer.Separator(),
@@ -278,6 +279,12 @@ const run = async () => {
           break;
         case 'userinfo':
           await showUserInfo(currentService);
+          break;
+        case 'add_prop_account':
+          const newService = await projectXMenu();
+          if (newService) {
+            currentService = newService;
+          }
           break;
         case 'algotrading':
           console.log(chalk.yellow('Algo-Trading coming soon...'));
