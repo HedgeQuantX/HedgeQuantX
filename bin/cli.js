@@ -2776,9 +2776,42 @@ const handleUpdate = async () => {
       const behindCount = execSync('git rev-list HEAD..origin/main --count', { cwd: cliDir, stdio: 'pipe' }).toString().trim();
       
       if (parseInt(behindCount) > 0) {
+        // Check for local changes that might block pull
+        let hasLocalChanges = false;
+        try {
+          const statusOutput = execSync('git status --porcelain', { cwd: cliDir, stdio: 'pipe' }).toString().trim();
+          hasLocalChanges = statusOutput.length > 0;
+        } catch (e) {
+          hasLocalChanges = false;
+        }
+        
+        // If there are local changes, stash them or reset
+        if (hasLocalChanges) {
+          spinnerRefresh.text = 'Stashing local changes...';
+          try {
+            // Try to stash changes first
+            execSync('git stash --include-untracked', { cwd: cliDir, stdio: 'pipe' });
+          } catch (e) {
+            // If stash fails, do a hard reset (for generated files like package-lock.json)
+            spinnerRefresh.text = 'Resetting local changes...';
+            execSync('git checkout -- .', { cwd: cliDir, stdio: 'pipe' });
+            execSync('git clean -fd', { cwd: cliDir, stdio: 'pipe' });
+          }
+        }
+        
+        spinnerRefresh.text = 'Downloading updates...';
+        
         // Pull from remote
         execSync('git pull origin main', { cwd: cliDir, stdio: 'pipe' });
         const afterCommit = execSync('git rev-parse --short HEAD', { cwd: cliDir, stdio: 'pipe' }).toString().trim();
+        
+        // Reinstall dependencies if package.json changed
+        spinnerRefresh.text = 'Installing dependencies...';
+        try {
+          execSync('npm install --silent', { cwd: cliDir, stdio: 'pipe' });
+        } catch (e) {
+          // Ignore npm install errors
+        }
         
         // Re-read package.json to get new version
         delete require.cache[require.resolve('../package.json')];
@@ -2787,8 +2820,8 @@ const handleUpdate = async () => {
         
         spinnerRefresh.succeed('CLI updated!');
         console.log();
-        console.log(chalk.green(`  Version: v${currentVersion} → v${newVersion}`));
-        console.log(chalk.gray(`  Commits: ${beforeCommit} → ${afterCommit} (${behindCount} new)`));
+        console.log(chalk.green(`  Version: v${currentVersion} -> v${newVersion}`));
+        console.log(chalk.gray(`  Commits: ${beforeCommit} -> ${afterCommit} (${behindCount} new)`));
         console.log();
         
         // Ask user if they want to restart
