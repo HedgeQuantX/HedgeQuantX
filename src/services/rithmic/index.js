@@ -70,21 +70,22 @@ class RithmicService extends EventEmitter {
       // Login
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
-          reject(new Error('Login timeout'));
-        }, 15000);
+          resolve({ success: false, error: 'Login timeout - server did not respond' });
+        }, 30000);
 
         this.orderConn.once('loggedIn', async (data) => {
           clearTimeout(timeout);
           this.loginInfo = data;
-          this.user = { userName: username };
+          this.user = { userName: username, fcmId: data.fcmId, ibId: data.ibId };
           
+          // Try to get accounts but don't fail if it doesn't work
           try {
-            // Get accounts
             await this.fetchAccounts();
-            resolve({ success: true });
           } catch (e) {
-            resolve({ success: false, error: e.message });
+            // Accounts fetch failed, but login succeeded
+            console.log('Note: Could not fetch accounts');
           }
+          resolve({ success: true });
         });
 
         this.orderConn.once('loginFailed', (data) => {
