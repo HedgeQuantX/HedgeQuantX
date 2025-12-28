@@ -287,17 +287,34 @@ const banner = async () => {
   }
   
   if (device.isMobile) {
-    // 📱 MOBILE: Ultra compact
+    // 📱 MOBILE: Adaptive to screen width
+    const width = device.width - 2; // Leave margin
+    const innerWidth = width - 4; // Account for borders and spaces
+    
+    const centerText = (text, w) => {
+      const padding = Math.max(0, w - text.length);
+      const left = Math.floor(padding / 2);
+      const right = padding - left;
+      return ' '.repeat(left) + text + ' '.repeat(right);
+    };
+    
     console.log();
-    console.log(chalk.cyan.bold(' ┌───────────────────┐'));
-    console.log(chalk.cyan.bold(' │   HEDGEQUANTX     │'));
-    console.log(chalk.cyan.bold(' │   ═══════════     │'));
+    console.log(chalk.cyan.bold(' ┌' + '─'.repeat(innerWidth + 2) + '┐'));
+    console.log(chalk.cyan.bold(' │' + centerText('HEDGEQUANTX', innerWidth + 2) + '│'));
+    console.log(chalk.cyan.bold(' │' + centerText('═'.repeat(Math.min(11, innerWidth)), innerWidth + 2) + '│'));
+    
     if (statsInfo) {
-      console.log(chalk.cyan.bold(' │') + chalk.green(` $${(statsInfo.balance/1000).toFixed(0)}K`) + chalk.gray(' | ') + chalk.cyan(`${statsInfo.accounts} acc`) + chalk.cyan.bold('  │'));
+      const pnlColor = statsInfo.pnl >= 0 ? chalk.green : chalk.red;
+      const balStr = `$${(statsInfo.balance/1000).toFixed(0)}K`;
+      const accStr = `${statsInfo.accounts} acc`;
+      const pnlStr = `${statsInfo.pnl >= 0 ? '+' : ''}${statsInfo.pnlPercent}%`;
+      const infoText = `${balStr} | ${accStr} | ${pnlStr}`;
+      console.log(chalk.cyan.bold(' │') + centerText(infoText, innerWidth + 2) + chalk.cyan.bold('│'));
     } else {
-      console.log(chalk.yellow.bold(' │   Algo Trading    │'));
+      console.log(chalk.cyan.bold(' │') + chalk.yellow.bold(centerText('Algo Trading', innerWidth + 2)) + chalk.cyan.bold('│'));
     }
-    console.log(chalk.cyan.bold(' └───────────────────┘'));
+    
+    console.log(chalk.cyan.bold(' └' + '─'.repeat(innerWidth + 2) + '┘'));
     console.log();
     
   } else if (device.isTablet) {
