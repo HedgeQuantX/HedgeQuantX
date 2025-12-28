@@ -107,19 +107,18 @@ const banner = async () => {
     
     const connStr = `Connections: ${statsInfo.connections}`;
     const accStr = `Accounts: ${statsInfo.accounts}`;
-    const balStr = `Balance: $${statsInfo.balance.toLocaleString()}`;
-    const pnlStr = `P&L: $${statsInfo.pnl.toLocaleString()} (${pnlSign}${statsInfo.pnlPercent}%)`;
+    const balVal = `$${statsInfo.balance.toLocaleString()}`;
+    const pnlVal = `$${statsInfo.pnl.toLocaleString()} (${pnlSign}${statsInfo.pnlPercent}%)`;
     
-    const statsText = `${connStr}    ${accStr}    ${balStr}    ${pnlStr}`;
-    const statsLen = connStr.length + 4 + accStr.length + 4 + balStr.length + 4 + pnlStr.length;
+    const statsLen = connStr.length + 4 + accStr.length + 4 + 8 + balVal.length + 4 + 5 + pnlVal.length;
     const statsLeftPad = Math.floor((innerWidth - statsLen) / 2);
     const statsRightPad = innerWidth - statsLen - statsLeftPad;
     
     console.log(chalk.cyan('║') + ' '.repeat(statsLeftPad) +
       chalk.white(connStr) + '    ' +
       chalk.white(accStr) + '    ' +
-      chalk.green(balStr) + '    ' +
-      pnlColor(pnlStr) + ' '.repeat(statsRightPad) + chalk.cyan('║')
+      chalk.white('Balance: ') + chalk.green(balVal) + '    ' +
+      chalk.white('P&L: ') + pnlColor(pnlVal) + ' '.repeat(statsRightPad) + chalk.cyan('║')
     );
   }
   
