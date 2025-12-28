@@ -530,14 +530,150 @@ class ProjectXService {
   // ==================== MARKET STATUS ====================
 
   /**
-   * Checks if futures market is open based on CME hours
+   * Gets US market holidays for the current year
+   * @returns {Array<{date: string, name: string, earlyClose: boolean}>}
+   */
+  getMarketHolidays() {
+    const year = new Date().getFullYear();
+    
+    // CME Futures holidays - markets closed or early close
+    // Dates are approximate, actual dates may vary slightly
+    const holidays = [
+      // New Year's Day
+      { date: `${year}-01-01`, name: "New Year's Day", earlyClose: false },
+      // Martin Luther King Jr. Day (3rd Monday of January)
+      { date: this._getNthWeekday(year, 0, 1, 3), name: 'MLK Day', earlyClose: false },
+      // Presidents Day (3rd Monday of February)
+      { date: this._getNthWeekday(year, 1, 1, 3), name: "Presidents' Day", earlyClose: false },
+      // Good Friday (Friday before Easter) - calculated dynamically
+      { date: this._getGoodFriday(year), name: 'Good Friday', earlyClose: false },
+      // Memorial Day (Last Monday of May)
+      { date: this._getLastWeekday(year, 4, 1), name: 'Memorial Day', earlyClose: false },
+      // Juneteenth (June 19)
+      { date: `${year}-06-19`, name: 'Juneteenth', earlyClose: false },
+      // Independence Day (July 4)
+      { date: `${year}-07-04`, name: 'Independence Day', earlyClose: false },
+      { date: `${year}-07-03`, name: 'Independence Day Eve', earlyClose: true },
+      // Labor Day (1st Monday of September)
+      { date: this._getNthWeekday(year, 8, 1, 1), name: 'Labor Day', earlyClose: false },
+      // Thanksgiving (4th Thursday of November)
+      { date: this._getNthWeekday(year, 10, 4, 4), name: 'Thanksgiving', earlyClose: false },
+      { date: this._getDayAfter(this._getNthWeekday(year, 10, 4, 4)), name: 'Black Friday', earlyClose: true },
+      // Christmas
+      { date: `${year}-12-25`, name: 'Christmas Day', earlyClose: false },
+      { date: `${year}-12-24`, name: 'Christmas Eve', earlyClose: true },
+      // New Year's Eve
+      { date: `${year}-12-31`, name: "New Year's Eve", earlyClose: true },
+    ];
+    
+    return holidays;
+  }
+
+  /**
+   * Helper: Get nth weekday of a month
+   * @private
+   */
+  _getNthWeekday(year, month, weekday, n) {
+    const firstDay = new Date(year, month, 1);
+    let count = 0;
+    for (let day = 1; day <= 31; day++) {
+      const d = new Date(year, month, day);
+      if (d.getMonth() !== month) break;
+      if (d.getDay() === weekday) {
+        count++;
+        if (count === n) {
+          return d.toISOString().split('T')[0];
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Helper: Get last weekday of a month
+   * @private
+   */
+  _getLastWeekday(year, month, weekday) {
+    const lastDay = new Date(year, month + 1, 0);
+    for (let day = lastDay.getDate(); day >= 1; day--) {
+      const d = new Date(year, month, day);
+      if (d.getDay() === weekday) {
+        return d.toISOString().split('T')[0];
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Helper: Get Good Friday (Friday before Easter)
+   * @private
+   */
+  _getGoodFriday(year) {
+    // Easter calculation (Anonymous Gregorian algorithm)
+    const a = year % 19;
+    const b = Math.floor(year / 100);
+    const c = year % 100;
+    const d = Math.floor(b / 4);
+    const e = b % 4;
+    const f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4);
+    const k = c % 4;
+    const l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const month = Math.floor((h + l - 7 * m + 114) / 31) - 1;
+    const day = ((h + l - 7 * m + 114) % 31) + 1;
+    
+    // Good Friday is 2 days before Easter
+    const easter = new Date(year, month, day);
+    const goodFriday = new Date(easter);
+    goodFriday.setDate(easter.getDate() - 2);
+    return goodFriday.toISOString().split('T')[0];
+  }
+
+  /**
+   * Helper: Get day after a date
+   * @private
+   */
+  _getDayAfter(dateStr) {
+    const d = new Date(dateStr);
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  }
+
+  /**
+   * Checks if today is a market holiday
+   * @returns {{isHoliday: boolean, holiday?: {date: string, name: string, earlyClose: boolean}}}
+   */
+  checkHoliday() {
+    const today = new Date().toISOString().split('T')[0];
+    const holidays = this.getMarketHolidays();
+    const holiday = holidays.find(h => h.date === today);
+    
+    if (holiday) {
+      return { isHoliday: !holiday.earlyClose, holiday };
+    }
+    return { isHoliday: false };
+  }
+
+  /**
+   * Checks if futures market is open based on CME hours and holidays
    * @returns {{isOpen: boolean, message: string}}
    */
   checkMarketHours() {
     const now = new Date();
     const utcDay = now.getUTCDay();
     const utcHour = now.getUTCHours();
-    const utcMinute = now.getUTCMinutes();
+    
+    // Check holidays first
+    const holidayCheck = this.checkHoliday();
+    if (holidayCheck.isHoliday) {
+      return { isOpen: false, message: `Market closed - ${holidayCheck.holiday.name}` };
+    }
+    if (holidayCheck.holiday && holidayCheck.holiday.earlyClose && utcHour >= 18) {
+      return { isOpen: false, message: `Market closed early - ${holidayCheck.holiday.name}` };
+    }
     
     // CME Futures hours (in UTC):
     // Open: Sunday 23:00 UTC (6:00 PM ET)
@@ -573,8 +709,6 @@ class ProjectXService {
    * @returns {Promise<{success: boolean, isOpen: boolean, message: string}>}
    */
   async getMarketStatus(accountId) {
-    // For now, just use the time-based check
-    // Could be extended to check account-specific trading permissions
     const hours = this.checkMarketHours();
     return { success: true, isOpen: hours.isOpen, message: hours.message };
   }
