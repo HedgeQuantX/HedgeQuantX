@@ -331,8 +331,30 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     console.clear();
   };
   
+  // Check market hours
+  const checkMarketStatus = () => {
+    const now = new Date();
+    const utcDay = now.getUTCDay();
+    const utcHour = now.getUTCHours();
+    const isDST = (() => {
+      const jan = new Date(now.getFullYear(), 0, 1);
+      const jul = new Date(now.getFullYear(), 6, 1);
+      return now.getTimezoneOffset() < Math.max(jan.getTimezoneOffset(), jul.getTimezoneOffset());
+    })();
+    const ctOffset = isDST ? 5 : 6;
+    const ctHour = (utcHour - ctOffset + 24) % 24;
+    const ctDay = utcHour < ctOffset ? (utcDay + 6) % 7 : utcDay;
+
+    if (ctDay === 6) return { isOpen: false, message: 'Market closed (Saturday)' };
+    if (ctDay === 0 && ctHour < 17) return { isOpen: false, message: 'Market opens Sunday 5:00 PM CT' };
+    if (ctDay === 5 && ctHour >= 16) return { isOpen: false, message: 'Market closed (Friday after 4PM CT)' };
+    if (ctHour === 16 && ctDay >= 1 && ctDay <= 4) return { isOpen: false, message: 'Daily maintenance (4:00-5:00 PM CT)' };
+    return { isOpen: true, message: 'Market OPEN' };
+  };
+
   const displayUI = () => {
     clearScreen();
+    const marketStatus = checkMarketStatus();
     console.log();
     console.log(chalk.gray(getSeparator()));
     console.log(chalk.cyan.bold('  HQX Ultra-Scalping Algo'));
@@ -341,7 +363,8 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     console.log(chalk.white(`  Account:   ${chalk.cyan(accountName)}`));
     console.log(chalk.white(`  Symbol:    ${chalk.cyan(symbolName)}`));
     console.log(chalk.white(`  Contracts: ${chalk.cyan(numContracts)}`));
-    console.log(chalk.white(`  Mode:      ${hqxConnected ? chalk.green('LIVE') : chalk.yellow('OFFLINE')}`));
+    console.log(chalk.white(`  Server:    ${hqxConnected ? chalk.green('CONNECTED') : chalk.red('DISCONNECTED')}`));
+    console.log(chalk.white(`  Market:    ${marketStatus.isOpen ? chalk.green(marketStatus.message) : chalk.red(marketStatus.message)}`));
     console.log(chalk.gray(getSeparator()));
 
     // Risk Management
