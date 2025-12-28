@@ -6,11 +6,82 @@ const inquirer = require('inquirer');
 const ora = require('ora');
 const { execSync } = require('child_process');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 const { program } = require('commander');
 const { ProjectXService } = require('../src/services/projectx');
 const { HQXServerService } = require('../src/services/hqx-server');
 
-// Session courante
+// ==================== MULTI-CONNECTION MANAGER ====================
+// Stocke toutes les connexions actives (ProjectX, Rithmic, Tradovate)
+const connections = {
+  services: [],      // Array of { type: 'projectx'|'rithmic'|'tradovate', service: ServiceInstance, propfirm: string }
+  
+  // Ajouter une connexion
+  add(type, service, propfirm = null) {
+    this.services.push({ type, service, propfirm, connectedAt: new Date() });
+  },
+  
+  // Supprimer une connexion
+  remove(index) {
+    this.services.splice(index, 1);
+  },
+  
+  // Obtenir toutes les connexions
+  getAll() {
+    return this.services;
+  },
+  
+  // Obtenir les connexions par type
+  getByType(type) {
+    return this.services.filter(c => c.type === type);
+  },
+  
+  // Nombre de connexions
+  count() {
+    return this.services.length;
+  },
+  
+  // Obtenir tous les comptes de toutes les connexions
+  async getAllAccounts() {
+    const allAccounts = [];
+    for (const conn of this.services) {
+      try {
+        const result = await conn.service.getTradingAccounts();
+        if (result.success && result.accounts) {
+          result.accounts.forEach(account => {
+            allAccounts.push({
+              ...account,
+              connectionType: conn.type,
+              propfirm: conn.propfirm || conn.type,
+              service: conn.service
+            });
+          });
+        }
+      } catch (e) {
+        // Ignore connection errors
+      }
+    }
+    return allAccounts;
+  },
+  
+  // Vérifier si connecté
+  isConnected() {
+    return this.services.length > 0;
+  },
+  
+  // Déconnecter tout
+  disconnectAll() {
+    this.services.forEach(conn => {
+      if (conn.service && conn.service.logout) {
+        conn.service.logout();
+      }
+    });
+    this.services = [];
+  }
+};
+
+// Session courante (pour compatibilité)
 let currentService = null;
 
 // ==================== DEVICE DETECTION & RESPONSIVE ====================
@@ -380,10 +451,10 @@ const dashboardMenu = async (service) => {
       { name: chalk.cyan('Positions'), value: 'positions' },
       { name: chalk.cyan('Orders'), value: 'orders' },
       { name: chalk.cyan('Stats'), value: 'stats' },
+      { name: chalk.cyan('Add Prop-Account'), value: 'add_prop_account' },
       new inquirer.Separator(),
       { name: chalk.cyan('Algo'), value: 'algotrading' },
       new inquirer.Separator(),
-      { name: chalk.green('+ Add Prop-Account'), value: 'add_prop_account' },
       { name: chalk.yellow('Update HQX'), value: 'refresh' },
       { name: chalk.red('Disconnect'), value: 'disconnect' }
     ];
@@ -393,11 +464,11 @@ const dashboardMenu = async (service) => {
       { name: chalk.cyan('View Positions'), value: 'positions' },
       { name: chalk.cyan('View Orders'), value: 'orders' },
       { name: chalk.cyan('View Stats'), value: 'stats' },
+      { name: chalk.cyan('Add Prop-Account'), value: 'add_prop_account' },
       { name: chalk.cyan('User Info'), value: 'userinfo' },
       new inquirer.Separator(),
       { name: chalk.cyan('Algo-Trading'), value: 'algotrading' },
       new inquirer.Separator(),
-      { name: chalk.green('+ Add Prop-Account'), value: 'add_prop_account' },
       { name: chalk.yellow('Update HQX'), value: 'refresh' },
       { name: chalk.red('Disconnect'), value: 'disconnect' }
     ];
@@ -440,59 +511,93 @@ const ACCOUNT_TYPE = {
   4: { text: 'Sim', color: 'gray' }
 };
 
-// Afficher les comptes
+// Afficher les comptes (toutes connexions)
 const showAccounts = async (service) => {
   const spinner = ora('Fetching accounts...').start();
   
-  const result = await service.getTradingAccounts();
+  // Collecter les comptes de TOUTES les connexions
+  let allAccountsData = [];
   
-  if (result.success && result.accounts) {
-    spinner.succeed('Accounts loaded');
-    console.log();
+  if (connections.count() > 0) {
+    for (const conn of connections.getAll()) {
+      try {
+        const result = await conn.service.getTradingAccounts();
+        if (result.success && result.accounts) {
+          result.accounts.forEach(account => {
+            allAccountsData.push({
+              ...account,
+              propfirm: conn.propfirm || conn.type,
+              service: conn.service
+            });
+          });
+        }
+      } catch (e) {
+        // Ignore errors
+      }
+    }
+  } else if (service) {
+    const result = await service.getTradingAccounts();
+    if (result.success && result.accounts) {
+      allAccountsData = result.accounts.map(a => ({ ...a, propfirm: service.getPropfirmName(), service }));
+    }
+  }
+  
+  spinner.succeed('Accounts loaded');
+  console.log();
+  
+  if (allAccountsData.length === 0) {
+    console.log(chalk.yellow('  No accounts found.'));
+  } else {
+    // Afficher le nombre de connexions
+    const totalConnections = connections.count() || 1;
+    console.log(chalk.white.bold(`  Your Trading Accounts (${totalConnections} connection${totalConnections > 1 ? 's' : ''}):`));
+    console.log(chalk.gray('  ' + '─'.repeat(50)));
     
-    if (result.accounts.length === 0) {
-      console.log(chalk.yellow('  No accounts found.'));
-    } else {
-      console.log(chalk.white.bold('  Your Trading Accounts:'));
-      console.log(chalk.gray('  ' + '─'.repeat(50)));
+    // Grouper par PropFirm
+    const groupedByPropfirm = {};
+    allAccountsData.forEach(account => {
+      const key = account.propfirm || 'Unknown';
+      if (!groupedByPropfirm[key]) {
+        groupedByPropfirm[key] = [];
+      }
+      groupedByPropfirm[key].push(account);
+    });
+    
+    // Afficher par groupe
+    for (const [propfirm, accounts] of Object.entries(groupedByPropfirm)) {
+      console.log(chalk.magenta.bold(`\n  ${propfirm}`));
+      console.log(chalk.gray('  ' + '─'.repeat(40)));
       
-      // Tri des comptes: Active (1) d'abord, puis par type (Live=3 d'abord)
-      const sortedAccounts = [...result.accounts].sort((a, b) => {
-        // Status: Active (1) en premier, puis Pending (0), puis autres
-        const statusOrder = { 1: 0, 0: 1, 2: 2, 6: 3, 7: 4, 3: 5, 4: 6, 5: 7 };
+      // Tri des comptes
+      const sortedAccounts = [...accounts].sort((a, b) => {
+        const statusOrder = { 0: 0, 1: 1, 2: 2, 6: 3, 7: 4, 3: 5, 4: 6, 5: 7 };
         const statusA = statusOrder[a.status] !== undefined ? statusOrder[a.status] : 99;
         const statusB = statusOrder[b.status] !== undefined ? statusOrder[b.status] : 99;
         if (statusA !== statusB) return statusA - statusB;
         
-        // Type: Live (3) d'abord, puis Express (2), Evaluation (1), Sim (0)
-        const typeOrder = { 3: 0, 2: 1, 1: 2, 0: 3 };
+        const typeOrder = { 2: 0, 3: 1, 1: 2, 0: 3 };
         const typeA = typeOrder[a.type] !== undefined ? typeOrder[a.type] : 99;
         const typeB = typeOrder[b.type] !== undefined ? typeOrder[b.type] : 99;
         return typeA - typeB;
       });
 
       sortedAccounts.forEach((account, index) => {
-        console.log(chalk.cyan(`  ${index + 1}. ${account.accountName || account.name || `Account #${account.accountId}`}`));
+        console.log(chalk.cyan(`    ${index + 1}. ${account.accountName || account.name || `Account #${account.accountId}`}`));
         
         if (account.balance !== undefined) {
           const balanceColor = account.balance >= 0 ? chalk.green : chalk.red;
-          console.log(`     Balance: ${balanceColor('$' + account.balance.toLocaleString())}`);
+          console.log(`       Balance: ${balanceColor('$' + account.balance.toLocaleString())}`);
         }
         
-        // Status
         const statusInfo = ACCOUNT_STATUS[account.status] || { text: `Unknown (${account.status})`, color: 'gray' };
-        console.log(`     Status: ${chalk[statusInfo.color](statusInfo.text)}`);
+        console.log(`       Status: ${chalk[statusInfo.color](statusInfo.text)}`);
 
-        // Type
         const typeInfo = ACCOUNT_TYPE[account.type] || { text: `Unknown (${account.type})`, color: 'white' };
-        console.log(`     Type: ${chalk[typeInfo.color](typeInfo.text)}`);
+        console.log(`       Type: ${chalk[typeInfo.color](typeInfo.text)}`);
         
         console.log();
       });
     }
-  } else {
-    spinner.fail('Failed to fetch accounts');
-    console.log(chalk.red(`  Error: ${result.error}`));
   }
   
   console.log();
@@ -641,145 +746,135 @@ const showOrders = async (service) => {
 // Ajouter un compte PropFirm supplémentaire
 const addPropAccount = async () => {
   const device = getDevice();
-  console.log();
-  console.log(chalk.gray(getSeparator()));
-  console.log(chalk.green.bold('  + Add Prop-Account'));
-  console.log(chalk.gray(getSeparator()));
-  console.log();
   
-  // Liste des PropFirms disponibles
-  const propfirmChoices = [
-    { name: chalk.cyan('Topstep'), value: 'topstep' },
-    { name: chalk.cyan('Alpha Futures'), value: 'alpha_futures' },
-    { name: chalk.cyan('TickTickTrader'), value: 'tickticktrader' },
-    { name: chalk.cyan('Bulenox'), value: 'bulenox' },
-    { name: chalk.cyan('TradeDay'), value: 'tradeday' },
-    { name: chalk.cyan('Blusky'), value: 'blusky' },
-    { name: chalk.cyan('Goat Futures'), value: 'goat_futures' },
-    { name: chalk.cyan('The Futures Desk'), value: 'futures_desk' },
-    { name: chalk.cyan('DayTraders'), value: 'daytraders' },
-    { name: chalk.cyan('E8 Futures'), value: 'e8_futures' },
-    { name: chalk.cyan('Blue Guardian Futures'), value: 'blue_guardian' },
-    { name: chalk.cyan('FuturesElite'), value: 'futures_elite' },
-    { name: chalk.cyan('FXIFY'), value: 'fxify' },
-    { name: chalk.cyan('Hola Prime'), value: 'hola_prime' },
-    { name: chalk.cyan('Top One Futures'), value: 'top_one_futures' },
-    { name: chalk.cyan('Funding Futures'), value: 'funding_futures' },
-    { name: chalk.cyan('TX3 Funding'), value: 'tx3_funding' },
-    { name: chalk.cyan('Lucid Trading'), value: 'lucid_trading' },
-    { name: chalk.cyan('Tradeify'), value: 'tradeify' },
-    new inquirer.Separator(),
-    { name: chalk.yellow('< Back'), value: 'back' }
-  ];
+  // Afficher les connexions actives
+  if (connections.count() > 0) {
+    console.log();
+    console.log(chalk.cyan.bold('  Active Connections:'));
+    connections.getAll().forEach((conn, i) => {
+      console.log(chalk.green(`    ${i + 1}. ${conn.propfirm || conn.type}`));
+    });
+    console.log();
+  }
   
-  const { propfirm } = await inquirer.prompt([
+  // Menu pour choisir le type de connexion
+  const { connectionType } = await inquirer.prompt([
     {
       type: 'list',
-      name: 'propfirm',
-      message: chalk.white.bold('Select PropFirm:'),
-      choices: propfirmChoices,
+      name: 'connectionType',
+      message: chalk.white.bold('Add Connection:'),
+      choices: [
+        { name: chalk.cyan('ProjectX (19 PropFirms)'), value: 'projectx' },
+        { name: chalk.gray('Rithmic (Coming Soon)'), value: 'rithmic', disabled: 'Coming Soon' },
+        { name: chalk.gray('Tradovate (Coming Soon)'), value: 'tradovate', disabled: 'Coming Soon' },
+        new inquirer.Separator(),
+        { name: chalk.yellow('< Back'), value: 'back' }
+      ],
       pageSize: device.menuPageSize,
       loop: false
     }
   ]);
   
-  if (propfirm === 'back') {
+  if (connectionType === 'back') {
     return;
   }
   
-  // Demander les credentials
-  console.log();
-  const credentials = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'username',
-      message: chalk.white('Username/Email:'),
-      validate: (input) => input.length > 0 || 'Username is required'
-    },
-    {
-      type: 'password',
-      name: 'password',
-      message: chalk.white('Password:'),
-      mask: '*',
-      validate: (input) => input.length > 0 || 'Password is required'
+  if (connectionType === 'projectx') {
+    // Sélection de la PropFirm
+    const propfirm = await projectXMenu();
+    if (propfirm === 'back') {
+      return;
     }
-  ]);
-  
-  // Tenter la connexion
-  const spinner = ora('Connecting to PropFirm...').start();
-  
-  try {
-    const ProjectXService = require('../src/services/projectx');
-    const newService = new ProjectXService(propfirm);
-    const loginResult = await newService.login(credentials.username, credentials.password);
     
-    if (loginResult.success) {
-      await newService.getUser();
-      const accountsResult = await newService.getTradingAccounts();
-      
-      spinner.succeed('PropFirm account added!');
-      console.log();
-      console.log(chalk.green(`  Connected to ${newService.getPropfirmName()}`));
-      
-      if (accountsResult.success && accountsResult.accounts) {
-        console.log(chalk.cyan(`  Found ${accountsResult.accounts.length} trading account(s)`));
-        
-        // Sauvegarder les credentials (encrypted)
-        const configPath = path.join(os.homedir(), '.hedgequantx', 'accounts.json');
-        const configDir = path.dirname(configPath);
-        
-        if (!fs.existsSync(configDir)) {
-          fs.mkdirSync(configDir, { recursive: true });
-        }
-        
-        let accounts = [];
-        if (fs.existsSync(configPath)) {
-          try {
-            accounts = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-          } catch (e) {
-            accounts = [];
-          }
-        }
-        
-        // Ajouter le nouveau compte (éviter les doublons)
-        const existingIndex = accounts.findIndex(a => a.propfirm === propfirm && a.username === credentials.username);
-        const accountData = {
-          propfirm,
-          username: credentials.username,
-          // Note: En production, le password devrait être encrypté
-          addedAt: new Date().toISOString()
-        };
-        
-        if (existingIndex >= 0) {
-          accounts[existingIndex] = accountData;
-          console.log(chalk.yellow('  Account updated.'));
-        } else {
-          accounts.push(accountData);
-          console.log(chalk.green('  Account saved.'));
-        }
-        
-        fs.writeFileSync(configPath, JSON.stringify(accounts, null, 2));
+    // Demander les credentials
+    console.log();
+    const credentials = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'username',
+        message: chalk.white('Username/Email:'),
+        validate: (input) => input.length > 0 || 'Username is required'
+      },
+      {
+        type: 'password',
+        name: 'password',
+        message: chalk.white('Password:'),
+        mask: '*',
+        validate: (input) => input.length > 0 || 'Password is required'
       }
-    } else {
+    ]);
+    
+    // Tenter la connexion
+    const spinner = ora('Connecting to PropFirm...').start();
+    
+    try {
+      const newService = new ProjectXService(propfirm);
+      const loginResult = await newService.login(credentials.username, credentials.password);
+      
+      if (loginResult.success) {
+        await newService.getUser();
+        const accountsResult = await newService.getTradingAccounts();
+        
+        // Ajouter au connection manager
+        connections.add('projectx', newService, newService.getPropfirmName());
+        
+        spinner.succeed('Connection added!');
+        console.log();
+        console.log(chalk.green(`  Connected to ${newService.getPropfirmName()}`));
+        
+        if (accountsResult.success && accountsResult.accounts) {
+          console.log(chalk.cyan(`  Found ${accountsResult.accounts.length} trading account(s)`));
+        }
+        
+        console.log(chalk.white(`  Total connections: ${connections.count()}`));
+      } else {
+        spinner.fail('Connection failed');
+        console.log(chalk.red(`  Error: ${loginResult.error}`));
+      }
+    } catch (error) {
       spinner.fail('Connection failed');
-      console.log(chalk.red(`  Error: ${loginResult.error}`));
+      console.log(chalk.red(`  Error: ${error.message}`));
     }
-  } catch (error) {
-    spinner.fail('Connection failed');
-    console.log(chalk.red(`  Error: ${error.message}`));
   }
   
   console.log();
   await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
 };
 
-// Afficher les stats de tous les comptes
+// Afficher les stats de tous les comptes (toutes connexions)
 const showStats = async (service) => {
   const spinner = ora('Fetching stats for all accounts...').start();
   
-  const accountsResult = await service.getTradingAccounts();
+  // Collecter les comptes de TOUTES les connexions
+  let allAccountsData = [];
   
-  if (!accountsResult.success || !accountsResult.accounts || accountsResult.accounts.length === 0) {
+  if (connections.count() > 0) {
+    // Multi-connexion: récupérer de toutes les connexions
+    for (const conn of connections.getAll()) {
+      try {
+        const result = await conn.service.getTradingAccounts();
+        if (result.success && result.accounts) {
+          result.accounts.forEach(account => {
+            allAccountsData.push({
+              ...account,
+              propfirm: conn.propfirm || conn.type,
+              service: conn.service
+            });
+          });
+        }
+      } catch (e) {
+        // Ignore errors
+      }
+    }
+  } else if (service) {
+    // Single connexion (compatibilité)
+    const result = await service.getTradingAccounts();
+    if (result.success && result.accounts) {
+      allAccountsData = result.accounts.map(a => ({ ...a, service }));
+    }
+  }
+  
+  if (allAccountsData.length === 0) {
     spinner.fail('No accounts found');
     await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
     return;
@@ -792,11 +887,13 @@ const showStats = async (service) => {
   let allTrades = [];
   let totalOpenPositions = 0;
   let totalOpenOrders = 0;
+  let totalConnections = connections.count() || 1;
 
   spinner.text = 'Fetching detailed stats...';
 
   // Collecter les données de tous les comptes
-  for (const account of accountsResult.accounts) {
+  for (const account of allAccountsData) {
+    const accountService = account.service;
     totalBalance += account.balance || 0;
     
     // Starting Balance estimation
@@ -809,23 +906,24 @@ const showStats = async (service) => {
     totalStartingBalance += startingBalance;
     
     // Positions
-    const posResult = await service.getPositions(account.accountId);
+    const posResult = await accountService.getPositions(account.accountId);
     if (posResult.success && posResult.positions) {
       totalOpenPositions += posResult.positions.length;
     }
     
     // Orders (for open orders count)
-    const ordersResult = await service.getOrders(account.accountId);
+    const ordersResult = await accountService.getOrders(account.accountId);
     if (ordersResult.success && ordersResult.orders) {
       totalOpenOrders += ordersResult.orders.filter(o => o.status === 1).length;
     }
     
     // Trade History (for metrics calculation)
-    const tradesResult = await service.getTradeHistory(account.accountId, 30);
+    const tradesResult = await accountService.getTradeHistory(account.accountId, 30);
     if (tradesResult.success && tradesResult.trades && tradesResult.trades.length > 0) {
       allTrades = allTrades.concat(tradesResult.trades.map(t => ({
         ...t,
-        accountName: account.accountName
+        accountName: account.accountName,
+        propfirm: account.propfirm
       })));
     } else {
       // Fallback: use filled orders if trade history not available
@@ -833,7 +931,8 @@ const showStats = async (service) => {
         const filledOrders = ordersResult.orders.filter(o => o.status === 2);
         allTrades = allTrades.concat(filledOrders.map(o => ({
           ...o,
-          accountName: account.accountName
+          accountName: account.accountName,
+          propfirm: account.propfirm
         })));
       }
     }
@@ -938,7 +1037,8 @@ const showStats = async (service) => {
   // Section: Account Overview
   console.log(chalk.cyan.bold('  ACCOUNT OVERVIEW'));
   console.log(chalk.gray('  ' + '─'.repeat(boxWidth - 4)));
-  console.log(chalk.white('  ' + formatLabel('Total Accounts:')) + chalk.cyan(accountsResult.accounts.length));
+  console.log(chalk.white('  ' + formatLabel('Connections:')) + chalk.cyan(totalConnections));
+  console.log(chalk.white('  ' + formatLabel('Total Accounts:')) + chalk.cyan(allAccountsData.length));
   
   const totalBalanceColor = totalBalance >= 0 ? chalk.green : chalk.red;
   console.log(chalk.white('  ' + formatLabel('Total Balance:')) + totalBalanceColor('$' + totalBalance.toLocaleString()));
@@ -1734,6 +1834,10 @@ const main = async () => {
         if (loginResult.success) {
           // Récupérer les infos utilisateur
           await currentService.getUser();
+          
+          // Ajouter au connection manager
+          connections.add('projectx', currentService, currentService.getPropfirmName());
+          
           spinner.succeed('Connected successfully!');
           
           // Dashboard loop
@@ -1860,11 +1964,12 @@ const main = async () => {
                 await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
                 break;
               case 'disconnect':
-                currentService.logout();
+                // Déconnecter toutes les connexions
+                connections.disconnectAll();
                 currentService = null;
                 connected = false;
                 banner();
-                console.log(chalk.yellow('  Disconnected.'));
+                console.log(chalk.yellow('  All connections disconnected.'));
                 console.log();
                 break;
             }
