@@ -30,6 +30,7 @@ class RithmicService extends EventEmitter {
   getPropFirmConfig(key) {
     const propfirms = {
       'apex': { name: 'Apex Trader Funding', systemName: 'Apex', defaultBalance: 300000 },
+      'apex_rithmic': { name: 'Apex Trader Funding', systemName: 'Apex', defaultBalance: 300000 },
       'topstep_r': { name: 'Topstep (Rithmic)', systemName: RITHMIC_SYSTEMS.TOPSTEP, defaultBalance: 150000 },
       'bulenox_r': { name: 'Bulenox (Rithmic)', systemName: RITHMIC_SYSTEMS.BULENOX, defaultBalance: 150000 },
       'earn2trade': { name: 'Earn2Trade', systemName: RITHMIC_SYSTEMS.EARN_2_TRADE, defaultBalance: 150000 },
