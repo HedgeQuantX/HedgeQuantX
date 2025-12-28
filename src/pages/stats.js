@@ -290,6 +290,166 @@ const showStats = async (service) => {
   }
   
   drawBoxFooter(boxWidth);
+  
+  // Trades History
+  console.log();
+  drawBoxHeader('TRADES HISTORY', boxWidth);
+  
+  const innerWidth = boxWidth - 2;
+  
+  if (allTrades.length > 0) {
+    // Column widths
+    const colTime = 12;
+    const colSymbol = 10;
+    const colEntry = 10;
+    const colExit = 10;
+    const colEntryP = 10;
+    const colExitP = 10;
+    const colPnL = 10;
+    const colDir = 6;
+    const colID = innerWidth - colTime - colSymbol - colEntry - colExit - colEntryP - colExitP - colPnL - colDir - 9;
+    
+    // Header
+    const header = 
+      chalk.white(' Time'.padEnd(colTime)) + chalk.gray('|') +
+      chalk.white('Symbol'.padEnd(colSymbol)) + chalk.gray('|') +
+      chalk.white('Entry'.padEnd(colEntry)) + chalk.gray('|') +
+      chalk.white('Exit'.padEnd(colExit)) + chalk.gray('|') +
+      chalk.white('Entry $'.padEnd(colEntryP)) + chalk.gray('|') +
+      chalk.white('Exit $'.padEnd(colExitP)) + chalk.gray('|') +
+      chalk.white('P&L'.padEnd(colPnL)) + chalk.gray('|') +
+      chalk.white('Dir'.padEnd(colDir)) + chalk.gray('|') +
+      chalk.white('ID'.padEnd(colID));
+    
+    console.log(chalk.cyan('\u2551') + header + chalk.cyan('\u2551'));
+    console.log(chalk.cyan('\u2551') + chalk.gray('\u2500'.repeat(innerWidth)) + chalk.cyan('\u2551'));
+    
+    // Show last 10 trades
+    const recentTrades = allTrades.slice(-10).reverse();
+    
+    for (const trade of recentTrades) {
+      const time = trade.exitTime ? new Date(trade.exitTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+      const symbol = (trade.contractName || trade.symbol || 'N/A').substring(0, colSymbol - 1);
+      const entryTime = trade.entryTime ? new Date(trade.entryTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+      const exitTime = trade.exitTime ? new Date(trade.exitTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+      const entryPrice = trade.entryPrice ? trade.entryPrice.toFixed(2) : 'N/A';
+      const exitPrice = trade.exitPrice ? trade.exitPrice.toFixed(2) : 'N/A';
+      const pnl = trade.profitAndLoss || trade.pnl || 0;
+      const pnlStr = pnl >= 0 ? chalk.green('+$' + pnl.toFixed(0)) : chalk.red('-$' + Math.abs(pnl).toFixed(0));
+      const direction = trade.side === 0 ? chalk.green('LONG') : trade.side === 1 ? chalk.red('SHORT') : chalk.gray('N/A');
+      const tradeId = (trade.id || trade.tradeId || 'N/A').toString().substring(0, colID - 1);
+      
+      const row = 
+        (' ' + time).padEnd(colTime) + chalk.gray('|') +
+        symbol.padEnd(colSymbol) + chalk.gray('|') +
+        entryTime.padEnd(colEntry) + chalk.gray('|') +
+        exitTime.padEnd(colExit) + chalk.gray('|') +
+        entryPrice.padEnd(colEntryP) + chalk.gray('|') +
+        exitPrice.padEnd(colExitP) + chalk.gray('|') +
+        pnlStr.padEnd(colPnL + 10) + chalk.gray('|') + // +10 for color codes
+        direction.padEnd(colDir + 10) + chalk.gray('|') + // +10 for color codes
+        tradeId.padEnd(colID);
+      
+      // Calculate visible length and pad
+      const visLen = row.replace(/\x1b\[[0-9;]*m/g, '').length;
+      const padding = innerWidth - visLen;
+      
+      console.log(chalk.cyan('\u2551') + row + ' '.repeat(Math.max(0, padding)) + chalk.cyan('\u2551'));
+    }
+    
+    if (allTrades.length > 10) {
+      const moreMsg = `  ... and ${allTrades.length - 10} more trades`;
+      console.log(chalk.cyan('\u2551') + chalk.gray(moreMsg) + ' '.repeat(innerWidth - moreMsg.length) + chalk.cyan('\u2551'));
+    }
+  } else {
+    const msg = '  No trade history available';
+    console.log(chalk.cyan('\u2551') + chalk.gray(msg) + ' '.repeat(innerWidth - msg.length) + chalk.cyan('\u2551'));
+  }
+  
+  drawBoxFooter(boxWidth);
+  
+  // HQX Score - Spider/Radar Chart
+  console.log();
+  drawBoxHeader('HQX SCORE', boxWidth);
+  
+  // Calculate scores (0-100)
+  const winRateScore = Math.min(100, parseFloat(winRate) * 1.5); // 66% win rate = 100
+  const profitFactorScore = Math.min(100, parseFloat(profitFactor) * 40); // 2.5 PF = 100
+  const consistencyScore = stats.maxConsecutiveLosses > 0 ? Math.max(0, 100 - (stats.maxConsecutiveLosses * 15)) : 100;
+  const riskScore = stats.worstTrade !== 0 && totalStartingBalance > 0 
+    ? Math.max(0, 100 - (Math.abs(stats.worstTrade) / totalStartingBalance * 1000)) 
+    : 50;
+  const volumeScore = Math.min(100, stats.totalTrades * 2); // 50 trades = 100
+  const returnScore = Math.min(100, Math.max(0, parseFloat(returnPercent) * 10 + 50)); // 5% return = 100
+  
+  // Overall HQX Score
+  const hqxScore = Math.round((winRateScore + profitFactorScore + consistencyScore + riskScore + volumeScore + returnScore) / 6);
+  
+  // Draw ASCII spider chart
+  const chartWidth = Math.min(50, Math.floor(innerWidth / 2) - 4);
+  const centerX = Math.floor(chartWidth / 2);
+  const centerY = 6;
+  const maxRadius = 5;
+  
+  // Scores for 6 axes
+  const scores = [
+    { name: 'Win Rate', value: winRateScore, short: 'WR' },
+    { name: 'Profit Factor', value: profitFactorScore, short: 'PF' },
+    { name: 'Consistency', value: consistencyScore, short: 'CS' },
+    { name: 'Risk Mgmt', value: riskScore, short: 'RM' },
+    { name: 'Volume', value: volumeScore, short: 'VL' },
+    { name: 'Returns', value: returnScore, short: 'RT' }
+  ];
+  
+  // Create simple spider visualization
+  const spiderLines = [];
+  spiderLines.push('');
+  spiderLines.push(`                    Win Rate: ${winRateScore.toFixed(0)}%`);
+  spiderLines.push(`                        /\\`);
+  spiderLines.push(`         Returns       /  \\       Profit Factor`);
+  spiderLines.push(`          ${returnScore.toFixed(0)}%  \\    /    \\    /  ${profitFactorScore.toFixed(0)}%`);
+  spiderLines.push(`                  \\  /      \\  /`);
+  spiderLines.push(`                   \\/________\\/`);
+  spiderLines.push(`                   /\\        /\\`);
+  spiderLines.push(`                  /  \\      /  \\`);
+  spiderLines.push(`         Volume  /    \\    /    \\  Consistency`);
+  spiderLines.push(`          ${volumeScore.toFixed(0)}%       \\  /        ${consistencyScore.toFixed(0)}%`);
+  spiderLines.push(`                        \\/`);
+  spiderLines.push(`                    Risk Mgmt: ${riskScore.toFixed(0)}%`);
+  spiderLines.push('');
+  
+  // Score color
+  const scoreColor = hqxScore >= 70 ? chalk.green : hqxScore >= 50 ? chalk.yellow : chalk.red;
+  const scoreGrade = hqxScore >= 90 ? 'S' : hqxScore >= 80 ? 'A' : hqxScore >= 70 ? 'B' : hqxScore >= 60 ? 'C' : hqxScore >= 50 ? 'D' : 'F';
+  
+  // Display spider chart on left, score on right
+  const scoreDisplay = [
+    '',
+    '',
+    '  ╔═══════════════════╗',
+    '  ║    HQX SCORE      ║',
+    '  ╠═══════════════════╣',
+    `  ║                   ║`,
+    `  ║     ${scoreColor(hqxScore.toString().padStart(3))} / 100     ║`,
+    `  ║     Grade: ${scoreColor(scoreGrade)}      ║`,
+    `  ║                   ║`,
+    '  ╚═══════════════════╝',
+    '',
+    '',
+    '',
+    ''
+  ];
+  
+  for (let i = 0; i < Math.max(spiderLines.length, scoreDisplay.length); i++) {
+    const left = (spiderLines[i] || '').padEnd(Math.floor(innerWidth / 2));
+    const right = (scoreDisplay[i] || '').padEnd(Math.floor(innerWidth / 2));
+    const line = left + right;
+    const visLen = line.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const pad = innerWidth - visLen;
+    console.log(chalk.cyan('\u2551') + line + ' '.repeat(Math.max(0, pad)) + chalk.cyan('\u2551'));
+  }
+  
+  drawBoxFooter(boxWidth);
   console.log();
   
   await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
