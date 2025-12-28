@@ -1661,9 +1661,9 @@ const oneAccountMenu = async (service) => {
   spinner.succeed(`Found ${activeAccounts.length} active account(s)`);
   console.log();
   
-  // Afficher les comptes actifs
-  const accountChoices = result.accounts.map(account => ({
-    name: chalk.cyan(`${account.name} - Balance: $${account.balance.toLocaleString()}`),
+  // Afficher seulement les comptes actifs
+  const accountChoices = activeAccounts.map(account => ({
+    name: chalk.cyan(`${account.accountName || account.name || 'Account #' + account.accountId} - Balance: $${account.balance.toLocaleString()}`),
     value: account
   }));
   
