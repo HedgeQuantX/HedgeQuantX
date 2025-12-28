@@ -254,7 +254,7 @@ const mainMenu = async () => {
         ? chalk.white.bold('Connection:')
         : chalk.white.bold('Choose Your Connection:'),
       choices: [
-        { name: chalk.green('ProjectX'), value: 'projectx' },
+        { name: chalk.cyan('ProjectX'), value: 'projectx' },
         { name: chalk.gray('Rithmic (Soon)'), value: 'rithmic', disabled: device.isMobile ? '' : 'Coming Soon' },
         { name: chalk.gray('Tradovate (Soon)'), value: 'tradovate', disabled: device.isMobile ? '' : 'Coming Soon' },
         new inquirer.Separator(),
@@ -302,7 +302,7 @@ const projectXMenu = async () => {
         ...projectXPropfirms.map(pf => ({
           name: pf.disabled 
             ? chalk.gray(formatPropfirmName(pf.name)) 
-            : chalk.green(formatPropfirmName(pf.name)),
+            : chalk.cyan(formatPropfirmName(pf.name)),
           value: pf.value,
           disabled: pf.disabled
         })),
@@ -375,27 +375,28 @@ const dashboardMenu = async (service) => {
   let choices;
   if (device.isMobile) {
     choices = [
-      { name: chalk.green('Accounts'), value: 'accounts' },
-      { name: chalk.green('Positions'), value: 'positions' },
-      { name: chalk.green('Orders'), value: 'orders' },
-      { name: chalk.green('Stats'), value: 'stats' },
+      { name: chalk.cyan('Accounts'), value: 'accounts' },
+      { name: chalk.cyan('Positions'), value: 'positions' },
+      { name: chalk.cyan('Orders'), value: 'orders' },
+      { name: chalk.cyan('Stats'), value: 'stats' },
       new inquirer.Separator(),
-      { name: chalk.magenta('Algo'), value: 'algotrading' },
+      { name: chalk.cyan('Algo'), value: 'algotrading' },
       new inquirer.Separator(),
-      { name: chalk.yellow('Disconnect'), value: 'disconnect' }
+      { name: chalk.yellow('Refresh'), value: 'refresh' },
+      { name: chalk.red('Disconnect'), value: 'disconnect' }
     ];
   } else {
     choices = [
-      { name: chalk.green('View Accounts'), value: 'accounts' },
-      { name: chalk.green('View Positions'), value: 'positions' },
-      { name: chalk.green('View Orders'), value: 'orders' },
-      { name: chalk.green('View Stats'), value: 'stats' },
-      { name: chalk.green('User Info'), value: 'userinfo' },
+      { name: chalk.cyan('View Accounts'), value: 'accounts' },
+      { name: chalk.cyan('View Positions'), value: 'positions' },
+      { name: chalk.cyan('View Orders'), value: 'orders' },
+      { name: chalk.cyan('View Stats'), value: 'stats' },
+      { name: chalk.cyan('User Info'), value: 'userinfo' },
       new inquirer.Separator(),
-      { name: chalk.magenta('Algo-Trading'), value: 'algotrading' },
+      { name: chalk.cyan('Algo-Trading'), value: 'algotrading' },
       new inquirer.Separator(),
-      { name: chalk.cyan('Refresh'), value: 'refresh' },
-      { name: chalk.yellow('Disconnect'), value: 'disconnect' }
+      { name: chalk.yellow('Refresh'), value: 'refresh' },
+      { name: chalk.red('Disconnect'), value: 'disconnect' }
     ];
   }
 
@@ -830,10 +831,11 @@ let activeAlgoSession = null;
 
 // Menu Algo-Trading principal
 const algoTradingMenu = async (service) => {
+  const device = getDevice();
   console.log();
-  console.log(chalk.gray('─'.repeat(60)));
+  console.log(chalk.gray(getSeparator()));
   console.log(chalk.magenta.bold('  Algo-Trading'));
-  console.log(chalk.gray('─'.repeat(60)));
+  console.log(chalk.gray(getSeparator()));
   console.log();
 
   const { action } = await inquirer.prompt([
@@ -842,12 +844,12 @@ const algoTradingMenu = async (service) => {
       name: 'action',
       message: chalk.white.bold('Select Mode:'),
       choices: [
-        { name: chalk.green('One Account'), value: 'one_account' },
+        { name: chalk.cyan('One Account'), value: 'one_account' },
         { name: chalk.gray('Copy Trading (Coming Soon)'), value: 'copy_trading', disabled: 'Coming Soon' },
         new inquirer.Separator(),
         { name: chalk.yellow('< Back'), value: 'back' }
       ],
-      pageSize: 10,
+      pageSize: device.menuPageSize,
       loop: false
     }
   ]);
@@ -886,7 +888,7 @@ const oneAccountMenu = async (service) => {
   
   // Afficher les comptes actifs
   const accountChoices = result.accounts.map(account => ({
-    name: chalk.green(`${account.name} - Balance: $${account.balance.toLocaleString()}`),
+    name: chalk.cyan(`${account.name} - Balance: $${account.balance.toLocaleString()}`),
     value: account
   }));
   
@@ -914,14 +916,15 @@ const oneAccountMenu = async (service) => {
 
 // Menu de sélection du symbole futures
 const selectSymbolMenu = async (service, account) => {
+  const device = getDevice();
   console.log();
-  console.log(chalk.gray('─'.repeat(60)));
+  console.log(chalk.gray(getSeparator()));
   console.log(chalk.cyan.bold(`  Account: ${account.name}`));
-  console.log(chalk.gray('─'.repeat(60)));
+  console.log(chalk.gray(getSeparator()));
   console.log();
   
   const symbolChoices = FUTURES_SYMBOLS.map(symbol => ({
-    name: chalk.green(symbol.name),
+    name: chalk.cyan(device.isMobile ? symbol.value : symbol.name),
     value: symbol
   }));
   
@@ -934,7 +937,7 @@ const selectSymbolMenu = async (service, account) => {
       name: 'selectedSymbol',
       message: chalk.white.bold('Select Symbol:'),
       choices: symbolChoices,
-      pageSize: 20,
+      pageSize: device.menuPageSize,
       loop: false
     }
   ]);
@@ -1017,17 +1020,26 @@ const tradingSettingsMenu = async (service, account, contract) => {
   ]);
   
   // Afficher le résumé
+  const device = getDevice();
   console.log();
-  console.log(chalk.gray('─'.repeat(60)));
+  console.log(chalk.gray(getSeparator()));
   console.log(chalk.green.bold('  Trading Session Summary'));
-  console.log(chalk.gray('─'.repeat(60)));
+  console.log(chalk.gray(getSeparator()));
   console.log();
-  console.log(chalk.white(`  Account:        ${chalk.cyan(account.name)}`));
-  console.log(chalk.white(`  Symbol:         ${chalk.cyan(contract.name)} (${contract.description})`));
-  console.log(chalk.white(`  Daily Target:   ${chalk.green('$' + settings.dailyTarget.toLocaleString())}`));
-  console.log(chalk.white(`  Max Risk:       ${chalk.red('$' + settings.maxRisk.toLocaleString())}`));
-  console.log(chalk.white(`  Contracts:      ${chalk.yellow(settings.contracts)}`));
-  console.log(chalk.white(`  Tick Value:     ${chalk.gray('$' + contract.tickValue)}`));
+  
+  if (device.isMobile) {
+    console.log(chalk.white(`  ${chalk.cyan(account.name)}`));
+    console.log(chalk.white(`  ${chalk.cyan(contract.name)}`));
+    console.log(chalk.white(`  Target: ${chalk.green('$' + settings.dailyTarget)} | Risk: ${chalk.red('$' + settings.maxRisk)}`));
+    console.log(chalk.white(`  Contracts: ${chalk.yellow(settings.contracts)}`));
+  } else {
+    console.log(chalk.white(`  Account:        ${chalk.cyan(account.name)}`));
+    console.log(chalk.white(`  Symbol:         ${chalk.cyan(contract.name)} (${contract.description})`));
+    console.log(chalk.white(`  Daily Target:   ${chalk.green('$' + settings.dailyTarget.toLocaleString())}`));
+    console.log(chalk.white(`  Max Risk:       ${chalk.red('$' + settings.maxRisk.toLocaleString())}`));
+    console.log(chalk.white(`  Contracts:      ${chalk.yellow(settings.contracts)}`));
+    console.log(chalk.white(`  Tick Value:     ${chalk.gray('$' + contract.tickValue)}`));
+  }
   console.log();
   
   // Menu d'action
@@ -1037,7 +1049,7 @@ const tradingSettingsMenu = async (service, account, contract) => {
       name: 'action',
       message: chalk.white.bold('Action:'),
       choices: [
-        { name: chalk.green.bold('Launch Algo'), value: 'launch' },
+        { name: chalk.cyan.bold('Launch Algo'), value: 'launch' },
         { name: chalk.yellow('< Back'), value: 'back' }
       ],
       pageSize: 5,
