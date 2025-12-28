@@ -8,15 +8,11 @@ const WebSocket = require('ws');
 const crypto = require('crypto');
 const https = require('https');
 
-// HQX Server Configuration
-// In production, use your dedicated server URL
+// HQX Server Configuration - Contabo Dedicated Server
 const HQX_CONFIG = {
-  apiUrl: process.env.HQX_API_URL || 'http://localhost:3500',
-  wsUrl: process.env.HQX_WS_URL || 'ws://localhost:3500/ws',
-  version: 'v1',
-  // Production URLs (uncomment when deploying)
-  // apiUrl: 'https://api.hedgequantx.com',
-  // wsUrl: 'wss://ws.hedgequantx.com',
+  apiUrl: process.env.HQX_API_URL || 'http://173.212.223.75:3500',
+  wsUrl: process.env.HQX_WS_URL || 'ws://173.212.223.75:3500/ws',
+  version: 'v1'
 };
 
 class HQXServerService {
