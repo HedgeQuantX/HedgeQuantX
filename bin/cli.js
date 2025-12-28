@@ -387,8 +387,9 @@ const banner = async () => {
       // Not connected - show tagline centered
       const tagline = 'Prop Futures Algo Trading';
       const version = 'v1.0.0';
-      const padding = logoWidth - tagline.length - version.length - 4;
-      console.log(chalk.yellow.bold('  ' + tagline) + ' '.repeat(padding) + chalk.gray(version));
+      const fullText = tagline + '  ' + version;
+      const leftPad = Math.floor((logoWidth - fullText.length) / 2);
+      console.log(' '.repeat(leftPad) + chalk.yellow.bold(tagline) + '  ' + chalk.gray(version));
     }
     
     console.log(chalk.gray('═'.repeat(logoWidth)));
