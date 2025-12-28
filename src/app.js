@@ -203,17 +203,26 @@ const projectXMenu = async () => {
  * Main connection menu
  */
 const mainMenu = async () => {
+  const boxWidth = getLogoWidth();
+  const innerWidth = boxWidth - 2;
+  
+  // Connection menu box
+  console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
+  console.log(chalk.cyan('║') + chalk.white(centerText('SELECT PLATFORM', innerWidth)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
+  console.log();
+
   const { connection } = await inquirer.prompt([
     {
       type: 'list',
       name: 'connection',
-      message: chalk.white.bold('Choose Your Connection:'),
+      message: chalk.white.bold('Platform:'),
       choices: [
-        { name: chalk.cyan('ProjectX'), value: 'projectx' },
-        { name: chalk.gray('Rithmic (Coming Soon)'), value: 'rithmic', disabled: 'Coming Soon' },
-        { name: chalk.gray('Tradovate (Coming Soon)'), value: 'tradovate', disabled: 'Coming Soon' },
-        new inquirer.Separator(),
-        { name: chalk.red('Exit'), value: 'exit' }
+        { name: chalk.cyan('[1] ProjectX'), value: 'projectx' },
+        { name: chalk.gray('[2] Rithmic (Coming Soon)'), value: 'rithmic', disabled: 'Soon' },
+        { name: chalk.gray('[3] Tradovate (Coming Soon)'), value: 'tradovate', disabled: 'Soon' },
+        new inquirer.Separator(chalk.gray('─'.repeat(30))),
+        { name: chalk.red('[X] Exit'), value: 'exit' }
       ]
     }
   ]);
@@ -228,33 +237,42 @@ const mainMenu = async () => {
 const dashboardMenu = async (service) => {
   const device = getDevice();
   const user = service.user;
+  const boxWidth = getLogoWidth();
+  const innerWidth = boxWidth - 2;
 
+  // Dashboard header box
   console.log();
-  console.log(chalk.gray(getSeparator()));
-  console.log(chalk.green.bold(`  Connected to ${service.propfirm.name}`));
-  if (user) {
-    console.log(chalk.white(`  Welcome, ${user.userName.toUpperCase()}!`));
+  console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
+  console.log(chalk.cyan('║') + chalk.white(centerText('DASHBOARD', innerWidth)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+  
+  const connInfo = `Connected to ${service.propfirm.name}`;
+  const userInfo = user ? `Welcome, ${user.userName.toUpperCase()}!` : '';
+  
+  console.log(chalk.cyan('║') + chalk.green('  ' + connInfo.padEnd(innerWidth - 2)) + chalk.cyan('║'));
+  if (userInfo) {
+    console.log(chalk.cyan('║') + chalk.white('  ' + userInfo.padEnd(innerWidth - 2)) + chalk.cyan('║'));
   }
-  console.log(chalk.gray(getSeparator()));
+  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
   console.log();
 
   const { action } = await inquirer.prompt([
     {
       type: 'list',
       name: 'action',
-      message: chalk.white.bold('Dashboard:'),
+      message: chalk.white.bold('Select:'),
       choices: [
-        { name: chalk.cyan('View Accounts'), value: 'accounts' },
-        { name: chalk.cyan('View Positions'), value: 'positions' },
-        { name: chalk.cyan('View Orders'), value: 'orders' },
-        { name: chalk.cyan('View Stats'), value: 'stats' },
-        { name: chalk.cyan('User Info'), value: 'userinfo' },
-        { name: chalk.green('Add Prop-Account'), value: 'add_prop_account' },
-        new inquirer.Separator(),
-        { name: chalk.magenta('Algo-Trading'), value: 'algotrading' },
-        new inquirer.Separator(),
-        { name: chalk.yellow('Update HQX'), value: 'update' },
-        { name: chalk.red('Disconnect'), value: 'disconnect' }
+        { name: chalk.cyan('[1] View Accounts'), value: 'accounts' },
+        { name: chalk.cyan('[2] View Positions'), value: 'positions' },
+        { name: chalk.cyan('[3] View Orders'), value: 'orders' },
+        { name: chalk.cyan('[4] View Stats'), value: 'stats' },
+        { name: chalk.cyan('[5] User Info'), value: 'userinfo' },
+        { name: chalk.green('[+] Add Prop-Account'), value: 'add_prop_account' },
+        new inquirer.Separator(chalk.gray('─'.repeat(30))),
+        { name: chalk.magenta('[>] Algo-Trading'), value: 'algotrading' },
+        new inquirer.Separator(chalk.gray('─'.repeat(30))),
+        { name: chalk.yellow('[U] Update HQX'), value: 'update' },
+        { name: chalk.red('[X] Disconnect'), value: 'disconnect' }
       ],
       pageSize: 12
     }
