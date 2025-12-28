@@ -154,14 +154,32 @@ hedgequantx version
 
 ```
 HQX-CLI/
-├── bin/cli.js              # Entry point (48 lines)
+├── bin/
+│   └── cli.js                # Entry point
 ├── src/
-│   ├── app.js              # Main router
-│   ├── config/             # PropFirms, constants
-│   ├── pages/              # accounts, orders, positions, stats, user
-│   ├── security/           # encryption, validation, rateLimit
-│   ├── services/           # projectx, session, hqx-server
-│   └── ui/                 # box, table, device helpers
+│   ├── app.js                # Main router
+│   ├── config/
+│   │   ├── index.js
+│   │   ├── constants.js
+│   │   └── propfirms.js      # 37 PropFirms config
+│   ├── pages/
+│   │   ├── accounts.js
+│   │   ├── orders.js
+│   │   ├── positions.js
+│   │   ├── stats.js
+│   │   └── user.js
+│   ├── security/
+│   │   ├── encryption.js     # AES-256-GCM
+│   │   ├── validation.js     # Input sanitization
+│   │   └── rateLimit.js      # API rate limiting
+│   ├── services/
+│   │   ├── projectx.js       # ProjectX API
+│   │   ├── session.js        # Encrypted sessions
+│   │   └── hqx-server.js     # HQX Server API
+│   └── ui/
+│       ├── box.js
+│       ├── table.js
+│       └── device.js
 ├── package.json
 └── README.md
 ```
