@@ -521,7 +521,8 @@ const banner = async () => {
     
     // Always show tagline centered
     const tagline = 'Prop Futures Algo Trading';
-    const version = 'v1.0.0';
+    const pkg = require('../package.json');
+    const version = 'v' + pkg.version;
     const taglineText = chalk.yellow.bold(tagline) + '  ' + chalk.gray(version);
     const taglineLen = tagline.length + 2 + version.length;
     const taglineLeftPad = Math.floor((logoWidth - 2 - taglineLen) / 2);
@@ -2553,10 +2554,11 @@ const main = async () => {
 };
 
 // Configuration CLI
+const packageInfo = require('../package.json');
 program
   .name('hedgequantx')
   .description('Prop Futures Algo Trading CLI')
-  .version('1.0.0');
+  .version(packageInfo.version);
 
 program
   .command('status')
