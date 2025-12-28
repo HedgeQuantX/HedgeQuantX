@@ -110,18 +110,21 @@ const banner = async () => {
     
     const connStr = `Connections: ${statsInfo.connections}`;
     const accStr = `Accounts: ${statsInfo.accounts}`;
-    const balVal = `$${statsInfo.balance.toLocaleString()}`;
-    const pnlVal = `$${statsInfo.pnl.toLocaleString()} (${pnlSign}${statsInfo.pnlPercent}%)`;
+    const balStr = `Balance: $${statsInfo.balance.toLocaleString()}`;
+    const pnlStr = `P&L: $${statsInfo.pnl.toLocaleString()} (${pnlSign}${statsInfo.pnlPercent}%)`;
     
-    const statsLen = connStr.length + 4 + accStr.length + 4 + 8 + balVal.length + 4 + 5 + pnlVal.length;
+    // Build full stats text and calculate padding
+    const statsText = `${connStr}    ${accStr}    ${balStr}    ${pnlStr}`;
+    const statsLen = statsText.length;
     const statsLeftPad = Math.floor((innerWidth - statsLen) / 2);
     const statsRightPad = innerWidth - statsLen - statsLeftPad;
     
     console.log(chalk.cyan('║') + ' '.repeat(statsLeftPad) +
       chalk.white(connStr) + '    ' +
       chalk.white(accStr) + '    ' +
-      chalk.white('Balance: ') + chalk.green(balVal) + '    ' +
-      chalk.white('P&L: ') + pnlColor(pnlVal) + ' '.repeat(statsRightPad) + chalk.cyan('║')
+      chalk.white('Balance: ') + chalk.green(`$${statsInfo.balance.toLocaleString()}`) + '    ' +
+      chalk.white('P&L: ') + pnlColor(`$${statsInfo.pnl.toLocaleString()} (${pnlSign}${statsInfo.pnlPercent}%)`) + 
+      ' '.repeat(statsRightPad) + chalk.cyan('║')
     );
   }
   
@@ -456,6 +459,60 @@ const tradovateMenu = async () => {
 };
 
 /**
+ * Add Prop Account menu (select platform)
+ */
+const addPropAccountMenu = async () => {
+  const boxWidth = getLogoWidth();
+  const innerWidth = boxWidth - 2;
+  const col1Width = Math.floor(innerWidth / 2);
+  const col2Width = innerWidth - col1Width;
+  
+  console.log();
+  console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
+  console.log(chalk.cyan('║') + chalk.white.bold(centerText('ADD PROP ACCOUNT', innerWidth)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+  
+  const menuRow = (left, right) => {
+    const leftText = '  ' + left;
+    const rightText = right ? '  ' + right : '';
+    const leftLen = leftText.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const rightLen = rightText.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const leftPad = col1Width - leftLen;
+    const rightPad = col2Width - rightLen;
+    console.log(chalk.cyan('║') + leftText + ' '.repeat(Math.max(0, leftPad)) + rightText + ' '.repeat(Math.max(0, rightPad)) + chalk.cyan('║'));
+  };
+  
+  menuRow(chalk.cyan('[1] ProjectX'), chalk.cyan('[2] Rithmic'));
+  menuRow(chalk.cyan('[3] Tradovate'), chalk.red('[X] Back'));
+  
+  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
+  console.log();
+
+  const { action } = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'action',
+      message: chalk.cyan('Enter choice (1/2/3/X):'),
+      validate: (input) => {
+        const valid = ['1', '2', '3', 'x', 'X'];
+        if (valid.includes(input)) return true;
+        return 'Please enter 1, 2, 3 or X';
+      }
+    }
+  ]);
+
+  const actionMap = {
+    '1': 'projectx',
+    '2': 'rithmic',
+    '3': 'tradovate',
+    'x': null,
+    'X': null
+  };
+
+  return actionMap[action];
+};
+
+/**
  * Main connection menu
  */
 const mainMenu = async () => {
@@ -722,9 +779,17 @@ const run = async () => {
           await showStats(currentService);
           break;
         case 'add_prop_account':
-          const newService = await projectXMenu();
-          if (newService) {
-            currentService = newService;
+          // Show platform selection menu
+          const platformChoice = await addPropAccountMenu();
+          if (platformChoice === 'projectx') {
+            const newService = await projectXMenu();
+            if (newService) currentService = newService;
+          } else if (platformChoice === 'rithmic') {
+            const newService = await rithmicMenu();
+            if (newService) currentService = newService;
+          } else if (platformChoice === 'tradovate') {
+            const newService = await tradovateMenu();
+            if (newService) currentService = newService;
           }
           break;
         case 'algotrading':
