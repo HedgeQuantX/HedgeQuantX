@@ -1634,19 +1634,38 @@ const main = async () => {
                   
                   // Check if remote exists
                   let hasRemote = false;
+                  let gitRemoteUrl = '';
                   try {
-                    const gitRemote = execSync('git remote get-url origin', { cwd: cliDir, stdio: 'pipe' }).toString().trim();
-                    hasRemote = gitRemote.length > 0;
+                    gitRemoteUrl = execSync('git remote get-url origin', { cwd: cliDir, stdio: 'pipe' }).toString().trim();
+                    hasRemote = gitRemoteUrl.length > 0;
                   } catch (e) {
                     hasRemote = false;
                   }
                   
                   if (hasRemote) {
-                    // Pull from remote (background update - session preserved)
-                    execSync('git pull origin main', { cwd: cliDir, stdio: 'pipe' });
-                    spinnerRefresh.succeed('CLI updated!');
-                    console.log(chalk.green('  Update applied. Your session is still active.'));
-                    console.log(chalk.gray('  Note: Some changes may require restart.'));
+                    // Get current commit before pull
+                    const beforeCommit = execSync('git rev-parse --short HEAD', { cwd: cliDir, stdio: 'pipe' }).toString().trim();
+                    
+                    // Fetch first to check if updates available
+                    execSync('git fetch origin main', { cwd: cliDir, stdio: 'pipe' });
+                    
+                    // Check if we're behind
+                    const behindCount = execSync('git rev-list HEAD..origin/main --count', { cwd: cliDir, stdio: 'pipe' }).toString().trim();
+                    
+                    if (parseInt(behindCount) > 0) {
+                      // Pull from remote
+                      const pullResult = execSync('git pull origin main', { cwd: cliDir, stdio: 'pipe' }).toString();
+                      const afterCommit = execSync('git rev-parse --short HEAD', { cwd: cliDir, stdio: 'pipe' }).toString().trim();
+                      
+                      spinnerRefresh.succeed('CLI updated!');
+                      console.log(chalk.green(`  Updated: ${beforeCommit} → ${afterCommit}`));
+                      console.log(chalk.green(`  ${behindCount} new commit(s) applied.`));
+                      console.log(chalk.yellow('  Restart CLI to apply all changes.'));
+                    } else {
+                      spinnerRefresh.succeed('Already up to date!');
+                      console.log(chalk.cyan(`  Current version: ${beforeCommit}`));
+                      console.log(chalk.gray('  No updates available.'));
+                    }
                   } else {
                     // Local dev mode - just refresh data
                     spinnerRefresh.succeed('Data refreshed');
