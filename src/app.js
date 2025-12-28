@@ -21,6 +21,7 @@ const { showAccounts } = require('./pages/accounts');
 const { showPositions } = require('./pages/positions');
 const { showOrders } = require('./pages/orders');
 const { showUserInfo } = require('./pages/user');
+const { algoTradingMenu } = require('./pages/algo');
 
 // Current service reference
 let currentService = null;
@@ -402,8 +403,7 @@ const run = async () => {
           }
           break;
         case 'algotrading':
-          console.log(chalk.yellow('Algo-Trading coming soon...'));
-          await inquirer.prompt([{ type: 'input', name: 'c', message: 'Press Enter...' }]);
+          await algoTradingMenu(currentService);
           break;
         case 'update':
           const updateResult = await handleUpdate();
