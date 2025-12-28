@@ -1177,8 +1177,10 @@ const showStats = async (service) => {
   spinner.succeed('Stats loaded');
   console.log();
   
-  const boxWidth = 57;
-  const innerWidth = boxWidth - 4; // 4 = 2 borders + 2 spaces
+  // Get logo width for consistent sizing
+  const logoText = figlet.textSync('HEDGEQUANTX', { font: 'ANSI Shadow' });
+  const boxWidth = logoText.split('\n')[0].length;
+  const colWidth = Math.floor((boxWidth - 5) / 2); // 2 columns with separator
   
   // Helper function to center text
   const centerText = (text, width) => {
@@ -1188,16 +1190,11 @@ const showStats = async (service) => {
     return ' '.repeat(leftPad) + text + ' '.repeat(rightPad);
   };
   
-  // ═══════════════════════════════════════════════════════
-  // HQX STATS - MAIN SUMMARY
-  // ═══════════════════════════════════════════════════════
-  console.log(chalk.cyan('  ╔' + '═'.repeat(boxWidth - 2) + '╗'));
-  console.log(chalk.cyan('  ║') + chalk.cyan.bold(centerText('HQX STATS', boxWidth - 2)) + chalk.cyan('║'));
-  console.log(chalk.cyan('  ╚' + '═'.repeat(boxWidth - 2) + '╝'));
-  console.log();
-  
-  const labelWidth = 20;
-  const formatLabel = (label) => label.padEnd(labelWidth);
+  // Helper to pad text to column width
+  const padCol = (text, width) => {
+    const len = text.replace(/\x1b\[[0-9;]*m/g, '').length;
+    return text + ' '.repeat(Math.max(0, width - len));
+  };
   
   // Calculate additional metrics
   const winRate = totalTrades > 0 ? ((winningTrades / totalTrades) * 100).toFixed(1) : '0.0';
@@ -1214,155 +1211,205 @@ const showStats = async (service) => {
   const longWinRate = longTrades > 0 ? ((longWins / longTrades) * 100).toFixed(1) : '0.0';
   const shortWinRate = shortTrades > 0 ? ((shortWins / shortTrades) * 100).toFixed(1) : '0.0';
   
-  // Section: Account Overview
-  console.log(chalk.cyan.bold('  ACCOUNT OVERVIEW'));
-  console.log(chalk.gray('  ' + '─'.repeat(boxWidth - 4)));
-  console.log(chalk.white('  ' + formatLabel('Connections:')) + chalk.cyan(totalConnections));
-  console.log(chalk.white('  ' + formatLabel('Total Accounts:')) + chalk.cyan(allAccountsData.length));
-  
   const totalBalanceColor = totalBalance >= 0 ? chalk.green : chalk.red;
-  console.log(chalk.white('  ' + formatLabel('Total Balance:')) + totalBalanceColor('$' + totalBalance.toLocaleString()));
+  const pnlColor = totalPnL >= 0 ? chalk.green : chalk.red;
   
-  if (totalStartingBalance > 0) {
-    console.log(chalk.white('  ' + formatLabel('Starting Balance:')) + chalk.white('$' + totalStartingBalance.toLocaleString()));
-    const pnlColor = totalPnL >= 0 ? chalk.green : chalk.red;
-    console.log(chalk.white('  ' + formatLabel('Total P&L:')) + pnlColor('$' + totalPnL.toLocaleString() + ' (' + returnPercent + '%)'));
+  // ═══════════════════════════════════════════════════════
+  // HQX STATS - MAIN SUMMARY (Full logo width)
+  // ═══════════════════════════════════════════════════════
+  console.log(chalk.cyan('╔' + '═'.repeat(boxWidth - 2) + '╗'));
+  console.log(chalk.cyan('║') + chalk.cyan.bold(centerText('HQX STATS', boxWidth - 2)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '═'.repeat(boxWidth - 2) + '╣'));
+  
+  // Two column headers: ACCOUNT OVERVIEW | TRADING PERFORMANCE
+  const header1 = centerText('ACCOUNT OVERVIEW', colWidth);
+  const header2 = centerText('TRADING PERFORMANCE', colWidth);
+  console.log(chalk.cyan('║') + chalk.cyan.bold(header1) + chalk.cyan('│') + chalk.cyan.bold(header2) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '─'.repeat(colWidth) + '┼' + '─'.repeat(colWidth) + '╣'));
+  
+  // Build rows side by side
+  const labelW = 18;
+  const valW = colWidth - labelW - 1;
+  
+  const fmtRow = (label, value) => {
+    const valStr = value.replace(/\x1b\[[0-9;]*m/g, '');
+    return chalk.white(label.padEnd(labelW)) + value + ' '.repeat(Math.max(0, valW - valStr.length));
+  };
+  
+  // Row 1: Connections | Total Trades
+  const r1c1 = fmtRow('Connections:', chalk.cyan(totalConnections.toString()));
+  const r1c2 = fmtRow('Total Trades:', chalk.white(totalTrades.toString()));
+  console.log(chalk.cyan('║') + r1c1 + chalk.cyan('│') + r1c2 + chalk.cyan('║'));
+  
+  // Row 2: Total Accounts | Winning Trades
+  const r2c1 = fmtRow('Total Accounts:', chalk.cyan(allAccountsData.length.toString()));
+  const r2c2 = fmtRow('Winning Trades:', chalk.green(winningTrades.toString()));
+  console.log(chalk.cyan('║') + r2c1 + chalk.cyan('│') + r2c2 + chalk.cyan('║'));
+  
+  // Row 3: Total Balance | Losing Trades
+  const r3c1 = fmtRow('Total Balance:', totalBalanceColor('$' + totalBalance.toLocaleString()));
+  const r3c2 = fmtRow('Losing Trades:', chalk.red(losingTrades.toString()));
+  console.log(chalk.cyan('║') + r3c1 + chalk.cyan('│') + r3c2 + chalk.cyan('║'));
+  
+  // Row 4: Starting Balance | Win Rate
+  const r4c1 = fmtRow('Starting Balance:', chalk.white('$' + totalStartingBalance.toLocaleString()));
+  const r4c2 = fmtRow('Win Rate:', parseFloat(winRate) >= 50 ? chalk.green(winRate + '%') : chalk.yellow(winRate + '%'));
+  console.log(chalk.cyan('║') + r4c1 + chalk.cyan('│') + r4c2 + chalk.cyan('║'));
+  
+  // Row 5: Total P&L | Long Trades
+  const r5c1 = fmtRow('Total P&L:', pnlColor('$' + totalPnL.toLocaleString() + ' (' + returnPercent + '%)'));
+  const r5c2 = fmtRow('Long Trades:', chalk.white(longTrades + ' (' + longWinRate + '%)'));
+  console.log(chalk.cyan('║') + r5c1 + chalk.cyan('│') + r5c2 + chalk.cyan('║'));
+  
+  // Row 6: Open Positions | Short Trades
+  const r6c1 = fmtRow('Open Positions:', chalk.white(totalOpenPositions.toString()));
+  const r6c2 = fmtRow('Short Trades:', chalk.white(shortTrades + ' (' + shortWinRate + '%)'));
+  console.log(chalk.cyan('║') + r6c1 + chalk.cyan('│') + r6c2 + chalk.cyan('║'));
+  
+  // Row 7: Open Orders | Volume
+  const r7c1 = fmtRow('Open Orders:', chalk.white(totalOpenOrders.toString()));
+  const r7c2 = fmtRow('Volume:', chalk.white(totalVolume + ' contracts'));
+  console.log(chalk.cyan('║') + r7c1 + chalk.cyan('│') + r7c2 + chalk.cyan('║'));
+  
+  // ═══════════════════════════════════════════════════════
+  // P&L METRICS | RISK METRICS (side by side)
+  // ═══════════════════════════════════════════════════════
+  console.log(chalk.cyan('╔' + '═'.repeat(boxWidth - 2) + '╗'));
+  
+  // Headers
+  const pnlHeader = centerText('P&L METRICS', colWidth);
+  const riskHeader = centerText('RISK METRICS', colWidth);
+  console.log(chalk.cyan('║') + chalk.cyan.bold(pnlHeader) + chalk.cyan('│') + chalk.cyan.bold(riskHeader) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '─'.repeat(colWidth) + '┼' + '─'.repeat(colWidth) + '╣'));
+  
+  // Row 1: Net P&L | Profit Factor
+  const p1c1 = fmtRow('Net P&L:', netPnL >= 0 ? chalk.green('$' + netPnL.toFixed(2)) : chalk.red('$' + netPnL.toFixed(2)));
+  const pfColor = profitFactor === '∞' ? chalk.green(profitFactor) : parseFloat(profitFactor) >= 1.5 ? chalk.green(profitFactor) : parseFloat(profitFactor) >= 1 ? chalk.yellow(profitFactor) : chalk.red(profitFactor);
+  const p1c2 = fmtRow('Profit Factor:', pfColor);
+  console.log(chalk.cyan('║') + p1c1 + chalk.cyan('│') + p1c2 + chalk.cyan('║'));
+  
+  // Row 2: Gross Profit | Payoff Ratio
+  const p2c1 = fmtRow('Gross Profit:', chalk.green('$' + totalWinAmount.toFixed(2)));
+  const p2c2 = fmtRow('Payoff Ratio:', parseFloat(payoffRatio) >= 1 ? chalk.green(payoffRatio) : chalk.red(payoffRatio));
+  console.log(chalk.cyan('║') + p2c1 + chalk.cyan('│') + p2c2 + chalk.cyan('║'));
+  
+  // Row 3: Gross Loss | Expectancy
+  const p3c1 = fmtRow('Gross Loss:', chalk.red('-$' + totalLossAmount.toFixed(2)));
+  const p3c2 = fmtRow('Expectancy:', parseFloat(expectancy) >= 0 ? chalk.green('$' + expectancy) : chalk.red('$' + expectancy));
+  console.log(chalk.cyan('║') + p3c1 + chalk.cyan('│') + p3c2 + chalk.cyan('║'));
+  
+  // Row 4: Avg Win | Max Drawdown
+  const p4c1 = fmtRow('Avg Win:', chalk.green('$' + avgWin));
+  const p4c2 = fmtRow('Max Drawdown:', chalk.red('$' + Math.abs(maxDrawdown).toFixed(2)));
+  console.log(chalk.cyan('║') + p4c1 + chalk.cyan('│') + p4c2 + chalk.cyan('║'));
+  
+  // Row 5: Avg Loss | Return
+  const p5c1 = fmtRow('Avg Loss:', chalk.red('-$' + avgLoss));
+  const p5c2 = fmtRow('Return:', parseFloat(returnPercent) >= 0 ? chalk.green(returnPercent + '%') : chalk.red(returnPercent + '%'));
+  console.log(chalk.cyan('║') + p5c1 + chalk.cyan('│') + p5c2 + chalk.cyan('║'));
+  
+  // Row 6: Best Trade | Max Consec. Wins
+  const p6c1 = fmtRow('Best Trade:', chalk.green('$' + bestTrade.toFixed(2)));
+  const p6c2 = fmtRow('Max Consec. Wins:', chalk.green(maxConsecutiveWins.toString()));
+  console.log(chalk.cyan('║') + p6c1 + chalk.cyan('│') + p6c2 + chalk.cyan('║'));
+  
+  // Row 7: Worst Trade | Max Consec. Losses
+  const p7c1 = fmtRow('Worst Trade:', chalk.red('$' + worstTrade.toFixed(2)));
+  const p7c2 = fmtRow('Max Consec. Losses:', chalk.red(maxConsecutiveLosses.toString()));
+  console.log(chalk.cyan('║') + p7c1 + chalk.cyan('│') + p7c2 + chalk.cyan('║'));
+  
+  // ═══════════════════════════════════════════════════════
+  // INDIVIDUAL ACCOUNTS (side by side, 2 per row)
+  // ═══════════════════════════════════════════════════════
+  console.log();
+  console.log(chalk.cyan('╔' + '═'.repeat(boxWidth - 2) + '╗'));
+  console.log(chalk.cyan('║') + chalk.cyan.bold(centerText('INDIVIDUAL ACCOUNTS', boxWidth - 2)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '═'.repeat(boxWidth - 2) + '╣'));
+
+  // Collect all account data first
+  const accountsWithData = [];
+  for (const account of allAccountsData) {
+    const accountService = account.service;
+    const accountName = account.accountName || account.name || `Account #${account.accountId}`;
+    const statusInfo = ACCOUNT_STATUS[account.status] || { text: 'Unknown', color: 'gray' };
+    const typeInfo = ACCOUNT_TYPE[account.type] || { text: 'Unknown', color: 'white' };
+    const balance = account.balance || 0;
+    const startBal = account.startingBalance || 0;
+    const pnl = account.profitAndLoss || (balance - startBal);
+    const pnlPercent = startBal > 0 ? ((pnl / startBal) * 100).toFixed(1) : '0.0';
+    
+    // Get positions and orders
+    let openPositions = 0;
+    let openOrders = 0;
+    try {
+      const posResult = await accountService.getPositions(account.accountId);
+      if (posResult.success && posResult.positions) openPositions = posResult.positions.length;
+      const ordResult = await accountService.getOrders(account.accountId);
+      if (ordResult.success && ordResult.orders) openOrders = ordResult.orders.filter(o => o.status === 1).length;
+    } catch (e) {}
+    
+    accountsWithData.push({
+      name: accountName,
+      propfirm: account.propfirm,
+      balance,
+      startBal,
+      pnl,
+      pnlPercent,
+      status: statusInfo,
+      type: typeInfo,
+      openPositions,
+      openOrders
+    });
   }
   
-  console.log(chalk.white('  ' + formatLabel('Open Positions:')) + chalk.white(totalOpenPositions));
-  console.log(chalk.white('  ' + formatLabel('Open Orders:')) + chalk.white(totalOpenOrders));
-  console.log();
-  
-  // Section: Trading Performance
-  console.log(chalk.cyan.bold('  TRADING PERFORMANCE'));
-  console.log(chalk.gray('  ' + '─'.repeat(boxWidth - 4)));
-  console.log(chalk.white('  ' + formatLabel('Total Trades:')) + chalk.white(totalTrades));
-  console.log(chalk.white('  ' + formatLabel('Winning Trades:')) + chalk.green(winningTrades));
-  console.log(chalk.white('  ' + formatLabel('Losing Trades:')) + chalk.red(losingTrades));
-  console.log(chalk.white('  ' + formatLabel('Break Even:')) + chalk.gray(breakEvenTrades));
-  console.log(chalk.white('  ' + formatLabel('Win Rate:')) + (parseFloat(winRate) >= 50 ? chalk.green(winRate + '%') : chalk.yellow(winRate + '%')));
-  console.log(chalk.white('  ' + formatLabel('Long Trades:')) + chalk.white(longTrades) + chalk.gray(' (Win: ') + chalk.cyan(longWinRate + '%') + chalk.gray(')')); 
-  console.log(chalk.white('  ' + formatLabel('Short Trades:')) + chalk.white(shortTrades) + chalk.gray(' (Win: ') + chalk.cyan(shortWinRate + '%') + chalk.gray(')'));
-  console.log(chalk.white('  ' + formatLabel('Total Volume:')) + chalk.white(totalVolume + ' contracts'));
-  console.log();
-  
-  // Section: P&L Metrics
-  console.log(chalk.cyan.bold('  P&L METRICS'));
-  console.log(chalk.gray('  ' + '─'.repeat(boxWidth - 4)));
-  console.log(chalk.white('  ' + formatLabel('Net P&L:')) + (netPnL >= 0 ? chalk.green('$' + netPnL.toFixed(2)) : chalk.red('$' + netPnL.toFixed(2))));
-  console.log(chalk.white('  ' + formatLabel('Gross Profit:')) + chalk.green('$' + totalWinAmount.toFixed(2)));
-  console.log(chalk.white('  ' + formatLabel('Gross Loss:')) + chalk.red('-$' + totalLossAmount.toFixed(2)));
-  console.log(chalk.white('  ' + formatLabel('Avg Win:')) + chalk.green('$' + avgWin));
-  console.log(chalk.white('  ' + formatLabel('Avg Loss:')) + chalk.red('-$' + avgLoss));
-  console.log(chalk.white('  ' + formatLabel('Avg Trade:')) + (parseFloat(avgTrade) >= 0 ? chalk.green('$' + avgTrade) : chalk.red('$' + avgTrade)));
-  console.log(chalk.white('  ' + formatLabel('Best Trade:')) + chalk.green('$' + bestTrade.toFixed(2)));
-  console.log(chalk.white('  ' + formatLabel('Worst Trade:')) + chalk.red('$' + worstTrade.toFixed(2)));
-  console.log();
-  
-  // Section: Risk Metrics
-  console.log(chalk.cyan.bold('  RISK METRICS'));
-  console.log(chalk.gray('  ' + '─'.repeat(boxWidth - 4)));
-  console.log(chalk.white('  ' + formatLabel('Profit Factor:')) + (profitFactor === '∞' ? chalk.green(profitFactor) : parseFloat(profitFactor) >= 1.5 ? chalk.green(profitFactor) : parseFloat(profitFactor) >= 1 ? chalk.yellow(profitFactor) : chalk.red(profitFactor)));
-  console.log(chalk.white('  ' + formatLabel('Payoff Ratio:')) + (parseFloat(payoffRatio) >= 1 ? chalk.green(payoffRatio) : chalk.red(payoffRatio)));
-  console.log(chalk.white('  ' + formatLabel('Expectancy:')) + (parseFloat(expectancy) >= 0 ? chalk.green('$' + expectancy) : chalk.red('$' + expectancy)));
-  console.log(chalk.white('  ' + formatLabel('Max Drawdown:')) + chalk.red('$' + Math.abs(maxDrawdown).toFixed(2) + ' (' + maxDrawdownPercent + '%)'));
-  console.log(chalk.white('  ' + formatLabel('Return:')) + (parseFloat(returnPercent) >= 0 ? chalk.green(returnPercent + '%') : chalk.red(returnPercent + '%')));
-  console.log();
-  
-  // Section: Streaks
-  console.log(chalk.cyan.bold('  STREAKS'));
-  console.log(chalk.gray('  ' + '─'.repeat(boxWidth - 4)));
-  console.log(chalk.white('  ' + formatLabel('Max Consec. Wins:')) + chalk.green(maxConsecutiveWins));
-  console.log(chalk.white('  ' + formatLabel('Max Consec. Losses:')) + chalk.red(maxConsecutiveLosses));
-  
-  console.log();
-  console.log(chalk.cyan('  ' + '═'.repeat(boxWidth)));
-  
-  // ═══════════════════════════════════════════════════════
-  // INDIVIDUAL ACCOUNT STATS
-  // ═══════════════════════════════════════════════════════
-  console.log();
-  console.log(chalk.cyan('  ╔' + '═'.repeat(boxWidth - 2) + '╗'));
-  console.log(chalk.cyan('  ║') + chalk.cyan.bold(centerText('INDIVIDUAL ACCOUNTS', boxWidth - 2)) + chalk.cyan('║'));
-  console.log(chalk.cyan('  ╚' + '═'.repeat(boxWidth - 2) + '╝'));
-
-  // Group accounts by propfirm
-  const groupedAccounts = {};
-  allAccountsData.forEach(account => {
-    const key = account.propfirm || 'Unknown';
-    if (!groupedAccounts[key]) groupedAccounts[key] = [];
-    groupedAccounts[key].push(account);
-  });
-
-  for (const [propfirmName, accounts] of Object.entries(groupedAccounts)) {
-    console.log();
-    console.log(chalk.magenta.bold(`  ${propfirmName}`));
-    console.log(chalk.gray('  ' + '─'.repeat(50)));
+  // Display accounts 2 per row
+  for (let i = 0; i < accountsWithData.length; i += 2) {
+    const acc1 = accountsWithData[i];
+    const acc2 = accountsWithData[i + 1];
     
-    for (const account of accounts) {
-      const accountService = account.service;
-      const accountName = account.accountName || account.name || `Account #${account.accountId}`;
-      const statusInfo = ACCOUNT_STATUS[account.status] || { text: 'Unknown', color: 'gray' };
-      const typeInfo = ACCOUNT_TYPE[account.type] || { text: 'Unknown', color: 'white' };
-      
-      console.log();
-      console.log(chalk.cyan.bold(`    ${accountName}`));
-      
-      // Balance
-      const balance = account.balance || 0;
-      const balanceColor = balance >= 0 ? chalk.green : chalk.red;
-      console.log(`       Balance:        ${balanceColor('$' + balance.toLocaleString())}`);
-      
-      // Status & Type
-      console.log(`       Status:         ${chalk[statusInfo.color](statusInfo.text)}`);
-      console.log(`       Type:           ${chalk[typeInfo.color](typeInfo.text)}`);
-      
-      // Starting Balance
-      let startingBalance = null;
-      if (accountName.includes('150')) startingBalance = 150000;
-      else if (accountName.includes('100')) startingBalance = 100000;
-      else if (accountName.includes('50')) startingBalance = 50000;
-      else if (accountName.includes('25')) startingBalance = 25000;
-      
-      if (startingBalance) {
-        const pnl = balance - startingBalance;
-        const pnlPercent = ((pnl / startingBalance) * 100).toFixed(2);
-        const pnlColor = pnl >= 0 ? chalk.green : chalk.red;
-        console.log(`       Starting:       ${chalk.white('$' + startingBalance.toLocaleString())}`);
-        console.log(`       P&L:            ${pnlColor('$' + pnl.toLocaleString() + ' (' + pnlPercent + '%)')}`);
-      }
-      
-      // Positions
-      const posResult = await accountService.getPositions(account.accountId);
-      if (posResult.success && posResult.positions) {
-        const openPositions = posResult.positions.length;
-        console.log(`       Open Positions: ${chalk.white(openPositions)}`);
-        
-        if (openPositions > 0) {
-          let totalUnrealizedPnL = 0;
-          posResult.positions.forEach(pos => {
-            if (pos.profitAndLoss !== undefined) {
-              totalUnrealizedPnL += pos.profitAndLoss;
-            }
-          });
-          const unrealizedColor = totalUnrealizedPnL >= 0 ? chalk.green : chalk.red;
-          console.log(`       Unrealized P&L: ${unrealizedColor('$' + totalUnrealizedPnL.toFixed(2))}`);
-        }
-      }
-      
-      // Orders
-      const ordersResult = await accountService.getOrders(account.accountId);
-      if (ordersResult.success && ordersResult.orders) {
-        const openOrders = ordersResult.orders.filter(o => o.status === 1).length;
-        const filledOrders = ordersResult.orders.filter(o => o.status === 2).length;
-        console.log(`       Open Orders:    ${chalk.white(openOrders)}`);
-        console.log(`       Filled Trades:  ${chalk.white(filledOrders)}`);
-      }
+    // Account names header
+    const name1 = centerText(acc1.name.substring(0, colWidth - 2), colWidth);
+    const name2 = acc2 ? centerText(acc2.name.substring(0, colWidth - 2), colWidth) : ' '.repeat(colWidth);
+    console.log(chalk.cyan('║') + chalk.cyan.bold(name1) + chalk.cyan('│') + chalk.cyan.bold(name2) + chalk.cyan('║'));
+    console.log(chalk.cyan('╠' + '─'.repeat(colWidth) + '┼' + '─'.repeat(colWidth) + '╣'));
+    
+    // PropFirm
+    const pf1 = fmtRow('PropFirm:', chalk.magenta(acc1.propfirm));
+    const pf2 = acc2 ? fmtRow('PropFirm:', chalk.magenta(acc2.propfirm)) : ' '.repeat(colWidth);
+    console.log(chalk.cyan('║') + pf1 + chalk.cyan('│') + pf2 + chalk.cyan('║'));
+    
+    // Balance
+    const bal1 = fmtRow('Balance:', acc1.balance >= 0 ? chalk.green('$' + acc1.balance.toLocaleString()) : chalk.red('$' + acc1.balance.toLocaleString()));
+    const bal2 = acc2 ? fmtRow('Balance:', acc2.balance >= 0 ? chalk.green('$' + acc2.balance.toLocaleString()) : chalk.red('$' + acc2.balance.toLocaleString())) : ' '.repeat(colWidth);
+    console.log(chalk.cyan('║') + bal1 + chalk.cyan('│') + bal2 + chalk.cyan('║'));
+    
+    // P&L
+    const pnl1 = fmtRow('P&L:', acc1.pnl >= 0 ? chalk.green('+$' + acc1.pnl.toLocaleString() + ' (' + acc1.pnlPercent + '%)') : chalk.red('$' + acc1.pnl.toLocaleString() + ' (' + acc1.pnlPercent + '%)'));
+    const pnl2 = acc2 ? fmtRow('P&L:', acc2.pnl >= 0 ? chalk.green('+$' + acc2.pnl.toLocaleString() + ' (' + acc2.pnlPercent + '%)') : chalk.red('$' + acc2.pnl.toLocaleString() + ' (' + acc2.pnlPercent + '%)')) : ' '.repeat(colWidth);
+    console.log(chalk.cyan('║') + pnl1 + chalk.cyan('│') + pnl2 + chalk.cyan('║'));
+    
+    // Status
+    const st1 = fmtRow('Status:', chalk[acc1.status.color](acc1.status.text));
+    const st2 = acc2 ? fmtRow('Status:', chalk[acc2.status.color](acc2.status.text)) : ' '.repeat(colWidth);
+    console.log(chalk.cyan('║') + st1 + chalk.cyan('│') + st2 + chalk.cyan('║'));
+    
+    // Type
+    const tp1 = fmtRow('Type:', chalk[acc1.type.color](acc1.type.text));
+    const tp2 = acc2 ? fmtRow('Type:', chalk[acc2.type.color](acc2.type.text)) : ' '.repeat(colWidth);
+    console.log(chalk.cyan('║') + tp1 + chalk.cyan('│') + tp2 + chalk.cyan('║'));
+    
+    // Positions & Orders
+    const po1 = fmtRow('Positions/Orders:', chalk.white(acc1.openPositions + '/' + acc1.openOrders));
+    const po2 = acc2 ? fmtRow('Positions/Orders:', chalk.white(acc2.openPositions + '/' + acc2.openOrders)) : ' '.repeat(colWidth);
+    console.log(chalk.cyan('║') + po1 + chalk.cyan('│') + po2 + chalk.cyan('║'));
+    
+    // Separator between account pairs
+    if (i + 2 < accountsWithData.length) {
+      console.log(chalk.cyan('╠' + '═'.repeat(colWidth) + '╪' + '═'.repeat(colWidth) + '╣'));
     }
   }
   
-  console.log();
-  console.log(chalk.gray('  ' + '═'.repeat(55)));
+  console.log(chalk.cyan('╚' + '═'.repeat(boxWidth - 2) + '╝'));
   console.log();
   await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
 };
