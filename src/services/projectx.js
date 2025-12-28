@@ -327,6 +327,69 @@ class ProjectXService {
     }
   }
 
+  /**
+   * Récupérer l'historique des trades d'un compte
+   * @param {number} accountId 
+   * @param {number} days - Nombre de jours d'historique (default: 30)
+   * @returns {Promise<{success: boolean, trades?: array, error?: string}>}
+   */
+  async getTradeHistory(accountId, days = 30) {
+    try {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+      
+      // Try UserAPI endpoint first: /Trade or /TradeHistory
+      let response = await this._request(
+        this.propfirm.userApi,
+        `/Trade?accountId=${accountId}`,
+        'GET'
+      );
+
+      if (response.statusCode === 200 && Array.isArray(response.data)) {
+        return { success: true, trades: response.data };
+      }
+
+      // Try alternative endpoint: /api/Trade/history
+      response = await this._request(
+        this.propfirm.gatewayApi,
+        `/api/Trade/history`,
+        'POST',
+        { 
+          accountId,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString()
+        }
+      );
+
+      if (response.statusCode === 200) {
+        const trades = response.data.trades || response.data;
+        return { success: true, trades: Array.isArray(trades) ? trades : [] };
+      }
+
+      // Try /api/History/trades
+      response = await this._request(
+        this.propfirm.gatewayApi,
+        `/api/History/trades`,
+        'POST',
+        { 
+          accountId,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString()
+        }
+      );
+
+      if (response.statusCode === 200) {
+        const trades = response.data.trades || response.data;
+        return { success: true, trades: Array.isArray(trades) ? trades : [] };
+      }
+
+      return { success: false, trades: [], error: 'Trade history not available' };
+    } catch (error) {
+      return { success: false, trades: [], error: error.message };
+    }
+  }
+
   // ==================== GATEWAY API (Trading) ====================
 
   /**

@@ -677,17 +677,28 @@ const showStats = async (service) => {
       totalOpenPositions += posResult.positions.length;
     }
     
-    // Orders
+    // Orders (for open orders count)
     const ordersResult = await service.getOrders(account.accountId);
     if (ordersResult.success && ordersResult.orders) {
       totalOpenOrders += ordersResult.orders.filter(o => o.status === 1).length;
-      
-      // Collecter les trades (ordres remplis)
-      const filledOrders = ordersResult.orders.filter(o => o.status === 2);
-      allTrades = allTrades.concat(filledOrders.map(o => ({
-        ...o,
+    }
+    
+    // Trade History (for metrics calculation)
+    const tradesResult = await service.getTradeHistory(account.accountId, 30);
+    if (tradesResult.success && tradesResult.trades && tradesResult.trades.length > 0) {
+      allTrades = allTrades.concat(tradesResult.trades.map(t => ({
+        ...t,
         accountName: account.accountName
       })));
+    } else {
+      // Fallback: use filled orders if trade history not available
+      if (ordersResult.success && ordersResult.orders) {
+        const filledOrders = ordersResult.orders.filter(o => o.status === 2);
+        allTrades = allTrades.concat(filledOrders.map(o => ({
+          ...o,
+          accountName: account.accountName
+        })));
+      }
     }
   }
 
