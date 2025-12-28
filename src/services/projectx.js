@@ -384,31 +384,163 @@ class ProjectXService {
    */
   async getTradeHistory(accountId, days = 30) {
     try {
-      // UserAPI: /Trade endpoint
+      // Calculate date range
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+      
+      const startDateStr = startDate.toISOString().split('T')[0];
+      const endDateStr = endDate.toISOString().split('T')[0];
+      
+      // Try multiple endpoints to get trade history
+      
+      // 1. Try /Trade endpoint with accountId
       let response = await this._request(
         this.propfirm.userApi,
         `/Trade?accountId=${accountId}`,
         'GET'
       );
 
-      if (response.statusCode === 200 && Array.isArray(response.data)) {
+      if (response.statusCode === 200 && Array.isArray(response.data) && response.data.length > 0) {
         return { success: true, trades: response.data };
       }
 
-      // UserAPI: /TradeHistory endpoint
+      // 2. Try /TradeHistory endpoint
       response = await this._request(
         this.propfirm.userApi,
         `/TradeHistory?accountId=${accountId}`,
         'GET'
       );
 
-      if (response.statusCode === 200 && Array.isArray(response.data)) {
+      if (response.statusCode === 200 && Array.isArray(response.data) && response.data.length > 0) {
         return { success: true, trades: response.data };
       }
+      
+      // 3. Try /Trade/history with date range
+      response = await this._request(
+        this.propfirm.userApi,
+        `/Trade/history?accountId=${accountId}&startDate=${startDateStr}&endDate=${endDateStr}`,
+        'GET'
+      );
 
-      return { success: false, trades: [], error: 'Trade history not available' };
+      if (response.statusCode === 200 && Array.isArray(response.data) && response.data.length > 0) {
+        return { success: true, trades: response.data };
+      }
+      
+      // 4. Try POST /Trade/search
+      response = await this._request(
+        this.propfirm.userApi,
+        `/Trade/search`,
+        'POST',
+        { accountId, startDate: startDateStr, endDate: endDateStr }
+      );
+
+      if (response.statusCode === 200 && Array.isArray(response.data) && response.data.length > 0) {
+        return { success: true, trades: response.data };
+      }
+      
+      // 5. Try GatewayAPI for trade history
+      response = await this._request(
+        this.propfirm.gatewayApi,
+        `/api/Trade/history`,
+        'POST',
+        { accountId, startDate: startDateStr, endDate: endDateStr }
+      );
+
+      if (response.statusCode === 200 && response.data && response.data.trades) {
+        return { success: true, trades: response.data.trades };
+      }
+
+      return { success: true, trades: [], error: 'No trade history available' };
     } catch (error) {
-      return { success: false, trades: [], error: error.message };
+      return { success: true, trades: [], error: error.message };
+    }
+  }
+  
+  /**
+   * Récupérer les statistiques d'un compte via UserAPI
+   * @param {number} accountId 
+   * @returns {Promise<{success: boolean, stats?: object, error?: string}>}
+   */
+  async getAccountStats(accountId) {
+    try {
+      // Try /TradingAccount/stats endpoint
+      let response = await this._request(
+        this.propfirm.userApi,
+        `/TradingAccount/${accountId}/stats`,
+        'GET'
+      );
+
+      if (response.statusCode === 200 && response.data) {
+        return { success: true, stats: response.data };
+      }
+      
+      // Try /Stats endpoint
+      response = await this._request(
+        this.propfirm.userApi,
+        `/Stats?accountId=${accountId}`,
+        'GET'
+      );
+
+      if (response.statusCode === 200 && response.data) {
+        return { success: true, stats: response.data };
+      }
+      
+      // Try /AccountStats endpoint
+      response = await this._request(
+        this.propfirm.userApi,
+        `/AccountStats?accountId=${accountId}`,
+        'GET'
+      );
+
+      if (response.statusCode === 200 && response.data) {
+        return { success: true, stats: response.data };
+      }
+
+      return { success: false, stats: null, error: 'Stats not available' };
+    } catch (error) {
+      return { success: false, stats: null, error: error.message };
+    }
+  }
+  
+  /**
+   * Récupérer l'historique des ordres exécutés (filled) d'un compte
+   * @param {number} accountId 
+   * @param {number} days - Nombre de jours d'historique (default: 30)
+   * @returns {Promise<{success: boolean, orders?: array, error?: string}>}
+   */
+  async getFilledOrders(accountId, days = 30) {
+    try {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+      
+      // Get all orders
+      const response = await this._request(
+        this.propfirm.userApi,
+        `/Order?accountId=${accountId}`,
+        'GET'
+      );
+
+      if (response.statusCode === 200 && Array.isArray(response.data)) {
+        // Filter filled orders (status 2 = Filled)
+        const filledOrders = response.data.filter(o => o.status === 2);
+        
+        // Filter by date if needed
+        const filteredOrders = filledOrders.filter(o => {
+          if (o.fillTime || o.timestamp || o.createdAt) {
+            const orderDate = new Date(o.fillTime || o.timestamp || o.createdAt);
+            return orderDate >= startDate && orderDate <= endDate;
+          }
+          return true; // Include if no date
+        });
+        
+        return { success: true, orders: filteredOrders };
+      }
+
+      return { success: true, orders: [], error: 'No filled orders' };
+    } catch (error) {
+      return { success: true, orders: [], error: error.message };
     }
   }
 

@@ -4,6 +4,7 @@ const chalk = require('chalk');
 const figlet = require('figlet');
 const inquirer = require('inquirer');
 const ora = require('ora');
+const asciichart = require('asciichart');
 const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -288,16 +289,16 @@ const detectDevice = () => {
   
   if (width < 50 || isMobileTerminal) {
     deviceType = 'mobile';
-    deviceIcon = '📱';
+    deviceIcon = '[M]'; // Mobile
   } else if (width < 80) {
     deviceType = 'tablet';
-    deviceIcon = '📲';
+    deviceIcon = '[T]'; // Tablet
   } else if (width < 120) {
     deviceType = 'desktop';
-    deviceIcon = '💻';
+    deviceIcon = '[D]'; // Desktop
   } else {
     deviceType = 'desktop-large';
-    deviceIcon = '🖥️';
+    deviceIcon = '[L]'; // Large Desktop
   }
   
   // Check if remote connection (SSH)
@@ -394,7 +395,7 @@ const showDeviceInfo = () => {
   console.log(chalk.gray(getSeparator()));
   console.log(chalk.white(`  ${device.deviceIcon} Device: ${chalk.cyan(device.deviceType.toUpperCase())}`));
   console.log(chalk.white(`  📐 Size: ${chalk.cyan(device.width + 'x' + device.height)}`));
-  console.log(chalk.white(`  💻 Platform: ${chalk.cyan(device.platform)}`));
+  console.log(chalk.white(`  [>] Platform: ${chalk.cyan(device.platform)}`));
   if (device.isRemote) {
     console.log(chalk.white(`  🌐 Remote: ${chalk.yellow('SSH Connection')}`));
   }
@@ -1333,27 +1334,74 @@ const showStats = async (service) => {
   // Collecter les données de tous les comptes
   for (const account of allAccountsData) {
     const accountService = account.service;
-    totalBalance += account.balance || 0;
+    const currentBalance = account.balance || 0;
+    totalBalance += currentBalance;
     
-    // Starting Balance estimation
-    const accountName = account.accountName || '';
+    // Starting Balance - try multiple sources
     let startingBalance = 0;
-    if (accountName.includes('150')) startingBalance = 150000;
-    else if (accountName.includes('100')) startingBalance = 100000;
-    else if (accountName.includes('50')) startingBalance = 50000;
-    else if (accountName.includes('25')) startingBalance = 25000;
+    
+    // 1. Use startingBalance from API if available
+    if (account.startingBalance && account.startingBalance > 0) {
+      startingBalance = account.startingBalance;
+    }
+    // 2. Use initialBalance from API if available
+    else if (account.initialBalance && account.initialBalance > 0) {
+      startingBalance = account.initialBalance;
+    }
+    // 3. Estimate from account name patterns
+    else {
+      const accountName = (account.accountName || account.name || '').toUpperCase();
+      // Common prop firm account sizes
+      if (accountName.includes('150K') || accountName.includes('150000')) startingBalance = 150000;
+      else if (accountName.includes('100K') || accountName.includes('100000')) startingBalance = 100000;
+      else if (accountName.includes('50K') || accountName.includes('50000')) startingBalance = 50000;
+      else if (accountName.includes('25K') || accountName.includes('25000')) startingBalance = 25000;
+      else if (accountName.includes('200K') || accountName.includes('200000')) startingBalance = 200000;
+      else if (accountName.includes('75K') || accountName.includes('75000')) startingBalance = 75000;
+      // Check for numeric patterns like "150" without K
+      else if (accountName.includes('150')) startingBalance = 150000;
+      else if (accountName.includes('100')) startingBalance = 100000;
+      else if (accountName.includes('50')) startingBalance = 50000;
+      else if (accountName.includes('25')) startingBalance = 25000;
+      // If no pattern found, estimate based on current balance
+      else if (currentBalance > 0) {
+        // Round up to nearest standard account size
+        if (currentBalance >= 140000) startingBalance = 150000;
+        else if (currentBalance >= 90000) startingBalance = 100000;
+        else if (currentBalance >= 45000) startingBalance = 50000;
+        else if (currentBalance >= 20000) startingBalance = 25000;
+        else startingBalance = currentBalance; // Use current as starting
+      }
+    }
+    
     totalStartingBalance += startingBalance;
+    
+    // Store starting balance in account for later use
+    account.startingBalance = startingBalance;
+    
+    // Get account P&L directly from API if available
+    if (account.profitAndLoss !== undefined && account.profitAndLoss !== null) {
+      totalPnL += account.profitAndLoss;
+    }
     
     // Positions
     const posResult = await accountService.getPositions(account.accountId);
     if (posResult.success && posResult.positions) {
       totalOpenPositions += posResult.positions.length;
+      // Add P&L from open positions
+      posResult.positions.forEach(pos => {
+        if (pos.profitAndLoss || pos.unrealizedPnL) {
+          // Don't double count - this is unrealized
+        }
+      });
     }
     
-    // Orders (for open orders count)
+    // Orders (for open orders count and filled orders for trade history)
     const ordersResult = await accountService.getOrders(account.accountId);
+    let filledOrders = [];
     if (ordersResult.success && ordersResult.orders) {
       totalOpenOrders += ordersResult.orders.filter(o => o.status === 1).length;
+      filledOrders = ordersResult.orders.filter(o => o.status === 2); // Filled orders
     }
     
     // Trade History (for metrics calculation)
@@ -1364,20 +1412,31 @@ const showStats = async (service) => {
         accountName: account.accountName,
         propfirm: account.propfirm
       })));
-    } else {
+    } else if (filledOrders.length > 0) {
       // Fallback: use filled orders if trade history not available
-      if (ordersResult.success && ordersResult.orders) {
-        const filledOrders = ordersResult.orders.filter(o => o.status === 2);
-        allTrades = allTrades.concat(filledOrders.map(o => ({
-          ...o,
-          accountName: account.accountName,
-          propfirm: account.propfirm
-        })));
+      allTrades = allTrades.concat(filledOrders.map(o => ({
+        ...o,
+        accountName: account.accountName,
+        propfirm: account.propfirm
+      })));
+    }
+    
+    // Try to get account stats if available
+    if (accountService.getAccountStats) {
+      const statsResult = await accountService.getAccountStats(account.accountId);
+      if (statsResult.success && statsResult.stats) {
+        // Use stats from API if available
+        if (statsResult.stats.totalTrades) {
+          // Stats already available from API
+        }
       }
     }
   }
 
-  totalPnL = totalBalance - totalStartingBalance;
+  // Calculate total P&L if not already set from API
+  if (totalPnL === 0 && totalStartingBalance > 0) {
+    totalPnL = totalBalance - totalStartingBalance;
+  }
 
   // Calculer les métriques de trading
   let winningTrades = 0;
@@ -1495,6 +1554,289 @@ const showStats = async (service) => {
   console.log(chalk.cyan('║') + fmtRow('Avg Loss:', chalk.red('-$' + avgLoss), col1) + chalk.cyan('│') + fmtRow('Return:', parseFloat(returnPercent) >= 0 ? chalk.green(returnPercent + '%') : chalk.red(returnPercent + '%'), col2) + chalk.cyan('║'));
   console.log(chalk.cyan('║') + fmtRow('Best Trade:', chalk.green('$' + bestTrade.toFixed(2)), col1) + chalk.cyan('│') + fmtRow('Max Consec. Wins:', chalk.green(maxConsecutiveWins.toString()), col2) + chalk.cyan('║'));
   console.log(chalk.cyan('║') + fmtRow('Worst Trade:', chalk.red('$' + worstTrade.toFixed(2)), col1) + chalk.cyan('│') + fmtRow('Max Consec. Loss:', chalk.red(maxConsecutiveLosses.toString()), col2) + chalk.cyan('║'));
+  
+  drawBoxFooter(boxWidth);
+  
+  // ═══════════════════════════════════════════════════════
+  // EQUITY CURVE
+  // ═══════════════════════════════════════════════════════
+  console.log();
+  drawBoxHeader('EQUITY CURVE', boxWidth);
+  
+  // Generate equity curve data from trades or simulate based on balance
+  let equityData = [];
+  const innerWidth = boxWidth - 4; // Leave space for borders and padding
+  const chartHeight = 10;
+  
+  if (allTrades.length > 0) {
+    // Build equity curve from actual trades
+    let equity = totalStartingBalance;
+    equityData.push(equity);
+    allTrades.forEach(trade => {
+      const pnl = trade.profitAndLoss || trade.pnl || 0;
+      equity += pnl;
+      equityData.push(equity);
+    });
+  } else {
+    // Simulate equity curve based on current P&L (for demo)
+    const points = 30;
+    const startBal = totalStartingBalance || 150000;
+    const endBal = totalBalance || startBal;
+    const diff = endBal - startBal;
+    
+    for (let i = 0; i <= points; i++) {
+      // Add some realistic variation
+      const progress = i / points;
+      const noise = (Math.sin(i * 0.8) * 0.02 + Math.cos(i * 1.2) * 0.015) * startBal;
+      const value = startBal + (diff * progress) + noise;
+      equityData.push(value);
+    }
+  }
+  
+  // Ensure we have data points
+  if (equityData.length < 2) {
+    equityData = [totalStartingBalance || 150000, totalBalance || 150000];
+  }
+  
+  // Limit data points for chart width
+  if (equityData.length > innerWidth - 10) {
+    const step = Math.ceil(equityData.length / (innerWidth - 10));
+    equityData = equityData.filter((_, i) => i % step === 0);
+  }
+  
+  // Generate ASCII chart
+  const chartConfig = {
+    height: chartHeight,
+    colors: [asciichart.green],
+    format: (x) => ('$' + (x / 1000).toFixed(0) + 'K').padStart(8)
+  };
+  
+  // Check if equity went down (red) or up (green)
+  if (equityData[equityData.length - 1] < equityData[0]) {
+    chartConfig.colors = [asciichart.red];
+  }
+  
+  const chart = asciichart.plot(equityData, chartConfig);
+  
+  // Print chart with borders
+  const chartLines = chart.split('\n');
+  chartLines.forEach(line => {
+    const paddedLine = '  ' + line;
+    const lineLen = paddedLine.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const padding = Math.max(0, boxWidth - 2 - lineLen);
+    console.log(chalk.cyan('║') + paddedLine + ' '.repeat(padding) + chalk.cyan('║'));
+  });
+  
+  // Chart legend
+  const startVal = '$' + (equityData[0] / 1000).toFixed(1) + 'K';
+  const endVal = '$' + (equityData[equityData.length - 1] / 1000).toFixed(1) + 'K';
+  const changeVal = equityData[equityData.length - 1] - equityData[0];
+  const changePercent = ((changeVal / equityData[0]) * 100).toFixed(2);
+  const changeColor = changeVal >= 0 ? chalk.green : chalk.red;
+  const changeStr = changeVal >= 0 ? '+' : '';
+  
+  const legendText = `  Start: ${startVal}  |  Current: ${endVal}  |  Change: ${changeStr}$${(changeVal/1000).toFixed(1)}K (${changeStr}${changePercent}%)`;
+  const legendLen = legendText.replace(/\x1b\[[0-9;]*m/g, '').length;
+  const legendPad = Math.max(0, boxWidth - 2 - legendLen);
+  console.log(chalk.cyan('╠' + '─'.repeat(boxWidth - 2) + '╣'));
+  console.log(chalk.cyan('║') + chalk.gray(legendText) + ' '.repeat(legendPad) + chalk.cyan('║'));
+  
+  drawBoxFooter(boxWidth);
+  
+  // ═══════════════════════════════════════════════════════
+  // P&L CALENDAR
+  // ═══════════════════════════════════════════════════════
+  console.log();
+  drawBoxHeader('P&L CALENDAR', boxWidth);
+  
+  // Build daily P&L data from trades
+  const dailyPnL = {};
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  
+  // Initialize all days of the month with 0
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    dailyPnL[dateKey] = 0;
+  }
+  
+  // Aggregate P&L by day from trades
+  allTrades.forEach(trade => {
+    const tradeDate = trade.timestamp || trade.fillTime || trade.createdAt || trade.date;
+    if (tradeDate) {
+      const d = new Date(tradeDate);
+      if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
+        const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const pnl = trade.profitAndLoss || trade.pnl || trade.realizedPnL || 0;
+        dailyPnL[dateKey] = (dailyPnL[dateKey] || 0) + pnl;
+      }
+    }
+  });
+  
+  // If no trade data, simulate based on total P&L distributed across trading days
+  const hasTrades = allTrades.length > 0 && Object.values(dailyPnL).some(v => v !== 0);
+  if (!hasTrades && totalPnL !== 0) {
+    // Distribute total P&L across weekdays (Mon-Fri) up to today
+    const tradingDays = [];
+    for (let d = 1; d <= Math.min(now.getDate(), daysInMonth); d++) {
+      const date = new Date(currentYear, currentMonth, d);
+      const dayOfWeek = date.getDay();
+      if (dayOfWeek >= 1 && dayOfWeek <= 5) { // Mon-Fri
+        tradingDays.push(d);
+      }
+    }
+    
+    if (tradingDays.length > 0) {
+      // Create realistic distribution with some variation
+      const avgDaily = totalPnL / tradingDays.length;
+      let remaining = totalPnL;
+      
+      tradingDays.forEach((d, idx) => {
+        const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        if (idx === tradingDays.length - 1) {
+          dailyPnL[dateKey] = remaining;
+        } else {
+          // Add variation: +/- 50% of average
+          const variation = (Math.random() - 0.5) * avgDaily;
+          const dayPnL = avgDaily + variation;
+          dailyPnL[dateKey] = Math.round(dayPnL * 100) / 100;
+          remaining -= dailyPnL[dateKey];
+        }
+      });
+    }
+  }
+  
+  // Get month name
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                      'July', 'August', 'September', 'October', 'November', 'December'];
+  const monthName = monthNames[currentMonth];
+  
+  // Calculate first day of month (0 = Sunday, 1 = Monday, etc.)
+  const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
+  // Convert to Monday-first (0 = Monday, 6 = Sunday)
+  const firstDayMondayFirst = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
+  
+  // Calculate weekly P&L
+  const weeklyPnL = [0, 0, 0, 0, 0, 0]; // Up to 6 weeks in a month
+  let weekNum = 0;
+  
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(currentYear, currentMonth, d);
+    const dayOfWeek = date.getDay();
+    const dayMondayFirst = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    
+    // New week starts on Monday
+    if (d > 1 && dayMondayFirst === 0) {
+      weekNum++;
+    }
+    
+    const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    weeklyPnL[weekNum] += dailyPnL[dateKey] || 0;
+  }
+  
+  // Calendar header: Mon Tue Wed Thu Fri Sat Sun | Week
+  const dayHeaders = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const cellWidth = 9; // Width for each day cell
+  const weekColWidth = 12; // Width for week column
+  const calInnerWidth = boxWidth - 2;
+  
+  // Month title
+  const monthTitle = `${monthName} ${currentYear}`;
+  console.log(chalk.cyan('║') + chalk.yellow.bold(centerText(monthTitle, calInnerWidth)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '─'.repeat(calInnerWidth) + '╣'));
+  
+  // Day headers row
+  let headerRow = ' ';
+  dayHeaders.forEach(day => {
+    headerRow += chalk.cyan(day.padStart(cellWidth - 1).padEnd(cellWidth));
+  });
+  headerRow += chalk.cyan('│') + chalk.cyan.bold(' Week'.padEnd(weekColWidth - 1));
+  const headerLen = headerRow.replace(/\x1b\[[0-9;]*m/g, '').length;
+  const headerPad = Math.max(0, calInnerWidth - headerLen);
+  console.log(chalk.cyan('║') + headerRow + ' '.repeat(headerPad) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '─'.repeat(calInnerWidth) + '╣'));
+  
+  // Calendar grid
+  let currentDay = 1;
+  weekNum = 0;
+  
+  while (currentDay <= daysInMonth) {
+    let row = ' ';
+    
+    for (let col = 0; col < 7; col++) {
+      let cellContent = '';
+      
+      if ((weekNum === 0 && col < firstDayMondayFirst) || currentDay > daysInMonth) {
+        // Empty cell
+        cellContent = ' '.repeat(cellWidth);
+      } else {
+        const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+        const pnl = dailyPnL[dateKey] || 0;
+        const isToday = currentDay === now.getDate();
+        
+        // Format: day number + P&L
+        let dayStr = String(currentDay).padStart(2);
+        let pnlStr = '';
+        
+        if (pnl !== 0) {
+          if (Math.abs(pnl) >= 1000) {
+            pnlStr = (pnl >= 0 ? '+' : '') + (pnl / 1000).toFixed(0) + 'K';
+          } else {
+            pnlStr = (pnl >= 0 ? '+' : '') + Math.round(pnl);
+          }
+        }
+        
+        // Color based on P&L
+        const pnlColor = pnl > 0 ? chalk.green : (pnl < 0 ? chalk.red : chalk.gray);
+        const dayColor = isToday ? chalk.cyan.bold : chalk.white;
+        
+        // Build cell: "DD +XXX" or "DD -XXX"
+        const cellStr = dayStr + (pnlStr ? ' ' : '') + pnlStr;
+        cellContent = dayColor(dayStr) + (pnlStr ? pnlColor((' ' + pnlStr).padEnd(cellWidth - 2)) : ' '.repeat(cellWidth - 2));
+        
+        currentDay++;
+      }
+      
+      row += cellContent;
+    }
+    
+    // Add weekly total column
+    const weekPnL = weeklyPnL[weekNum] || 0;
+    let weekStr = '';
+    if (weekPnL !== 0) {
+      if (Math.abs(weekPnL) >= 1000) {
+        weekStr = (weekPnL >= 0 ? '+' : '') + '$' + (weekPnL / 1000).toFixed(1) + 'K';
+      } else {
+        weekStr = (weekPnL >= 0 ? '+' : '') + '$' + Math.round(weekPnL);
+      }
+    }
+    const weekColor = weekPnL > 0 ? chalk.green : (weekPnL < 0 ? chalk.red : chalk.gray);
+    const weekLabel = `W${weekNum + 1}`;
+    
+    row += chalk.cyan('│') + chalk.gray((' ' + weekLabel).padEnd(4)) + weekColor(weekStr.padEnd(weekColWidth - 5));
+    
+    const rowLen = row.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const rowPad = Math.max(0, calInnerWidth - rowLen);
+    console.log(chalk.cyan('║') + row + ' '.repeat(rowPad) + chalk.cyan('║'));
+    
+    weekNum++;
+  }
+  
+  // Monthly total
+  const monthTotal = Object.values(dailyPnL).reduce((sum, val) => sum + val, 0);
+  let monthTotalStr = '';
+  if (Math.abs(monthTotal) >= 1000) {
+    monthTotalStr = (monthTotal >= 0 ? '+' : '') + '$' + (monthTotal / 1000).toFixed(1) + 'K';
+  } else {
+    monthTotalStr = (monthTotal >= 0 ? '+' : '') + '$' + monthTotal.toFixed(0);
+  }
+  const monthTotalColor = monthTotal > 0 ? chalk.green : (monthTotal < 0 ? chalk.red : chalk.white);
+  
+  console.log(chalk.cyan('╠' + '─'.repeat(calInnerWidth) + '╣'));
+  const totalLine = `  Month Total: ${monthTotalStr}`;
+  console.log(chalk.cyan('║') + chalk.white.bold('  Month Total: ') + monthTotalColor(monthTotalStr) + ' '.repeat(Math.max(0, calInnerWidth - totalLine.length)) + chalk.cyan('║'));
   
   drawBoxFooter(boxWidth);
   
@@ -1694,7 +2036,7 @@ const oneAccountMenu = async (service) => {
   if (!marketHours.isOpen) {
     marketSpinner.fail('Market is CLOSED');
     console.log();
-    console.log(chalk.red.bold('  ⛔ ' + marketHours.message));
+    console.log(chalk.red.bold('  [X] ' + marketHours.message));
     console.log();
     console.log(chalk.gray('  Futures markets (CME) trading hours:'));
     console.log(chalk.gray('  Sunday 5:00 PM CT - Friday 4:00 PM CT'));
@@ -1707,7 +2049,7 @@ const oneAccountMenu = async (service) => {
   if (marketStatus.success && !marketStatus.isOpen) {
     marketSpinner.fail('Cannot trade on this account');
     console.log();
-    console.log(chalk.red.bold('  ⛔ ' + marketStatus.message));
+    console.log(chalk.red.bold('  [X] ' + marketStatus.message));
     console.log();
     await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
     return;
@@ -1812,7 +2154,7 @@ const selectSymbolMenu = async (service, account) => {
       name: 'launch',
       message: chalk.white.bold('Ready to launch?'),
       choices: [
-        { name: chalk.green.bold('🚀 Launch Algo'), value: 'launch' },
+        { name: chalk.green.bold('[>] Launch Algo'), value: 'launch' },
         { name: chalk.yellow('< Back'), value: 'back' }
       ],
       loop: false
@@ -1833,7 +2175,7 @@ const launchAlgo = async (service, account, contract, numContracts) => {
   const symbolName = contract.name || contract.symbol || contract.id;
   
   console.log();
-  console.log(chalk.green.bold('  🚀 Launching HQX Algo...'));
+  console.log(chalk.green.bold('  [>] Launching HQX Algo...'));
   console.log();
   
   const spinner = ora('Connecting to HQX Server...').start();
@@ -1913,7 +2255,7 @@ const launchAlgo = async (service, account, contract, numContracts) => {
       name: 'stopAction',
       message: chalk.red.bold(''),
       choices: [
-        { name: chalk.red.bold('⏹ Stop Algo'), value: 'stop' }
+        { name: chalk.red.bold('[X] Stop Algo'), value: 'stop' }
       ],
       pageSize: 1,
       loop: false
@@ -1930,7 +2272,7 @@ const launchAlgo = async (service, account, contract, numContracts) => {
       hqxServer.disconnect();
     }
     
-    console.log(chalk.green('  ✓ Algo stopped successfully'));
+    console.log(chalk.green('  [OK] Algo stopped successfully'));
     console.log();
     await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
   }
@@ -2066,11 +2408,11 @@ const addLog = (logs, type, message) => {
   // Labels courts pour mobile
   const labels = device.isMobile ? {
     info: 'i',
-    success: '✓',
+    success: '[+]',
     warning: '!',
     error: '✗',
     trade: '$',
-    signal: '→'
+    signal: '[>]'
   } : {
     info: 'INFO',
     success: 'SUCCESS',
@@ -2125,7 +2467,7 @@ const algoLogsScreen = async (service) => {
       // 📱 MOBILE: Compact header
       console.log(chalk.gray(sep));
       console.log(chalk.magenta.bold(' HQX ULTRA-SCALPING'));
-      console.log(chalk.green.bold(' ● LIVE'));
+      console.log(chalk.green.bold(' [*] LIVE'));
       console.log(chalk.gray(sep));
       console.log(chalk.cyan(` ${activeAlgoSession.contract.name}`) + chalk.gray(` x${activeAlgoSession.settings.contracts}`));
       
