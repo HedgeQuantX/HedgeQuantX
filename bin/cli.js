@@ -144,6 +144,7 @@ const dashboardMenu = async (service) => {
         { name: chalk.green('View Accounts'), value: 'accounts' },
         { name: chalk.green('View Positions'), value: 'positions' },
         { name: chalk.green('View Orders'), value: 'orders' },
+        { name: chalk.green('View Stats'), value: 'stats' },
         { name: chalk.green('User Info'), value: 'userinfo' },
         new inquirer.Separator(),
         { name: chalk.yellow('Disconnect'), value: 'disconnect' }
@@ -375,6 +376,88 @@ const showOrders = async (service) => {
   await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
 };
 
+// Afficher les stats de tous les comptes
+const showStats = async (service) => {
+  const spinner = ora('Fetching stats for all accounts...').start();
+  
+  const accountsResult = await service.getTradingAccounts();
+  
+  if (!accountsResult.success || !accountsResult.accounts || accountsResult.accounts.length === 0) {
+    spinner.fail('No accounts found');
+    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+    return;
+  }
+
+  spinner.succeed('Stats loaded');
+  console.log();
+  console.log(chalk.white.bold('  Account Statistics:'));
+  console.log(chalk.gray('  ' + '═'.repeat(55)));
+
+  for (const account of accountsResult.accounts) {
+    const accountName = account.accountName || account.name || `Account #${account.accountId}`;
+    const statusInfo = ACCOUNT_STATUS[account.status] || { text: 'Unknown', color: 'gray' };
+    const typeInfo = ACCOUNT_TYPE[account.type] || { text: 'Unknown', color: 'white' };
+    
+    console.log();
+    console.log(chalk.cyan.bold(`  ${accountName}`));
+    console.log(chalk.gray('  ' + '─'.repeat(50)));
+    
+    // Balance
+    const balance = account.balance || 0;
+    const balanceColor = balance >= 0 ? chalk.green : chalk.red;
+    console.log(`     Balance:        ${balanceColor('$' + balance.toLocaleString())}`);
+    
+    // Status & Type
+    console.log(`     Status:         ${chalk[statusInfo.color](statusInfo.text)}`);
+    console.log(`     Type:           ${chalk[typeInfo.color](typeInfo.text)}`);
+    
+    // Starting Balance (si disponible, sinon estimation basée sur le nom du compte)
+    let startingBalance = null;
+    if (accountName.includes('150')) startingBalance = 150000;
+    else if (accountName.includes('100')) startingBalance = 100000;
+    else if (accountName.includes('50')) startingBalance = 50000;
+    else if (accountName.includes('25')) startingBalance = 25000;
+    
+    if (startingBalance) {
+      const pnl = balance - startingBalance;
+      const pnlPercent = ((pnl / startingBalance) * 100).toFixed(2);
+      const pnlColor = pnl >= 0 ? chalk.green : chalk.red;
+      console.log(`     Starting:       ${chalk.white('$' + startingBalance.toLocaleString())}`);
+      console.log(`     P&L:            ${pnlColor('$' + pnl.toLocaleString() + ' (' + pnlPercent + '%)')}`);
+    }
+    
+    // Récupérer les positions ouvertes pour ce compte
+    const posResult = await service.getPositions(account.accountId);
+    if (posResult.success && posResult.positions) {
+      const openPositions = posResult.positions.length;
+      console.log(`     Open Positions: ${chalk.white(openPositions)}`);
+      
+      if (openPositions > 0) {
+        let totalUnrealizedPnL = 0;
+        posResult.positions.forEach(pos => {
+          if (pos.profitAndLoss !== undefined) {
+            totalUnrealizedPnL += pos.profitAndLoss;
+          }
+        });
+        const unrealizedColor = totalUnrealizedPnL >= 0 ? chalk.green : chalk.red;
+        console.log(`     Unrealized P&L: ${unrealizedColor('$' + totalUnrealizedPnL.toFixed(2))}`);
+      }
+    }
+    
+    // Récupérer les ordres ouverts pour ce compte
+    const ordersResult = await service.getOrders(account.accountId);
+    if (ordersResult.success && ordersResult.orders) {
+      const openOrders = ordersResult.orders.filter(o => o.status === 1).length;
+      console.log(`     Open Orders:    ${chalk.white(openOrders)}`);
+    }
+  }
+  
+  console.log();
+  console.log(chalk.gray('  ' + '═'.repeat(55)));
+  console.log();
+  await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+};
+
 // Fonction principale
 const main = async () => {
   banner();
@@ -421,6 +504,9 @@ const main = async () => {
                 break;
               case 'orders':
                 await showOrders(currentService);
+                break;
+              case 'stats':
+                await showStats(currentService);
                 break;
               case 'userinfo':
                 await showUserInfo(currentService);
