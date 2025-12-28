@@ -154,6 +154,26 @@ const dashboardMenu = async (service) => {
   return action;
 };
 
+// Account Status Enum (ProjectX UserAPI)
+const ACCOUNT_STATUS = {
+  0: { text: 'Pending', color: 'yellow' },
+  1: { text: 'Active', color: 'green' },
+  2: { text: 'End Of Day', color: 'cyan' },
+  3: { text: 'Terminated', color: 'red' },
+  4: { text: 'Disabled', color: 'red' },
+  5: { text: 'Closed', color: 'gray' },
+  6: { text: 'Paused', color: 'yellow' },
+  7: { text: 'Inactive', color: 'gray' }
+};
+
+// Account Type Enum (ProjectX UserAPI)
+const ACCOUNT_TYPE = {
+  0: { text: 'Sim', color: 'blue' },
+  1: { text: 'Evaluation', color: 'yellow' },
+  2: { text: 'Express', color: 'magenta' },
+  3: { text: 'Live', color: 'green' }
+};
+
 // Afficher les comptes
 const showAccounts = async (service) => {
   const spinner = ora('Fetching accounts...').start();
@@ -170,42 +190,36 @@ const showAccounts = async (service) => {
       console.log(chalk.white.bold('  Your Trading Accounts:'));
       console.log(chalk.gray('  ' + '─'.repeat(50)));
       
-      // Tri des comptes: Active d'abord, puis par type
+      // Tri des comptes: Active (1) d'abord, puis par type (Live=3 d'abord)
       const sortedAccounts = [...result.accounts].sort((a, b) => {
-        // Status: Active (1) en premier
-        if (a.status !== b.status) return a.status - b.status;
-        // Type: trier par type
-        if (a.type !== b.type) return a.type - b.type;
-        return 0;
+        // Status: Active (1) en premier, puis Pending (0), puis autres
+        const statusOrder = { 1: 0, 0: 1, 2: 2, 6: 3, 7: 4, 3: 5, 4: 6, 5: 7 };
+        const statusA = statusOrder[a.status] !== undefined ? statusOrder[a.status] : 99;
+        const statusB = statusOrder[b.status] !== undefined ? statusOrder[b.status] : 99;
+        if (statusA !== statusB) return statusA - statusB;
+        
+        // Type: Live (3) d'abord, puis Express (2), Evaluation (1), Sim (0)
+        const typeOrder = { 3: 0, 2: 1, 1: 2, 0: 3 };
+        const typeA = typeOrder[a.type] !== undefined ? typeOrder[a.type] : 99;
+        const typeB = typeOrder[b.type] !== undefined ? typeOrder[b.type] : 99;
+        return typeA - typeB;
       });
 
       sortedAccounts.forEach((account, index) => {
         console.log(chalk.cyan(`  ${index + 1}. ${account.accountName || account.name || `Account #${account.accountId}`}`));
         
         if (account.balance !== undefined) {
-          console.log(chalk.white(`     Balance: $${account.balance.toLocaleString()}`));
+          const balanceColor = account.balance >= 0 ? chalk.green : chalk.red;
+          console.log(`     Balance: ${balanceColor('$' + account.balance.toLocaleString())}`);
         }
         
-        // Status mapping
-        const statusMap = {
-          1: { text: 'Active', color: chalk.green },
-          2: { text: 'Inactive', color: chalk.red },
-          3: { text: 'Pending', color: chalk.yellow },
-          4: { text: 'Suspended', color: chalk.red },
-          5: { text: 'Closed', color: chalk.gray }
-        };
-        const statusInfo = statusMap[account.status] || { text: `Unknown (${account.status})`, color: chalk.gray };
-        console.log(`     Status: ${statusInfo.color(statusInfo.text)}`);
+        // Status
+        const statusInfo = ACCOUNT_STATUS[account.status] || { text: `Unknown (${account.status})`, color: 'gray' };
+        console.log(`     Status: ${chalk[statusInfo.color](statusInfo.text)}`);
 
-        // Type mapping
-        const typeMap = {
-          1: { text: 'Live', color: chalk.green },
-          2: { text: 'Evaluation', color: chalk.yellow },
-          3: { text: 'Sim', color: chalk.blue },
-          4: { text: 'Practice', color: chalk.gray }
-        };
-        const typeInfo = typeMap[account.type] || { text: `Type ${account.type}`, color: chalk.white };
-        console.log(`     Type: ${typeInfo.color(typeInfo.text)}`);
+        // Type
+        const typeInfo = ACCOUNT_TYPE[account.type] || { text: `Unknown (${account.type})`, color: 'white' };
+        console.log(`     Type: ${chalk[typeInfo.color](typeInfo.text)}`);
         
         console.log();
       });
