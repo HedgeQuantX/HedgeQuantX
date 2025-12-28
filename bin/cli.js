@@ -130,7 +130,7 @@ const dashboardMenu = async (service) => {
   console.log(chalk.gray('─'.repeat(60)));
   console.log(chalk.green.bold(`  Connected to ${propfirmName}`));
   if (user) {
-    console.log(chalk.white(`  Welcome, ${user.firstName || user.userName}!`));
+    console.log(chalk.white(`  Welcome, ${user.userName}!`));
   }
   console.log(chalk.gray('─'.repeat(60)));
   console.log();
