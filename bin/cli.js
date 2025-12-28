@@ -2267,13 +2267,17 @@ const handleUpdate = async () => {
         
         if (restart) {
           console.log(chalk.cyan('  Restarting...'));
-          const { spawn } = require('child_process');
-          const child = spawn(process.argv[0], process.argv.slice(1), {
-            cwd: cliDir,
-            detached: true,
-            stdio: 'inherit'
-          });
-          child.unref();
+          console.log();
+          // Use execSync to restart in the same terminal
+          const { execSync } = require('child_process');
+          try {
+            execSync(`node "${path.join(cliDir, 'bin', 'cli.js')}"`, {
+              cwd: cliDir,
+              stdio: 'inherit'
+            });
+          } catch (e) {
+            // User exited the restarted CLI, exit cleanly
+          }
           process.exit(0);
         }
       } else {
