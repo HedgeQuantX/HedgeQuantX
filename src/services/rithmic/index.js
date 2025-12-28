@@ -142,69 +142,44 @@ class RithmicService extends EventEmitter {
 
   /**
    * Fetch accounts from ORDER_PLANT
+   * Note: Rithmic often fails to return accounts, so we use a short timeout
    */
   async fetchAccounts() {
     if (!this.orderConn || !this.loginInfo) {
-      throw new Error('Not connected');
+      return [];
     }
 
-    // Request login info first
-    await this.requestLoginInfo();
-
-    // Then request accounts
-    return new Promise((resolve, reject) => {
+    // Quick timeout - don't wait too long for accounts
+    return new Promise((resolve) => {
       const accounts = [];
-      let completed = false;
-
+      
       const timeout = setTimeout(() => {
-        if (!completed) {
-          completed = true;
-          this.accounts = accounts;
-          resolve(accounts);
-        }
-      }, 5000);
+        this.accounts = accounts;
+        resolve(accounts);
+      }, 2000); // 2 seconds max
 
-      const handleAccount = (account) => {
+      this.once('accountReceived', (account) => {
         accounts.push(account);
-      };
+      });
 
-      this.once('accountReceived', handleAccount);
       this.once('accountListComplete', () => {
-        if (!completed) {
-          completed = true;
-          clearTimeout(timeout);
-          this.accounts = accounts;
-          resolve(accounts);
-        }
+        clearTimeout(timeout);
+        this.accounts = accounts;
+        resolve(accounts);
       });
 
       // Request account list
-      this.orderConn.send('RequestAccountList', {
-        templateId: REQ.ACCOUNT_LIST,
-        userMsg: ['HQX'],
-        fcmId: this.loginInfo.fcmId,
-        ibId: this.loginInfo.ibId,
-      });
-    });
-  }
-
-  /**
-   * Request login info
-   */
-  async requestLoginInfo() {
-    return new Promise((resolve) => {
-      const timeout = setTimeout(() => resolve(), 3000);
-
-      this.once('loginInfoReceived', (info) => {
+      try {
+        this.orderConn.send('RequestAccountList', {
+          templateId: REQ.ACCOUNT_LIST,
+          userMsg: ['HQX'],
+          fcmId: this.loginInfo.fcmId,
+          ibId: this.loginInfo.ibId,
+        });
+      } catch (e) {
         clearTimeout(timeout);
-        this.loginInfo = { ...this.loginInfo, ...info };
-        resolve(info);
-      });
-
-      this.orderConn.send('RequestLoginInfo', {
-        templateId: REQ.LOGIN_INFO,
-        userMsg: ['HQX'],
-      });
+        resolve([]);
+      }
     });
   }
 
@@ -212,8 +187,13 @@ class RithmicService extends EventEmitter {
    * Get trading accounts (formatted like ProjectX)
    */
   async getTradingAccounts() {
-    if (this.accounts.length === 0) {
-      await this.fetchAccounts();
+    // Only try to fetch if we don't have accounts yet
+    if (this.accounts.length === 0 && this.orderConn && this.loginInfo) {
+      try {
+        await this.fetchAccounts();
+      } catch (e) {
+        // Ignore fetch errors
+      }
     }
 
     let tradingAccounts = this.accounts.map((acc, index) => {
