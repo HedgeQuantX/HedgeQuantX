@@ -150,6 +150,9 @@ class RithmicConnection extends EventEmitter {
   onLoginResponse(data) {
     try {
       const res = proto.decode('ResponseLogin', data);
+      
+      // Debug: log full response
+      console.log('[DEBUG] Login response rpCode:', JSON.stringify(res.rpCode));
 
       if (res.rpCode?.[0] === '0') {
         this.state = 'LOGGED_IN';

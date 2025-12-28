@@ -355,8 +355,6 @@ const rithmicMenu = async () => {
 
   try {
     const service = new RithmicService(selectedPropfirm.key);
-    // Debug: log password length to check if $ is eaten
-    console.log(chalk.gray(`[DEBUG] Password length: ${credentials.password.length}, ends with: ${credentials.password.slice(-2)}`));
     const result = await service.login(credentials.username, credentials.password);
 
     if (result.success) {
