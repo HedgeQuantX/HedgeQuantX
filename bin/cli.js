@@ -911,9 +911,21 @@ const showUserInfo = async (service) => {
   spinner.succeed('User info loaded');
   console.log();
   
+  // Inner width for content
+  const innerWidth = boxWidth - 2;
+  
+  // Helper to format row
+  const fmtRow = (label, value, totalW) => {
+    const labelStr = ' ' + label.padEnd(14);
+    const valueVisible = (value || '').toString().replace(/\x1b\[[0-9;]*m/g, '');
+    const totalVisible = labelStr.length + valueVisible.length;
+    const padding = Math.max(0, totalW - totalVisible - 1);
+    return chalk.white(labelStr) + value + ' '.repeat(padding);
+  };
+  
   if (allUsers.length === 0) {
     drawBoxHeader('USER INFO', boxWidth);
-    console.log(chalk.cyan('║') + padText(chalk.yellow('  No user information available.'), boxWidth - 2) + chalk.cyan('║'));
+    console.log(chalk.cyan('║') + padText(chalk.yellow('  No user information available.'), innerWidth) + chalk.cyan('║'));
     drawBoxFooter(boxWidth);
   } else {
     drawBoxHeader(`USER INFO (${allUsers.length} connection${allUsers.length > 1 ? 's' : ''})`, boxWidth);
@@ -921,28 +933,24 @@ const showUserInfo = async (service) => {
     allUsers.forEach((user, index) => {
       // PropFirm header
       const pfHeader = `── ${user.propfirm} ──`;
-      console.log(chalk.cyan('║') + chalk.magenta.bold(centerText(pfHeader, boxWidth - 2)) + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + chalk.magenta.bold(centerText(pfHeader, innerWidth)) + chalk.cyan('║'));
       
       // Username
-      const usernameRow = formatRow('Username:', chalk.cyan(user.userName || 'N/A'), 14, boxWidth - 4);
-      console.log(chalk.cyan('║') + '  ' + usernameRow + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('Username:', chalk.cyan(user.userName || 'N/A'), innerWidth) + chalk.cyan('║'));
       
       // Full Name
       const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'N/A';
-      const nameRow = formatRow('Name:', chalk.white(fullName), 14, boxWidth - 4);
-      console.log(chalk.cyan('║') + '  ' + nameRow + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('Name:', chalk.white(fullName), innerWidth) + chalk.cyan('║'));
       
       // Email
-      const emailRow = formatRow('Email:', chalk.white(user.email || 'N/A'), 14, boxWidth - 4);
-      console.log(chalk.cyan('║') + '  ' + emailRow + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('Email:', chalk.white(user.email || 'N/A'), innerWidth) + chalk.cyan('║'));
       
       // User ID
-      const userIdRow = formatRow('User ID:', chalk.gray(user.userId || 'N/A'), 14, boxWidth - 4);
-      console.log(chalk.cyan('║') + '  ' + userIdRow + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('User ID:', chalk.gray(user.userId || 'N/A'), innerWidth) + chalk.cyan('║'));
       
       // Separator between users if there are more
       if (index < allUsers.length - 1) {
-        console.log(chalk.cyan('╠' + '─'.repeat(boxWidth - 2) + '╣'));
+        console.log(chalk.cyan('╠' + '─'.repeat(innerWidth) + '╣'));
       }
     });
     
