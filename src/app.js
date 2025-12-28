@@ -253,8 +253,7 @@ const dashboardMenu = async (service) => {
         { name: chalk.magenta('Algo-Trading'), value: 'algotrading' },
         new inquirer.Separator(),
         { name: chalk.yellow('Update HQX'), value: 'update' },
-        { name: chalk.red('Disconnect'), value: 'disconnect' },
-        { name: chalk.red('Exit'), value: 'exit' }
+        { name: chalk.red('Disconnect'), value: 'disconnect' }
       ],
       pageSize: 12
     }
