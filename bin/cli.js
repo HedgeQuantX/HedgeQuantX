@@ -1188,64 +1188,78 @@ const showStats = async (service) => {
   console.log(chalk.cyan('  ║') + chalk.cyan.bold(centerText('INDIVIDUAL ACCOUNTS', boxWidth - 2)) + chalk.cyan('║'));
   console.log(chalk.cyan('  ╚' + '═'.repeat(boxWidth - 2) + '╝'));
 
-  for (const account of accountsResult.accounts) {
-    const accountName = account.accountName || account.name || `Account #${account.accountId}`;
-    const statusInfo = ACCOUNT_STATUS[account.status] || { text: 'Unknown', color: 'gray' };
-    const typeInfo = ACCOUNT_TYPE[account.type] || { text: 'Unknown', color: 'white' };
-    
+  // Group accounts by propfirm
+  const groupedAccounts = {};
+  allAccountsData.forEach(account => {
+    const key = account.propfirm || 'Unknown';
+    if (!groupedAccounts[key]) groupedAccounts[key] = [];
+    groupedAccounts[key].push(account);
+  });
+
+  for (const [propfirmName, accounts] of Object.entries(groupedAccounts)) {
     console.log();
-    console.log(chalk.cyan.bold(`  ${accountName}`));
+    console.log(chalk.magenta.bold(`  ${propfirmName}`));
     console.log(chalk.gray('  ' + '─'.repeat(50)));
     
-    // Balance
-    const balance = account.balance || 0;
-    const balanceColor = balance >= 0 ? chalk.green : chalk.red;
-    console.log(`     Balance:        ${balanceColor('$' + balance.toLocaleString())}`);
-    
-    // Status & Type
-    console.log(`     Status:         ${chalk[statusInfo.color](statusInfo.text)}`);
-    console.log(`     Type:           ${chalk[typeInfo.color](typeInfo.text)}`);
-    
-    // Starting Balance
-    let startingBalance = null;
-    if (accountName.includes('150')) startingBalance = 150000;
-    else if (accountName.includes('100')) startingBalance = 100000;
-    else if (accountName.includes('50')) startingBalance = 50000;
-    else if (accountName.includes('25')) startingBalance = 25000;
-    
-    if (startingBalance) {
-      const pnl = balance - startingBalance;
-      const pnlPercent = ((pnl / startingBalance) * 100).toFixed(2);
-      const pnlColor = pnl >= 0 ? chalk.green : chalk.red;
-      console.log(`     Starting:       ${chalk.white('$' + startingBalance.toLocaleString())}`);
-      console.log(`     P&L:            ${pnlColor('$' + pnl.toLocaleString() + ' (' + pnlPercent + '%)')}`);
-    }
-    
-    // Positions
-    const posResult = await service.getPositions(account.accountId);
-    if (posResult.success && posResult.positions) {
-      const openPositions = posResult.positions.length;
-      console.log(`     Open Positions: ${chalk.white(openPositions)}`);
+    for (const account of accounts) {
+      const accountService = account.service;
+      const accountName = account.accountName || account.name || `Account #${account.accountId}`;
+      const statusInfo = ACCOUNT_STATUS[account.status] || { text: 'Unknown', color: 'gray' };
+      const typeInfo = ACCOUNT_TYPE[account.type] || { text: 'Unknown', color: 'white' };
       
-      if (openPositions > 0) {
-        let totalUnrealizedPnL = 0;
-        posResult.positions.forEach(pos => {
-          if (pos.profitAndLoss !== undefined) {
-            totalUnrealizedPnL += pos.profitAndLoss;
-          }
-        });
-        const unrealizedColor = totalUnrealizedPnL >= 0 ? chalk.green : chalk.red;
-        console.log(`     Unrealized P&L: ${unrealizedColor('$' + totalUnrealizedPnL.toFixed(2))}`);
+      console.log();
+      console.log(chalk.cyan.bold(`    ${accountName}`));
+      
+      // Balance
+      const balance = account.balance || 0;
+      const balanceColor = balance >= 0 ? chalk.green : chalk.red;
+      console.log(`       Balance:        ${balanceColor('$' + balance.toLocaleString())}`);
+      
+      // Status & Type
+      console.log(`       Status:         ${chalk[statusInfo.color](statusInfo.text)}`);
+      console.log(`       Type:           ${chalk[typeInfo.color](typeInfo.text)}`);
+      
+      // Starting Balance
+      let startingBalance = null;
+      if (accountName.includes('150')) startingBalance = 150000;
+      else if (accountName.includes('100')) startingBalance = 100000;
+      else if (accountName.includes('50')) startingBalance = 50000;
+      else if (accountName.includes('25')) startingBalance = 25000;
+      
+      if (startingBalance) {
+        const pnl = balance - startingBalance;
+        const pnlPercent = ((pnl / startingBalance) * 100).toFixed(2);
+        const pnlColor = pnl >= 0 ? chalk.green : chalk.red;
+        console.log(`       Starting:       ${chalk.white('$' + startingBalance.toLocaleString())}`);
+        console.log(`       P&L:            ${pnlColor('$' + pnl.toLocaleString() + ' (' + pnlPercent + '%)')}`);
       }
-    }
-    
-    // Orders
-    const ordersResult = await service.getOrders(account.accountId);
-    if (ordersResult.success && ordersResult.orders) {
-      const openOrders = ordersResult.orders.filter(o => o.status === 1).length;
-      const filledOrders = ordersResult.orders.filter(o => o.status === 2).length;
-      console.log(`     Open Orders:    ${chalk.white(openOrders)}`);
-      console.log(`     Filled Trades:  ${chalk.white(filledOrders)}`);
+      
+      // Positions
+      const posResult = await accountService.getPositions(account.accountId);
+      if (posResult.success && posResult.positions) {
+        const openPositions = posResult.positions.length;
+        console.log(`       Open Positions: ${chalk.white(openPositions)}`);
+        
+        if (openPositions > 0) {
+          let totalUnrealizedPnL = 0;
+          posResult.positions.forEach(pos => {
+            if (pos.profitAndLoss !== undefined) {
+              totalUnrealizedPnL += pos.profitAndLoss;
+            }
+          });
+          const unrealizedColor = totalUnrealizedPnL >= 0 ? chalk.green : chalk.red;
+          console.log(`       Unrealized P&L: ${unrealizedColor('$' + totalUnrealizedPnL.toFixed(2))}`);
+        }
+      }
+      
+      // Orders
+      const ordersResult = await accountService.getOrders(account.accountId);
+      if (ordersResult.success && ordersResult.orders) {
+        const openOrders = ordersResult.orders.filter(o => o.status === 1).length;
+        const filledOrders = ordersResult.orders.filter(o => o.status === 2).length;
+        console.log(`       Open Orders:    ${chalk.white(openOrders)}`);
+        console.log(`       Filled Trades:  ${chalk.white(filledOrders)}`);
+      }
     }
   }
   
