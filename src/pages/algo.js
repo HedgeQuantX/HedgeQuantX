@@ -580,8 +580,52 @@ const copyTradingMenu = async () => {
     return;
   }
 
-  // Step 1: Select Lead Account
-  console.log(chalk.cyan.bold('  Step 1: Select Lead Account'));
+  // Step 1: Risk Management Settings
+  console.log(chalk.cyan.bold('  Step 1: Risk Management'));
+  console.log(chalk.gray('  Set your daily target and maximum risk to auto-stop copy trading.'));
+  console.log();
+
+  const { dailyTarget } = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'dailyTarget',
+      message: chalk.white.bold('Daily Target ($):'),
+      default: '500',
+      validate: (input) => {
+        const num = parseFloat(input);
+        if (isNaN(num) || num <= 0) {
+          return 'Please enter a valid amount greater than 0';
+        }
+        return true;
+      },
+      filter: (input) => parseFloat(input)
+    }
+  ]);
+
+  const { maxRisk } = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'maxRisk',
+      message: chalk.white.bold('Max Risk ($):'),
+      default: '200',
+      validate: (input) => {
+        const num = parseFloat(input);
+        if (isNaN(num) || num <= 0) {
+          return 'Please enter a valid amount greater than 0';
+        }
+        return true;
+      },
+      filter: (input) => parseFloat(input)
+    }
+  ]);
+
+  console.log();
+  console.log(chalk.gray('  Daily Target: ') + chalk.green('$' + dailyTarget.toFixed(2)));
+  console.log(chalk.gray('  Max Risk:     ') + chalk.red('$' + maxRisk.toFixed(2)));
+  console.log();
+
+  // Step 2: Select Lead Account
+  console.log(chalk.cyan.bold('  Step 2: Select Lead Account'));
   console.log(chalk.gray('  The lead account is the master account whose trades will be copied.'));
   console.log();
 
@@ -605,9 +649,9 @@ const copyTradingMenu = async () => {
 
   if (leadAccount === 'back') return;
 
-  // Step 2: Select Follower Account
+  // Step 3: Select Follower Account
   console.log();
-  console.log(chalk.cyan.bold('  Step 2: Select Follower Account'));
+  console.log(chalk.cyan.bold('  Step 3: Select Follower Account'));
   console.log(chalk.gray('  The follower account will copy trades from the lead account.'));
   console.log();
 
@@ -633,9 +677,9 @@ const copyTradingMenu = async () => {
 
   if (followerAccount === 'back') return;
 
-  // Step 3: Select Lead Symbol
+  // Step 4: Select Lead Symbol
   console.log();
-  console.log(chalk.cyan.bold('  Step 3: Configure Lead Symbol'));
+  console.log(chalk.cyan.bold('  Step 4: Configure Lead Symbol'));
   console.log();
 
   const { leadSymbol } = await inquirer.prompt([
@@ -669,9 +713,9 @@ const copyTradingMenu = async () => {
     }
   ]);
 
-  // Step 4: Select Follower Symbol
+  // Step 5: Select Follower Symbol
   console.log();
-  console.log(chalk.cyan.bold('  Step 4: Configure Follower Symbol'));
+  console.log(chalk.cyan.bold('  Step 5: Configure Follower Symbol'));
   console.log();
 
   const { followerSymbol } = await inquirer.prompt([
@@ -711,6 +755,10 @@ const copyTradingMenu = async () => {
   console.log(chalk.white.bold('  Copy Trading Configuration'));
   console.log(chalk.gray(getSeparator()));
   console.log();
+  console.log(chalk.white('  RISK MANAGEMENT'));
+  console.log(chalk.white(`    Daily Target: ${chalk.green('$' + dailyTarget.toFixed(2))}`));
+  console.log(chalk.white(`    Max Risk:     ${chalk.red('$' + maxRisk.toFixed(2))}`));
+  console.log();
   console.log(chalk.white('  LEAD ACCOUNT'));
   console.log(chalk.white(`    Account:   ${chalk.cyan(leadAccount.accountName || leadAccount.name)}`));
   console.log(chalk.white(`    PropFirm:  ${chalk.magenta(leadAccount.propfirm)}`));
@@ -743,6 +791,8 @@ const copyTradingMenu = async () => {
 
   // Launch Copy Trading
   await launchCopyTrading({
+    dailyTarget,
+    maxRisk,
     lead: {
       account: leadAccount,
       symbol: leadSymbol,
@@ -762,22 +812,24 @@ const copyTradingMenu = async () => {
  * Launch Copy Trading
  */
 const launchCopyTrading = async (config) => {
-  const { lead, follower } = config;
+  const { lead, follower, dailyTarget, maxRisk } = config;
 
   console.log();
   console.log(chalk.green.bold('  [>] Launching Copy Trading...'));
   console.log();
 
   let isRunning = true;
+  let stopReason = null;
   let lastLeadPosition = null;
   const logs = [];
-  const MAX_LOGS = 15;
+  const MAX_LOGS = 12;
 
   const stats = {
     copiedTrades: 0,
     leadTrades: 0,
     followerTrades: 0,
-    errors: 0
+    errors: 0,
+    pnl: 0
   };
 
   const addLog = (type, message) => {
@@ -794,6 +846,15 @@ const launchCopyTrading = async (config) => {
     console.log(chalk.gray(getSeparator()));
     console.log(chalk.white(`  Status: ${isRunning ? chalk.green('RUNNING') : chalk.red('STOPPED')}`));
     console.log(chalk.gray(getSeparator()));
+    console.log();
+
+    // Risk Management
+    console.log(chalk.white.bold('  RISK MANAGEMENT'));
+    const targetProgress = Math.min(100, (stats.pnl / dailyTarget) * 100);
+    const riskProgress = Math.min(100, (Math.abs(Math.min(0, stats.pnl)) / maxRisk) * 100);
+    console.log(chalk.white(`    Target:  ${chalk.green('$' + dailyTarget.toFixed(2))} | Progress: ${targetProgress >= 100 ? chalk.green.bold(targetProgress.toFixed(1) + '%') : chalk.yellow(targetProgress.toFixed(1) + '%')}`));
+    console.log(chalk.white(`    Risk:    ${chalk.red('$' + maxRisk.toFixed(2))} | Used: ${riskProgress >= 100 ? chalk.red.bold(riskProgress.toFixed(1) + '%') : chalk.cyan(riskProgress.toFixed(1) + '%')}`));
+    console.log(chalk.white(`    P&L:     ${stats.pnl >= 0 ? chalk.green('+$' + stats.pnl.toFixed(2)) : chalk.red('-$' + Math.abs(stats.pnl).toFixed(2))}`));
     console.log();
 
     // Lead info
@@ -858,6 +919,63 @@ const launchCopyTrading = async (config) => {
     if (!isRunning) return;
 
     try {
+      // Get follower positions for P&L tracking
+      const followerPositions = await follower.service.getPositions(follower.account.rithmicAccountId || follower.account.accountId);
+      
+      if (followerPositions.success && followerPositions.positions) {
+        const followerPos = followerPositions.positions.find(p => 
+          p.symbol === follower.symbol.value || 
+          p.symbol?.includes(follower.symbol.searchText)
+        );
+        
+        // Update P&L from follower position
+        if (followerPos && typeof followerPos.unrealizedPnl === 'number') {
+          stats.pnl = followerPos.unrealizedPnl;
+        }
+      }
+
+      // Check if daily target reached
+      if (stats.pnl >= dailyTarget) {
+        isRunning = false;
+        stopReason = 'target';
+        addLog('success', `Daily target reached! +$${stats.pnl.toFixed(2)}`);
+        
+        // Close follower position
+        try {
+          await follower.service.closePosition(
+            follower.account.rithmicAccountId || follower.account.accountId,
+            follower.symbol.value
+          );
+          addLog('info', 'Follower position closed');
+        } catch (e) {
+          // Position may already be closed
+        }
+        
+        displayUI();
+        return;
+      }
+
+      // Check if max risk reached
+      if (stats.pnl <= -maxRisk) {
+        isRunning = false;
+        stopReason = 'risk';
+        addLog('error', `Max risk reached! -$${Math.abs(stats.pnl).toFixed(2)}`);
+        
+        // Close follower position
+        try {
+          await follower.service.closePosition(
+            follower.account.rithmicAccountId || follower.account.accountId,
+            follower.symbol.value
+          );
+          addLog('info', 'Follower position closed');
+        } catch (e) {
+          // Position may already be closed
+        }
+        
+        displayUI();
+        return;
+      }
+
       // Get lead positions
       const leadPositions = await lead.service.getPositions(lead.account.rithmicAccountId || lead.account.accountId);
       
@@ -918,14 +1036,24 @@ const launchCopyTrading = async (config) => {
   await waitForStopKey();
 
   // Cleanup
-  isRunning = false;
   clearInterval(monitorInterval);
+  isRunning = false;
 
   console.log();
-  console.log(chalk.green('  [OK] Copy trading stopped'));
+  if (stopReason === 'target') {
+    console.log(chalk.green.bold('  [OK] Daily target reached! Copy trading stopped.'));
+  } else if (stopReason === 'risk') {
+    console.log(chalk.red.bold('  [X] Max risk reached! Copy trading stopped.'));
+  } else {
+    console.log(chalk.yellow('  [OK] Copy trading stopped by user'));
+  }
   console.log();
   console.log(chalk.gray(getSeparator()));
   console.log(chalk.white.bold('  Session Summary'));
+  console.log(chalk.gray(getSeparator()));
+  console.log(chalk.white(`  Daily Target:  ${chalk.green('$' + dailyTarget.toFixed(2))}`));
+  console.log(chalk.white(`  Max Risk:      ${chalk.red('$' + maxRisk.toFixed(2))}`));
+  console.log(chalk.white(`  Final P&L:     ${stats.pnl >= 0 ? chalk.green('+$' + stats.pnl.toFixed(2)) : chalk.red('-$' + Math.abs(stats.pnl).toFixed(2))}`));
   console.log(chalk.gray(getSeparator()));
   console.log(chalk.white(`  Lead Trades:   ${chalk.cyan(stats.leadTrades)}`));
   console.log(chalk.white(`  Copied Trades: ${chalk.green(stats.copiedTrades)}`));
