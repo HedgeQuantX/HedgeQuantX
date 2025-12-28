@@ -229,13 +229,13 @@ const draw2ColHeader = (title1, title2, boxWidth) => {
   const h1 = centerText(title1, col1);
   const h2 = centerText(title2, col2);
   console.log(chalk.cyan('║') + chalk.cyan.bold(h1) + chalk.cyan('│') + chalk.cyan.bold(h2) + chalk.cyan('║'));
-  console.log(chalk.cyan('╠' + '─'.repeat(col1) + '┼' + '─'.repeat(col2) + '╣'));
+  console.log(chalk.cyan('╠') + chalk.cyan('─'.repeat(col1)) + chalk.cyan('┼') + chalk.cyan('─'.repeat(col2)) + chalk.cyan('╣'));
 };
 
 // Draw 2-column data row with label:value pairs
 const draw2ColRow = (label1, value1, label2, value2, boxWidth) => {
   const { col1, col2 } = getColWidths(boxWidth);
-  const labelWidth = 16;
+  const labelWidth = 18;
   
   // Build column 1
   let c1Content = ' ' + (label1 || '').padEnd(labelWidth) + (value1 || '');
@@ -256,10 +256,10 @@ const draw2ColRowRaw = (content1, content2, boxWidth) => {
   console.log(chalk.cyan('║') + c1 + chalk.cyan('│') + c2 + chalk.cyan('║'));
 };
 
-// Draw separator between 2-column sections
+// Draw separator between 2-column sections (double line with cross)
 const draw2ColSeparator = (boxWidth) => {
   const { col1, col2 } = getColWidths(boxWidth);
-  console.log(chalk.cyan('╠' + '═'.repeat(col1) + '╪' + '═'.repeat(col2) + '╣'));
+  console.log(chalk.cyan('╠') + chalk.cyan('═'.repeat(col1)) + chalk.cyan('╪') + chalk.cyan('═'.repeat(col2)) + chalk.cyan('╣'));
 };
 
 // Draw a single row inside a box (full width, no columns)
@@ -1634,16 +1634,16 @@ const showStats = async (service) => {
   console.log();
   drawBoxHeader('EQUITY CURVE', boxWidth);
   
-  const chartInnerWidth = boxWidth - 2; // Inner width between ║ and ║
-  const yAxisWidth = 10;                // Width for Y-axis labels (e.g., "  $150K ")
-  const chartAreaWidth = chartInnerWidth - yAxisWidth - 4; // -4 for margins
-  const chartHeight = 10;
+  const chartInnerWidth = boxWidth - 2;
   
-  // Generate equity curve data from trades or simulate based on balance
-  let equityData = [];
-  
+  // Only show equity curve if we have real trade data
   if (allTrades.length > 0) {
+    const yAxisWidth = 10;
+    const chartAreaWidth = chartInnerWidth - yAxisWidth - 4;
+    const chartHeight = 10;
+    
     // Build equity curve from actual trades
+    let equityData = [];
     let equity = totalStartingBalance;
     equityData.push(equity);
     allTrades.forEach(trade => {
@@ -1651,84 +1651,60 @@ const showStats = async (service) => {
       equity += pnl;
       equityData.push(equity);
     });
+    
+    // Limit data points to fit chart width
+    const maxDataPoints = chartAreaWidth - 5;
+    if (equityData.length > maxDataPoints) {
+      const step = Math.ceil(equityData.length / maxDataPoints);
+      equityData = equityData.filter((_, i) => i % step === 0);
+    }
+    
+    // Generate ASCII chart with fixed width
+    const chartConfig = {
+      height: chartHeight,
+      colors: [asciichart.green],
+      format: (x) => ('$' + (x / 1000).toFixed(0) + 'K').padStart(yAxisWidth)
+    };
+    
+    // Check if equity went down (red) or up (green)
+    if (equityData[equityData.length - 1] < equityData[0]) {
+      chartConfig.colors = [asciichart.red];
+    }
+    
+    const chart = asciichart.plot(equityData, chartConfig);
+    
+    // Print chart with borders
+    const chartLines = chart.split('\n');
+    chartLines.forEach(line => {
+      let chartLine = '  ' + line;
+      const chartLineVisLen = visibleLength(chartLine);
+      
+      if (chartLineVisLen < chartInnerWidth) {
+        chartLine = chartLine + ' '.repeat(chartInnerWidth - chartLineVisLen);
+      }
+      
+      console.log(chalk.cyan('║') + chartLine + chalk.cyan('║'));
+    });
+    
+    // Chart legend separator
+    console.log(chalk.cyan('╠' + '─'.repeat(chartInnerWidth) + '╣'));
+    
+    // Chart legend
+    const startVal = '$' + (equityData[0] / 1000).toFixed(1) + 'K';
+    const endVal = '$' + (equityData[equityData.length - 1] / 1000).toFixed(1) + 'K';
+    const changeVal = equityData[equityData.length - 1] - equityData[0];
+    const changePercent = ((changeVal / equityData[0]) * 100).toFixed(2);
+    const changeStr = changeVal >= 0 ? '+' : '';
+    
+    const legendContent = `  Start: ${startVal}  |  Current: ${endVal}  |  Change: ${changeStr}$${(changeVal/1000).toFixed(1)}K (${changeStr}${changePercent}%)`;
+    const legendVisLen = visibleLength(legendContent);
+    const legendPad = Math.max(0, chartInnerWidth - legendVisLen);
+    console.log(chalk.cyan('║') + chalk.gray(legendContent) + ' '.repeat(legendPad) + chalk.cyan('║'));
   } else {
-    // Simulate equity curve based on current P&L (for demo)
-    const points = 30;
-    const startBal = totalStartingBalance || 150000;
-    const endBal = totalBalance || startBal;
-    const diff = endBal - startBal;
-    
-    for (let i = 0; i <= points; i++) {
-      // Add some realistic variation
-      const progress = i / points;
-      const noise = (Math.sin(i * 0.8) * 0.02 + Math.cos(i * 1.2) * 0.015) * startBal;
-      const value = startBal + (diff * progress) + noise;
-      equityData.push(value);
-    }
+    // No trade data - show message
+    const noDataMsg = '  No trade data available';
+    console.log(chalk.cyan('║') + chalk.gray(noDataMsg) + ' '.repeat(chartInnerWidth - noDataMsg.length) + chalk.cyan('║'));
   }
-  
-  // Ensure we have data points
-  if (equityData.length < 2) {
-    equityData = [totalStartingBalance || 150000, totalBalance || 150000];
-  }
-  
-  // Limit data points to fit chart width
-  const maxDataPoints = chartAreaWidth - 5;
-  if (equityData.length > maxDataPoints) {
-    const step = Math.ceil(equityData.length / maxDataPoints);
-    equityData = equityData.filter((_, i) => i % step === 0);
-  }
-  
-  // Generate ASCII chart with fixed width
-  const chartConfig = {
-    height: chartHeight,
-    colors: [asciichart.green],
-    format: (x) => ('$' + (x / 1000).toFixed(0) + 'K').padStart(yAxisWidth)
-  };
-  
-  // Check if equity went down (red) or up (green)
-  if (equityData[equityData.length - 1] < equityData[0]) {
-    chartConfig.colors = [asciichart.red];
-  }
-  
-  const chart = asciichart.plot(equityData, chartConfig);
-  
-  // Print chart with borders - ensure each line fits exactly
-  const chartLines = chart.split('\n');
-  chartLines.forEach(line => {
-    // Calculate visible length
-    const lineVisLen = visibleLength(line);
-    
-    // Add left margin and truncate/pad to fit
-    let chartLine = '  ' + line;
-    const chartLineVisLen = visibleLength(chartLine);
-    
-    if (chartLineVisLen > chartInnerWidth) {
-      // Truncate if too long (shouldn't happen with proper sizing)
-      const excess = chartLineVisLen - chartInnerWidth;
-      chartLine = '  ' + line.substring(0, line.length - excess);
-    } else if (chartLineVisLen < chartInnerWidth) {
-      // Pad if too short
-      chartLine = chartLine + ' '.repeat(chartInnerWidth - chartLineVisLen);
-    }
-    
-    console.log(chalk.cyan('║') + chartLine + chalk.cyan('║'));
-  });
-  
-  // Chart legend separator
-  console.log(chalk.cyan('╠' + '─'.repeat(chartInnerWidth) + '╣'));
-  
-  // Chart legend
-  const startVal = '$' + (equityData[0] / 1000).toFixed(1) + 'K';
-  const endVal = '$' + (equityData[equityData.length - 1] / 1000).toFixed(1) + 'K';
-  const changeVal = equityData[equityData.length - 1] - equityData[0];
-  const changePercent = ((changeVal / equityData[0]) * 100).toFixed(2);
-  const changeStr = changeVal >= 0 ? '+' : '';
-  
-  const legendContent = `  Start: ${startVal}  |  Current: ${endVal}  |  Change: ${changeStr}$${(changeVal/1000).toFixed(1)}K (${changeStr}${changePercent}%)`;
-  const legendVisLen = visibleLength(legendContent);
-  const legendPad = Math.max(0, chartInnerWidth - legendVisLen);
-  console.log(chalk.cyan('║') + chalk.gray(legendContent) + ' '.repeat(legendPad) + chalk.cyan('║'));
   
   drawBoxFooter(boxWidth);
   
