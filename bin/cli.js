@@ -559,7 +559,28 @@ const showStats = async (service) => {
   await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
 };
 
-// Menu Algo-Trading
+// Liste des symboles futures populaires
+const FUTURES_SYMBOLS = [
+  { name: 'NQ - E-mini NASDAQ-100', value: 'NQ', searchText: 'NQ' },
+  { name: 'MNQ - Micro E-mini NASDAQ-100', value: 'MNQ', searchText: 'MNQ' },
+  { name: 'ES - E-mini S&P 500', value: 'ES', searchText: 'ES' },
+  { name: 'MES - Micro E-mini S&P 500', value: 'MES', searchText: 'MES' },
+  { name: 'YM - E-mini Dow Jones', value: 'YM', searchText: 'YM' },
+  { name: 'MYM - Micro E-mini Dow Jones', value: 'MYM', searchText: 'MYM' },
+  { name: 'RTY - E-mini Russell 2000', value: 'RTY', searchText: 'RTY' },
+  { name: 'M2K - Micro E-mini Russell 2000', value: 'M2K', searchText: 'M2K' },
+  { name: 'CL - Crude Oil', value: 'CL', searchText: 'CL' },
+  { name: 'MCL - Micro Crude Oil', value: 'MCL', searchText: 'MCL' },
+  { name: 'GC - Gold', value: 'GC', searchText: 'GC' },
+  { name: 'MGC - Micro Gold', value: 'MGC', searchText: 'MGC' },
+  { name: 'SI - Silver', value: 'SI', searchText: 'SI' },
+  { name: 'SIL - Micro Silver', value: 'SIL', searchText: 'SIL' }
+];
+
+// Session de trading active
+let activeAlgoSession = null;
+
+// Menu Algo-Trading principal
 const algoTradingMenu = async (service) => {
   console.log();
   console.log(chalk.gray('─'.repeat(60)));
@@ -571,13 +592,10 @@ const algoTradingMenu = async (service) => {
     {
       type: 'list',
       name: 'action',
-      message: chalk.white.bold('Algo-Trading Options:'),
+      message: chalk.white.bold('Select Mode:'),
       choices: [
-        { name: chalk.green('Start Strategy'), value: 'start' },
-        { name: chalk.green('Stop Strategy'), value: 'stop' },
-        { name: chalk.green('View Active Strategies'), value: 'view' },
-        { name: chalk.green('Strategy Settings'), value: 'settings' },
-        { name: chalk.green('Backtest'), value: 'backtest' },
+        { name: chalk.green('One Account'), value: 'one_account' },
+        { name: chalk.gray('Copy Trading (Coming Soon)'), value: 'copy_trading', disabled: 'Coming Soon' },
         new inquirer.Separator(),
         { name: chalk.yellow('< Back'), value: 'back' }
       ],
@@ -587,37 +605,214 @@ const algoTradingMenu = async (service) => {
   ]);
 
   switch (action) {
-    case 'start':
-      console.log();
-      console.log(chalk.yellow('  Strategy engine coming soon...'));
-      console.log(chalk.gray('  This feature will allow you to run automated trading strategies.'));
+    case 'one_account':
+      await oneAccountMenu(service);
       break;
-    case 'stop':
-      console.log();
-      console.log(chalk.yellow('  No active strategies to stop.'));
-      break;
-    case 'view':
-      console.log();
-      console.log(chalk.yellow('  No active strategies.'));
-      break;
-    case 'settings':
-      console.log();
-      console.log(chalk.yellow('  Strategy settings coming soon...'));
-      break;
-    case 'backtest':
-      console.log();
-      console.log(chalk.yellow('  Backtesting engine coming soon...'));
+    case 'copy_trading':
+      // Disabled - Coming Soon
       break;
     case 'back':
       return 'back';
   }
-
-  if (action !== 'back') {
-    console.log();
-    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
-  }
   
   return action;
+};
+
+// Menu One Account - Sélection du compte actif
+const oneAccountMenu = async (service) => {
+  const spinner = ora('Fetching active accounts...').start();
+  
+  // Récupérer les comptes via GatewayAPI (seulement les actifs)
+  const result = await service.searchAccounts(true);
+  
+  if (!result.success || !result.accounts || result.accounts.length === 0) {
+    spinner.fail('No active accounts found');
+    console.log(chalk.yellow('  You need at least one active trading account.'));
+    console.log();
+    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+    return;
+  }
+  
+  spinner.succeed(`Found ${result.accounts.length} active account(s)`);
+  console.log();
+  
+  // Afficher les comptes actifs
+  const accountChoices = result.accounts.map(account => ({
+    name: chalk.green(`${account.name} - Balance: $${account.balance.toLocaleString()}`),
+    value: account
+  }));
+  
+  accountChoices.push(new inquirer.Separator());
+  accountChoices.push({ name: chalk.yellow('< Back'), value: 'back' });
+  
+  const { selectedAccount } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'selectedAccount',
+      message: chalk.white.bold('Select Account:'),
+      choices: accountChoices,
+      pageSize: 15,
+      loop: false
+    }
+  ]);
+  
+  if (selectedAccount === 'back') {
+    return;
+  }
+  
+  // Passer à la sélection du symbole
+  await selectSymbolMenu(service, selectedAccount);
+};
+
+// Menu de sélection du symbole futures
+const selectSymbolMenu = async (service, account) => {
+  console.log();
+  console.log(chalk.gray('─'.repeat(60)));
+  console.log(chalk.cyan.bold(`  Account: ${account.name}`));
+  console.log(chalk.gray('─'.repeat(60)));
+  console.log();
+  
+  const symbolChoices = FUTURES_SYMBOLS.map(symbol => ({
+    name: chalk.green(symbol.name),
+    value: symbol
+  }));
+  
+  symbolChoices.push(new inquirer.Separator());
+  symbolChoices.push({ name: chalk.yellow('< Back'), value: 'back' });
+  
+  const { selectedSymbol } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'selectedSymbol',
+      message: chalk.white.bold('Select Symbol:'),
+      choices: symbolChoices,
+      pageSize: 20,
+      loop: false
+    }
+  ]);
+  
+  if (selectedSymbol === 'back') {
+    return;
+  }
+  
+  // Rechercher le contrat actif pour ce symbole
+  const spinner = ora(`Searching for active ${selectedSymbol.value} contract...`).start();
+  const contractResult = await service.searchContracts(selectedSymbol.searchText, false);
+  
+  if (!contractResult.success || !contractResult.contracts || contractResult.contracts.length === 0) {
+    spinner.fail(`No contracts found for ${selectedSymbol.value}`);
+    console.log();
+    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+    return;
+  }
+  
+  // Trouver le contrat actif
+  const activeContract = contractResult.contracts.find(c => c.activeContract) || contractResult.contracts[0];
+  spinner.succeed(`Found: ${activeContract.name} - ${activeContract.description}`);
+  console.log(chalk.gray(`     Tick Size: ${activeContract.tickSize} | Tick Value: $${activeContract.tickValue}`));
+  console.log();
+  
+  // Passer aux paramètres de trading
+  await tradingSettingsMenu(service, account, activeContract);
+};
+
+// Menu des paramètres de trading
+const tradingSettingsMenu = async (service, account, contract) => {
+  console.log(chalk.gray('─'.repeat(60)));
+  console.log(chalk.white.bold('  Trading Settings'));
+  console.log(chalk.gray('─'.repeat(60)));
+  console.log();
+  
+  const settings = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'dailyTarget',
+      message: chalk.white.bold('Daily Target ($):'),
+      default: '500',
+      validate: (input) => {
+        const num = parseFloat(input);
+        if (isNaN(num) || num <= 0) {
+          return 'Please enter a valid positive number';
+        }
+        return true;
+      },
+      filter: (input) => parseFloat(input)
+    },
+    {
+      type: 'input',
+      name: 'maxRisk',
+      message: chalk.white.bold('Max Risk ($):'),
+      default: '250',
+      validate: (input) => {
+        const num = parseFloat(input);
+        if (isNaN(num) || num <= 0) {
+          return 'Please enter a valid positive number';
+        }
+        return true;
+      },
+      filter: (input) => parseFloat(input)
+    },
+    {
+      type: 'input',
+      name: 'contracts',
+      message: chalk.white.bold('Number of Contracts:'),
+      default: '1',
+      validate: (input) => {
+        const num = parseInt(input);
+        if (isNaN(num) || num <= 0 || num > 100) {
+          return 'Please enter a valid number between 1 and 100';
+        }
+        return true;
+      },
+      filter: (input) => parseInt(input)
+    }
+  ]);
+  
+  // Afficher le résumé
+  console.log();
+  console.log(chalk.gray('─'.repeat(60)));
+  console.log(chalk.green.bold('  Trading Session Summary'));
+  console.log(chalk.gray('─'.repeat(60)));
+  console.log();
+  console.log(chalk.white(`  Account:        ${chalk.cyan(account.name)}`));
+  console.log(chalk.white(`  Symbol:         ${chalk.cyan(contract.name)} (${contract.description})`));
+  console.log(chalk.white(`  Daily Target:   ${chalk.green('$' + settings.dailyTarget.toLocaleString())}`));
+  console.log(chalk.white(`  Max Risk:       ${chalk.red('$' + settings.maxRisk.toLocaleString())}`));
+  console.log(chalk.white(`  Contracts:      ${chalk.yellow(settings.contracts)}`));
+  console.log(chalk.white(`  Tick Value:     ${chalk.gray('$' + contract.tickValue)}`));
+  console.log();
+  
+  // Confirmation
+  const { confirm } = await inquirer.prompt([
+    {
+      type: 'confirm',
+      name: 'confirm',
+      message: chalk.white.bold('Start trading session with these settings?'),
+      default: false
+    }
+  ]);
+  
+  if (confirm) {
+    // Sauvegarder la session active
+    activeAlgoSession = {
+      account,
+      contract,
+      settings,
+      startTime: new Date(),
+      status: 'active'
+    };
+    
+    console.log();
+    console.log(chalk.green.bold('  Trading session configured!'));
+    console.log(chalk.yellow('  Strategy engine coming soon...'));
+    console.log(chalk.gray('  Your settings have been saved.'));
+  } else {
+    console.log();
+    console.log(chalk.yellow('  Trading session cancelled.'));
+  }
+  
+  console.log();
+  await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
 };
 
 // Fonction principale

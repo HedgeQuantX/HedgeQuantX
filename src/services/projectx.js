@@ -412,6 +412,61 @@ class ProjectXService {
   }
 
   /**
+   * Rechercher des contrats via GatewayAPI
+   * @param {string} searchText - Texte à rechercher (ex: "NQ", "ES")
+   * @param {boolean} live - Utiliser les données live ou sim
+   * @returns {Promise<{success: boolean, contracts?: array, error?: string}>}
+   */
+  async searchContracts(searchText, live = false) {
+    try {
+      const response = await this._request(
+        this.propfirm.gatewayApi,
+        '/api/Contract/search',
+        'POST',
+        { searchText, live }
+      );
+
+      if (response.statusCode === 200 && response.data.success) {
+        return { success: true, contracts: response.data.contracts };
+      } else {
+        return { 
+          success: false, 
+          error: response.data.errorMessage || 'Failed to search contracts' 
+        };
+      }
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Récupérer les contrats disponibles via GatewayAPI
+   * @param {boolean} live - Utiliser les données live ou sim
+   * @returns {Promise<{success: boolean, contracts?: array, error?: string}>}
+   */
+  async getAvailableContracts(live = false) {
+    try {
+      const response = await this._request(
+        this.propfirm.gatewayApi,
+        '/api/Contract/available',
+        'POST',
+        { live }
+      );
+
+      if (response.statusCode === 200 && response.data.success) {
+        return { success: true, contracts: response.data.contracts };
+      } else {
+        return { 
+          success: false, 
+          error: response.data.errorMessage || 'Failed to get available contracts' 
+        };
+      }
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Fermer une position via GatewayAPI
    * @param {number} accountId 
    * @param {string} contractId 
