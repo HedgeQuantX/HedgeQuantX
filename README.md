@@ -54,7 +54,7 @@ A powerful command-line interface for connecting to prop trading firms and manag
 npm install -g github:HedgeQuantX/HQX-CLI
 ```
 
-### Option 2: Clone and Install
+### Option 2: Clone and Install (Recommended)
 
 ```bash
 git clone https://github.com/HedgeQuantX/HQX-CLI.git
@@ -62,6 +62,18 @@ cd HQX-CLI
 npm install
 npm link
 ```
+
+---
+
+## Update
+
+To update the CLI to the latest version:
+
+```bash
+cd ~/HQX-CLI && git pull
+```
+
+That's it! Changes are applied immediately. No need to reinstall.
 
 ### Option 3: Download and Install
 
