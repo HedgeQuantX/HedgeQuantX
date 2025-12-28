@@ -922,6 +922,7 @@ const showUserInfo = async (service) => {
 
 // Afficher les positions
 const showPositions = async (service) => {
+  const spinner = ora('Fetching positions...').start();
   const boxWidth = getLogoWidth();
   const colWidth = Math.floor((boxWidth - 3) / 2);
   
@@ -962,7 +963,6 @@ const showPositions = async (service) => {
     }
   }
 
-  const spinner = ora('Fetching positions...').start();
   spinner.succeed('Positions loaded');
   console.log();
   
@@ -1033,6 +1033,7 @@ const showPositions = async (service) => {
 
 // Afficher les ordres
 const showOrders = async (service) => {
+  const spinner = ora('Fetching orders...').start();
   const boxWidth = getLogoWidth();
   const colWidth = Math.floor((boxWidth - 3) / 2);
   
@@ -1087,7 +1088,6 @@ const showOrders = async (service) => {
     }
   }
 
-  const spinner = ora('Fetching orders...').start();
   spinner.succeed('Orders loaded');
   console.log();
   
