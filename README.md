@@ -228,7 +228,6 @@ This software is for educational and informational purposes only. Trading future
 ## Support
 
 - GitHub Issues: [https://github.com/HedgeQuantX/HQX-CLI/issues](https://github.com/HedgeQuantX/HQX-CLI/issues)
-- NPM: [https://www.npmjs.com/package/hedgequantx](https://www.npmjs.com/package/hedgequantx)
 
 ---
 
