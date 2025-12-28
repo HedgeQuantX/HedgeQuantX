@@ -1,0 +1,29 @@
+{
+  "name": "hedgequantx",
+  "version": "1.0.0",
+  "description": "Prop Futures Algo Trading",
+  "main": "src/index.js",
+  "bin": {
+    "hedgequantx": "./bin/cli.js"
+  },
+  "scripts": {
+    "start": "node bin/cli.js",
+    "dev": "node bin/cli.js"
+  },
+  "keywords": [
+    "trading",
+    "futures",
+    "algo",
+    "prop",
+    "cli"
+  ],
+  "author": "HedgeQuantX",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "commander": "^11.1.0",
+    "figlet": "^1.7.0",
+    "inquirer": "^8.2.6",
+    "ora": "^5.4.1"
+  }
+}

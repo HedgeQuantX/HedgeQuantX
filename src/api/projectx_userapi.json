@@ -1,0 +1,641 @@
+{
+  "x-generator": "NSwag v14.2.0.0 (NJsonSchema v11.1.0.0 (Newtonsoft.Json v13.0.0.0))",
+  "swagger": "2.0",
+  "info": {
+    "title": "ProjectX User API",
+    "description": "ProjectX User API Documentation and specification.",
+    "version": "1.0.0"
+  },
+  "host": "userapi.topstepx.com",
+  "schemes": [
+    "https"
+  ],
+  "paths": {
+    "/AccountTemplate/userTemplates": {
+      "get": {
+        "tags": [
+          "AccountTemplate"
+        ],
+        "summary": "Retrieves a list of all templates associated with a specific user",
+        "operationId": "AccountTemplate_GetUserTemplates",
+        "produces": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "responses": {
+          "200": {
+            "x-nullable": false,
+            "description": "A list of AccountTemplateModel.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/AccountTemplateModel"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/AccountTemplateRule/rules/{accountTemplateId}/all": {
+      "get": {
+        "tags": [
+          "AccountTemplateRule"
+        ],
+        "summary": "Retrieves a list of all rule configurations for the specified account template id",
+        "operationId": "AccountTemplateRule_GetAllAttachedRules",
+        "produces": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "accountTemplateId",
+            "in": "path",
+            "required": true,
+            "description": "Account template id",
+            "format": "int32",
+            "x-nullable": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "x-nullable": false,
+            "description": "List of rule types (rule IDs) attached to the template",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/AccountTemplateRuleModel"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/brackets": {
+      "get": {
+        "tags": [
+          "AutoOcoBrackets"
+        ],
+        "operationId": "AutoOcoBrackets_Get",
+        "produces": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "responses": {
+          "200": {
+            "x-nullable": false,
+            "description": "",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/AutoOcoBracketModel"
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "AutoOcoBrackets"
+        ],
+        "operationId": "AutoOcoBrackets_Post",
+        "consumes": [
+          "application/json",
+          "text/json",
+          "application/*+json"
+        ],
+        "produces": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "parameters": [
+          {
+            "name": "request",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/AutoOcoBracketRequest"
+            },
+            "x-nullable": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "x-nullable": false,
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/AutoOcoBracketResponse"
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "AutoOcoBrackets"
+        ],
+        "operationId": "AutoOcoBrackets_Delete",
+        "consumes": [
+          "application/json",
+          "text/json",
+          "application/*+json"
+        ],
+        "produces": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "parameters": [
+          {
+            "name": "request",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/AutoOcoBracketRemoveRequest"
+            },
+            "x-nullable": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "x-nullable": false,
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/AutoOcoBracketRemoveResponse"
+            }
+          }
+        }
+      }
+    },
+    "/Login": {
+      "post": {
+        "tags": [
+          "Login"
+        ],
+        "summary": "Authenticates a user based on the provided login request.",
+        "operationId": "Login_Login",
+        "consumes": [
+          "application/json",
+          "text/json",
+          "application/*+json"
+        ],
+        "produces": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "parameters": [
+          {
+            "name": "model",
+            "in": "body",
+            "required": true,
+            "description": "A login request model containing the username and password of the user.",
+            "schema": {
+              "$ref": "#/definitions/LoginRequestModel"
+            },
+            "x-nullable": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "x-nullable": false,
+            "description": "A model containing the result of the login attempt and the token, if successful.",
+            "schema": {
+              "$ref": "#/definitions/LoginResultModel"
+            }
+          }
+        }
+      }
+    },
+    "/Login/key": {
+      "post": {
+        "tags": [
+          "Login"
+        ],
+        "operationId": "Login_ApiLogin",
+        "consumes": [
+          "application/json",
+          "text/json",
+          "application/*+json"
+        ],
+        "produces": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "parameters": [
+          {
+            "name": "request",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ApiKeyLoginRequest"
+            },
+            "x-nullable": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "x-nullable": false,
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/LoginResultModel"
+            }
+          }
+        }
+      }
+    },
+    "/Order": {
+      "get": {
+        "tags": [
+          "Order"
+        ],
+        "summary": "Retrieves a list of recent orders for an account.",
+        "operationId": "Order_Get",
+        "produces": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "accountId",
+            "in": "query",
+            "description": "The ID of the account.",
+            "format": "int32",
+            "x-nullable": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "x-nullable": false,
+            "description": "A list of recent orders for the specified account.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/OrderModel"
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Order"
+        ],
+        "summary": "Places an order.",
+        "operationId": "Order_Post",
+        "consumes": [
+          "application/json",
+          "text/json",
+          "application/*+json"
+        ],
+        "produces": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "parameters": [
+          {
+            "name": "request",
+            "in": "body",
+            "required": true,
+            "description": "The request containing the details of the order to be placed.",
+            "schema": {
+              "$ref": "#/definitions/PlaceOrderRequest"
+            },
+            "x-nullable": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "x-nullable": false,
+            "description": "A response containing the result of the order placement operation.",
+            "schema": {
+              "$ref": "#/definitions/PlaceOrderResponse"
+            }
+          }
+        }
+      }
+    },
+    "/Position": {
+      "get": {
+        "tags": [
+          "Position"
+        ],
+        "summary": "Retrieves the open positions for an account.",
+        "operationId": "Position_Get",
+        "produces": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "accountId",
+            "in": "query",
+            "description": "The ID of the account.",
+            "format": "int32",
+            "x-nullable": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "x-nullable": false,
+            "description": "A list of PositionModel representing the open positions for the account.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/PositionModel"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/TradingAccount": {
+      "get": {
+        "tags": [
+          "TradingAccount"
+        ],
+        "summary": "Retrieves all accounts associated with the current user.",
+        "operationId": "TradingAccount_Get",
+        "produces": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "responses": {
+          "200": {
+            "x-nullable": false,
+            "description": "A list of TradingAccountModel representing the accounts of the current user.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/TradingAccountModel"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/User": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Retrieves details about the current user.",
+        "operationId": "User_Get",
+        "produces": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "responses": {
+          "200": {
+            "x-nullable": false,
+            "description": "A UserModel containing the user's details.",
+            "schema": {
+              "$ref": "#/definitions/UserModel"
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "AccountTemplateModel": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "startingBalance",
+        "margin",
+        "tag",
+        "limitCopyTradingToTemplate"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "title": {
+          "type": "string"
+        },
+        "startingBalance": {
+          "type": "number",
+          "format": "decimal"
+        },
+        "margin": {
+          "type": "number",
+          "format": "decimal"
+        },
+        "tag": {
+          "type": "integer"
+        },
+        "limitCopyTradingToTemplate": {
+          "type": "boolean"
+        }
+      }
+    },
+    "LoginRequestModel": {
+      "type": "object",
+      "required": [
+        "userName",
+        "password"
+      ],
+      "properties": {
+        "userName": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        }
+      }
+    },
+    "LoginResultModel": {
+      "type": "object",
+      "required": [
+        "result"
+      ],
+      "properties": {
+        "result": {
+          "type": "integer"
+        },
+        "token": {
+          "type": "string"
+        }
+      }
+    },
+    "ApiKeyLoginRequest": {
+      "type": "object",
+      "required": [
+        "userName",
+        "apiKey"
+      ],
+      "properties": {
+        "userName": {
+          "type": "string"
+        },
+        "apiKey": {
+          "type": "string"
+        }
+      }
+    },
+    "OrderModel": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "symbolId": {
+          "type": "string"
+        },
+        "accountId": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "status": {
+          "type": "integer"
+        },
+        "type": {
+          "type": "integer"
+        },
+        "positionSize": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "PlaceOrderRequest": {
+      "type": "object",
+      "required": [
+        "accountId",
+        "symbolId",
+        "type",
+        "positionSize",
+        "timeType"
+      ],
+      "properties": {
+        "accountId": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "symbolId": {
+          "type": "string"
+        },
+        "type": {
+          "type": "integer"
+        },
+        "limitPrice": {
+          "type": "number",
+          "format": "decimal"
+        },
+        "stopPrice": {
+          "type": "number",
+          "format": "decimal"
+        },
+        "positionSize": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "timeType": {
+          "type": "integer"
+        }
+      }
+    },
+    "PlaceOrderResponse": {
+      "type": "object",
+      "properties": {
+        "result": {
+          "type": "integer"
+        },
+        "orderId": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "errorMessage": {
+          "type": "string"
+        }
+      }
+    },
+    "PositionModel": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "symbolId": {
+          "type": "string"
+        },
+        "positionSize": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "averagePrice": {
+          "type": "number",
+          "format": "decimal"
+        },
+        "profitAndLoss": {
+          "type": "number",
+          "format": "decimal"
+        },
+        "accountId": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "TradingAccountModel": {
+      "type": "object",
+      "properties": {
+        "accountId": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "accountName": {
+          "type": "string"
+        },
+        "balance": {
+          "type": "number",
+          "format": "decimal"
+        },
+        "status": {
+          "type": "integer"
+        },
+        "type": {
+          "type": "integer"
+        }
+      }
+    },
+    "UserModel": {
+      "type": "object",
+      "properties": {
+        "userName": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "firstName": {
+          "type": "string"
+        },
+        "lastName": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
