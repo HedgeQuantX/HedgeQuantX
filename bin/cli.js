@@ -714,12 +714,12 @@ const dashboardMenu = async (service) => {
   if (device.isMobile) {
     console.log(chalk.green.bold(`  ✓ ${propfirmName}`));
     if (user) {
-      console.log(chalk.white(`  ${user.userName}`));
+      console.log(chalk.white(`  ${user.userName.toUpperCase()}`));
     }
   } else {
     console.log(chalk.green.bold(`  Connected to ${propfirmName}`));
     if (user) {
-      console.log(chalk.white(`  Welcome, ${user.userName}!`));
+      console.log(chalk.white(`  Welcome, ${user.userName.toUpperCase()}!`));
     }
   }
   console.log(chalk.gray(getSeparator()));
