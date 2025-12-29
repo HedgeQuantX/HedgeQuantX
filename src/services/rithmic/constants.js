@@ -7,6 +7,7 @@ const RITHMIC_ENDPOINTS = {
   TEST: 'wss://rituz00100.rithmic.com:443',
   PAPER: 'wss://ritpa11120.11.rithmic.com:443',
   LIVE: 'wss://ritpz01000.01.rithmic.com:443',
+  APEX: 'wss://ritpz01000.01.rithmic.com:443', // Apex uses live server
 };
 
 // System names for PropFirms

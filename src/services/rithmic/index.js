@@ -57,8 +57,14 @@ class RithmicService extends EventEmitter {
       // Connect to ORDER_PLANT
       this.orderConn = new RithmicConnection();
       
+      // Determine endpoint based on propfirm
+      let endpoint = RITHMIC_ENDPOINTS.PAPER;
+      if (this.propfirmKey === 'apex' || this.propfirmKey === 'apex_rithmic') {
+        endpoint = RITHMIC_ENDPOINTS.LIVE; // Apex uses live server
+      }
+      
       const config = {
-        uri: RITHMIC_ENDPOINTS.PAPER,
+        uri: endpoint,
         systemName: this.propfirm.systemName,
         userId: username,
         password: password,
@@ -139,8 +145,14 @@ class RithmicService extends EventEmitter {
     try {
       this.pnlConn = new RithmicConnection();
 
+      // Determine endpoint based on propfirm
+      let endpoint = RITHMIC_ENDPOINTS.PAPER;
+      if (this.propfirmKey === 'apex' || this.propfirmKey === 'apex_rithmic') {
+        endpoint = RITHMIC_ENDPOINTS.LIVE; // Apex uses live server
+      }
+
       const config = {
-        uri: RITHMIC_ENDPOINTS.PAPER,
+        uri: endpoint,
         systemName: this.propfirm.systemName,
         userId: username,
         password: password,
