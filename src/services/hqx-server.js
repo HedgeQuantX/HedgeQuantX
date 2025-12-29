@@ -30,6 +30,8 @@ class HQXServerService {
     this.listeners = new Map();
     this.heartbeatInterval = null;
     this.messageQueue = [];
+    this.latency = 0;
+    this.lastPingTime = 0;
   }
 
   /**
@@ -200,6 +202,14 @@ class HQXServerService {
    * Handle incoming messages
    */
   _handleMessage(message) {
+    // Calculate latency from server timestamp
+    if (message.timestamp) {
+      this.latency = Date.now() - message.timestamp;
+      if (this.latency < 0) this.latency = 0; // Handle clock skew
+      if (this.latency > 5000) this.latency = 0; // Ignore unrealistic values
+      this._emit('latency', { latency: this.latency });
+    }
+    
     switch (message.type) {
       case 'signal':
         this._emit('signal', message.data);
@@ -217,11 +227,22 @@ class HQXServerService {
         this._emit('error', message.data);
         break;
       case 'pong':
-        // Heartbeat response
+        // Calculate ping latency
+        if (this.lastPingTime > 0) {
+          this.latency = Date.now() - this.lastPingTime;
+          this._emit('latency', { latency: this.latency });
+        }
         break;
       default:
         this._emit('message', message);
     }
+  }
+  
+  /**
+   * Get current latency
+   */
+  getLatency() {
+    return this.latency;
   }
 
   /**
@@ -303,9 +324,10 @@ class HQXServerService {
   _startHeartbeat() {
     this.heartbeatInterval = setInterval(() => {
       if (this.connected) {
-        this.send('ping', { timestamp: Date.now() });
+        this.lastPingTime = Date.now();
+        this.send('ping', { timestamp: this.lastPingTime });
       }
-    }, 30000);
+    }, 5000); // Ping every 5 seconds for more accurate latency
   }
 
   _stopHeartbeat() {

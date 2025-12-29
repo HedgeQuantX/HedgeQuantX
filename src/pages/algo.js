@@ -146,6 +146,7 @@ const oneAccountMenu = async (service) => {
 const selectSymbolMenu = async (service, account) => {
   const device = getDevice();
   const accountName = account.accountName || account.name || 'Account #' + account.accountId;
+  const propfirm = account.propfirm || 'projectx';
   
   console.log();
   console.log(chalk.gray(getSeparator()));
@@ -153,10 +154,119 @@ const selectSymbolMenu = async (service, account) => {
   console.log(chalk.gray(getSeparator()));
   console.log();
   
-  const symbolChoices = FUTURES_SYMBOLS.map(symbol => ({
-    name: chalk.cyan(device.isMobile ? symbol.value : symbol.name),
-    value: symbol
-  }));
+  // Fetch available symbols from API
+  const spinner = ora('Loading available symbols...').start();
+  
+  let availableSymbols = [];
+  
+  // Search for common symbols to get available contracts
+  const commonSearches = ['NQ', 'ES', 'YM', 'RTY', 'CL', 'GC', 'SI', '6E', 'ZB', 'NG'];
+  
+  try {
+    for (const search of commonSearches) {
+      const result = await service.searchContracts(search, false);
+      if (result.success && result.contracts && result.contracts.length > 0) {
+        for (const contract of result.contracts) {
+          // Only add active/front-month contracts
+          if (contract.activeContract || contract.name) {
+            const existing = availableSymbols.find(s => s.id === contract.id);
+            if (!existing) {
+              availableSymbols.push({
+                id: contract.id || contract.contractId,
+                name: contract.name || contract.symbol,
+                symbol: contract.symbol || search,
+                tickSize: contract.tickSize,
+                tickValue: contract.tickValue,
+                exchange: contract.exchange || 'CME'
+              });
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    // Fallback to static list
+  }
+  
+  // If no symbols found from API, use static list
+  if (availableSymbols.length === 0) {
+    spinner.warn('Using default symbol list');
+    availableSymbols = FUTURES_SYMBOLS.map(s => ({
+      id: s.value,
+      name: s.name,
+      symbol: s.value,
+      searchText: s.searchText
+    }));
+  } else {
+    spinner.succeed(`Found ${availableSymbols.length} available contracts`);
+  }
+  
+  console.log();
+  
+  // Symbol name descriptions
+  const symbolDescriptions = {
+    'NQ': 'E-mini NASDAQ-100',
+    'MNQ': 'Micro E-mini NASDAQ-100',
+    'ES': 'E-mini S&P 500',
+    'MES': 'Micro E-mini S&P 500',
+    'YM': 'E-mini Dow Jones',
+    'MYM': 'Micro E-mini Dow Jones',
+    'RTY': 'E-mini Russell 2000',
+    'M2K': 'Micro E-mini Russell 2000',
+    'CL': 'Crude Oil WTI',
+    'MCL': 'Micro Crude Oil',
+    'NG': 'Natural Gas',
+    'QG': 'E-mini Natural Gas',
+    'QM': 'E-mini Crude Oil',
+    'GC': 'Gold',
+    'MGC': 'Micro Gold',
+    'SI': 'Silver',
+    'SIL': 'Micro Silver',
+    'HG': 'Copper',
+    'PL': 'Platinum',
+    '6E': 'Euro FX',
+    'M6E': 'Micro Euro FX',
+    '6B': 'British Pound',
+    '6J': 'Japanese Yen',
+    '6A': 'Australian Dollar',
+    '6C': 'Canadian Dollar',
+    '6M': 'Mexican Peso',
+    '6S': 'Swiss Franc',
+    'ZB': '30-Year T-Bond',
+    'ZN': '10-Year T-Note',
+    'ZF': '5-Year T-Note',
+    'ZT': '2-Year T-Note',
+    'ZC': 'Corn',
+    'ZS': 'Soybeans',
+    'ZW': 'Wheat'
+  };
+  
+  // Format symbols for display
+  const symbolChoices = availableSymbols.map(symbol => {
+    const symbolCode = symbol.symbol || symbol.id || '';
+    
+    // Extract base symbol (e.g., NQ from NQH6) and month code
+    const baseMatch = symbolCode.match(/^([A-Z0-9]{1,4})([FGHJKMNQUVXZ])(\d{1,2})$/i);
+    let baseSymbol = symbolCode;
+    let monthYear = '';
+    
+    if (baseMatch) {
+      baseSymbol = baseMatch[1];
+      const monthCodes = { F: 'Jan', G: 'Feb', H: 'Mar', J: 'Apr', K: 'May', M: 'Jun', N: 'Jul', Q: 'Aug', U: 'Sep', V: 'Oct', X: 'Nov', Z: 'Dec' };
+      const monthCode = baseMatch[2].toUpperCase();
+      const year = baseMatch[3].length === 1 ? '2' + baseMatch[3] : baseMatch[3];
+      monthYear = (monthCodes[monthCode] || monthCode) + year;
+    }
+    
+    // Get descriptive name from mapping
+    const description = symbolDescriptions[baseSymbol] || symbol.name || baseSymbol;
+    
+    // Format: "NQ   Mar26  E-mini NASDAQ-100"
+    return {
+      name: chalk.yellow(baseSymbol.padEnd(5)) + chalk.cyan(monthYear.padEnd(7)) + chalk.white(description),
+      value: symbol
+    };
+  });
   
   symbolChoices.push(new inquirer.Separator());
   symbolChoices.push({ name: chalk.yellow('< Back'), value: 'back' });
@@ -167,7 +277,7 @@ const selectSymbolMenu = async (service, account) => {
       name: 'selectedSymbol',
       message: chalk.white.bold('Select Symbol:'),
       choices: symbolChoices,
-      pageSize: 15,
+      pageSize: 20,
       loop: false
     }
   ]);
@@ -176,24 +286,32 @@ const selectSymbolMenu = async (service, account) => {
     return;
   }
   
-  // Search contract via Gateway API
-  const spinner = ora(`Searching for ${selectedSymbol.value} contract...`).start();
-  const contractResult = await service.searchContracts(selectedSymbol.searchText, false);
+  // Use the selected contract directly (already fetched from API)
+  let contract = selectedSymbol;
   
-  let contract = null;
-  if (contractResult.success && contractResult.contracts && contractResult.contracts.length > 0) {
-    contract = contractResult.contracts.find(c => c.activeContract) || contractResult.contracts[0];
-    spinner.succeed(`Found: ${contract.name || selectedSymbol.value}`);
-    if (contract.tickSize && contract.tickValue) {
-      console.log(chalk.gray(`  Tick Size: ${contract.tickSize} | Tick Value: $${contract.tickValue}`));
+  console.log();
+  console.log(chalk.green(`  [OK] Selected: ${contract.name || contract.symbol}`));
+  if (contract.tickSize && contract.tickValue) {
+    console.log(chalk.gray(`  Tick Size: ${contract.tickSize} | Tick Value: $${contract.tickValue}`));
+  }
+  
+  // If contract doesn't have full details, search again
+  if (!contract.id || !contract.tickSize) {
+    const searchSpinner = ora(`Getting contract details...`).start();
+    const contractResult = await service.searchContracts(contract.symbol || contract.searchText, false);
+    
+    if (contractResult.success && contractResult.contracts && contractResult.contracts.length > 0) {
+      const found = contractResult.contracts.find(c => c.activeContract) || contractResult.contracts[0];
+      contract = { ...contract, ...found };
+      searchSpinner.succeed(`Contract: ${contract.name || contract.symbol}`);
+    } else {
+      searchSpinner.warn('Using basic contract info');
+      contract = {
+        id: contract.symbol || contract.id,
+        name: contract.name || contract.symbol,
+        symbol: contract.symbol || contract.id
+      };
     }
-  } else {
-    spinner.warn(`Using ${selectedSymbol.value} (contract details unavailable)`);
-    contract = {
-      id: selectedSymbol.value,
-      name: selectedSymbol.name,
-      symbol: selectedSymbol.value
-    };
   }
   
   console.log();
@@ -306,8 +424,11 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
   let hqxConnected = false;
   let algoRunning = false;
   let stopReason = null;
+  let latency = 0;
+  let spinnerFrame = 0;
+  const spinnerChars = ['\u280B', '\u2819', '\u2839', '\u2838', '\u283C', '\u2834', '\u2826', '\u2827', '\u2807', '\u280F'];
+  const sessionStartTime = Date.now();
   
-  // Activity logs
   // Stats
   let stats = {
     trades: 0,
@@ -318,9 +439,9 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     winRate: '0.0'
   };
   
-  // Logs buffer (newest first)
+  // Logs buffer - newest first display, show many logs
   const logs = [];
-  const MAX_LOGS = 20;
+  const MAX_LOGS = 30;
   
   // Log colors
   const typeColors = {
@@ -333,12 +454,17 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
   };
   
   const getIcon = (type) => {
+    // Fixed width tags (10 chars) for alignment
     switch(type) {
-      case 'signal': return '[*]';
-      case 'trade': return '[>]';
-      case 'error': return '[X]';
-      case 'success': return '[OK]';
-      default: return '[.]';
+      case 'signal':   return '[SIGNAL]  ';
+      case 'trade':    return '[TRADE]   ';
+      case 'order':    return '[ORDER]   ';
+      case 'position': return '[POSITION]';
+      case 'error':    return '[ERROR]   ';
+      case 'warning':  return '[WARNING] ';
+      case 'success':  return '[OK]      ';
+      case 'analysis': return '[ANALYSIS]';
+      default:         return '[INFO]    ';
     }
   };
   
@@ -376,56 +502,183 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     return { isOpen: true, message: 'Market OPEN' };
   };
 
-  // Display full UI with logs (newest first)
+  // Display full UI with logs (newest first at top)
+  // Use ANSI escape codes to avoid flickering
+  let firstDraw = true;
   const displayUI = () => {
-    console.clear();
-    const marketStatus = checkMarketStatus();
-    
-    // Logo
-    const logo = [
-      '██╗  ██╗ ██████╗ ██╗  ██╗',
-      '██║  ██║██╔═══██╗╚██╗██╔╝',
-      '███████║██║   ██║ ╚███╔╝ ',
-      '██╔══██║██║▄▄ ██║ ██╔██╗ ',
-      '██║  ██║╚██████╔╝██╔╝ ██╗',
-      '╚═╝  ╚═╝ ╚══▀▀═╝ ╚═╝  ╚═╝'
-    ];
-    
-    console.log();
-    logo.forEach(line => {
-      console.log(chalk.cyan('  ' + line));
-    });
-    console.log(chalk.gray('  Ultra-Scalping Algorithm'));
-    console.log();
-    
-    // Info Box
-    console.log(chalk.cyan('  ╔════════════════════════════════════════════════════════════════════╗'));
-    console.log(chalk.cyan('  ║') + chalk.white(` Account:   ${chalk.cyan(accountName.padEnd(25))} Symbol: ${chalk.yellow(symbolName.padEnd(10))} Qty: ${chalk.cyan(numContracts.toString().padEnd(3))}`) + chalk.cyan('║'));
-    console.log(chalk.cyan('  ║') + chalk.white(` Target:    ${chalk.green(('$' + dailyTarget.toFixed(2)).padEnd(12))} Risk: ${chalk.red(('$' + maxRisk.toFixed(2)).padEnd(12))} Server: ${hqxConnected ? chalk.green('ON ') : chalk.red('OFF')}       `) + chalk.cyan('║'));
-    
-    // Stats line
-    const pnlColor = stats.pnl >= 0 ? chalk.green : chalk.red;
-    const pnlStr = (stats.pnl >= 0 ? '+$' : '-$') + Math.abs(stats.pnl).toFixed(2);
-    console.log(chalk.cyan('  ║') + chalk.white(` P&L:       ${pnlColor(pnlStr.padEnd(12))} Trades: ${chalk.cyan(stats.trades.toString().padEnd(4))} W: ${chalk.green(stats.wins.toString().padEnd(3))} L: ${chalk.red(stats.losses.toString().padEnd(3))}       `) + chalk.cyan('║'));
-    console.log(chalk.cyan('  ╠════════════════════════════════════════════════════════════════════╣'));
-    console.log(chalk.cyan('  ║') + chalk.white(' Activity Log                                   ') + chalk.yellow('Press X to stop') + chalk.cyan(' ║'));
-    console.log(chalk.cyan('  ╠════════════════════════════════════════════════════════════════════╣'));
-    
-    // Logs (newest first - already in correct order)
-    if (logs.length === 0) {
-      console.log(chalk.cyan('  ║') + chalk.gray('  Waiting for activity...'.padEnd(68)) + chalk.cyan('║'));
+    // First time: clear screen, after: just move cursor to top
+    if (firstDraw) {
+      console.clear();
+      firstDraw = false;
     } else {
-      logs.forEach(log => {
-        const color = typeColors[log.type] || chalk.white;
-        const icon = getIcon(log.type);
-        const logLine = `[${log.timestamp}] ${icon} ${log.message}`;
-        const truncated = logLine.length > 66 ? logLine.substring(0, 63) + '...' : logLine;
-        console.log(chalk.cyan('  ║') + ' ' + color(truncated.padEnd(67)) + chalk.cyan('║'));
-      });
+      // Move cursor to top-left without clearing (avoids flicker)
+      process.stdout.write('\x1B[H');
     }
     
-    console.log(chalk.cyan('  ╚════════════════════════════════════════════════════════════════════╝'));
+    // Stats
+    const pnlColor = stats.pnl >= 0 ? chalk.green : chalk.red;
+    const pnlStr = (stats.pnl >= 0 ? '+$' : '-$') + Math.abs(stats.pnl).toFixed(2);
+    // Always show latency in ms format
+    const latencyMs = latency > 0 ? latency : 0;
+    const latencyStr = `${latencyMs}ms`;
+    const latencyColor = latencyMs < 100 ? chalk.green : (latencyMs < 300 ? chalk.yellow : chalk.red);
+    const serverStatus = hqxConnected ? 'ON' : 'OFF';
+    const serverColor = hqxConnected ? chalk.green : chalk.red;
+    
+    // Current date
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    
+    // Get package version
+    const version = require('../../package.json').version;
+    
+    // Fixed width = 96 inner chars
+    const W = 96;
+    const TOP    = '\u2554' + '\u2550'.repeat(W) + '\u2557';
+    const MID    = '\u2560' + '\u2550'.repeat(W) + '\u2563';
+    const BOT    = '\u255A' + '\u2550'.repeat(W) + '\u255D';
+    const V      = '\u2551';
+    
+    // Center text helper
+    const center = (text, width) => {
+      const pad = Math.floor((width - text.length) / 2);
+      return ' '.repeat(pad) + text + ' '.repeat(width - pad - text.length);
+    };
+    
+    // Pad text to exact width
+    const padRight = (text, width) => {
+      if (text.length >= width) return text.substring(0, width);
+      return text + ' '.repeat(width - text.length);
+    };
+    
+    console.log();
+    console.log(chalk.cyan(TOP));
+    // Logo = 87 chars cyan + 9 chars yellow = 96 total
+    console.log(chalk.cyan(V) + chalk.cyan(' ██╗  ██╗███████╗██████╗  ██████╗ ███████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗') + chalk.yellow('██╗  ██╗') + ' ' + chalk.cyan(V));
+    console.log(chalk.cyan(V) + chalk.cyan(' ██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝') + chalk.yellow('╚██╗██╔╝') + ' ' + chalk.cyan(V));
+    console.log(chalk.cyan(V) + chalk.cyan(' ███████║█████╗  ██║  ██║██║  ███╗█████╗  ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║   ') + chalk.yellow(' ╚███╔╝ ') + ' ' + chalk.cyan(V));
+    console.log(chalk.cyan(V) + chalk.cyan(' ██╔══██║██╔══╝  ██║  ██║██║   ██║██╔══╝  ██║▄▄ ██║██║   ██║██╔══██║██║╚██╗██║   ██║   ') + chalk.yellow(' ██╔██╗ ') + ' ' + chalk.cyan(V));
+    console.log(chalk.cyan(V) + chalk.cyan(' ██║  ██║███████╗██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ') + chalk.yellow('██╔╝ ██╗') + ' ' + chalk.cyan(V));
+    console.log(chalk.cyan(V) + chalk.cyan(' ╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ') + chalk.yellow('╚═╝  ╚═╝') + ' ' + chalk.cyan(V));
+    console.log(chalk.cyan(MID));
+    
+    // Centered title
+    const title1 = `Prop Futures Algo Trading  v${version}`;
+    console.log(chalk.cyan(V) + chalk.white(center(title1, W)) + chalk.cyan(V));
+    console.log(chalk.cyan(MID));
+    
+    // Centered subtitle
+    const title2 = 'HQX Ultra-Scalping Algorithm';
+    console.log(chalk.cyan(V) + chalk.yellow(center(title2, W)) + chalk.cyan(V));
+    
+    // Grid layout for metrics - 2 columns per row, 4 rows
+    // Row 1: Account | Symbol + Qty
+    // Row 2: Target | Risk  
+    // Row 3: P&L | Server
+    // Row 4: Trades + W/L | Latency
+    const VS = '\u2502'; // Vertical separator (thin)
+    
+    // 2 columns: 48 + 47 + 1 separator = 96
+    const colL = 48, colR = 47;
+    
+    // Safe padding function
+    const safePad = (len) => ' '.repeat(Math.max(0, len));
+    
+    // Build cell helper
+    const buildCell = (label, value, valueColor, width) => {
+      const text = ` ${label}: ${valueColor(value)}`;
+      const plain = ` ${label}: ${value}`;
+      return { text, plain, padded: text + safePad(width - plain.length) };
+    };
+    
+    // Row 1: Account | Symbol + Qty
+    const accVal = accountName.length > 35 ? accountName.substring(0, 35) : accountName;
+    const symVal = symbolName.length > 12 ? symbolName.substring(0, 12) : symbolName;
+    const r1c1 = buildCell('Account', accVal, chalk.cyan, colL);
+    const r1c2text = ` Symbol: ${chalk.yellow(symVal)}  Qty: ${chalk.cyan(numContracts)}`;
+    const r1c2plain = ` Symbol: ${symVal}  Qty: ${numContracts}`;
+    const r1c2 = r1c2text + safePad(colR - r1c2plain.length);
+    
+    // Row 2: Target | Risk
+    const r2c1 = buildCell('Target', '$' + dailyTarget.toFixed(2), chalk.green, colL);
+    const r2c2 = buildCell('Risk', '$' + maxRisk.toFixed(2), chalk.red, colR);
+    
+    // Row 3: P&L | Server
+    const r3c1 = buildCell('P&L', pnlStr, pnlColor, colL);
+    const r3c2 = buildCell('Server', serverStatus, serverColor, colR);
+    
+    // Row 4: Trades + W/L | Latency
+    const r4c1text = ` Trades: ${chalk.cyan(stats.trades)}  W/L: ${chalk.green(stats.wins)}/${chalk.red(stats.losses)}`;
+    const r4c1plain = ` Trades: ${stats.trades}  W/L: ${stats.wins}/${stats.losses}`;
+    const r4c1 = r4c1text + safePad(colL - r4c1plain.length);
+    const r4c2 = buildCell('Latency', latencyStr, latencyColor, colR);
+    
+    // Grid separators
+    const GRID_TOP = '\u2560' + '\u2550'.repeat(colL) + '\u2564' + '\u2550'.repeat(colR) + '\u2563';
+    const GRID_MID = '\u2560' + '\u2550'.repeat(colL) + '\u256A' + '\u2550'.repeat(colR) + '\u2563';
+    const GRID_BOT = '\u2560' + '\u2550'.repeat(colL) + '\u2567' + '\u2550'.repeat(colR) + '\u2563';
+    
+    // Print grid
+    console.log(chalk.cyan(GRID_TOP));
+    console.log(chalk.cyan(V) + r1c1.padded + chalk.cyan(VS) + r1c2 + chalk.cyan(V));
+    console.log(chalk.cyan(GRID_MID));
+    console.log(chalk.cyan(V) + r2c1.padded + chalk.cyan(VS) + r2c2.padded + chalk.cyan(V));
+    console.log(chalk.cyan(GRID_MID));
+    console.log(chalk.cyan(V) + r3c1.padded + chalk.cyan(VS) + r3c2.padded + chalk.cyan(V));
+    console.log(chalk.cyan(GRID_MID));
+    console.log(chalk.cyan(V) + r4c1 + chalk.cyan(VS) + r4c2.padded + chalk.cyan(V));
+    console.log(chalk.cyan(GRID_BOT));
+    
+    // Activity log header with spinner and centered date
+    spinnerFrame = (spinnerFrame + 1) % spinnerChars.length;
+    const spinnerChar = spinnerChars[spinnerFrame];
+    const actLeft = ` Activity Log ${chalk.yellow(spinnerChar)}`;
+    const actLeftPlain = ` Activity Log ${spinnerChar}`;
+    const actRight = 'Press X to stop ';
+    const dateCentered = `- ${dateStr} -`;
+    const leftLen = actLeftPlain.length;
+    const rightLen = actRight.length;
+    const midSpace = Math.max(0, W - leftLen - rightLen);
+    const datePad = Math.max(0, Math.floor((midSpace - dateCentered.length) / 2));
+    const remainingPad = Math.max(0, midSpace - datePad - dateCentered.length);
+    const dateSection = ' '.repeat(datePad) + chalk.cyan(dateCentered) + ' '.repeat(remainingPad);
+    console.log(chalk.cyan(V) + chalk.white(actLeft) + dateSection + chalk.yellow(actRight) + chalk.cyan(V));
+    console.log(chalk.cyan(BOT));
+    
+    // Logs (without borders) - newest first, fixed number of lines
+    const MAX_VISIBLE_LOGS = 15;
+    console.log();
+    
+    if (logs.length === 0) {
+      console.log(chalk.gray('  Waiting for activity...') + '\x1B[K');
+      // Fill remaining lines with empty
+      for (let i = 0; i < MAX_VISIBLE_LOGS - 1; i++) {
+        console.log('\x1B[K');
+      }
+    } else {
+      // Show newest first (reverse), limited to MAX_VISIBLE_LOGS
+      const reversedLogs = [...logs].reverse().slice(0, MAX_VISIBLE_LOGS);
+      reversedLogs.forEach(log => {
+        const color = typeColors[log.type] || chalk.white;
+        const icon = getIcon(log.type);
+        const logLine = `  [${log.timestamp}] ${icon} ${log.message}`;
+        console.log(color(logLine) + '\x1B[K');
+      });
+      // Fill remaining lines with empty to keep fixed height
+      for (let i = reversedLogs.length; i < MAX_VISIBLE_LOGS; i++) {
+        console.log('\x1B[K');
+      }
+    }
+    // Clear anything below
+    process.stdout.write('\x1B[J');
   };
+  
+  // Spinner interval to refresh UI
+  const spinnerInterval = setInterval(() => {
+    if (algoRunning) {
+      displayUI();
+    }
+  }, 100);
   
   // Connect to HQX Server
   const spinner = ora('Authenticating with HQX Server...').start();
@@ -463,6 +716,11 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
   }
   
   // Setup event handlers - logs scroll down naturally
+  hqxServer.on('latency', (data) => {
+    latency = data.latency || 0;
+    displayUI(); // Refresh UI with new latency
+  });
+  
   hqxServer.on('log', (data) => {
     printLog(data.type || 'info', data.message);
   });
@@ -521,11 +779,24 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
   
   hqxServer.on('error', (data) => {
     printLog('error', data.message || 'Unknown error');
+    // Stop algo on connection error
+    if (!stopReason) {
+      stopReason = 'connection_error';
+      algoRunning = false;
+    }
   });
   
   hqxServer.on('disconnected', () => {
     hqxConnected = false;
-    printLog('warning', 'Disconnected from HQX Server');
+    // Only log error if not intentionally stopped by user
+    if (!stopReason || stopReason === 'user') {
+      // Don't show error for user-initiated stop
+      if (!stopReason) {
+        printLog('error', 'Connection lost - Stopping algo');
+        stopReason = 'disconnected';
+        algoRunning = false;
+      }
+    }
   });
   
   // Display header once
@@ -554,34 +825,51 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
   
   // Wait for X key OR auto-stop (target/risk reached)
   await new Promise((resolve) => {
+    let resolved = false;
+    
+    const cleanup = () => {
+      if (resolved) return;
+      resolved = true;
+      clearInterval(checkInterval);
+      if (process.stdin.isTTY) {
+        try {
+          process.stdin.setRawMode(false);
+          process.stdin.removeAllListeners('keypress');
+        } catch (e) {}
+      }
+      resolve();
+    };
+    
     // Check for auto-stop every 500ms
     const checkInterval = setInterval(() => {
       if (!algoRunning || stopReason) {
-        clearInterval(checkInterval);
-        if (process.stdin.isTTY && process.stdin.isRaw) {
-          process.stdin.setRawMode(false);
-        }
-        resolve();
+        cleanup();
       }
     }, 500);
 
-    // Also listen for X key
+    // Listen for X key
     if (process.stdin.isTTY) {
-      readline.emitKeypressEvents(process.stdin);
-      process.stdin.setRawMode(true);
-      
-      const onKeypress = (str, key) => {
-        if (key && (key.name === 'x' || key.name === 'X' || (key.ctrl && key.name === 'c'))) {
-          clearInterval(checkInterval);
-          process.stdin.setRawMode(false);
-          process.stdin.removeListener('keypress', onKeypress);
-          resolve();
-        }
-      };
-      
-      process.stdin.on('keypress', onKeypress);
+      try {
+        readline.emitKeypressEvents(process.stdin);
+        process.stdin.setRawMode(true);
+        process.stdin.resume();
+        
+        process.stdin.on('keypress', (str, key) => {
+          if (!key) return;
+          const keyName = key.name?.toLowerCase();
+          if (keyName === 'x' || (key.ctrl && keyName === 'c')) {
+            stopReason = 'user'; // Set stop reason before cleanup
+            cleanup();
+          }
+        });
+      } catch (e) {
+        // Fallback: just wait for auto-stop
+      }
     }
   });
+  
+  // Clear spinner interval
+  clearInterval(spinnerInterval);
   
   // Stop algo
   console.log();
@@ -637,29 +925,87 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
   hqxServer.disconnect();
   algoRunning = false;
   
+  // Clear screen and show final result
+  console.clear();
+  
   console.log();
   if (stopReason === 'target') {
     console.log(chalk.green.bold('  [OK] Daily target reached! Algo stopped.'));
   } else if (stopReason === 'risk') {
     console.log(chalk.red.bold('  [X] Max risk reached! Algo stopped.'));
+  } else if (stopReason === 'disconnected' || stopReason === 'connection_error') {
+    console.log(chalk.red.bold('  [X] Connection lost! Algo stopped.'));
+  } else if (stopReason === 'user') {
+    console.log(chalk.yellow('  [OK] Algo stopped by user'));
   } else {
     console.log(chalk.yellow('  [OK] Algo stopped by user'));
   }
   console.log();
   
-  // Final stats
-  console.log(chalk.gray(getSeparator()));
-  console.log(chalk.white.bold('  Session Summary'));
-  console.log(chalk.gray(getSeparator()));
-  console.log(chalk.white(`  Daily Target:  ${chalk.green('$' + dailyTarget.toFixed(2))}`));
-  console.log(chalk.white(`  Max Risk:      ${chalk.red('$' + maxRisk.toFixed(2))}`));
-  console.log(chalk.white(`  Final P&L:     ${stats.pnl >= 0 ? chalk.green('+$' + stats.pnl.toFixed(2)) : chalk.red('-$' + Math.abs(stats.pnl).toFixed(2))}`));
-  console.log(chalk.gray(getSeparator()));
-  console.log(chalk.white(`  Total Trades:  ${chalk.cyan(stats.trades)}`));
-  console.log(chalk.white(`  Wins:          ${chalk.green(stats.wins)}`));
-  console.log(chalk.white(`  Losses:        ${chalk.red(stats.losses)}`));
-  console.log(chalk.white(`  Win Rate:      ${chalk.yellow(stats.winRate + '%')}`));
-  console.log(chalk.gray(getSeparator()));
+  // Final stats in a grid box - must match main UI width of 96
+  const summaryV = '\u2551';
+  const summaryVS = '\u2502';
+  const summaryH = '\u2550';
+  const summaryW = 96; // Same as main UI
+  
+  // Calculate session duration
+  const sessionDuration = Date.now() - sessionStartTime;
+  const durationSec = Math.floor(sessionDuration / 1000);
+  const durationMin = Math.floor(durationSec / 60);
+  const durationHr = Math.floor(durationMin / 60);
+  const durationStr = durationHr > 0 
+    ? `${durationHr}h ${durationMin % 60}m ${durationSec % 60}s`
+    : durationMin > 0 
+      ? `${durationMin}m ${durationSec % 60}s`
+      : `${durationSec}s`;
+  
+  // 4 cells + 3 separators = 96 inner chars
+  // 96 - 3 separators = 93, divided by 4 = 23.25, so use 24+23+24+23 = 94... need 96
+  // Let's use: 24 + 24 + 24 + 21 = 93 + 3 sep = 96
+  const sc1 = 24, sc2 = 24, sc3 = 24, sc4 = 21;
+  
+  const summaryCell = (label, value, width) => {
+    const text = ` ${label}: ${value}`;
+    const stripped = text.replace(/\x1b\[[0-9;]*m/g, '');
+    const padding = Math.max(0, width - stripped.length);
+    return text + ' '.repeat(padding);
+  };
+  
+  const centerSummaryTitle = (text, width) => {
+    const pad = Math.floor((width - text.length) / 2);
+    return ' '.repeat(pad) + text + ' '.repeat(width - pad - text.length);
+  };
+  
+  const pnlValue = stats.pnl >= 0 ? chalk.green('+$' + stats.pnl.toFixed(2)) : chalk.red('-$' + Math.abs(stats.pnl).toFixed(2));
+  
+  // Build separator lines
+  const SUMMARY_TOP = '\u2554' + summaryH.repeat(summaryW) + '\u2557';
+  const SUMMARY_GRID_TOP = '\u2560' + summaryH.repeat(sc1) + '\u2564' + summaryH.repeat(sc2) + '\u2564' + summaryH.repeat(sc3) + '\u2564' + summaryH.repeat(sc4) + '\u2563';
+  const SUMMARY_GRID_MID = '\u2560' + summaryH.repeat(sc1) + '\u256A' + summaryH.repeat(sc2) + '\u256A' + summaryH.repeat(sc3) + '\u256A' + summaryH.repeat(sc4) + '\u2563';
+  const SUMMARY_BOT = '\u255A' + summaryH.repeat(sc1) + '\u2567' + summaryH.repeat(sc2) + '\u2567' + summaryH.repeat(sc3) + '\u2567' + summaryH.repeat(sc4) + '\u255D';
+  
+  console.log();
+  console.log(chalk.cyan(SUMMARY_TOP));
+  console.log(chalk.cyan(summaryV) + chalk.white.bold(centerSummaryTitle('Session Summary', summaryW)) + chalk.cyan(summaryV));
+  console.log(chalk.cyan(SUMMARY_GRID_TOP));
+  
+  // Row 1: Target | Risk | P&L | Win Rate
+  const r1c1 = summaryCell('Target', chalk.green('$' + dailyTarget.toFixed(2)), sc1);
+  const r1c2 = summaryCell('Risk', chalk.red('$' + maxRisk.toFixed(2)), sc2);
+  const r1c3 = summaryCell('P&L', pnlValue, sc3);
+  const r1c4 = summaryCell('Win Rate', chalk.yellow(stats.winRate + '%'), sc4);
+  console.log(chalk.cyan(summaryV) + r1c1 + chalk.cyan(summaryVS) + r1c2 + chalk.cyan(summaryVS) + r1c3 + chalk.cyan(summaryVS) + r1c4 + chalk.cyan(summaryV));
+  
+  console.log(chalk.cyan(SUMMARY_GRID_MID));
+  
+  // Row 2: Trades | Wins | Losses | Duration
+  const r2c1 = summaryCell('Trades', chalk.cyan(stats.trades.toString()), sc1);
+  const r2c2 = summaryCell('Wins', chalk.green(stats.wins.toString()), sc2);
+  const r2c3 = summaryCell('Losses', chalk.red(stats.losses.toString()), sc3);
+  const r2c4 = summaryCell('Duration', chalk.white(durationStr), sc4);
+  console.log(chalk.cyan(summaryV) + r2c1 + chalk.cyan(summaryVS) + r2c2 + chalk.cyan(summaryVS) + r2c3 + chalk.cyan(summaryVS) + r2c4 + chalk.cyan(summaryV));
+  
+  console.log(chalk.cyan(SUMMARY_BOT));
   console.log();
   
   await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
@@ -1014,6 +1360,26 @@ const launchCopyTrading = async (config) => {
     pnl: 0
   };
 
+  // Log colors
+  const typeColors = {
+    info: chalk.cyan,
+    success: chalk.green,
+    trade: chalk.green.bold,
+    copy: chalk.yellow.bold,
+    error: chalk.red,
+    warning: chalk.yellow
+  };
+
+  const getIcon = (type) => {
+    switch(type) {
+      case 'trade': return '[>]';
+      case 'copy': return '[+]';
+      case 'error': return '[X]';
+      case 'success': return '[OK]';
+      default: return '[.]';
+    }
+  };
+
   const addLog = (type, message) => {
     const timestamp = new Date().toLocaleTimeString();
     logs.push({ timestamp, type, message });
@@ -1022,74 +1388,52 @@ const launchCopyTrading = async (config) => {
 
   const displayUI = () => {
     console.clear();
+    
+    // Logo
+    const logo = [
+      '██╗  ██╗ ██████╗ ██╗  ██╗',
+      '██║  ██║██╔═══██╗╚██╗██╔╝',
+      '███████║██║   ██║ ╚███╔╝ ',
+      '██╔══██║██║▄▄ ██║ ██╔██╗ ',
+      '██║  ██║╚██████╔╝██╔╝ ██╗',
+      '╚═╝  ╚═╝ ╚══▀▀═╝ ╚═╝  ╚═╝'
+    ];
+    
     console.log();
-    console.log(chalk.gray(getSeparator()));
-    console.log(chalk.green.bold('  HQX Copy Trading'));
-    console.log(chalk.gray(getSeparator()));
-    console.log(chalk.white(`  Status: ${isRunning ? chalk.green('RUNNING') : chalk.red('STOPPED')}`));
-    console.log(chalk.gray(getSeparator()));
-    console.log();
-
-    // Risk Management
-    console.log(chalk.white.bold('  RISK MANAGEMENT'));
-    const targetProgress = Math.min(100, (stats.pnl / dailyTarget) * 100);
-    const riskProgress = Math.min(100, (Math.abs(Math.min(0, stats.pnl)) / maxRisk) * 100);
-    console.log(chalk.white(`    Target:  ${chalk.green('$' + dailyTarget.toFixed(2))} | Progress: ${targetProgress >= 100 ? chalk.green.bold(targetProgress.toFixed(1) + '%') : chalk.yellow(targetProgress.toFixed(1) + '%')}`));
-    console.log(chalk.white(`    Risk:    ${chalk.red('$' + maxRisk.toFixed(2))} | Used: ${riskProgress >= 100 ? chalk.red.bold(riskProgress.toFixed(1) + '%') : chalk.cyan(riskProgress.toFixed(1) + '%')}`));
-    console.log(chalk.white(`    P&L:     ${stats.pnl >= 0 ? chalk.green('+$' + stats.pnl.toFixed(2)) : chalk.red('-$' + Math.abs(stats.pnl).toFixed(2))}`));
-    console.log();
-
-    // Lead info
-    console.log(chalk.white.bold('  LEAD'));
-    console.log(chalk.white(`    ${chalk.cyan(lead.account.accountName)} @ ${chalk.magenta(lead.account.propfirm)}`));
-    console.log(chalk.white(`    ${chalk.cyan(lead.symbol.value)} x ${lead.contracts}`));
+    logo.forEach(line => {
+      console.log(chalk.cyan('  ' + line));
+    });
+    console.log(chalk.gray('  Copy Trading System'));
     console.log();
 
-    // Follower info
-    console.log(chalk.white.bold('  FOLLOWER'));
-    console.log(chalk.white(`    ${chalk.cyan(follower.account.accountName)} @ ${chalk.magenta(follower.account.propfirm)}`));
-    console.log(chalk.white(`    ${chalk.cyan(follower.symbol.value)} x ${follower.contracts}`));
-    console.log();
-
-    // Stats
-    console.log(chalk.gray(getSeparator()));
-    console.log(chalk.white('  Stats: ') +
-      chalk.gray('Lead Trades: ') + chalk.cyan(stats.leadTrades) +
-      chalk.gray(' | Copied: ') + chalk.green(stats.copiedTrades) +
-      chalk.gray(' | Errors: ') + chalk.red(stats.errors)
-    );
-    console.log(chalk.gray(getSeparator()));
+    // Info Box
+    const pnlColor = stats.pnl >= 0 ? chalk.green : chalk.red;
+    const pnlStr = (stats.pnl >= 0 ? '+$' : '-$') + Math.abs(stats.pnl).toFixed(2);
+    
+    console.log(chalk.cyan('  ╔════════════════════════════════════════════════════════════════════╗'));
+    console.log(chalk.cyan('  ║') + chalk.white(` LEAD:     ${chalk.cyan((lead.account.accountName || '').substring(0, 20).padEnd(20))} ${chalk.yellow((lead.symbol.value || '').padEnd(10))} x${lead.contracts}`) + chalk.cyan('       ║'));
+    console.log(chalk.cyan('  ║') + chalk.white(` FOLLOWER: ${chalk.cyan((follower.account.accountName || '').substring(0, 20).padEnd(20))} ${chalk.yellow((follower.symbol.value || '').padEnd(10))} x${follower.contracts}`) + chalk.cyan('       ║'));
+    console.log(chalk.cyan('  ╠════════════════════════════════════════════════════════════════════╣'));
+    console.log(chalk.cyan('  ║') + chalk.white(` Target: ${chalk.green(('$' + dailyTarget.toFixed(2)).padEnd(10))} Risk: ${chalk.red(('$' + maxRisk.toFixed(2)).padEnd(10))} P&L: ${pnlColor(pnlStr.padEnd(12))}`) + chalk.cyan('   ║'));
+    console.log(chalk.cyan('  ║') + chalk.white(` Lead Trades: ${chalk.cyan(stats.leadTrades.toString().padEnd(4))} Copied: ${chalk.green(stats.copiedTrades.toString().padEnd(4))} Errors: ${chalk.red(stats.errors.toString().padEnd(4))}`) + chalk.cyan('           ║'));
+    console.log(chalk.cyan('  ╠════════════════════════════════════════════════════════════════════╣'));
+    console.log(chalk.cyan('  ║') + chalk.white(' Activity Log                                   ') + chalk.yellow('Press X to stop') + chalk.cyan(' ║'));
+    console.log(chalk.cyan('  ╠════════════════════════════════════════════════════════════════════╣'));
 
     // Logs
-    console.log(chalk.white.bold('  Activity Log'));
-    console.log(chalk.gray(getSeparator()));
-
     if (logs.length === 0) {
-      console.log(chalk.gray('  Monitoring lead account for trades...'));
+      console.log(chalk.cyan('  ║') + chalk.gray('  Monitoring lead account for trades...'.padEnd(68)) + chalk.cyan('║'));
     } else {
-      const typeColors = {
-        info: chalk.cyan,
-        success: chalk.green,
-        trade: chalk.green.bold,
-        copy: chalk.yellow.bold,
-        error: chalk.red,
-        warning: chalk.yellow
-      };
-
       logs.forEach(log => {
         const color = typeColors[log.type] || chalk.white;
-        const icon = log.type === 'trade' ? '[>]' :
-                     log.type === 'copy' ? '[+]' :
-                     log.type === 'error' ? '[X]' :
-                     log.type === 'success' ? '[OK]' : '[.]';
-        console.log(chalk.gray(`  [${log.timestamp}]`) + ' ' + color(`${icon} ${log.message}`));
+        const icon = getIcon(log.type);
+        const logLine = `[${log.timestamp}] ${icon} ${log.message}`;
+        const truncated = logLine.length > 66 ? logLine.substring(0, 63) + '...' : logLine;
+        console.log(chalk.cyan('  ║') + ' ' + color(truncated.padEnd(67)) + chalk.cyan('║'));
       });
     }
 
-    console.log(chalk.gray(getSeparator()));
-    console.log();
-    console.log(chalk.yellow('  Press X to stop copy trading...'));
-    console.log();
+    console.log(chalk.cyan('  ╚════════════════════════════════════════════════════════════════════╝'));
   };
 
   addLog('info', 'Copy trading initialized');

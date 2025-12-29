@@ -579,48 +579,57 @@ const mainMenu = async () => {
  */
 const dashboardMenu = async (service) => {
   const user = service.user;
-  const boxWidth = getLogoWidth();
-  const innerWidth = boxWidth - 2;
+  const W = 60; // Fixed width for dashboard box
+  
+  // Helper to center text
+  const centerLine = (text, width) => {
+    const pad = Math.floor((width - text.length) / 2);
+    return ' '.repeat(Math.max(0, pad)) + text + ' '.repeat(Math.max(0, width - pad - text.length));
+  };
+  
+  // Helper to pad text left
+  const padLine = (text, width) => {
+    return ' ' + text + ' '.repeat(Math.max(0, width - text.length - 1));
+  };
   
   // Dashboard box header
   console.log();
-  console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
-  console.log(chalk.cyan('║') + chalk.white.bold(centerText('DASHBOARD', innerWidth)) + chalk.cyan('║'));
-  console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+  console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
+  console.log(chalk.cyan('║') + chalk.white.bold(centerLine('DASHBOARD', W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
   // Connection info - show all active connections
   const allConns = connections.getAll();
   if (allConns.length > 0) {
     const connNames = allConns.map(c => c.propfirm || c.type).join(', ');
     const connText = `Connected to ${connNames}`;
-    const connInfo = chalk.green(connText);
-    console.log(chalk.cyan('║') + '  ' + connInfo + ' '.repeat(Math.max(0, innerWidth - connText.length - 2)) + chalk.cyan('║'));
+    console.log(chalk.cyan('║') + chalk.green(padLine(connText, W)) + chalk.cyan('║'));
   }
   
   if (user) {
-    const userInfo = 'Welcome, ' + user.userName.toUpperCase() + '!';
-    console.log(chalk.cyan('║') + '  ' + chalk.white(userInfo) + ' '.repeat(innerWidth - userInfo.length - 2) + chalk.cyan('║'));
+    const userText = 'Welcome, ' + user.userName.toUpperCase() + '!';
+    console.log(chalk.cyan('║') + chalk.white(padLine(userText, W)) + chalk.cyan('║'));
   }
   
-  console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
   // Menu options in 2 columns
-  const col1Width = Math.floor(innerWidth / 2);
-  const col2Width = innerWidth - col1Width;
+  const col1Width = Math.floor(W / 2);
+  const col2Width = W - col1Width;
   
   const menuRow = (left, right) => {
-    const leftText = '  ' + left;
-    const rightText = right ? '  ' + right : '';
-    const leftPad = col1Width - leftText.replace(/\x1b\[[0-9;]*m/g, '').length;
-    const rightPad = col2Width - rightText.replace(/\x1b\[[0-9;]*m/g, '').length;
-    console.log(chalk.cyan('║') + leftText + ' '.repeat(Math.max(0, leftPad)) + rightText + ' '.repeat(Math.max(0, rightPad)) + chalk.cyan('║'));
+    const leftPlain = left.replace(/\x1b\[[0-9;]*m/g, '');
+    const rightPlain = right ? right.replace(/\x1b\[[0-9;]*m/g, '') : '';
+    const leftPad = ' '.repeat(Math.max(0, col1Width - leftPlain.length - 2));
+    const rightPad = ' '.repeat(Math.max(0, col2Width - rightPlain.length - 2));
+    console.log(chalk.cyan('║') + '  ' + left + leftPad + '  ' + (right || '') + rightPad + chalk.cyan('║'));
   };
   
   menuRow(chalk.cyan('[1] View Accounts'), chalk.cyan('[2] View Stats'));
   menuRow(chalk.cyan('[+] Add Prop-Account'), chalk.cyan('[A] Algo-Trading'));
   menuRow(chalk.yellow('[U] Update HQX'), chalk.red('[X] Disconnect'));
   
-  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
+  console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
   console.log();
 
   const { action } = await inquirer.prompt([
