@@ -666,7 +666,7 @@ const dashboardMenu = async (service) => {
  * Handles the update process with auto-restart
  */
 const handleUpdate = async () => {
-  const { spawn, execSync: exec } = require('child_process');
+  const { execSync: exec } = require('child_process');
   const pkg = require('../package.json');
   const currentVersion = pkg.version;
   const spinner = ora('Checking for updates...').start();
@@ -679,31 +679,41 @@ const handleUpdate = async () => {
       latestVersion = exec('npm view hedgequantx version', { stdio: 'pipe' }).toString().trim();
     } catch (e) {
       spinner.fail('Cannot reach npm registry');
+      console.log();
+      await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
       return;
     }
     
     if (currentVersion === latestVersion) {
       spinner.succeed('Already up to date!');
-      console.log(chalk.cyan(`  Version: v${currentVersion}`));
+      console.log();
+      console.log(chalk.green(`  ✓ You have the latest version of HedgeQuantX CLI: v${currentVersion}`));
+      console.log();
+      await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
       return;
     }
     
     // Update via npm
     spinner.text = `Updating v${currentVersion} -> v${latestVersion}...`;
     try {
-      execSync('npm install -g hedgequantx@latest', { stdio: 'pipe' });
+      exec('npm install -g hedgequantx@latest', { stdio: 'pipe' });
     } catch (e) {
       spinner.fail('Update failed - try manually: npm install -g hedgequantx@latest');
       console.log(chalk.gray(`  Error: ${e.message}`));
+      console.log();
+      await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
       return;
     }
     
     spinner.succeed('CLI updated!');
     console.log();
-    console.log(chalk.green(`  Updated: v${currentVersion} -> v${latestVersion}`));
+    console.log(chalk.green(`  ✓ Updated: v${currentVersion} -> v${latestVersion}`));
     console.log();
-    console.log(chalk.cyan('  Please restart HQX to apply changes.'));
+    console.log(chalk.cyan('  Restarting HQX...'));
     console.log();
+    
+    // Small delay so user can see the message
+    await new Promise(resolve => setTimeout(resolve, 1500));
     
     // Exit so user can restart
     process.exit(0);
@@ -711,6 +721,8 @@ const handleUpdate = async () => {
   } catch (error) {
     spinner.fail('Update failed: ' + error.message);
     console.log(chalk.yellow('  Try manually: npm install -g hedgequantx@latest'));
+    console.log();
+    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
   }
 };
 
