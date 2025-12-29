@@ -473,6 +473,7 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     success: chalk.green,
     signal: chalk.yellow.bold,
     trade: chalk.green.bold,
+    loss: chalk.magenta.bold,
     error: chalk.red,
     warning: chalk.yellow
   };
@@ -550,13 +551,16 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     // Reset buffer
     screenBuffer = '';
     
-    // Start with cursor home + clear screen
-    screenBuffer += '\x1B[H\x1B[2J';
-    
     if (firstDraw) {
+      // Switch to alternate screen buffer - isolates our display
+      screenBuffer += '\x1B[?1049h'; // Enter alternate screen
       screenBuffer += '\x1B[?25l'; // Hide cursor
+      screenBuffer += '\x1B[2J'; // Clear screen
       firstDraw = false;
     }
+    
+    // Move cursor to home position
+    screenBuffer += '\x1B[H';
     
     // Stats
     const pnlColor = stats.pnl >= 0 ? chalk.green : chalk.red;
@@ -685,19 +689,42 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     const datePad = Math.max(0, Math.floor((midSpace - dateCentered.length) / 2));
     const remainingPad = Math.max(0, midSpace - datePad - dateCentered.length);
     const dateSection = ' '.repeat(datePad) + chalk.cyan(dateCentered) + ' '.repeat(remainingPad);
-    printLine(chalk.cyan(V) + chalk.white(actLeft) + dateSection + chalk.yellow(actRight) + chalk.cyan(V));
-    printLine(chalk.cyan(BOT));
+    bufferLine(chalk.cyan(V) + chalk.white(actLeft) + dateSection + chalk.yellow(actRight) + chalk.cyan(V));
+    bufferLine(chalk.cyan(MID));
     
-    // Logs (without borders) - newest first, show more logs
-    // Align with left border of rectangle above (║ = 1 char + 1 space)
+    // Helper to strip ANSI codes for length calculation
+    const stripAnsi = (str) => str.replace(/\x1B\[[0-9;]*m/g, '');
+    
+    // Helper to truncate and pad text to exact width W
+    const fitToWidth = (text, width) => {
+      const plainText = stripAnsi(text);
+      if (plainText.length > width) {
+        // Truncate - find where to cut in original string
+        let count = 0;
+        let cutIndex = 0;
+        for (let i = 0; i < text.length && count < width - 3; i++) {
+          if (text[i] === '\x1B') {
+            // Skip ANSI sequence
+            while (i < text.length && text[i] !== 'm') i++;
+          } else {
+            count++;
+            cutIndex = i + 1;
+          }
+        }
+        return text.substring(0, cutIndex) + '...';
+      }
+      return text + ' '.repeat(width - plainText.length);
+    };
+    
+    // Logs inside the rectangle - newest first, max 50 lines
     const MAX_VISIBLE_LOGS = 50;
-    printLine('');
     
     if (logs.length === 0) {
-      bufferLine(chalk.gray(' Waiting for activity...'));
-      // Fill remaining lines with empty
+      const emptyLine = ' Waiting for activity...';
+      bufferLine(chalk.cyan(V) + chalk.gray(fitToWidth(emptyLine, W)) + chalk.cyan(V));
+      // Fill remaining lines
       for (let i = 0; i < MAX_VISIBLE_LOGS - 1; i++) {
-        bufferLine('');
+        bufferLine(chalk.cyan(V) + ' '.repeat(W) + chalk.cyan(V));
       }
     } else {
       // Show newest first (reverse), limited to MAX_VISIBLE_LOGS
@@ -705,18 +732,22 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
       reversedLogs.forEach(log => {
         const color = typeColors[log.type] || chalk.white;
         const icon = getIcon(log.type);
-        // Align with rectangle: 1 space to match content after ║
-        const logLine = ` [${log.timestamp}] ${icon} ${log.message}`;
-        bufferLine(color(logLine));
+        // Build log line content (plain text, no color yet)
+        const logContent = ` [${log.timestamp}] ${icon} ${log.message}`;
+        // Fit to width then apply color
+        const fitted = fitToWidth(logContent, W);
+        bufferLine(chalk.cyan(V) + color(fitted) + chalk.cyan(V));
       });
       // Fill remaining lines with empty to keep fixed height
       for (let i = reversedLogs.length; i < MAX_VISIBLE_LOGS; i++) {
-        bufferLine('');
+        bufferLine(chalk.cyan(V) + ' '.repeat(W) + chalk.cyan(V));
       }
     }
     
+    // Bottom border to close the rectangle
+    bufferLine(chalk.cyan(BOT));
+    
     // Write entire buffer atomically
-    screenBuffer += '\x1B[J'; // Clear anything below
     process.stdout.write(screenBuffer);
     
     isDrawing = false;
@@ -798,12 +829,13 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
       printLog('trade', `Closed +$${data.pnl.toFixed(2)} (${data.reason || 'take_profit'})`);
     } else {
       stats.losses++;
-      printLog('trade', `Closed -$${Math.abs(data.pnl).toFixed(2)} (${data.reason || 'stop_loss'})`);
+      printLog('loss', `Closed -$${Math.abs(data.pnl).toFixed(2)} (${data.reason || 'stop_loss'})`);
     }
     stats.winRate = stats.trades > 0 ? ((stats.wins / stats.trades) * 100).toFixed(1) : '0.0';
     
     // Print updated stats
-    printLog('info', `Stats: Trades: ${stats.trades} | Wins: ${stats.wins} | P&L: $${stats.pnl.toFixed(2)}`);
+    const statsType = stats.pnl >= 0 ? 'info' : 'loss';
+    printLog(statsType, `Stats: Trades: ${stats.trades} | Wins: ${stats.wins} | P&L: $${stats.pnl.toFixed(2)}`);
     
     // Check daily target
     if (stats.pnl >= dailyTarget) {
@@ -939,8 +971,9 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
   // Clear spinner interval
   clearInterval(spinnerInterval);
   
-  // Show cursor again
-  process.stdout.write('\x1B[?25h');
+  // Exit alternate screen buffer and show cursor
+  process.stdout.write('\x1B[?1049l'); // Exit alternate screen
+  process.stdout.write('\x1B[?25h'); // Show cursor
   
   // Stop algo
   console.log();
