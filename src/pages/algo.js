@@ -308,9 +308,6 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
   let stopReason = null;
   
   // Activity logs
-  const logs = [];
-  const MAX_LOGS = 10;
-  
   // Stats
   let stats = {
     trades: 0,
@@ -321,14 +318,32 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     winRate: '0.0'
   };
   
-  const addLog = (type, message) => {
-    const timestamp = new Date().toLocaleTimeString();
-    logs.push({ timestamp, type, message });
-    if (logs.length > MAX_LOGS) logs.shift();
+  // Log colors
+  const typeColors = {
+    info: chalk.cyan,
+    success: chalk.green,
+    signal: chalk.yellow.bold,
+    trade: chalk.green.bold,
+    error: chalk.red,
+    warning: chalk.yellow
   };
   
-  const clearScreen = () => {
-    console.clear();
+  const getIcon = (type) => {
+    switch(type) {
+      case 'signal': return '[*]';
+      case 'trade': return '[>]';
+      case 'error': return '[X]';
+      case 'success': return '[OK]';
+      default: return '[.]';
+    }
+  };
+  
+  // Print log directly to console (no clear screen)
+  const printLog = (type, message) => {
+    const timestamp = new Date().toLocaleTimeString();
+    const color = typeColors[type] || chalk.white;
+    const icon = getIcon(type);
+    console.log(chalk.gray(`  [${timestamp}]`) + ' ' + color(`${icon} ${message}`));
   };
   
   // Check market hours
@@ -352,71 +367,22 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     return { isOpen: true, message: 'Market OPEN' };
   };
 
-  const displayUI = () => {
-    clearScreen();
+  // Display header once at start
+  const displayHeader = () => {
+    console.clear();
     const marketStatus = checkMarketStatus();
     console.log();
     console.log(chalk.gray(getSeparator()));
     console.log(chalk.cyan.bold('  HQX Ultra-Scalping Algo'));
     console.log(chalk.gray(getSeparator()));
-    console.log(chalk.white(`  Status:    ${algoRunning ? chalk.green('RUNNING') : chalk.yellow('CONNECTING...')}`));
     console.log(chalk.white(`  Account:   ${chalk.cyan(accountName)}`));
     console.log(chalk.white(`  Symbol:    ${chalk.cyan(symbolName)}`));
     console.log(chalk.white(`  Contracts: ${chalk.cyan(numContracts)}`));
-    console.log(chalk.white(`  Server:    ${hqxConnected ? chalk.green('CONNECTED') : chalk.red('DISCONNECTED')}`));
+    console.log(chalk.white(`  Target:    ${chalk.green('$' + dailyTarget.toFixed(2))} | Risk: ${chalk.red('$' + maxRisk.toFixed(2))}`));
     console.log(chalk.white(`  Market:    ${marketStatus.isOpen ? chalk.green(marketStatus.message) : chalk.red(marketStatus.message)}`));
     console.log(chalk.gray(getSeparator()));
-
-    // Risk Management
-    console.log();
-    const targetProgress = Math.min(100, Math.max(0, (stats.pnl / dailyTarget) * 100));
-    const riskProgress = Math.min(100, (Math.abs(Math.min(0, stats.pnl)) / maxRisk) * 100);
-    console.log(chalk.white('  Target:  ') + chalk.green('$' + dailyTarget.toFixed(2)) + 
-      chalk.gray(' | Progress: ') + (targetProgress >= 100 ? chalk.green.bold(targetProgress.toFixed(1) + '%') : chalk.yellow(targetProgress.toFixed(1) + '%')));
-    console.log(chalk.white('  Risk:    ') + chalk.red('$' + maxRisk.toFixed(2)) + 
-      chalk.gray(' | Used: ') + (riskProgress >= 100 ? chalk.red.bold(riskProgress.toFixed(1) + '%') : chalk.cyan(riskProgress.toFixed(1) + '%')));
-    
-    // Stats bar
-    console.log();
-    console.log(chalk.white('  Stats: ') + 
-      chalk.gray('Trades: ') + chalk.cyan(stats.trades) + 
-      chalk.gray(' | Wins: ') + chalk.green(stats.wins) + 
-      chalk.gray(' | Losses: ') + chalk.red(stats.losses) + 
-      chalk.gray(' | Win Rate: ') + chalk.yellow(stats.winRate + '%') +
-      chalk.gray(' | P&L: ') + (stats.pnl >= 0 ? chalk.green('+$' + stats.pnl.toFixed(2)) : chalk.red('-$' + Math.abs(stats.pnl).toFixed(2)))
-    );
-    console.log();
-    
-    // Activity logs
-    console.log(chalk.gray(getSeparator()));
-    console.log(chalk.white.bold('  Activity Log'));
-    console.log(chalk.gray(getSeparator()));
-    
-    const typeColors = {
-      info: chalk.cyan,
-      success: chalk.green,
-      signal: chalk.yellow.bold,
-      trade: chalk.green.bold,
-      error: chalk.red,
-      warning: chalk.yellow
-    };
-    
-    if (logs.length === 0) {
-      console.log(chalk.gray('  Waiting for activity...'));
-    } else {
-      logs.forEach(log => {
-        const color = typeColors[log.type] || chalk.white;
-        const icon = log.type === 'signal' ? '[*]' : 
-                     log.type === 'trade' ? '[>]' : 
-                     log.type === 'error' ? '[X]' : 
-                     log.type === 'success' ? '[OK]' : '[.]';
-        console.log(chalk.gray(`  [${log.timestamp}]`) + ' ' + color(`${icon} ${log.message}`));
-      });
-    }
-    
-    console.log(chalk.gray(getSeparator()));
-    console.log();
     console.log(chalk.yellow('  Press X to stop algo...'));
+    console.log(chalk.gray(getSeparator()));
     console.log();
   };
   
@@ -455,17 +421,15 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     hqxConnected = false;
   }
   
-  // Setup event handlers
+  // Setup event handlers - logs scroll down naturally
   hqxServer.on('log', (data) => {
-    addLog(data.type || 'info', data.message);
-    displayUI();
+    printLog(data.type || 'info', data.message);
   });
   
   hqxServer.on('signal', (data) => {
     stats.signals++;
     const side = data.side === 'long' ? 'BUY' : 'SELL';
-    addLog('signal', `${side} Signal @ ${data.entry?.toFixed(2) || 'N/A'} | SL: ${data.stop?.toFixed(2) || 'N/A'} | TP: ${data.target?.toFixed(2) || 'N/A'}`);
-    displayUI();
+    printLog('signal', `${side} Signal @ ${data.entry?.toFixed(2) || 'N/A'} | SL: ${data.stop?.toFixed(2) || 'N/A'} | TP: ${data.target?.toFixed(2) || 'N/A'}`);
     
     // Execute order via PropFirm API if connected
     if (hqxConnected && service) {
@@ -478,17 +442,20 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     stats.pnl += data.pnl || 0;
     if (data.pnl > 0) {
       stats.wins++;
-      addLog('trade', `Closed +$${data.pnl.toFixed(2)} (${data.reason || 'take_profit'})`);
+      printLog('trade', `Closed +$${data.pnl.toFixed(2)} (${data.reason || 'take_profit'})`);
     } else {
       stats.losses++;
-      addLog('trade', `Closed -$${Math.abs(data.pnl).toFixed(2)} (${data.reason || 'stop_loss'})`);
+      printLog('trade', `Closed -$${Math.abs(data.pnl).toFixed(2)} (${data.reason || 'stop_loss'})`);
     }
     stats.winRate = stats.trades > 0 ? ((stats.wins / stats.trades) * 100).toFixed(1) : '0.0';
+    
+    // Print updated stats
+    printLog('info', `Stats: Trades: ${stats.trades} | Wins: ${stats.wins} | P&L: $${stats.pnl.toFixed(2)}`);
     
     // Check daily target
     if (stats.pnl >= dailyTarget) {
       stopReason = 'target';
-      addLog('success', `Daily target reached! +$${stats.pnl.toFixed(2)}`);
+      printLog('success', `Daily target reached! +$${stats.pnl.toFixed(2)}`);
       algoRunning = false;
       if (hqxConnected) {
         hqxServer.stopAlgo();
@@ -498,36 +465,35 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     // Check max risk
     if (stats.pnl <= -maxRisk) {
       stopReason = 'risk';
-      addLog('error', `Max risk reached! -$${Math.abs(stats.pnl).toFixed(2)}`);
+      printLog('error', `Max risk reached! -$${Math.abs(stats.pnl).toFixed(2)}`);
       algoRunning = false;
       if (hqxConnected) {
         hqxServer.stopAlgo();
       }
     }
-    
-    displayUI();
   });
   
   hqxServer.on('stats', (data) => {
     stats = { ...stats, ...data };
-    displayUI();
+    // Don't print stats every time, only on trades
   });
   
   hqxServer.on('error', (data) => {
-    addLog('error', data.message || 'Unknown error');
-    displayUI();
+    printLog('error', data.message || 'Unknown error');
   });
   
   hqxServer.on('disconnected', () => {
     hqxConnected = false;
-    addLog('warning', 'Disconnected from HQX Server');
-    displayUI();
+    printLog('warning', 'Disconnected from HQX Server');
   });
+  
+  // Display header once
+  displayHeader();
   
   // Start algo
   if (hqxConnected) {
-    addLog('info', 'Starting HQX Ultra-Scalping...');
-    addLog('info', `Target: $${dailyTarget.toFixed(2)} | Risk: $${maxRisk.toFixed(2)}`);
+    printLog('info', 'Starting HQX Ultra-Scalping...');
+    printLog('info', `Target: $${dailyTarget.toFixed(2)} | Risk: $${maxRisk.toFixed(2)}`);
     hqxServer.startAlgo({
       accountId: account.accountId,
       contractId: contract.id || contract.contractId,
@@ -540,12 +506,10 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     });
     algoRunning = true;
   } else {
-    addLog('warning', 'Running in offline demo mode');
-    addLog('info', 'No real trades will be executed');
+    printLog('warning', 'Running in offline demo mode');
+    printLog('info', 'No real trades will be executed');
     algoRunning = true;
   }
-  
-  displayUI();
   
   // Wait for X key OR auto-stop (target/risk reached)
   await new Promise((resolve) => {
@@ -579,31 +543,28 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
   });
   
   // Stop algo
+  console.log();
   if (!stopReason) {
-    addLog('warning', 'Stopping algo...');
+    printLog('warning', 'Stopping algo...');
   }
   
   // Cancel all pending orders and close positions
-  addLog('info', 'Cancelling pending orders...');
-  displayUI();
+  printLog('info', 'Cancelling pending orders...');
   
   try {
     // Cancel all orders
     const cancelResult = await service.cancelAllOrders(account.accountId);
     if (cancelResult.success) {
-      addLog('success', 'All pending orders cancelled');
+      printLog('success', 'All pending orders cancelled');
     } else {
-      addLog('warning', 'No pending orders to cancel');
+      printLog('warning', 'No pending orders to cancel');
     }
   } catch (e) {
-    addLog('warning', 'Could not cancel orders: ' + e.message);
+    printLog('warning', 'Could not cancel orders: ' + e.message);
   }
   
-  displayUI();
-  
   // Close all positions for this symbol
-  addLog('info', 'Closing open positions...');
-  displayUI();
+  printLog('info', 'Closing open positions...');
   
   try {
     const positions = await service.getPositions(account.accountId);
@@ -616,19 +577,17 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
       if (symbolPos && symbolPos.quantity !== 0) {
         const closeResult = await service.closePosition(account.accountId, symbolPos.contractId || symbolPos.symbol);
         if (closeResult.success) {
-          addLog('success', `Position closed: ${Math.abs(symbolPos.quantity)} ${symbol}`);
+          printLog('success', `Position closed: ${Math.abs(symbolPos.quantity)} ${symbol}`);
         } else {
-          addLog('error', 'Failed to close position: ' + (closeResult.error || 'Unknown'));
+          printLog('error', 'Failed to close position: ' + (closeResult.error || 'Unknown'));
         }
       } else {
-        addLog('info', 'No open position to close');
+        printLog('info', 'No open position to close');
       }
     }
   } catch (e) {
-    addLog('warning', 'Could not close positions: ' + e.message);
+    printLog('warning', 'Could not close positions: ' + e.message);
   }
-  
-  displayUI();
   
   if (hqxConnected && algoRunning) {
     hqxServer.stopAlgo();
@@ -1004,7 +963,7 @@ const launchCopyTrading = async (config) => {
   let stopReason = null;
   let lastLeadPosition = null;
   const logs = [];
-  const MAX_LOGS = 12;
+  const MAX_LOGS = 25;
 
   const stats = {
     copiedTrades: 0,
