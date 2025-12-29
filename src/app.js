@@ -7,7 +7,7 @@ const chalk = require('chalk');
 const inquirer = require('inquirer');
 const ora = require('ora');
 const figlet = require('figlet');
-const { execSync } = require('child_process');
+const { execSync, spawn } = require('child_process');
 const path = require('path');
 
 const { ProjectXService, connections } = require('./services');
@@ -691,32 +691,22 @@ const handleUpdate = async () => {
     // Update via npm
     spinner.text = `Updating v${currentVersion} -> v${latestVersion}...`;
     try {
-      exec('npm install -g hedgequantx@latest', { stdio: 'pipe' });
+      execSync('npm install -g hedgequantx@latest', { stdio: 'pipe' });
     } catch (e) {
       spinner.fail('Update failed - try manually: npm install -g hedgequantx@latest');
+      console.log(chalk.gray(`  Error: ${e.message}`));
       return;
     }
     
     spinner.succeed('CLI updated!');
     console.log();
-    console.log(chalk.green(`  Version: v${currentVersion} -> v${latestVersion}`));
+    console.log(chalk.green(`  Updated: v${currentVersion} -> v${latestVersion}`));
     console.log();
-    console.log(chalk.cyan('  Restarting...'));
+    console.log(chalk.cyan('  Please restart HQX to apply changes.'));
     console.log();
     
-    // Restart CLI
-    const cliPath = exec('npm root -g', { stdio: 'pipe' }).toString().trim();
-    const child = spawn(process.argv[0], [path.join(cliPath, 'hedgequantx', 'bin', 'cli.js')], {
-      stdio: 'inherit',
-      shell: true
-    });
-    
-    child.on('exit', (code) => {
-      process.exit(code);
-    });
-    
-    // Stop current process loop
-    return 'restart';
+    // Exit so user can restart
+    process.exit(0);
     
   } catch (error) {
     spinner.fail('Update failed: ' + error.message);

@@ -26,11 +26,28 @@ class ProjectXService {
    */
   constructor(propfirmKey = 'topstep') {
     this.propfirm = PROPFIRMS[propfirmKey] || PROPFIRMS.topstep;
+    this.propfirmKey = propfirmKey;
     this.token = null;
     this.user = null;
     this.rateLimiter = getLimiter('api');
     this.loginLimiter = getLimiter('login');
     this.orderLimiter = getLimiter('orders');
+  }
+
+  /**
+   * Get current auth token
+   * @returns {string|null} The JWT token
+   */
+  getToken() {
+    return this.token;
+  }
+
+  /**
+   * Get propfirm key
+   * @returns {string} The propfirm identifier
+   */
+  getPropfirm() {
+    return this.propfirmKey;
   }
 
   /**

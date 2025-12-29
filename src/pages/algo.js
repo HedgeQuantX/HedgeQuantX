@@ -174,161 +174,105 @@ const selectSymbolMenu = async (service, account) => {
   ];
   
   try {
+    const seenIds = new Set();
+    
     for (const search of commonSearches) {
       const result = await service.searchContracts(search, false);
       if (result.success && result.contracts && result.contracts.length > 0) {
         for (const contract of result.contracts) {
-          // Only add contracts that have valid data
-          if (contract.id || contract.contractId || contract.name) {
-            const contractId = contract.id || contract.contractId;
-            const existing = availableSymbols.find(s => s.id === contractId);
-            if (!existing) {
-              // Extract symbol from name if not provided (e.g., "NQH6" from "CON.F.US.ENQ.H26")
-              let symbolCode = contract.symbol || search;
-              if (contract.name && contract.name.includes(' ')) {
-                // Try to extract from name like "E-mini NASDAQ-100 Mar 2026"
-                symbolCode = search;
-              }
-              
-              availableSymbols.push({
-                id: contractId,
-                name: contract.name || contract.symbol || search,
-                symbol: symbolCode,
-                tickSize: contract.tickSize,
-                tickValue: contract.tickValue,
-                exchange: contract.exchange || 'CME',
-                activeContract: contract.activeContract || false
-              });
-            }
-          }
+          // Skip if already added (by contract ID)
+          const contractId = contract.id || '';
+          if (!contractId || seenIds.has(contractId)) continue;
+          seenIds.add(contractId);
+          
+          // Add the raw contract data from API
+          availableSymbols.push(contract);
         }
       }
     }
   } catch (e) {
-    // Fallback to static list
+    spinner.fail('Failed to load symbols from API: ' + e.message);
+    return;
   }
   
-  // Add micro contracts if not found from API
-  const microContracts = [
-    { symbol: 'MNQ', name: 'Micro E-mini NASDAQ-100' },
-    { symbol: 'MES', name: 'Micro E-mini S&P 500' },
-    { symbol: 'MYM', name: 'Micro E-mini Dow Jones' },
-    { symbol: 'M2K', name: 'Micro E-mini Russell 2000' },
-    { symbol: 'MCL', name: 'Micro Crude Oil' },
-    { symbol: 'MGC', name: 'Micro Gold' }
-  ];
-  
-  // Get current month code for front month
-  const now = new Date();
-  const monthCodes = ['F', 'G', 'H', 'J', 'K', 'M', 'N', 'Q', 'U', 'V', 'X', 'Z'];
-  const currentMonthCode = monthCodes[now.getMonth()];
-  const yearCode = (now.getFullYear() % 100).toString();
-  
-  for (const micro of microContracts) {
-    const hasMicro = availableSymbols.some(s => 
-      (s.symbol && s.symbol.toUpperCase().startsWith(micro.symbol)) ||
-      (s.name && s.name.toUpperCase().includes(micro.symbol))
-    );
-    if (!hasMicro) {
-      // Add micro contract with front month
-      availableSymbols.push({
-        id: `${micro.symbol}${currentMonthCode}${yearCode}`,
-        name: `${micro.symbol}${currentMonthCode}${yearCode}`,
-        symbol: `${micro.symbol}${currentMonthCode}${yearCode}`,
-        description: micro.name,
-        exchange: 'CME'
-      });
-    }
-  }
-  
-  // If no symbols found from API, use static list
+  // Only use REAL data from API - no mock/static data
   if (availableSymbols.length === 0) {
-    spinner.warn('Using default symbol list');
-    availableSymbols = FUTURES_SYMBOLS.map(s => ({
-      id: s.value,
-      name: s.name,
-      symbol: s.value,
-      searchText: s.searchText
-    }));
-  } else {
-    spinner.succeed(`Found ${availableSymbols.length} available contracts`);
+    spinner.fail('No contracts available from API');
+    console.log(chalk.red('  Please check your connection and try again'));
+    return;
   }
+  
+  spinner.succeed(`Found ${availableSymbols.length} available contracts`);
   
   console.log();
   
-  // Symbol name descriptions
-  const symbolDescriptions = {
-    'NQ': 'E-mini NASDAQ-100',
-    'MNQ': 'Micro E-mini NASDAQ-100',
-    'ES': 'E-mini S&P 500',
-    'MES': 'Micro E-mini S&P 500',
-    'YM': 'E-mini Dow Jones',
-    'MYM': 'Micro E-mini Dow Jones',
-    'RTY': 'E-mini Russell 2000',
-    'M2K': 'Micro E-mini Russell 2000',
-    'CL': 'Crude Oil WTI',
-    'MCL': 'Micro Crude Oil',
-    'NG': 'Natural Gas',
-    'QG': 'E-mini Natural Gas',
-    'QM': 'E-mini Crude Oil',
-    'GC': 'Gold',
-    'MGC': 'Micro Gold',
-    'SI': 'Silver',
-    'SIL': 'Micro Silver',
-    'HG': 'Copper',
-    'PL': 'Platinum',
-    '6E': 'Euro FX',
-    'M6E': 'Micro Euro FX',
-    '6B': 'British Pound',
-    '6J': 'Japanese Yen',
-    '6A': 'Australian Dollar',
-    '6C': 'Canadian Dollar',
-    '6M': 'Mexican Peso',
-    '6S': 'Swiss Franc',
-    'ZB': '30-Year T-Bond',
-    'ZN': '10-Year T-Note',
-    'ZF': '5-Year T-Note',
-    'ZT': '2-Year T-Note',
-    'ZC': 'Corn',
-    'ZS': 'Soybeans',
-    'ZW': 'Wheat'
-  };
-  
-  // Format symbols for display - deduplicate by base symbol + month
-  const seenSymbols = new Set();
+  // Format symbols for display - show ALL contracts from API (REAL DATA ONLY)
   const symbolChoices = [];
   
-  for (const symbol of availableSymbols) {
-    const symbolCode = symbol.symbol || symbol.id || '';
+  for (const contract of availableSymbols) {
+    // Get symbol code and description directly from API
+    const symbolCode = contract.name || contract.id || 'Unknown';
+    const description = contract.description || symbolCode;
     
-    // Extract base symbol (e.g., NQ from NQH6) and month code
-    const baseMatch = symbolCode.match(/^([A-Z0-9]{1,4})([FGHJKMNQUVXZ])(\d{1,2})$/i);
-    let baseSymbol = symbolCode;
-    let monthYear = '';
-    
-    if (baseMatch) {
-      baseSymbol = baseMatch[1];
-      const monthCodes = { F: 'Jan', G: 'Feb', H: 'Mar', J: 'Apr', K: 'May', M: 'Jun', N: 'Jul', Q: 'Aug', U: 'Sep', V: 'Oct', X: 'Nov', Z: 'Dec' };
-      const monthCode = baseMatch[2].toUpperCase();
-      const year = baseMatch[3].length === 1 ? '2' + baseMatch[3] : baseMatch[3];
-      monthYear = (monthCodes[monthCode] || monthCode) + year;
-    }
-    
-    // Create unique key to deduplicate
-    const uniqueKey = `${baseSymbol}-${monthYear}`;
-    if (seenSymbols.has(uniqueKey)) continue;
-    seenSymbols.add(uniqueKey);
-    
-    // Get descriptive name from mapping
-    const description = symbolDescriptions[baseSymbol] || symbol.name || baseSymbol;
-    
-    // Format: "NQ.Mar26     E-mini NASDAQ-100"
-    const symbolDisplay = monthYear ? `${baseSymbol}.${monthYear}` : baseSymbol;
+    // Format: "NQH6         E-mini NASDAQ-100: March 2026"
     symbolChoices.push({
-      name: chalk.yellow(symbolDisplay.padEnd(12)) + chalk.white(description),
-      value: symbol
+      name: chalk.yellow(symbolCode.padEnd(12)) + chalk.white(description),
+      value: contract
     });
   }
+  
+  // Sort by category: E-mini indices first, then Micro E-mini, then others
+  const getSymbolPriority = (contract) => {
+    const name = (contract.name || contract.symbol || '').toUpperCase();
+    const desc = (contract.description || '').toLowerCase();
+    
+    // E-mini indices (NQ, ES, YM, RTY) - highest priority
+    if (name.match(/^(NQ|ES|YM|RTY)[A-Z]\d/) && !name.startsWith('M')) {
+      if (name.startsWith('NQ')) return 10;
+      if (name.startsWith('ES')) return 11;
+      if (name.startsWith('YM')) return 12;
+      if (name.startsWith('RTY')) return 13;
+      return 15;
+    }
+    
+    // Micro E-mini indices (MNQ, MES, MYM, M2K)
+    if (name.match(/^(MNQ|MES|MYM|M2K)/)) {
+      if (name.startsWith('MNQ')) return 20;
+      if (name.startsWith('MES')) return 21;
+      if (name.startsWith('MYM')) return 22;
+      if (name.startsWith('M2K')) return 23;
+      return 25;
+    }
+    
+    // Energy (CL, MCL, NG)
+    if (name.match(/^(CL|MCL|NG|QG)/)) return 30;
+    
+    // Metals (GC, MGC, SI)
+    if (name.match(/^(GC|MGC|SI|HG|PL)/)) return 40;
+    
+    // Currencies (6E, 6B, etc)
+    if (name.match(/^(6E|6B|6J|6A|6C|M6E)/)) return 50;
+    
+    // Treasuries (ZB, ZN, ZF, ZT)
+    if (name.match(/^(ZB|ZN|ZF|ZT)/)) return 60;
+    
+    // Everything else
+    return 100;
+  };
+  
+  symbolChoices.sort((a, b) => {
+    const priorityA = getSymbolPriority(a.value);
+    const priorityB = getSymbolPriority(b.value);
+    
+    if (priorityA !== priorityB) {
+      return priorityA - priorityB;
+    }
+    
+    // Same priority - sort alphabetically
+    const aCode = a.value.name || a.value.symbol || '';
+    const bCode = b.value.name || b.value.symbol || '';
+    return aCode.localeCompare(bCode);
+  });
   
   symbolChoices.push(new inquirer.Separator());
   symbolChoices.push({ name: chalk.yellow('< Back'), value: 'back' });
@@ -339,7 +283,7 @@ const selectSymbolMenu = async (service, account) => {
       name: 'selectedSymbol',
       message: chalk.white.bold('Select Symbol:'),
       choices: symbolChoices,
-      pageSize: 20,
+      pageSize: 50,
       loop: false
     }
   ]);
@@ -894,6 +838,11 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
   if (hqxConnected) {
     printLog('info', 'Starting HQX Ultra-Scalping...');
     printLog('info', `Target: $${dailyTarget.toFixed(2)} | Risk: $${maxRisk.toFixed(2)}`);
+    
+    // Get propfirm token for real market data
+    const propfirmToken = service.getToken ? service.getToken() : null;
+    const propfirmId = service.getPropfirm ? service.getPropfirm() : (account.propfirm || 'topstep');
+    
     hqxServer.startAlgo({
       accountId: account.accountId,
       contractId: contract.id || contract.contractId,
@@ -901,8 +850,8 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
       contracts: numContracts,
       dailyTarget: dailyTarget,
       maxRisk: maxRisk,
-      propfirm: account.propfirm || 'projectx',
-      propfirmToken: service.getToken ? service.getToken() : null
+      propfirm: propfirmId,
+      propfirmToken: propfirmToken
     });
     algoRunning = true;
   } else {
