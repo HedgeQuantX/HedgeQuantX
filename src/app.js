@@ -709,13 +709,20 @@ const handleUpdate = async () => {
     console.log();
     console.log(chalk.green(`  ✓ Updated: v${currentVersion} -> v${latestVersion}`));
     console.log();
-    console.log(chalk.cyan('  Restarting HQX...'));
+    console.log(chalk.cyan('  Restarting HedgeQuantX CLI...'));
     console.log();
     
     // Small delay so user can see the message
     await new Promise(resolve => setTimeout(resolve, 1500));
     
-    // Exit so user can restart
+    // Restart the CLI automatically
+    const { spawn } = require('child_process');
+    const child = spawn('hedgequantx', [], {
+      stdio: 'inherit',
+      detached: true,
+      shell: true
+    });
+    child.unref();
     process.exit(0);
     
   } catch (error) {
