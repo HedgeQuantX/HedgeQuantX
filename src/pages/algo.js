@@ -159,25 +159,45 @@ const selectSymbolMenu = async (service, account) => {
   
   let availableSymbols = [];
   
-  // Search for common symbols to get available contracts
-  const commonSearches = ['NQ', 'ES', 'YM', 'RTY', 'CL', 'GC', 'SI', '6E', 'ZB', 'NG'];
+  // Search for common symbols to get available contracts (including micros)
+  // Use various search terms to find all contracts
+  const commonSearches = [
+    'NQ', 'ES', 'YM', 'RTY',           // E-mini indices
+    'Micro', 'MNQ', 'MES', 'MYM', 'M2K', // Micro indices (try multiple search terms)
+    'CL', 'MCL', 'QM',                 // Crude Oil
+    'GC', 'MGC',                       // Gold
+    'SI', 'SIL',                       // Silver
+    '6E', 'M6E', '6B', '6J', '6A', '6C', // Currencies
+    'ZB', 'ZN', 'ZF', 'ZT',            // Treasuries
+    'NG', 'QG',                        // Natural Gas
+    'HG', 'PL'                         // Copper, Platinum
+  ];
   
   try {
     for (const search of commonSearches) {
       const result = await service.searchContracts(search, false);
       if (result.success && result.contracts && result.contracts.length > 0) {
         for (const contract of result.contracts) {
-          // Only add active/front-month contracts
-          if (contract.activeContract || contract.name) {
-            const existing = availableSymbols.find(s => s.id === contract.id);
+          // Only add contracts that have valid data
+          if (contract.id || contract.contractId || contract.name) {
+            const contractId = contract.id || contract.contractId;
+            const existing = availableSymbols.find(s => s.id === contractId);
             if (!existing) {
+              // Extract symbol from name if not provided (e.g., "NQH6" from "CON.F.US.ENQ.H26")
+              let symbolCode = contract.symbol || search;
+              if (contract.name && contract.name.includes(' ')) {
+                // Try to extract from name like "E-mini NASDAQ-100 Mar 2026"
+                symbolCode = search;
+              }
+              
               availableSymbols.push({
-                id: contract.id || contract.contractId,
-                name: contract.name || contract.symbol,
-                symbol: contract.symbol || search,
+                id: contractId,
+                name: contract.name || contract.symbol || search,
+                symbol: symbolCode,
                 tickSize: contract.tickSize,
                 tickValue: contract.tickValue,
-                exchange: contract.exchange || 'CME'
+                exchange: contract.exchange || 'CME',
+                activeContract: contract.activeContract || false
               });
             }
           }
@@ -186,6 +206,39 @@ const selectSymbolMenu = async (service, account) => {
     }
   } catch (e) {
     // Fallback to static list
+  }
+  
+  // Add micro contracts if not found from API
+  const microContracts = [
+    { symbol: 'MNQ', name: 'Micro E-mini NASDAQ-100' },
+    { symbol: 'MES', name: 'Micro E-mini S&P 500' },
+    { symbol: 'MYM', name: 'Micro E-mini Dow Jones' },
+    { symbol: 'M2K', name: 'Micro E-mini Russell 2000' },
+    { symbol: 'MCL', name: 'Micro Crude Oil' },
+    { symbol: 'MGC', name: 'Micro Gold' }
+  ];
+  
+  // Get current month code for front month
+  const now = new Date();
+  const monthCodes = ['F', 'G', 'H', 'J', 'K', 'M', 'N', 'Q', 'U', 'V', 'X', 'Z'];
+  const currentMonthCode = monthCodes[now.getMonth()];
+  const yearCode = (now.getFullYear() % 100).toString();
+  
+  for (const micro of microContracts) {
+    const hasMicro = availableSymbols.some(s => 
+      (s.symbol && s.symbol.toUpperCase().startsWith(micro.symbol)) ||
+      (s.name && s.name.toUpperCase().includes(micro.symbol))
+    );
+    if (!hasMicro) {
+      // Add micro contract with front month
+      availableSymbols.push({
+        id: `${micro.symbol}${currentMonthCode}${yearCode}`,
+        name: `${micro.symbol}${currentMonthCode}${yearCode}`,
+        symbol: `${micro.symbol}${currentMonthCode}${yearCode}`,
+        description: micro.name,
+        exchange: 'CME'
+      });
+    }
   }
   
   // If no symbols found from API, use static list
@@ -269,9 +322,10 @@ const selectSymbolMenu = async (service, account) => {
     // Get descriptive name from mapping
     const description = symbolDescriptions[baseSymbol] || symbol.name || baseSymbol;
     
-    // Format: "NQ   Mar26  E-mini NASDAQ-100"
+    // Format: "NQ.Mar26     E-mini NASDAQ-100"
+    const symbolDisplay = monthYear ? `${baseSymbol}.${monthYear}` : baseSymbol;
     symbolChoices.push({
-      name: chalk.yellow(baseSymbol.padEnd(5)) + chalk.cyan(monthYear.padEnd(7)) + chalk.white(description),
+      name: chalk.yellow(symbolDisplay.padEnd(12)) + chalk.white(description),
       value: symbol
     });
   }
@@ -382,12 +436,29 @@ const selectSymbolMenu = async (service, account) => {
     }
   ]);
   
+  // Privacy option - show or hide account name
+  console.log();
+  const { showAccountName } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'showAccountName',
+      message: chalk.white.bold('Account name visibility:'),
+      choices: [
+        { name: chalk.cyan('[>] Show account name'), value: true },
+        { name: chalk.gray('[.] Hide account name'), value: false }
+      ],
+      loop: false
+    }
+  ]);
+  
+  const displayAccountName = showAccountName ? accountName : 'HQX *****';
+  
   // Confirmation
   console.log();
   console.log(chalk.gray(getSeparator()));
   console.log(chalk.white.bold('  Algo Configuration:'));
   console.log(chalk.gray(getSeparator()));
-  console.log(chalk.white(`  Account:      ${chalk.cyan(accountName)}`));
+  console.log(chalk.white(`  Account:      ${chalk.cyan(displayAccountName)}`));
   console.log(chalk.white(`  Symbol:       ${chalk.cyan(contract.name || selectedSymbol.value)}`));
   console.log(chalk.white(`  Contracts:    ${chalk.cyan(contracts)}`));
   console.log(chalk.white(`  Daily Target: ${chalk.green('$' + dailyTarget.toFixed(2))}`));
@@ -412,14 +483,15 @@ const selectSymbolMenu = async (service, account) => {
     return;
   }
   
-  await launchAlgo(service, account, contract, contracts, dailyTarget, maxRisk);
+  await launchAlgo(service, account, contract, contracts, dailyTarget, maxRisk, showAccountName);
 };
 
 /**
  * Launch Algo with HQX Server Connection
  */
-const launchAlgo = async (service, account, contract, numContracts, dailyTarget, maxRisk) => {
-  const accountName = account.accountName || account.name || 'Account #' + account.accountId;
+const launchAlgo = async (service, account, contract, numContracts, dailyTarget, maxRisk, showAccountName = true) => {
+  const realAccountName = account.accountName || account.name || 'Account #' + account.accountId;
+  const accountName = showAccountName ? realAccountName : 'HQX *****';
   const symbolName = contract.name || contract.symbol || contract.id;
   const symbol = contract.symbol || contract.id;
   
@@ -449,7 +521,7 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
   
   // Logs buffer - newest first display, show many logs
   const logs = [];
-  const MAX_LOGS = 30;
+  const MAX_LOGS = 50;
   
   // Log colors
   const typeColors = {
@@ -654,12 +726,13 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     console.log(chalk.cyan(V) + chalk.white(actLeft) + dateSection + chalk.yellow(actRight) + chalk.cyan(V));
     console.log(chalk.cyan(BOT));
     
-    // Logs (without borders) - newest first, fixed number of lines
-    const MAX_VISIBLE_LOGS = 15;
+    // Logs (without borders) - newest first, show more logs
+    // Align with left border of rectangle above (║ = 1 char + 1 space)
+    const MAX_VISIBLE_LOGS = 50;
     console.log();
     
     if (logs.length === 0) {
-      console.log(chalk.gray('  Waiting for activity...') + '\x1B[K');
+      console.log(chalk.gray(' Waiting for activity...') + '\x1B[K');
       // Fill remaining lines with empty
       for (let i = 0; i < MAX_VISIBLE_LOGS - 1; i++) {
         console.log('\x1B[K');
@@ -670,7 +743,8 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
       reversedLogs.forEach(log => {
         const color = typeColors[log.type] || chalk.white;
         const icon = getIcon(log.type);
-        const logLine = `  [${log.timestamp}] ${icon} ${log.message}`;
+        // Align with rectangle: 1 space to match content after ║
+        const logLine = ` [${log.timestamp}] ${icon} ${log.message}`;
         console.log(color(logLine) + '\x1B[K');
       });
       // Fill remaining lines with empty to keep fixed height
@@ -731,7 +805,12 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
   });
   
   hqxServer.on('log', (data) => {
-    printLog(data.type || 'info', data.message);
+    let message = data.message;
+    // If account name is hidden, filter it from logs too
+    if (!showAccountName && realAccountName) {
+      message = message.replace(new RegExp(realAccountName, 'gi'), 'HQX *****');
+    }
+    printLog(data.type || 'info', message);
   });
   
   hqxServer.on('signal', (data) => {
@@ -937,20 +1016,25 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
   hqxServer.disconnect();
   algoRunning = false;
   
-  // Clear screen and show final result
-  console.clear();
+  // Small delay to ensure all cleanup is done
+  await new Promise(r => setTimeout(r, 500));
   
+  // Show cursor again (don't clear screen - show summary below logs)
+  process.stdout.write('\x1B[?25h');
+  
+  // Print stop reason message
+  console.log();
   console.log();
   if (stopReason === 'target') {
-    console.log(chalk.green.bold('  [OK] Daily target reached! Algo stopped.'));
+    console.log(chalk.green.bold(' [OK] Daily target reached! Algo stopped.'));
   } else if (stopReason === 'risk') {
-    console.log(chalk.red.bold('  [X] Max risk reached! Algo stopped.'));
+    console.log(chalk.red.bold(' [X] Max risk reached! Algo stopped.'));
   } else if (stopReason === 'disconnected' || stopReason === 'connection_error') {
-    console.log(chalk.red.bold('  [X] Connection lost! Algo stopped.'));
+    console.log(chalk.red.bold(' [X] Connection lost! Algo stopped.'));
   } else if (stopReason === 'user') {
-    console.log(chalk.yellow('  [OK] Algo stopped by user'));
+    console.log(chalk.yellow(' [OK] Algo stopped by user'));
   } else {
-    console.log(chalk.yellow('  [OK] Algo stopped by user'));
+    console.log(chalk.yellow(' [OK] Algo stopped by user'));
   }
   console.log();
   

@@ -693,18 +693,8 @@ const handleUpdate = async () => {
     try {
       exec('npm install -g hedgequantx@latest', { stdio: 'pipe' });
     } catch (e) {
-      // Try with sudo on Unix systems
-      if (process.platform !== 'win32') {
-        try {
-          exec('sudo npm install -g hedgequantx@latest', { stdio: 'pipe' });
-        } catch (e2) {
-          spinner.fail('Update failed - try manually: npm install -g hedgequantx@latest');
-          return;
-        }
-      } else {
-        spinner.fail('Update failed - try manually: npm install -g hedgequantx@latest');
-        return;
-      }
+      spinner.fail('Update failed - try manually: npm install -g hedgequantx@latest');
+      return;
     }
     
     spinner.succeed('CLI updated!');
