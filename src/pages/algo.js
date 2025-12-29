@@ -342,11 +342,11 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     }
   };
   
-  // Add log (newest first)
+  // Add log (oldest first, newest at bottom)
   const addLog = (type, message) => {
     const timestamp = new Date().toLocaleTimeString();
-    logs.unshift({ timestamp, type, message }); // Add at beginning
-    if (logs.length > MAX_LOGS) logs.pop(); // Remove oldest
+    logs.push({ timestamp, type, message }); // Add at end
+    if (logs.length > MAX_LOGS) logs.shift(); // Remove oldest from top
   };
   
   // Print log and refresh display
@@ -381,33 +381,50 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     console.clear();
     const marketStatus = checkMarketStatus();
     
-    // Header
+    // Logo
+    const logo = [
+      '██╗  ██╗ ██████╗ ██╗  ██╗',
+      '██║  ██║██╔═══██╗╚██╗██╔╝',
+      '███████║██║   ██║ ╚███╔╝ ',
+      '██╔══██║██║▄▄ ██║ ██╔██╗ ',
+      '██║  ██║╚██████╔╝██╔╝ ██╗',
+      '╚═╝  ╚═╝ ╚══▀▀═╝ ╚═╝  ╚═╝'
+    ];
+    
     console.log();
-    console.log(chalk.gray(getSeparator()));
-    console.log(chalk.cyan.bold('  HQX Ultra-Scalping Algo') + chalk.gray('  |  ') + chalk.yellow('Press X to stop'));
-    console.log(chalk.gray(getSeparator()));
-    console.log(chalk.white(`  Account: ${chalk.cyan(accountName)} | Symbol: ${chalk.cyan(symbolName)} | Qty: ${chalk.cyan(numContracts)}`));
-    console.log(chalk.white(`  Target: ${chalk.green('$' + dailyTarget.toFixed(2))} | Risk: ${chalk.red('$' + maxRisk.toFixed(2))} | Server: ${hqxConnected ? chalk.green('ON') : chalk.red('OFF')}`));
+    logo.forEach(line => {
+      console.log(chalk.cyan('  ' + line));
+    });
+    console.log(chalk.gray('  Ultra-Scalping Algorithm'));
+    console.log();
+    
+    // Info Box
+    console.log(chalk.cyan('  ╔════════════════════════════════════════════════════════════════════╗'));
+    console.log(chalk.cyan('  ║') + chalk.white(` Account:   ${chalk.cyan(accountName.padEnd(25))} Symbol: ${chalk.yellow(symbolName.padEnd(10))} Qty: ${chalk.cyan(numContracts.toString().padEnd(3))}`) + chalk.cyan('║'));
+    console.log(chalk.cyan('  ║') + chalk.white(` Target:    ${chalk.green(('$' + dailyTarget.toFixed(2)).padEnd(12))} Risk: ${chalk.red(('$' + maxRisk.toFixed(2)).padEnd(12))} Server: ${hqxConnected ? chalk.green('ON ') : chalk.red('OFF')}       `) + chalk.cyan('║'));
     
     // Stats line
     const pnlColor = stats.pnl >= 0 ? chalk.green : chalk.red;
-    const pnlStr = stats.pnl >= 0 ? '+$' + stats.pnl.toFixed(2) : '-$' + Math.abs(stats.pnl).toFixed(2);
-    console.log(chalk.white(`  P&L: ${pnlColor(pnlStr)} | Trades: ${chalk.cyan(stats.trades)} | Wins: ${chalk.green(stats.wins)} | Losses: ${chalk.red(stats.losses)}`));
-    
-    console.log(chalk.gray(getSeparator()));
+    const pnlStr = (stats.pnl >= 0 ? '+$' : '-$') + Math.abs(stats.pnl).toFixed(2);
+    console.log(chalk.cyan('  ║') + chalk.white(` P&L:       ${pnlColor(pnlStr.padEnd(12))} Trades: ${chalk.cyan(stats.trades.toString().padEnd(4))} W: ${chalk.green(stats.wins.toString().padEnd(3))} L: ${chalk.red(stats.losses.toString().padEnd(3))}       `) + chalk.cyan('║'));
+    console.log(chalk.cyan('  ╠════════════════════════════════════════════════════════════════════╣'));
+    console.log(chalk.cyan('  ║') + chalk.white(' Activity Log                                   ') + chalk.yellow('Press X to stop') + chalk.cyan(' ║'));
+    console.log(chalk.cyan('  ╠════════════════════════════════════════════════════════════════════╣'));
     
     // Logs (newest first - already in correct order)
     if (logs.length === 0) {
-      console.log(chalk.gray('  Waiting for activity...'));
+      console.log(chalk.cyan('  ║') + chalk.gray('  Waiting for activity...'.padEnd(68)) + chalk.cyan('║'));
     } else {
       logs.forEach(log => {
         const color = typeColors[log.type] || chalk.white;
         const icon = getIcon(log.type);
-        console.log(chalk.gray(`  [${log.timestamp}]`) + ' ' + color(`${icon} ${log.message}`));
+        const logLine = `[${log.timestamp}] ${icon} ${log.message}`;
+        const truncated = logLine.length > 66 ? logLine.substring(0, 63) + '...' : logLine;
+        console.log(chalk.cyan('  ║') + ' ' + color(truncated.padEnd(67)) + chalk.cyan('║'));
       });
     }
     
-    console.log(chalk.gray(getSeparator()));
+    console.log(chalk.cyan('  ╚════════════════════════════════════════════════════════════════════╝'));
   };
   
   // Connect to HQX Server
