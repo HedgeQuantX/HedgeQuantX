@@ -499,10 +499,12 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     if (logs.length > MAX_LOGS) logs.shift(); // Remove oldest from top
   };
   
-  // Print log and refresh display
+  // Print log - just add to buffer, spinner interval will refresh display
+  // This prevents display flicker from multiple concurrent displayUI() calls
   const printLog = (type, message) => {
     addLog(type, message);
-    displayUI();
+    // Don't call displayUI() here - let the spinner interval handle it
+    // This prevents flickering when logs arrive rapidly
   };
   
   // Check market hours
@@ -527,17 +529,33 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
   };
 
   // Display full UI with logs (newest first at top)
-  // Use ANSI escape codes to avoid flickering
   let firstDraw = true;
+  let isDrawing = false; // Mutex to prevent concurrent draws
+  
+  // Build entire screen as a single string buffer to write atomically
+  let screenBuffer = '';
+  
+  const bufferLine = (text) => {
+    screenBuffer += text + '\x1B[K\n'; // Add text + clear to EOL + newline
+  };
+  
+  // Legacy function for compatibility
+  const printLine = bufferLine;
+  
   const displayUI = () => {
-    // First time: clear screen and hide cursor, after: just move cursor to top
+    // Prevent concurrent draws
+    if (isDrawing) return;
+    isDrawing = true;
+    
+    // Reset buffer
+    screenBuffer = '';
+    
+    // Start with cursor home + clear screen
+    screenBuffer += '\x1B[H\x1B[2J';
+    
     if (firstDraw) {
-      console.clear();
-      process.stdout.write('\x1B[?25l'); // Hide cursor
+      screenBuffer += '\x1B[?25l'; // Hide cursor
       firstDraw = false;
-    } else {
-      // Move cursor to top-left without clearing (avoids flicker)
-      process.stdout.write('\x1B[H');
     }
     
     // Stats
@@ -576,25 +594,25 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
       return text + ' '.repeat(width - text.length);
     };
     
-    console.log();
-    console.log(chalk.cyan(TOP));
+    printLine('');
+    printLine(chalk.cyan(TOP));
     // Logo = 87 chars cyan + 9 chars yellow = 96 total
-    console.log(chalk.cyan(V) + chalk.cyan(' ██╗  ██╗███████╗██████╗  ██████╗ ███████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗') + chalk.yellow('██╗  ██╗') + ' ' + chalk.cyan(V));
-    console.log(chalk.cyan(V) + chalk.cyan(' ██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝') + chalk.yellow('╚██╗██╔╝') + ' ' + chalk.cyan(V));
-    console.log(chalk.cyan(V) + chalk.cyan(' ███████║█████╗  ██║  ██║██║  ███╗█████╗  ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║   ') + chalk.yellow(' ╚███╔╝ ') + ' ' + chalk.cyan(V));
-    console.log(chalk.cyan(V) + chalk.cyan(' ██╔══██║██╔══╝  ██║  ██║██║   ██║██╔══╝  ██║▄▄ ██║██║   ██║██╔══██║██║╚██╗██║   ██║   ') + chalk.yellow(' ██╔██╗ ') + ' ' + chalk.cyan(V));
-    console.log(chalk.cyan(V) + chalk.cyan(' ██║  ██║███████╗██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ') + chalk.yellow('██╔╝ ██╗') + ' ' + chalk.cyan(V));
-    console.log(chalk.cyan(V) + chalk.cyan(' ╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ') + chalk.yellow('╚═╝  ╚═╝') + ' ' + chalk.cyan(V));
-    console.log(chalk.cyan(MID));
+    printLine(chalk.cyan(V) + chalk.cyan(' ██╗  ██╗███████╗██████╗  ██████╗ ███████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗') + chalk.yellow('██╗  ██╗') + ' ' + chalk.cyan(V));
+    printLine(chalk.cyan(V) + chalk.cyan(' ██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝') + chalk.yellow('╚██╗██╔╝') + ' ' + chalk.cyan(V));
+    printLine(chalk.cyan(V) + chalk.cyan(' ███████║█████╗  ██║  ██║██║  ███╗█████╗  ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║   ') + chalk.yellow(' ╚███╔╝ ') + ' ' + chalk.cyan(V));
+    printLine(chalk.cyan(V) + chalk.cyan(' ██╔══██║██╔══╝  ██║  ██║██║   ██║██╔══╝  ██║▄▄ ██║██║   ██║██╔══██║██║╚██╗██║   ██║   ') + chalk.yellow(' ██╔██╗ ') + ' ' + chalk.cyan(V));
+    printLine(chalk.cyan(V) + chalk.cyan(' ██║  ██║███████╗██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ') + chalk.yellow('██╔╝ ██╗') + ' ' + chalk.cyan(V));
+    printLine(chalk.cyan(V) + chalk.cyan(' ╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ') + chalk.yellow('╚═╝  ╚═╝') + ' ' + chalk.cyan(V));
+    printLine(chalk.cyan(MID));
     
     // Centered title
     const title1 = `Prop Futures Algo Trading  v${version}`;
-    console.log(chalk.cyan(V) + chalk.white(center(title1, W)) + chalk.cyan(V));
-    console.log(chalk.cyan(MID));
+    printLine(chalk.cyan(V) + chalk.white(center(title1, W)) + chalk.cyan(V));
+    printLine(chalk.cyan(MID));
     
     // Centered subtitle
     const title2 = 'HQX Ultra-Scalping Algorithm';
-    console.log(chalk.cyan(V) + chalk.yellow(center(title2, W)) + chalk.cyan(V));
+    printLine(chalk.cyan(V) + chalk.yellow(center(title2, W)) + chalk.cyan(V));
     
     // Grid layout for metrics - 2 columns per row, 4 rows
     // Row 1: Account | Symbol + Qty
@@ -644,15 +662,15 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     const GRID_BOT = '\u2560' + '\u2550'.repeat(colL) + '\u2567' + '\u2550'.repeat(colR) + '\u2563';
     
     // Print grid
-    console.log(chalk.cyan(GRID_TOP));
-    console.log(chalk.cyan(V) + r1c1.padded + chalk.cyan(VS) + r1c2 + chalk.cyan(V));
-    console.log(chalk.cyan(GRID_MID));
-    console.log(chalk.cyan(V) + r2c1.padded + chalk.cyan(VS) + r2c2.padded + chalk.cyan(V));
-    console.log(chalk.cyan(GRID_MID));
-    console.log(chalk.cyan(V) + r3c1.padded + chalk.cyan(VS) + r3c2.padded + chalk.cyan(V));
-    console.log(chalk.cyan(GRID_MID));
-    console.log(chalk.cyan(V) + r4c1 + chalk.cyan(VS) + r4c2.padded + chalk.cyan(V));
-    console.log(chalk.cyan(GRID_BOT));
+    printLine(chalk.cyan(GRID_TOP));
+    printLine(chalk.cyan(V) + r1c1.padded + chalk.cyan(VS) + r1c2 + chalk.cyan(V));
+    printLine(chalk.cyan(GRID_MID));
+    printLine(chalk.cyan(V) + r2c1.padded + chalk.cyan(VS) + r2c2.padded + chalk.cyan(V));
+    printLine(chalk.cyan(GRID_MID));
+    printLine(chalk.cyan(V) + r3c1.padded + chalk.cyan(VS) + r3c2.padded + chalk.cyan(V));
+    printLine(chalk.cyan(GRID_MID));
+    printLine(chalk.cyan(V) + r4c1 + chalk.cyan(VS) + r4c2.padded + chalk.cyan(V));
+    printLine(chalk.cyan(GRID_BOT));
     
     // Activity log header with spinner and centered date
     spinnerFrame = (spinnerFrame + 1) % spinnerChars.length;
@@ -667,19 +685,19 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     const datePad = Math.max(0, Math.floor((midSpace - dateCentered.length) / 2));
     const remainingPad = Math.max(0, midSpace - datePad - dateCentered.length);
     const dateSection = ' '.repeat(datePad) + chalk.cyan(dateCentered) + ' '.repeat(remainingPad);
-    console.log(chalk.cyan(V) + chalk.white(actLeft) + dateSection + chalk.yellow(actRight) + chalk.cyan(V));
-    console.log(chalk.cyan(BOT));
+    printLine(chalk.cyan(V) + chalk.white(actLeft) + dateSection + chalk.yellow(actRight) + chalk.cyan(V));
+    printLine(chalk.cyan(BOT));
     
     // Logs (without borders) - newest first, show more logs
     // Align with left border of rectangle above (║ = 1 char + 1 space)
     const MAX_VISIBLE_LOGS = 50;
-    console.log();
+    printLine('');
     
     if (logs.length === 0) {
-      console.log(chalk.gray(' Waiting for activity...') + '\x1B[K');
+      bufferLine(chalk.gray(' Waiting for activity...'));
       // Fill remaining lines with empty
       for (let i = 0; i < MAX_VISIBLE_LOGS - 1; i++) {
-        console.log('\x1B[K');
+        bufferLine('');
       }
     } else {
       // Show newest first (reverse), limited to MAX_VISIBLE_LOGS
@@ -689,23 +707,27 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
         const icon = getIcon(log.type);
         // Align with rectangle: 1 space to match content after ║
         const logLine = ` [${log.timestamp}] ${icon} ${log.message}`;
-        console.log(color(logLine) + '\x1B[K');
+        bufferLine(color(logLine));
       });
       // Fill remaining lines with empty to keep fixed height
       for (let i = reversedLogs.length; i < MAX_VISIBLE_LOGS; i++) {
-        console.log('\x1B[K');
+        bufferLine('');
       }
     }
-    // Clear anything below
-    process.stdout.write('\x1B[J');
+    
+    // Write entire buffer atomically
+    screenBuffer += '\x1B[J'; // Clear anything below
+    process.stdout.write(screenBuffer);
+    
+    isDrawing = false;
   };
   
-  // Spinner interval to refresh UI
+  // Spinner interval to refresh UI - 250ms for stability
   const spinnerInterval = setInterval(() => {
-    if (algoRunning) {
+    if (algoRunning && !isDrawing) {
       displayUI();
     }
-  }, 100);
+  }, 250);
   
   // Connect to HQX Server
   const spinner = ora('Authenticating with HQX Server...').start();
@@ -745,7 +767,7 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
   // Setup event handlers - logs scroll down naturally
   hqxServer.on('latency', (data) => {
     latency = data.latency || 0;
-    displayUI(); // Refresh UI with new latency
+    // Don't call displayUI() - spinner interval will refresh
   });
   
   hqxServer.on('log', (data) => {
@@ -805,8 +827,17 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
   });
   
   hqxServer.on('stats', (data) => {
-    stats = { ...stats, ...data };
-    // Don't print stats every time, only on trades
+    // Update stats from server
+    stats.trades = data.trades || stats.trades;
+    stats.wins = data.wins || stats.wins;
+    stats.losses = data.losses || stats.losses;
+    stats.signals = data.signals || stats.signals;
+    stats.winRate = data.winRate || stats.winRate;
+    
+    // P&L = realized P&L + unrealized P&L from open position
+    const realizedPnl = data.pnl || 0;
+    const unrealizedPnl = data.position?.pnl || 0;
+    stats.pnl = realizedPnl + unrealizedPnl;
   });
   
   hqxServer.on('error', (data) => {
