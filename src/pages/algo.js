@@ -318,6 +318,10 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     winRate: '0.0'
   };
   
+  // Logs buffer (newest first)
+  const logs = [];
+  const MAX_LOGS = 20;
+  
   // Log colors
   const typeColors = {
     info: chalk.cyan,
@@ -338,12 +342,17 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     }
   };
   
-  // Print log directly to console (no clear screen)
-  const printLog = (type, message) => {
+  // Add log (newest first)
+  const addLog = (type, message) => {
     const timestamp = new Date().toLocaleTimeString();
-    const color = typeColors[type] || chalk.white;
-    const icon = getIcon(type);
-    console.log(chalk.gray(`  [${timestamp}]`) + ' ' + color(`${icon} ${message}`));
+    logs.unshift({ timestamp, type, message }); // Add at beginning
+    if (logs.length > MAX_LOGS) logs.pop(); // Remove oldest
+  };
+  
+  // Print log and refresh display
+  const printLog = (type, message) => {
+    addLog(type, message);
+    displayUI();
   };
   
   // Check market hours
@@ -367,23 +376,38 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
     return { isOpen: true, message: 'Market OPEN' };
   };
 
-  // Display header once at start
-  const displayHeader = () => {
+  // Display full UI with logs (newest first)
+  const displayUI = () => {
     console.clear();
     const marketStatus = checkMarketStatus();
+    
+    // Header
     console.log();
     console.log(chalk.gray(getSeparator()));
-    console.log(chalk.cyan.bold('  HQX Ultra-Scalping Algo'));
+    console.log(chalk.cyan.bold('  HQX Ultra-Scalping Algo') + chalk.gray('  |  ') + chalk.yellow('Press X to stop'));
     console.log(chalk.gray(getSeparator()));
-    console.log(chalk.white(`  Account:   ${chalk.cyan(accountName)}`));
-    console.log(chalk.white(`  Symbol:    ${chalk.cyan(symbolName)}`));
-    console.log(chalk.white(`  Contracts: ${chalk.cyan(numContracts)}`));
-    console.log(chalk.white(`  Target:    ${chalk.green('$' + dailyTarget.toFixed(2))} | Risk: ${chalk.red('$' + maxRisk.toFixed(2))}`));
-    console.log(chalk.white(`  Market:    ${marketStatus.isOpen ? chalk.green(marketStatus.message) : chalk.red(marketStatus.message)}`));
+    console.log(chalk.white(`  Account: ${chalk.cyan(accountName)} | Symbol: ${chalk.cyan(symbolName)} | Qty: ${chalk.cyan(numContracts)}`));
+    console.log(chalk.white(`  Target: ${chalk.green('$' + dailyTarget.toFixed(2))} | Risk: ${chalk.red('$' + maxRisk.toFixed(2))} | Server: ${hqxConnected ? chalk.green('ON') : chalk.red('OFF')}`));
+    
+    // Stats line
+    const pnlColor = stats.pnl >= 0 ? chalk.green : chalk.red;
+    const pnlStr = stats.pnl >= 0 ? '+$' + stats.pnl.toFixed(2) : '-$' + Math.abs(stats.pnl).toFixed(2);
+    console.log(chalk.white(`  P&L: ${pnlColor(pnlStr)} | Trades: ${chalk.cyan(stats.trades)} | Wins: ${chalk.green(stats.wins)} | Losses: ${chalk.red(stats.losses)}`));
+    
     console.log(chalk.gray(getSeparator()));
-    console.log(chalk.yellow('  Press X to stop algo...'));
+    
+    // Logs (newest first - already in correct order)
+    if (logs.length === 0) {
+      console.log(chalk.gray('  Waiting for activity...'));
+    } else {
+      logs.forEach(log => {
+        const color = typeColors[log.type] || chalk.white;
+        const icon = getIcon(log.type);
+        console.log(chalk.gray(`  [${log.timestamp}]`) + ' ' + color(`${icon} ${log.message}`));
+      });
+    }
+    
     console.log(chalk.gray(getSeparator()));
-    console.log();
   };
   
   // Connect to HQX Server
@@ -488,7 +512,7 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
   });
   
   // Display header once
-  displayHeader();
+  displayUI();
   
   // Start algo
   if (hqxConnected) {
