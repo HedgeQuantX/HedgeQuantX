@@ -7,7 +7,18 @@ const RITHMIC_ENDPOINTS = {
   TEST: 'wss://rituz00100.rithmic.com:443',
   PAPER: 'wss://ritpa11120.11.rithmic.com:443',
   LIVE: 'wss://ritpz01000.01.rithmic.com:443',
-  APEX: 'wss://ritpz01000.01.rithmic.com:443', // Apex uses live server
+  // Production gateways for prop firms (discovered via RequestRithmicSystemGatewayInfo)
+  CHICAGO: 'wss://rprotocol.rithmic.com:443',        // Chicago Area (primary for US)
+  EUROPE: 'wss://rprotocol-ie.rithmic.com:443',      // Europe (Ireland)
+  FRANKFURT: 'wss://rprotocol-de.rithmic.com:443',   // Frankfurt
+  SINGAPORE: 'wss://rprotocol-sg.rithmic.com:443',   // Singapore
+  SYDNEY: 'wss://rprotocol-au.rithmic.com:443',      // Sydney
+  TOKYO: 'wss://rprotocol-jp.rithmic.com:443',       // Tokyo
+  HONG_KONG: 'wss://rprotocol-hk.rithmic.com:443',   // Hong Kong
+  SEOUL: 'wss://rprotocol-kr.rithmic.com:443',       // Seoul
+  MUMBAI: 'wss://rprotocol-in.rithmic.com:443',      // Mumbai
+  SAO_PAULO: 'wss://rprotocol-br.rithmic.com:443',   // Sao Paulo
+  CAPE_TOWN: 'wss://rprotocol-za.rithmic.com:443',   // Cape Town
 };
 
 // System names for PropFirms

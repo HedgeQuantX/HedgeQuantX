@@ -26,27 +26,28 @@ class RithmicService extends EventEmitter {
 
   /**
    * Get PropFirm configuration
+   * Note: Apex and other prop firms use the Chicago gateway (rprotocol.rithmic.com), NOT Paper Trading endpoint
    */
   getPropFirmConfig(key) {
     const propfirms = {
-      'apex': { name: 'Apex Trader Funding', systemName: 'Apex', defaultBalance: 300000 },
-      'apex_rithmic': { name: 'Apex Trader Funding', systemName: 'Apex', defaultBalance: 300000 },
-      'topstep_r': { name: 'Topstep (Rithmic)', systemName: RITHMIC_SYSTEMS.TOPSTEP, defaultBalance: 150000 },
-      'bulenox_r': { name: 'Bulenox (Rithmic)', systemName: RITHMIC_SYSTEMS.BULENOX, defaultBalance: 150000 },
-      'earn2trade': { name: 'Earn2Trade', systemName: RITHMIC_SYSTEMS.EARN_2_TRADE, defaultBalance: 150000 },
-      'mescapital': { name: 'MES Capital', systemName: RITHMIC_SYSTEMS.MES_CAPITAL, defaultBalance: 150000 },
-      'tradefundrr': { name: 'TradeFundrr', systemName: RITHMIC_SYSTEMS.TRADEFUNDRR, defaultBalance: 150000 },
-      'thetradingpit': { name: 'The Trading Pit', systemName: RITHMIC_SYSTEMS.THE_TRADING_PIT, defaultBalance: 150000 },
-      'fundedfutures': { name: 'Funded Futures Network', systemName: RITHMIC_SYSTEMS.FUNDED_FUTURES_NETWORK, defaultBalance: 150000 },
-      'propshop': { name: 'PropShop Trader', systemName: RITHMIC_SYSTEMS.PROPSHOP_TRADER, defaultBalance: 150000 },
-      '4proptrader': { name: '4PropTrader', systemName: RITHMIC_SYSTEMS.FOUR_PROP_TRADER, defaultBalance: 150000 },
-      'daytraders': { name: 'DayTraders.com', systemName: RITHMIC_SYSTEMS.DAY_TRADERS, defaultBalance: 150000 },
-      '10xfutures': { name: '10X Futures', systemName: RITHMIC_SYSTEMS.TEN_X_FUTURES, defaultBalance: 150000 },
-      'lucidtrading': { name: 'Lucid Trading', systemName: RITHMIC_SYSTEMS.LUCID_TRADING, defaultBalance: 150000 },
-      'thrivetrading': { name: 'Thrive Trading', systemName: RITHMIC_SYSTEMS.THRIVE_TRADING, defaultBalance: 150000 },
-      'legendstrading': { name: 'Legends Trading', systemName: RITHMIC_SYSTEMS.LEGENDS_TRADING, defaultBalance: 150000 },
+      'apex': { name: 'Apex Trader Funding', systemName: 'Apex', defaultBalance: 300000, gateway: RITHMIC_ENDPOINTS.CHICAGO },
+      'apex_rithmic': { name: 'Apex Trader Funding', systemName: 'Apex', defaultBalance: 300000, gateway: RITHMIC_ENDPOINTS.CHICAGO },
+      'topstep_r': { name: 'Topstep (Rithmic)', systemName: RITHMIC_SYSTEMS.TOPSTEP, defaultBalance: 150000, gateway: RITHMIC_ENDPOINTS.CHICAGO },
+      'bulenox_r': { name: 'Bulenox (Rithmic)', systemName: RITHMIC_SYSTEMS.BULENOX, defaultBalance: 150000, gateway: RITHMIC_ENDPOINTS.CHICAGO },
+      'earn2trade': { name: 'Earn2Trade', systemName: RITHMIC_SYSTEMS.EARN_2_TRADE, defaultBalance: 150000, gateway: RITHMIC_ENDPOINTS.CHICAGO },
+      'mescapital': { name: 'MES Capital', systemName: RITHMIC_SYSTEMS.MES_CAPITAL, defaultBalance: 150000, gateway: RITHMIC_ENDPOINTS.CHICAGO },
+      'tradefundrr': { name: 'TradeFundrr', systemName: RITHMIC_SYSTEMS.TRADEFUNDRR, defaultBalance: 150000, gateway: RITHMIC_ENDPOINTS.CHICAGO },
+      'thetradingpit': { name: 'The Trading Pit', systemName: RITHMIC_SYSTEMS.THE_TRADING_PIT, defaultBalance: 150000, gateway: RITHMIC_ENDPOINTS.CHICAGO },
+      'fundedfutures': { name: 'Funded Futures Network', systemName: RITHMIC_SYSTEMS.FUNDED_FUTURES_NETWORK, defaultBalance: 150000, gateway: RITHMIC_ENDPOINTS.CHICAGO },
+      'propshop': { name: 'PropShop Trader', systemName: RITHMIC_SYSTEMS.PROPSHOP_TRADER, defaultBalance: 150000, gateway: RITHMIC_ENDPOINTS.CHICAGO },
+      '4proptrader': { name: '4PropTrader', systemName: RITHMIC_SYSTEMS.FOUR_PROP_TRADER, defaultBalance: 150000, gateway: RITHMIC_ENDPOINTS.CHICAGO },
+      'daytraders': { name: 'DayTraders.com', systemName: RITHMIC_SYSTEMS.DAY_TRADERS, defaultBalance: 150000, gateway: RITHMIC_ENDPOINTS.CHICAGO },
+      '10xfutures': { name: '10X Futures', systemName: RITHMIC_SYSTEMS.TEN_X_FUTURES, defaultBalance: 150000, gateway: RITHMIC_ENDPOINTS.CHICAGO },
+      'lucidtrading': { name: 'Lucid Trading', systemName: RITHMIC_SYSTEMS.LUCID_TRADING, defaultBalance: 150000, gateway: RITHMIC_ENDPOINTS.CHICAGO },
+      'thrivetrading': { name: 'Thrive Trading', systemName: RITHMIC_SYSTEMS.THRIVE_TRADING, defaultBalance: 150000, gateway: RITHMIC_ENDPOINTS.CHICAGO },
+      'legendstrading': { name: 'Legends Trading', systemName: RITHMIC_SYSTEMS.LEGENDS_TRADING, defaultBalance: 150000, gateway: RITHMIC_ENDPOINTS.CHICAGO },
     };
-    return propfirms[key] || { name: key, systemName: 'Rithmic Paper Trading', defaultBalance: 150000 };
+    return propfirms[key] || { name: key, systemName: 'Rithmic Paper Trading', defaultBalance: 150000, gateway: RITHMIC_ENDPOINTS.PAPER };
   }
 
   /**
@@ -57,14 +58,11 @@ class RithmicService extends EventEmitter {
       // Connect to ORDER_PLANT
       this.orderConn = new RithmicConnection();
       
-      // Determine endpoint based on propfirm
-      let endpoint = RITHMIC_ENDPOINTS.PAPER;
-      if (this.propfirmKey === 'apex' || this.propfirmKey === 'apex_rithmic') {
-        endpoint = RITHMIC_ENDPOINTS.LIVE; // Apex uses live server
-      }
+      // Use propfirm-specific gateway (Chicago for Apex and most prop firms)
+      const gateway = this.propfirm.gateway || RITHMIC_ENDPOINTS.CHICAGO;
       
       const config = {
-        uri: endpoint,
+        uri: gateway,
         systemName: this.propfirm.systemName,
         userId: username,
         password: password,
@@ -145,14 +143,11 @@ class RithmicService extends EventEmitter {
     try {
       this.pnlConn = new RithmicConnection();
 
-      // Determine endpoint based on propfirm
-      let endpoint = RITHMIC_ENDPOINTS.PAPER;
-      if (this.propfirmKey === 'apex' || this.propfirmKey === 'apex_rithmic') {
-        endpoint = RITHMIC_ENDPOINTS.LIVE; // Apex uses live server
-      }
+      // Use propfirm-specific gateway (Chicago for Apex and most prop firms)
+      const gateway = this.propfirm.gateway || RITHMIC_ENDPOINTS.CHICAGO;
 
       const config = {
-        uri: endpoint,
+        uri: gateway,
         systemName: this.propfirm.systemName,
         userId: username,
         password: password,
