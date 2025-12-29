@@ -241,8 +241,11 @@ const selectSymbolMenu = async (service, account) => {
     'ZW': 'Wheat'
   };
   
-  // Format symbols for display
-  const symbolChoices = availableSymbols.map(symbol => {
+  // Format symbols for display - deduplicate by base symbol + month
+  const seenSymbols = new Set();
+  const symbolChoices = [];
+  
+  for (const symbol of availableSymbols) {
     const symbolCode = symbol.symbol || symbol.id || '';
     
     // Extract base symbol (e.g., NQ from NQH6) and month code
@@ -258,15 +261,20 @@ const selectSymbolMenu = async (service, account) => {
       monthYear = (monthCodes[monthCode] || monthCode) + year;
     }
     
+    // Create unique key to deduplicate
+    const uniqueKey = `${baseSymbol}-${monthYear}`;
+    if (seenSymbols.has(uniqueKey)) continue;
+    seenSymbols.add(uniqueKey);
+    
     // Get descriptive name from mapping
     const description = symbolDescriptions[baseSymbol] || symbol.name || baseSymbol;
     
     // Format: "NQ   Mar26  E-mini NASDAQ-100"
-    return {
+    symbolChoices.push({
       name: chalk.yellow(baseSymbol.padEnd(5)) + chalk.cyan(monthYear.padEnd(7)) + chalk.white(description),
       value: symbol
-    };
-  });
+    });
+  }
   
   symbolChoices.push(new inquirer.Separator());
   symbolChoices.push({ name: chalk.yellow('< Back'), value: 'back' });
@@ -506,9 +514,10 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
   // Use ANSI escape codes to avoid flickering
   let firstDraw = true;
   const displayUI = () => {
-    // First time: clear screen, after: just move cursor to top
+    // First time: clear screen and hide cursor, after: just move cursor to top
     if (firstDraw) {
       console.clear();
+      process.stdout.write('\x1B[?25l'); // Hide cursor
       firstDraw = false;
     } else {
       // Move cursor to top-left without clearing (avoids flicker)
@@ -870,6 +879,9 @@ const launchAlgo = async (service, account, contract, numContracts, dailyTarget,
   
   // Clear spinner interval
   clearInterval(spinnerInterval);
+  
+  // Show cursor again
+  process.stdout.write('\x1B[?25h');
   
   // Stop algo
   console.log();

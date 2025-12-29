@@ -579,7 +579,8 @@ const mainMenu = async () => {
  */
 const dashboardMenu = async (service) => {
   const user = service.user;
-  const W = 60; // Fixed width for dashboard box
+  const boxWidth = getLogoWidth();
+  const W = boxWidth - 2; // Same width as logo (inner width)
   
   // Helper to center text
   const centerLine = (text, width) => {
