@@ -665,19 +665,17 @@ const dashboardMenu = async (service) => {
   // Dashboard box header
   console.log();
   console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
-  console.log(chalk.cyan('║') + chalk.white.bold(centerLine('DASHBOARD', W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + chalk.yellow.bold(centerLine('Welcome, HQX Trader!', W)) + chalk.cyan('║'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
   // Connection info - show all active connections
   const allConns = connections.getAll();
   if (allConns.length > 0) {
-    const connNames = allConns.map(c => c.propfirm || c.type).join(', ');
-    const connText = `Connected to ${connNames}`;
-    console.log(chalk.cyan('║') + chalk.green(padLine(connText, W)) + chalk.cyan('║'));
+    allConns.forEach(c => {
+      const connText = c.propfirm || c.type || 'Connected';
+      console.log(chalk.cyan('║') + chalk.green(padLine(` ${connText}`, W)) + chalk.cyan('║'));
+    });
   }
-  
-  const userText = 'Welcome, HQX Trader!';
-  console.log(chalk.cyan('║') + chalk.white(padLine(userText, W)) + chalk.cyan('║'));
   
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
