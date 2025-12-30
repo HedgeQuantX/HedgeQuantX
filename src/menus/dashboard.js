@@ -45,7 +45,7 @@ const dashboardMenu = async (service) => {
   const allConns = connections.getAll();
   if (allConns.length > 0) {
     const propfirms = allConns.slice(0, 3).map(c => c.propfirm || c.type || 'Connected');
-    const propfirmText = propfirms.map(p => chalk.green('> ') + chalk.white(p)).join('    ');
+    const propfirmText = propfirms.map(p => chalk.green('● ') + chalk.white(p)).join('    ');
     console.log(makeLine(propfirmText, 'center'));
   }
   
