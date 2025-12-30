@@ -259,35 +259,26 @@ const mainMenu = async () => {
     console.log(chalk.cyan('║') + leftText + ' '.repeat(Math.max(0, leftPad)) + rightText + ' '.repeat(Math.max(0, rightPad)) + chalk.cyan('║'));
   };
   
-  menuRow(chalk.cyan('[1] ProjectX'), chalk.cyan('[2] Rithmic'));
-  menuRow(chalk.cyan('[3] Tradovate'), chalk.red('[X] Exit'));
-  
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
   console.log();
 
+  // Use list type - more stable stdin handling
   const { action } = await inquirer.prompt([
     {
-      type: 'input',
+      type: 'list',
       name: 'action',
-      message: chalk.cyan('Enter choice (1/2/3/X):'),
-      validate: (input) => {
-        const valid = ['1', '2', '3', 'x', 'X'];
-        if (valid.includes(input)) return true;
-        return 'Please enter 1, 2, 3 or X';
-      }
+      message: chalk.cyan('Select platform:'),
+      choices: [
+        { name: chalk.cyan('[1] ProjectX'), value: 'projectx' },
+        { name: chalk.cyan('[2] Rithmic'), value: 'rithmic' },
+        { name: chalk.cyan('[3] Tradovate'), value: 'tradovate' },
+        { name: chalk.red('[X] Exit'), value: 'exit' }
+      ],
+      loop: false
     }
   ]);
 
-  // Map input to action
-  const actionMap = {
-    '1': 'projectx',
-    '2': 'rithmic',
-    '3': 'tradovate',
-    'x': 'exit',
-    'X': 'exit'
-  };
-
-  return actionMap[action] || 'exit';
+  return action;
 };
 
 /**
