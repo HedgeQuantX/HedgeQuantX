@@ -676,10 +676,8 @@ const dashboardMenu = async (service) => {
     console.log(chalk.cyan('║') + chalk.green(padLine(connText, W)) + chalk.cyan('║'));
   }
   
-  if (user) {
-    const userText = 'Welcome, ' + user.userName.toUpperCase() + '!';
-    console.log(chalk.cyan('║') + chalk.white(padLine(userText, W)) + chalk.cyan('║'));
-  }
+  const userText = 'Welcome, HQX Trader!';
+  console.log(chalk.cyan('║') + chalk.white(padLine(userText, W)) + chalk.cyan('║'));
   
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
