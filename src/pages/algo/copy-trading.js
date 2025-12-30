@@ -173,12 +173,16 @@ const copyTradingMenu = async () => {
   const maxRisk = parseInt(maxRiskInput) || 200;
   
   // Step 6: Privacy
-  const { showNames } = await inquirer.prompt([{
-    type: 'confirm',
-    name: 'showNames',
-    message: 'Show account names?',
-    default: false
+  const { privacyChoice } = await inquirer.prompt([{
+    type: 'list',
+    name: 'privacyChoice',
+    message: 'Account names:',
+    choices: [
+      { name: 'Hide account names', value: false },
+      { name: 'Show account names', value: true }
+    ]
   }]);
+  const showNames = privacyChoice;
   
   // Confirm
   console.log();

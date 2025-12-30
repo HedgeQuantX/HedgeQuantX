@@ -210,69 +210,14 @@ class RithmicService extends EventEmitter {
     };
   }
 
-  // All available contracts for Rithmic
-  // TODO: Fetch from TICKER_PLANT API instead of static list
-  _getAvailableContracts() {
-    // Current front-month contracts (update monthly)
-    return [
-      // Index Futures
-      { symbol: 'ESH5', name: 'E-mini S&P 500 (Mar 25)', exchange: 'CME', group: 'Index' },
-      { symbol: 'NQH5', name: 'E-mini NASDAQ-100 (Mar 25)', exchange: 'CME', group: 'Index' },
-      { symbol: 'RTYH5', name: 'E-mini Russell 2000 (Mar 25)', exchange: 'CME', group: 'Index' },
-      { symbol: 'YMH5', name: 'E-mini Dow Jones (Mar 25)', exchange: 'CBOT', group: 'Index' },
-      
-      // Micro Index Futures
-      { symbol: 'MESH5', name: 'Micro E-mini S&P 500 (Mar 25)', exchange: 'CME', group: 'Micro Index' },
-      { symbol: 'MNQH5', name: 'Micro E-mini NASDAQ-100 (Mar 25)', exchange: 'CME', group: 'Micro Index' },
-      { symbol: 'M2KH5', name: 'Micro E-mini Russell 2000 (Mar 25)', exchange: 'CME', group: 'Micro Index' },
-      { symbol: 'MYMH5', name: 'Micro E-mini Dow Jones (Mar 25)', exchange: 'CBOT', group: 'Micro Index' },
-      
-      // Energy Futures
-      { symbol: 'CLG5', name: 'Crude Oil (Feb 25)', exchange: 'NYMEX', group: 'Energy' },
-      { symbol: 'CLH5', name: 'Crude Oil (Mar 25)', exchange: 'NYMEX', group: 'Energy' },
-      { symbol: 'NGG5', name: 'Natural Gas (Feb 25)', exchange: 'NYMEX', group: 'Energy' },
-      { symbol: 'NGH5', name: 'Natural Gas (Mar 25)', exchange: 'NYMEX', group: 'Energy' },
-      
-      // Micro Energy
-      { symbol: 'MCLG5', name: 'Micro Crude Oil (Feb 25)', exchange: 'NYMEX', group: 'Micro Energy' },
-      { symbol: 'MCLH5', name: 'Micro Crude Oil (Mar 25)', exchange: 'NYMEX', group: 'Micro Energy' },
-      
-      // Metals Futures
-      { symbol: 'GCG5', name: 'Gold (Feb 25)', exchange: 'COMEX', group: 'Metals' },
-      { symbol: 'GCJ5', name: 'Gold (Apr 25)', exchange: 'COMEX', group: 'Metals' },
-      { symbol: 'SIH5', name: 'Silver (Mar 25)', exchange: 'COMEX', group: 'Metals' },
-      { symbol: 'HGH5', name: 'Copper (Mar 25)', exchange: 'COMEX', group: 'Metals' },
-      
-      // Micro Metals
-      { symbol: 'MGCG5', name: 'Micro Gold (Feb 25)', exchange: 'COMEX', group: 'Micro Metals' },
-      { symbol: 'MGCJ5', name: 'Micro Gold (Apr 25)', exchange: 'COMEX', group: 'Micro Metals' },
-      { symbol: 'SILU5', name: 'Micro Silver (Sep 25)', exchange: 'COMEX', group: 'Micro Metals' },
-      
-      // Treasury Futures
-      { symbol: 'ZBH5', name: '30-Year US Treasury Bond (Mar 25)', exchange: 'CBOT', group: 'Bonds' },
-      { symbol: 'ZNH5', name: '10-Year US Treasury Note (Mar 25)', exchange: 'CBOT', group: 'Bonds' },
-      { symbol: 'ZFH5', name: '5-Year US Treasury Note (Mar 25)', exchange: 'CBOT', group: 'Bonds' },
-      { symbol: 'ZTH5', name: '2-Year US Treasury Note (Mar 25)', exchange: 'CBOT', group: 'Bonds' },
-      
-      // Agriculture Futures
-      { symbol: 'ZCH5', name: 'Corn (Mar 25)', exchange: 'CBOT', group: 'Agriculture' },
-      { symbol: 'ZSH5', name: 'Soybeans (Mar 25)', exchange: 'CBOT', group: 'Agriculture' },
-      { symbol: 'ZWH5', name: 'Wheat (Mar 25)', exchange: 'CBOT', group: 'Agriculture' },
-      
-      // Currency Futures
-      { symbol: '6EH5', name: 'Euro FX (Mar 25)', exchange: 'CME', group: 'Currency' },
-      { symbol: '6BH5', name: 'British Pound (Mar 25)', exchange: 'CME', group: 'Currency' },
-      { symbol: '6JH5', name: 'Japanese Yen (Mar 25)', exchange: 'CME', group: 'Currency' },
-      { symbol: '6AH5', name: 'Australian Dollar (Mar 25)', exchange: 'CME', group: 'Currency' },
-    ];
-  }
-
   async getContracts() {
-    return { success: true, contracts: this._getAvailableContracts() };
+    const { getContractsWithMonthCode } = require('../../config/contracts');
+    return { success: true, contracts: getContractsWithMonthCode() };
   }
 
   async searchContracts(searchText) {
-    const contracts = this._getAvailableContracts();
+    const { getContractsWithMonthCode } = require('../../config/contracts');
+    const contracts = getContractsWithMonthCode();
     if (!searchText) return contracts;
     const search = searchText.toUpperCase();
     return contracts.filter(c => c.symbol.includes(search) || c.name.toUpperCase().includes(search));

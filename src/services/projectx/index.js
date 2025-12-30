@@ -445,76 +445,11 @@ class ProjectXService {
 
   /**
    * Get popular contracts for trading
+   * Uses shared contract list for consistency with Rithmic
    */
   async getContracts() {
-    try {
-      // Search for popular futures symbols
-      const symbols = ['ES', 'NQ', 'MES', 'MNQ', 'CL', 'GC', 'RTY', 'YM', 'SI', 'ZB', 'ZN', 'NG'];
-      const allContracts = [];
-      
-      for (const sym of symbols) {
-        const response = await this._request(
-          this.propfirm.gatewayApi, '/api/Contract/search', 'POST',
-          { searchText: sym, live: false }
-        );
-        if (response.statusCode === 200) {
-          const contracts = response.data.contracts || response.data || [];
-          // Take first contract for each symbol (front month)
-          if (contracts.length > 0) {
-            const contract = contracts[0];
-            // Ensure name is set properly
-            if (!contract.name || contract.name === contract.symbol) {
-              contract.name = this._getContractDisplayName(contract.symbol) || contract.symbol;
-            }
-            allContracts.push(contract);
-          }
-        }
-      }
-      
-      return { success: true, contracts: allContracts };
-    } catch (error) {
-      return { success: false, contracts: [], error: error.message };
-    }
-  }
-
-  /**
-   * Get display name for contract symbol
-   */
-  _getContractDisplayName(symbol) {
-    const baseSymbol = symbol.replace(/[A-Z][0-9]$/, '').replace(/[0-9]+$/, '');
-    const names = {
-      'ES': 'E-mini S&P 500',
-      'NQ': 'E-mini NASDAQ-100',
-      'MES': 'Micro E-mini S&P 500',
-      'MNQ': 'Micro E-mini NASDAQ-100',
-      'RTY': 'E-mini Russell 2000',
-      'M2K': 'Micro E-mini Russell 2000',
-      'YM': 'E-mini Dow Jones',
-      'MYM': 'Micro E-mini Dow Jones',
-      'CL': 'Crude Oil',
-      'MCL': 'Micro Crude Oil',
-      'GC': 'Gold',
-      'MGC': 'Micro Gold',
-      'SI': 'Silver',
-      'SIL': 'Micro Silver',
-      'NG': 'Natural Gas',
-      'ZB': '30-Year Treasury Bond',
-      'ZN': '10-Year Treasury Note',
-      'ZF': '5-Year Treasury Note',
-      'ZC': 'Corn',
-      'ZS': 'Soybeans',
-      'ZW': 'Wheat',
-      '6E': 'Euro FX',
-      '6B': 'British Pound',
-      '6J': 'Japanese Yen',
-    };
-    const baseName = names[baseSymbol];
-    if (baseName) {
-      // Extract month/year from symbol
-      const monthYear = symbol.slice(baseSymbol.length);
-      return `${baseName} (${monthYear})`;
-    }
-    return symbol;
+    const { getContractsWithMonthCode } = require('../../config/contracts');
+    return { success: true, contracts: getContractsWithMonthCode() };
   }
 
   async searchContracts(searchText) {
