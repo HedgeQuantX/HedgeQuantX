@@ -1465,6 +1465,7 @@ const launchCopyTrading = async (config) => {
     copiedTrades: 0,
     leadTrades: 0,
     followerTrades: 0,
+    signals: 0,
     errors: 0,
     pnl: 0
   };
@@ -1475,14 +1476,18 @@ const launchCopyTrading = async (config) => {
     success: chalk.green,
     trade: chalk.green.bold,
     copy: chalk.yellow.bold,
+    signal: chalk.magenta.bold,
+    loss: chalk.red.bold,
     error: chalk.red,
     warning: chalk.yellow
   };
 
   const getIcon = (type) => {
     switch(type) {
+      case 'signal': return '[~]';
       case 'trade': return '[>]';
       case 'copy': return '[+]';
+      case 'loss': return '[-]';
       case 'error': return '[X]';
       case 'success': return '[OK]';
       default: return '[.]';
@@ -1495,170 +1500,512 @@ const launchCopyTrading = async (config) => {
     if (logs.length > MAX_LOGS) logs.shift();
   };
 
-  const displayUI = () => {
-    console.clear();
-    
-    // Logo
-    const logo = [
-      '██╗  ██╗ ██████╗ ██╗  ██╗',
-      '██║  ██║██╔═══██╗╚██╗██╔╝',
-      '███████║██║   ██║ ╚███╔╝ ',
-      '██╔══██║██║▄▄ ██║ ██╔██╗ ',
-      '██║  ██║╚██████╔╝██╔╝ ██╗',
-      '╚═╝  ╚═╝ ╚══▀▀═╝ ╚═╝  ╚═╝'
-    ];
-    
-    console.log();
-    logo.forEach(line => {
-      console.log(chalk.cyan('  ' + line));
-    });
-    console.log(chalk.gray('  Copy Trading System'));
-    console.log();
+  // Build entire screen as a single string buffer to write atomically
+  let screenBuffer = '';
+  let firstDraw = true;
+  let isDrawing = false;
+  let spinnerFrame = 0;
+  const spinnerChars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  
+  const bufferLine = (text) => {
+    screenBuffer += text + '\x1B[K\n';
+  };
 
-    // Info Box
+  const displayUI = () => {
+    // Prevent concurrent draws
+    if (isDrawing) return;
+    isDrawing = true;
+    
+    // Reset buffer
+    screenBuffer = '';
+    
+    if (firstDraw) {
+      screenBuffer += '\x1B[?1049h'; // Enter alternate screen
+      screenBuffer += '\x1B[?25l'; // Hide cursor
+      screenBuffer += '\x1B[2J'; // Clear screen
+      firstDraw = false;
+    }
+    
+    // Move cursor to home position
+    screenBuffer += '\x1B[H';
+    
+    // Stats
     const pnlColor = stats.pnl >= 0 ? chalk.green : chalk.red;
     const pnlStr = (stats.pnl >= 0 ? '+$' : '-$') + Math.abs(stats.pnl).toFixed(2);
     
-    console.log(chalk.cyan('  ╔════════════════════════════════════════════════════════════════════╗'));
-    console.log(chalk.cyan('  ║') + chalk.white(` LEAD:     ${chalk.cyan((lead.account.accountName || '').substring(0, 20).padEnd(20))} ${chalk.yellow((lead.symbol.value || '').padEnd(10))} x${lead.contracts}`) + chalk.cyan('       ║'));
-    console.log(chalk.cyan('  ║') + chalk.white(` FOLLOWER: ${chalk.cyan((follower.account.accountName || '').substring(0, 20).padEnd(20))} ${chalk.yellow((follower.symbol.value || '').padEnd(10))} x${follower.contracts}`) + chalk.cyan('       ║'));
-    console.log(chalk.cyan('  ╠════════════════════════════════════════════════════════════════════╣'));
-    console.log(chalk.cyan('  ║') + chalk.white(` Target: ${chalk.green(('$' + dailyTarget.toFixed(2)).padEnd(10))} Risk: ${chalk.red(('$' + maxRisk.toFixed(2)).padEnd(10))} P&L: ${pnlColor(pnlStr.padEnd(12))}`) + chalk.cyan('   ║'));
-    console.log(chalk.cyan('  ║') + chalk.white(` Lead Trades: ${chalk.cyan(stats.leadTrades.toString().padEnd(4))} Copied: ${chalk.green(stats.copiedTrades.toString().padEnd(4))} Errors: ${chalk.red(stats.errors.toString().padEnd(4))}`) + chalk.cyan('           ║'));
-    console.log(chalk.cyan('  ╠════════════════════════════════════════════════════════════════════╣'));
-    console.log(chalk.cyan('  ║') + chalk.white(' Activity Log                                   ') + chalk.yellow('Press X to stop') + chalk.cyan(' ║'));
-    console.log(chalk.cyan('  ╠════════════════════════════════════════════════════════════════════╣'));
-
-    // Logs
+    // Current date
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    
+    // Get package version
+    const version = require('../../package.json').version;
+    
+    // Fixed width = 96 inner chars
+    const W = 96;
+    const TOP    = '\u2554' + '\u2550'.repeat(W) + '\u2557';
+    const MID    = '\u2560' + '\u2550'.repeat(W) + '\u2563';
+    const BOT    = '\u255A' + '\u2550'.repeat(W) + '\u255D';
+    const V      = '\u2551';
+    
+    // Center text helper
+    const center = (text, width) => {
+      const pad = Math.floor((width - text.length) / 2);
+      return ' '.repeat(pad) + text + ' '.repeat(width - pad - text.length);
+    };
+    
+    // Safe padding function
+    const safePad = (len) => ' '.repeat(Math.max(0, len));
+    
+    // Build cell helper
+    const buildCell = (label, value, valueColor, width) => {
+      const text = ` ${label}: ${valueColor(value)}`;
+      const plain = ` ${label}: ${value}`;
+      return { text, plain, padded: text + safePad(width - plain.length) };
+    };
+    
+    bufferLine('');
+    bufferLine(chalk.cyan(TOP));
+    // Logo HEDGEQUANTX
+    bufferLine(chalk.cyan(V) + chalk.cyan(' ██╗  ██╗███████╗██████╗  ██████╗ ███████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗') + chalk.yellow('██╗  ██╗') + ' ' + chalk.cyan(V));
+    bufferLine(chalk.cyan(V) + chalk.cyan(' ██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝') + chalk.yellow('╚██╗██╔╝') + ' ' + chalk.cyan(V));
+    bufferLine(chalk.cyan(V) + chalk.cyan(' ███████║█████╗  ██║  ██║██║  ███╗█████╗  ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║   ') + chalk.yellow(' ╚███╔╝ ') + ' ' + chalk.cyan(V));
+    bufferLine(chalk.cyan(V) + chalk.cyan(' ██╔══██║██╔══╝  ██║  ██║██║   ██║██╔══╝  ██║▄▄ ██║██║   ██║██╔══██║██║╚██╗██║   ██║   ') + chalk.yellow(' ██╔██╗ ') + ' ' + chalk.cyan(V));
+    bufferLine(chalk.cyan(V) + chalk.cyan(' ██║  ██║███████╗██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ') + chalk.yellow('██╔╝ ██╗') + ' ' + chalk.cyan(V));
+    bufferLine(chalk.cyan(V) + chalk.cyan(' ╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ') + chalk.yellow('╚═╝  ╚═╝') + ' ' + chalk.cyan(V));
+    bufferLine(chalk.cyan(MID));
+    
+    // Centered title
+    const title1 = `Copy Trading System  v${version}`;
+    bufferLine(chalk.cyan(V) + chalk.white(center(title1, W)) + chalk.cyan(V));
+    bufferLine(chalk.cyan(MID));
+    
+    // Grid layout - 2 columns
+    const VS = '\u2502'; // Vertical separator (thin)
+    const colL = 48, colR = 47;
+    
+    // Row 1: Lead Account | Lead Symbol
+    const leadName = (lead.account.accountName || '').substring(0, 30);
+    const leadSym = lead.symbol.value || lead.symbol.name || '';
+    const r1c1 = buildCell('Lead', leadName, chalk.cyan, colL);
+    const r1c2text = ` Symbol: ${chalk.yellow(leadSym)}  Qty: ${chalk.cyan(lead.contracts)}`;
+    const r1c2plain = ` Symbol: ${leadSym}  Qty: ${lead.contracts}`;
+    const r1c2 = r1c2text + safePad(colR - r1c2plain.length);
+    
+    // Row 2: Follower Account | Follower Symbol
+    const followerName = (follower.account.accountName || '').substring(0, 30);
+    const followerSym = follower.symbol.value || follower.symbol.name || '';
+    const r2c1 = buildCell('Follower', followerName, chalk.magenta, colL);
+    const r2c2text = ` Symbol: ${chalk.yellow(followerSym)}  Qty: ${chalk.cyan(follower.contracts)}`;
+    const r2c2plain = ` Symbol: ${followerSym}  Qty: ${follower.contracts}`;
+    const r2c2 = r2c2text + safePad(colR - r2c2plain.length);
+    
+    // Row 3: Target | Risk
+    const r3c1 = buildCell('Target', '$' + dailyTarget.toFixed(2), chalk.green, colL);
+    const r3c2 = buildCell('Risk', '$' + maxRisk.toFixed(2), chalk.red, colR);
+    
+    // Row 4: P&L | Server Status
+    const r4c1 = buildCell('P&L', pnlStr, pnlColor, colL);
+    const serverStr = hqxConnected ? 'HQX ON' : 'MONITOR';
+    const serverColor = hqxConnected ? chalk.green : chalk.yellow;
+    const r4c2 = buildCell('Server', serverStr, serverColor, colR);
+    
+    // Row 5: Signals + Lead Trades | Copied + Errors
+    const r5c1text = ` Signals: ${chalk.magenta(stats.signals || 0)}  Lead: ${chalk.cyan(stats.leadTrades)}`;
+    const r5c1plain = ` Signals: ${stats.signals || 0}  Lead: ${stats.leadTrades}`;
+    const r5c1 = r5c1text + safePad(colL - r5c1plain.length);
+    const r5c2text = ` Copied: ${chalk.green(stats.copiedTrades)}  Errors: ${chalk.red(stats.errors)}`;
+    const r5c2plain = ` Copied: ${stats.copiedTrades}  Errors: ${stats.errors}`;
+    const r5c2 = r5c2text + safePad(colR - r5c2plain.length);
+    
+    // Grid separators
+    const GRID_TOP = '\u2560' + '\u2550'.repeat(colL) + '\u2564' + '\u2550'.repeat(colR) + '\u2563';
+    const GRID_MID = '\u2560' + '\u2550'.repeat(colL) + '\u256A' + '\u2550'.repeat(colR) + '\u2563';
+    const GRID_BOT = '\u2560' + '\u2550'.repeat(colL) + '\u2567' + '\u2550'.repeat(colR) + '\u2563';
+    
+    // Print grid
+    bufferLine(chalk.cyan(GRID_TOP));
+    bufferLine(chalk.cyan(V) + r1c1.padded + chalk.cyan(VS) + r1c2 + chalk.cyan(V));
+    bufferLine(chalk.cyan(GRID_MID));
+    bufferLine(chalk.cyan(V) + r2c1.padded + chalk.cyan(VS) + r2c2 + chalk.cyan(V));
+    bufferLine(chalk.cyan(GRID_MID));
+    bufferLine(chalk.cyan(V) + r3c1.padded + chalk.cyan(VS) + r3c2.padded + chalk.cyan(V));
+    bufferLine(chalk.cyan(GRID_MID));
+    bufferLine(chalk.cyan(V) + r4c1.padded + chalk.cyan(VS) + r4c2.padded + chalk.cyan(V));
+    bufferLine(chalk.cyan(GRID_MID));
+    bufferLine(chalk.cyan(V) + r5c1 + chalk.cyan(VS) + r5c2 + chalk.cyan(V));
+    bufferLine(chalk.cyan(GRID_BOT));
+    
+    // Activity log header with spinner and centered date
+    spinnerFrame = (spinnerFrame + 1) % spinnerChars.length;
+    const spinnerChar = spinnerChars[spinnerFrame];
+    const actLeft = ` Activity Log ${chalk.yellow(spinnerChar)}`;
+    const actLeftPlain = ` Activity Log ${spinnerChar}`;
+    const actRight = 'Press X to stop ';
+    const dateCentered = `- ${dateStr} -`;
+    const leftLen = actLeftPlain.length;
+    const rightLen = actRight.length;
+    const midSpace = Math.max(0, W - leftLen - rightLen);
+    const datePad = Math.max(0, Math.floor((midSpace - dateCentered.length) / 2));
+    const remainingPad = Math.max(0, midSpace - datePad - dateCentered.length);
+    const dateSection = ' '.repeat(datePad) + chalk.cyan(dateCentered) + ' '.repeat(remainingPad);
+    bufferLine(chalk.cyan(V) + chalk.white(actLeft) + dateSection + chalk.yellow(actRight) + chalk.cyan(V));
+    bufferLine(chalk.cyan(MID));
+    
+    // Helper to strip ANSI codes for length calculation
+    const stripAnsi = (str) => str.replace(/\x1B\[[0-9;]*m/g, '');
+    
+    // Helper to truncate and pad text to exact width W
+    const fitToWidth = (text, width) => {
+      const plainText = stripAnsi(text);
+      if (plainText.length > width) {
+        let count = 0;
+        let cutIndex = 0;
+        for (let i = 0; i < text.length && count < width - 3; i++) {
+          if (text[i] === '\x1B') {
+            while (i < text.length && text[i] !== 'm') i++;
+          } else {
+            count++;
+            cutIndex = i + 1;
+          }
+        }
+        return text.substring(0, cutIndex) + '...';
+      }
+      return text + ' '.repeat(width - plainText.length);
+    };
+    
+    // Logs inside the rectangle - newest first, max 30 lines
+    const MAX_VISIBLE_LOGS = 30;
+    
     if (logs.length === 0) {
-      console.log(chalk.cyan('  ║') + chalk.gray('  Monitoring lead account for trades...'.padEnd(68)) + chalk.cyan('║'));
+      const emptyLine = ' Waiting for activity...';
+      bufferLine(chalk.cyan(V) + chalk.gray(fitToWidth(emptyLine, W)) + chalk.cyan(V));
+      for (let i = 0; i < MAX_VISIBLE_LOGS - 1; i++) {
+        bufferLine(chalk.cyan(V) + ' '.repeat(W) + chalk.cyan(V));
+      }
     } else {
-      logs.forEach(log => {
+      const reversedLogs = [...logs].reverse().slice(0, MAX_VISIBLE_LOGS);
+      reversedLogs.forEach(log => {
         const color = typeColors[log.type] || chalk.white;
         const icon = getIcon(log.type);
-        const logLine = `[${log.timestamp}] ${icon} ${log.message}`;
-        const truncated = logLine.length > 66 ? logLine.substring(0, 63) + '...' : logLine;
-        console.log(chalk.cyan('  ║') + ' ' + color(truncated.padEnd(67)) + chalk.cyan('║'));
+        const logContent = ` [${log.timestamp}] ${icon} ${log.message}`;
+        const fitted = fitToWidth(logContent, W);
+        bufferLine(chalk.cyan(V) + color(fitted) + chalk.cyan(V));
       });
+      for (let i = reversedLogs.length; i < MAX_VISIBLE_LOGS; i++) {
+        bufferLine(chalk.cyan(V) + ' '.repeat(W) + chalk.cyan(V));
+      }
     }
-
-    console.log(chalk.cyan('  ╚════════════════════════════════════════════════════════════════════╝'));
+    
+    // Bottom border
+    bufferLine(chalk.cyan(BOT));
+    
+    // Write entire buffer atomically
+    process.stdout.write(screenBuffer);
+    isDrawing = false;
   };
+  
+  // Spinner interval for animation
+  const spinnerInterval = setInterval(() => {
+    if (isRunning) displayUI();
+  }, 250);
 
   addLog('info', 'Copy trading initialized');
-  addLog('info', `Monitoring ${lead.account.accountName} for position changes`);
   displayUI();
 
-  // Position monitoring loop
+  // Connect to HQX Server for Ultra-Scalping signals
+  const hqxServer = new HQXServerService();
+  let hqxConnected = false;
+  let latency = 0;
+
+  // Authenticate with HQX Server
+  addLog('info', 'Connecting to HQX Server...');
+  displayUI();
+
+  try {
+    const authResult = await hqxServer.authenticate(
+      lead.account.accountId.toString(), 
+      lead.account.propfirm || 'projectx'
+    );
+
+    if (authResult.success) {
+      const connectResult = await hqxServer.connect();
+      if (connectResult.success) {
+        hqxConnected = true;
+        addLog('success', 'Connected to HQX Server');
+      } else {
+        addLog('warning', 'HQX Server unavailable - Running in monitor mode');
+      }
+    } else {
+      addLog('warning', 'HQX Auth failed - Running in monitor mode');
+    }
+  } catch (error) {
+    addLog('warning', 'HQX Server unavailable - Running in monitor mode');
+  }
+
+  displayUI();
+
+  // Helper function to execute signal on both accounts
+  const executeSignalOnBothAccounts = async (signal) => {
+    const side = signal.side === 'long' ? 0 : 1; // 0=Buy, 1=Sell
+    const sideStr = signal.side === 'long' ? 'LONG' : 'SHORT';
+
+    // Execute on Lead account
+    try {
+      const leadResult = await lead.service.placeOrder({
+        accountId: lead.account.rithmicAccountId || lead.account.accountId,
+        symbol: lead.symbol.value,
+        exchange: 'CME',
+        size: lead.contracts,
+        side: side,
+        type: 2 // Market
+      });
+
+      if (leadResult.success) {
+        stats.leadTrades++;
+        addLog('trade', `Lead: ${sideStr} ${lead.contracts} ${lead.symbol.value} @ MKT`);
+      } else {
+        throw new Error(leadResult.error || 'Lead order failed');
+      }
+    } catch (e) {
+      stats.errors++;
+      addLog('error', `Lead order failed: ${e.message}`);
+      return; // Don't copy if lead fails
+    }
+
+    // Execute on Follower account (copy)
+    try {
+      const followerResult = await follower.service.placeOrder({
+        accountId: follower.account.rithmicAccountId || follower.account.accountId,
+        symbol: follower.symbol.value,
+        exchange: 'CME',
+        size: follower.contracts,
+        side: side,
+        type: 2 // Market
+      });
+
+      if (followerResult.success) {
+        stats.copiedTrades++;
+        addLog('copy', `Follower: ${sideStr} ${follower.contracts} ${follower.symbol.value} @ MKT`);
+      } else {
+        throw new Error(followerResult.error || 'Follower order failed');
+      }
+    } catch (e) {
+      stats.errors++;
+      addLog('error', `Follower order failed: ${e.message}`);
+    }
+  };
+
+  // Helper function to close positions on both accounts
+  const closePositionsOnBothAccounts = async (reason) => {
+    // Close Lead position
+    try {
+      await lead.service.closePosition(
+        lead.account.rithmicAccountId || lead.account.accountId,
+        lead.symbol.value
+      );
+      addLog('trade', `Lead: Position closed (${reason})`);
+    } catch (e) {
+      // Position may already be closed
+    }
+
+    // Close Follower position
+    try {
+      await follower.service.closePosition(
+        follower.account.rithmicAccountId || follower.account.accountId,
+        follower.symbol.value
+      );
+      addLog('copy', `Follower: Position closed (${reason})`);
+    } catch (e) {
+      // Position may already be closed
+    }
+  };
+
+  // Setup HQX Server event handlers
+  if (hqxConnected) {
+    hqxServer.on('latency', (data) => {
+      latency = data.latency || 0;
+    });
+
+    hqxServer.on('log', (data) => {
+      addLog(data.type || 'info', data.message);
+    });
+
+    hqxServer.on('signal', async (data) => {
+      stats.signals = (stats.signals || 0) + 1;
+      const side = data.side === 'long' ? 'BUY' : 'SELL';
+      addLog('signal', `${side} Signal @ ${data.entry?.toFixed(2) || 'N/A'} | SL: ${data.stop?.toFixed(2) || 'N/A'} | TP: ${data.target?.toFixed(2) || 'N/A'}`);
+      
+      // Execute on both accounts
+      await executeSignalOnBothAccounts(data);
+      displayUI();
+    });
+
+    hqxServer.on('trade', async (data) => {
+      stats.pnl += data.pnl || 0;
+      if (data.pnl > 0) {
+        addLog('trade', `Closed +$${data.pnl.toFixed(2)} (${data.reason || 'take_profit'})`);
+      } else {
+        addLog('loss', `Closed -$${Math.abs(data.pnl).toFixed(2)} (${data.reason || 'stop_loss'})`);
+      }
+
+      // Check daily target
+      if (stats.pnl >= dailyTarget) {
+        stopReason = 'target';
+        addLog('success', `Daily target reached! +$${stats.pnl.toFixed(2)}`);
+        isRunning = false;
+        hqxServer.stopAlgo();
+        await closePositionsOnBothAccounts('target');
+      }
+
+      // Check max risk
+      if (stats.pnl <= -maxRisk) {
+        stopReason = 'risk';
+        addLog('error', `Max risk reached! -$${Math.abs(stats.pnl).toFixed(2)}`);
+        isRunning = false;
+        hqxServer.stopAlgo();
+        await closePositionsOnBothAccounts('risk');
+      }
+
+      displayUI();
+    });
+
+    hqxServer.on('stats', (data) => {
+      const realizedPnl = data.pnl || 0;
+      const unrealizedPnl = data.position?.pnl || 0;
+      stats.pnl = realizedPnl + unrealizedPnl;
+    });
+
+    hqxServer.on('error', (data) => {
+      addLog('error', data.message || 'Unknown error');
+    });
+
+    hqxServer.on('disconnected', () => {
+      hqxConnected = false;
+      if (!stopReason) {
+        addLog('error', 'HQX Server disconnected');
+      }
+    });
+
+    // Start the Ultra-Scalping algo
+    addLog('info', 'Starting HQX Ultra-Scalping...');
+    addLog('info', `Target: $${dailyTarget.toFixed(2)} | Risk: $${maxRisk.toFixed(2)}`);
+    
+    const propfirmToken = lead.service.getToken ? lead.service.getToken() : null;
+    const propfirmId = lead.service.getPropfirm ? lead.service.getPropfirm() : (lead.account.propfirm || 'topstep');
+
+    hqxServer.startAlgo({
+      accountId: lead.account.accountId,
+      contractId: lead.symbol.id || lead.symbol.contractId,
+      symbol: lead.symbol.value,
+      contracts: lead.contracts,
+      dailyTarget: dailyTarget,
+      maxRisk: maxRisk,
+      propfirm: propfirmId,
+      propfirmToken: propfirmToken,
+      copyTrading: true, // Flag for copy trading mode
+      followerSymbol: follower.symbol.value,
+      followerContracts: follower.contracts
+    });
+
+    displayUI();
+  }
+
+  // Position monitoring loop (for P&L tracking and fallback copy)
   const monitorInterval = setInterval(async () => {
     if (!isRunning) return;
 
     try {
-      // Get follower positions for P&L tracking
-      const followerPositions = await follower.service.getPositions(follower.account.rithmicAccountId || follower.account.accountId);
-      
-      if (followerPositions.success && followerPositions.positions) {
-        const followerPos = followerPositions.positions.find(p => 
-          p.symbol === follower.symbol.value || 
-          p.symbol?.includes(follower.symbol.searchText)
+      // Get positions from both accounts for P&L tracking
+      const [leadPositions, followerPositions] = await Promise.all([
+        lead.service.getPositions(lead.account.rithmicAccountId || lead.account.accountId),
+        follower.service.getPositions(follower.account.rithmicAccountId || follower.account.accountId)
+      ]);
+
+      // Calculate combined P&L
+      let leadPnl = 0, followerPnl = 0;
+
+      if (leadPositions.success && leadPositions.positions) {
+        const leadPos = leadPositions.positions.find(p => 
+          p.symbol === lead.symbol.value || p.symbol?.includes(lead.symbol.searchText)
         );
-        
-        // Update P&L from follower position
-        if (followerPos && typeof followerPos.unrealizedPnl === 'number') {
-          stats.pnl = followerPos.unrealizedPnl;
+        if (leadPos && typeof leadPos.unrealizedPnl === 'number') {
+          leadPnl = leadPos.unrealizedPnl;
         }
       }
 
+      if (followerPositions.success && followerPositions.positions) {
+        const followerPos = followerPositions.positions.find(p => 
+          p.symbol === follower.symbol.value || p.symbol?.includes(follower.symbol.searchText)
+        );
+        if (followerPos && typeof followerPos.unrealizedPnl === 'number') {
+          followerPnl = followerPos.unrealizedPnl;
+        }
+      }
+
+      // Update combined P&L (or just follower if HQX handles lead)
+      stats.pnl = leadPnl + followerPnl;
+
       // Check if daily target reached
-      if (stats.pnl >= dailyTarget) {
+      if (stats.pnl >= dailyTarget && !stopReason) {
         isRunning = false;
         stopReason = 'target';
         addLog('success', `Daily target reached! +$${stats.pnl.toFixed(2)}`);
         
-        // Close follower position
-        try {
-          await follower.service.closePosition(
-            follower.account.rithmicAccountId || follower.account.accountId,
-            follower.symbol.value
-          );
-          addLog('info', 'Follower position closed');
-        } catch (e) {
-          // Position may already be closed
-        }
-        
+        if (hqxConnected) hqxServer.stopAlgo();
+        await closePositionsOnBothAccounts('target');
         displayUI();
         return;
       }
 
       // Check if max risk reached
-      if (stats.pnl <= -maxRisk) {
+      if (stats.pnl <= -maxRisk && !stopReason) {
         isRunning = false;
         stopReason = 'risk';
         addLog('error', `Max risk reached! -$${Math.abs(stats.pnl).toFixed(2)}`);
         
-        // Close follower position
-        try {
-          await follower.service.closePosition(
-            follower.account.rithmicAccountId || follower.account.accountId,
-            follower.symbol.value
-          );
-          addLog('info', 'Follower position closed');
-        } catch (e) {
-          // Position may already be closed
-        }
-        
+        if (hqxConnected) hqxServer.stopAlgo();
+        await closePositionsOnBothAccounts('risk');
         displayUI();
         return;
       }
 
-      // Get lead positions
-      const leadPositions = await lead.service.getPositions(lead.account.rithmicAccountId || lead.account.accountId);
-      
-      let currentLeadPosition = null;
-      if (leadPositions.success && leadPositions.positions) {
-        currentLeadPosition = leadPositions.positions.find(p => 
-          p.symbol === lead.symbol.value || 
-          p.symbol?.includes(lead.symbol.searchText)
-        );
+      // Fallback: If HQX not connected, monitor lead and copy manually
+      if (!hqxConnected) {
+        let currentLeadPosition = null;
+        if (leadPositions.success && leadPositions.positions) {
+          currentLeadPosition = leadPositions.positions.find(p => 
+            p.symbol === lead.symbol.value || p.symbol?.includes(lead.symbol.searchText)
+          );
+        }
+
+        const hadPosition = lastLeadPosition && lastLeadPosition.quantity !== 0;
+        const hasPosition = currentLeadPosition && currentLeadPosition.quantity !== 0;
+
+        if (!hadPosition && hasPosition) {
+          stats.leadTrades++;
+          const side = currentLeadPosition.quantity > 0 ? 'LONG' : 'SHORT';
+          addLog('trade', `Lead opened ${side} ${Math.abs(currentLeadPosition.quantity)} @ ${currentLeadPosition.averagePrice || 'MKT'}`);
+          await copyTradeToFollower(follower, currentLeadPosition, 'open');
+          stats.copiedTrades++;
+          displayUI();
+
+        } else if (hadPosition && !hasPosition) {
+          addLog('trade', `Lead closed position`);
+          await copyTradeToFollower(follower, lastLeadPosition, 'close');
+          stats.copiedTrades++;
+          displayUI();
+
+        } else if (hadPosition && hasPosition && lastLeadPosition.quantity !== currentLeadPosition.quantity) {
+          const diff = currentLeadPosition.quantity - lastLeadPosition.quantity;
+          const action = diff > 0 ? 'added' : 'reduced';
+          addLog('trade', `Lead ${action} ${Math.abs(diff)} contracts`);
+          await copyTradeToFollower(follower, { ...currentLeadPosition, quantityChange: diff }, 'adjust');
+          stats.copiedTrades++;
+          displayUI();
+        }
+
+        lastLeadPosition = currentLeadPosition ? { ...currentLeadPosition } : null;
       }
-
-      // Detect position changes
-      const hadPosition = lastLeadPosition && lastLeadPosition.quantity !== 0;
-      const hasPosition = currentLeadPosition && currentLeadPosition.quantity !== 0;
-
-      if (!hadPosition && hasPosition) {
-        // New position opened
-        stats.leadTrades++;
-        const side = currentLeadPosition.quantity > 0 ? 'LONG' : 'SHORT';
-        addLog('trade', `Lead opened ${side} ${Math.abs(currentLeadPosition.quantity)} @ ${currentLeadPosition.averagePrice || 'MKT'}`);
-        
-        // Copy to follower
-        await copyTradeToFollower(follower, currentLeadPosition, 'open');
-        stats.copiedTrades++;
-        displayUI();
-
-      } else if (hadPosition && !hasPosition) {
-        // Position closed
-        addLog('trade', `Lead closed position`);
-        
-        // Close follower position
-        await copyTradeToFollower(follower, lastLeadPosition, 'close');
-        stats.copiedTrades++;
-        displayUI();
-
-      } else if (hadPosition && hasPosition && lastLeadPosition.quantity !== currentLeadPosition.quantity) {
-        // Position size changed
-        const diff = currentLeadPosition.quantity - lastLeadPosition.quantity;
-        const action = diff > 0 ? 'added' : 'reduced';
-        addLog('trade', `Lead ${action} ${Math.abs(diff)} contracts`);
-        
-        // Adjust follower position
-        await copyTradeToFollower(follower, { ...currentLeadPosition, quantityChange: diff }, 'adjust');
-        stats.copiedTrades++;
-        displayUI();
-      }
-
-      lastLeadPosition = currentLeadPosition ? { ...currentLeadPosition } : null;
 
     } catch (error) {
       stats.errors++;
@@ -1701,7 +2048,33 @@ const launchCopyTrading = async (config) => {
   });
 
   // Cleanup
+  clearInterval(spinnerInterval);
   isRunning = false;
+
+  // Stop HQX Server and close positions
+  if (hqxConnected) {
+    hqxServer.stopAlgo();
+    hqxServer.disconnect();
+  }
+
+  // Cancel all pending orders and close positions on both accounts
+  try {
+    await Promise.all([
+      lead.service.cancelAllOrders(lead.account.rithmicAccountId || lead.account.accountId),
+      follower.service.cancelAllOrders(follower.account.rithmicAccountId || follower.account.accountId)
+    ]);
+  } catch (e) {
+    // Ignore cancel errors
+  }
+
+  if (!stopReason) {
+    // User stopped manually, close positions
+    await closePositionsOnBothAccounts('user_stop');
+  }
+
+  // Exit alternate screen buffer and show cursor
+  process.stdout.write('\x1B[?1049l');
+  process.stdout.write('\x1B[?25h');
 
   console.log();
   if (stopReason === 'target') {
