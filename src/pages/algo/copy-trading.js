@@ -137,24 +137,44 @@ const copyTradingMenu = async () => {
   });
 };
 
+// Cached contracts from API
+let cachedContracts = null;
+
 /**
- * Symbol selection helper
+ * Get contracts from ProjectX API (shared for all services)
+ */
+const getContractsFromAPI = async () => {
+  if (cachedContracts) return cachedContracts;
+  
+  // Find a ProjectX connection to get contracts from API
+  const allConns = connections.getAll();
+  const projectxConn = allConns.find(c => c.type === 'projectx');
+  
+  if (projectxConn && typeof projectxConn.service.getContracts === 'function') {
+    const result = await projectxConn.service.getContracts();
+    if (result.success && result.contracts?.length > 0) {
+      cachedContracts = result.contracts;
+      return cachedContracts;
+    }
+  }
+  
+  return null;
+};
+
+/**
+ * Symbol selection helper - uses API contracts for all services
  */
 const selectSymbol = async (service, label) => {
   try {
-    let contracts = [];
+    // Always use contracts from ProjectX API for consistency
+    let contracts = await getContractsFromAPI();
     
-    if (typeof service.getContracts === 'function') {
+    // Fallback to service's own contracts if no ProjectX available
+    if (!contracts && typeof service.getContracts === 'function') {
       const result = await service.getContracts();
       if (result.success && result.contracts?.length > 0) {
         contracts = result.contracts;
       }
-    }
-    
-    if (contracts.length === 0 && typeof service.searchContracts === 'function') {
-      const searchResult = await service.searchContracts('ES');
-      if (Array.isArray(searchResult)) contracts = searchResult;
-      else if (searchResult?.contracts) contracts = searchResult.contracts;
     }
     
     if (!contracts || contracts.length === 0) {
