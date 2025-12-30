@@ -133,7 +133,7 @@ const banner = async () => {
   console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
   const tagline = isMobile ? `HQX v${version}` : `Prop Futures Algo Trading  v${version}`;
   console.log(chalk.cyan('║') + chalk.white(centerText(tagline, innerWidth)) + chalk.cyan('║'));
-  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
+  // No closing line - dashboard will continue the box
 };
 
 /**
@@ -142,20 +142,36 @@ const banner = async () => {
 const mainMenu = async () => {
   const boxWidth = getLogoWidth();
   const innerWidth = boxWidth - 2;
+  const col1Width = Math.floor(innerWidth / 2);
   
-  console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
+  const menuRow = (left, right) => {
+    const leftPlain = left.replace(/\x1b\[[0-9;]*m/g, '');
+    const rightPlain = right ? right.replace(/\x1b\[[0-9;]*m/g, '') : '';
+    const leftPadded = '  ' + left + ' '.repeat(Math.max(0, col1Width - leftPlain.length - 2));
+    const rightPadded = (right || '') + ' '.repeat(Math.max(0, innerWidth - col1Width - rightPlain.length));
+    console.log(chalk.cyan('║') + leftPadded + rightPadded + chalk.cyan('║'));
+  };
+  
+  // Continue from banner
+  console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
   console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PLATFORM', innerWidth)) + chalk.cyan('║'));
   console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+  
+  menuRow(chalk.cyan('[1] ProjectX'), chalk.cyan('[2] Rithmic'));
+  menuRow(chalk.cyan('[3] Tradovate'), chalk.red('[X] Exit'));
+  
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
 
-  const action = await prompts.selectOption('Select platform:', [
-    { value: 'projectx', label: '[1] ProjectX' },
-    { value: 'rithmic', label: '[2] Rithmic' },
-    { value: 'tradovate', label: '[3] Tradovate' },
-    { value: 'exit', label: '[X] Exit' }
-  ]);
+  const input = await prompts.textInput('Select (1/2/3/X)');
+  
+  const actionMap = {
+    '1': 'projectx',
+    '2': 'rithmic',
+    '3': 'tradovate',
+    'x': 'exit'
+  };
 
-  return action || 'exit';
+  return actionMap[(input || '').toLowerCase()] || 'exit';
 };
 
 /**

@@ -30,7 +30,8 @@ const dashboardMenu = async (service) => {
     return chalk.cyan('║') + content + ' '.repeat(Math.max(0, padding)) + chalk.cyan('║');
   };
   
-  console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
+  // Continue from banner (no top border)
+  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   console.log(makeLine(chalk.yellow.bold('Welcome, HQX Trader!'), 'center'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
@@ -89,16 +90,19 @@ const dashboardMenu = async (service) => {
   
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
   
-  const action = await prompts.selectOption('Select:', [
-    { value: 'accounts', label: '[1] View Accounts' },
-    { value: 'stats', label: '[2] View Stats' },
-    { value: 'add_prop_account', label: '[+] Add Prop-Account' },
-    { value: 'algotrading', label: '[A] Algo-Trading' },
-    { value: 'update', label: '[U] Update HQX' },
-    { value: 'disconnect', label: '[X] Disconnect' }
-  ]);
+  // Simple input - no duplicate menu
+  const input = await prompts.textInput('Select (1/2/+/A/U/X)');
   
-  return action || 'disconnect';
+  const actionMap = {
+    '1': 'accounts',
+    '2': 'stats',
+    '+': 'add_prop_account',
+    'a': 'algotrading',
+    'u': 'update',
+    'x': 'disconnect'
+  };
+  
+  return actionMap[(input || '').toLowerCase()] || null;
 };
 
 /**
