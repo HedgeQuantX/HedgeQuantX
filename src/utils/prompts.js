@@ -1,56 +1,53 @@
 /**
  * Centralized prompts utility
- * Uses inquirer for reliable stdin handling
+ * Uses native readline for reliable stdin handling
  */
 
 const inquirer = require('inquirer');
+const readline = require('readline');
 
 /**
- * Ensure stdin is ready and clear any buffered input
+ * Ensure stdin is ready
  */
 const prepareStdin = () => {
   try {
-    // Resume if paused
     if (process.stdin.isPaused()) process.stdin.resume();
-    
-    // Ensure raw mode is off for line-based input
     if (process.stdin.isTTY && process.stdin.setRawMode) {
       process.stdin.setRawMode(false);
     }
-    
-    // Clear any buffered data by removing all listeners temporarily
-    const listeners = process.stdin.listeners('data');
-    process.stdin.removeAllListeners('data');
-    
-    // Drain any pending input
-    process.stdin.read();
-    
-    // Restore listeners
-    listeners.forEach(l => process.stdin.on('data', l));
   } catch (e) {}
+};
+
+/**
+ * Native readline prompt - more reliable than inquirer for simple input
+ */
+const nativePrompt = (message) => {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    
+    rl.question(message + ' ', (answer) => {
+      rl.close();
+      resolve(answer || '');
+    });
+  });
 };
 
 /**
  * Wait for Enter
  */
 const waitForEnter = async (message = 'Press Enter to continue...') => {
-  prepareStdin();
-  await inquirer.prompt([{ type: 'input', name: '_', message, prefix: '' }]);
+  await nativePrompt(message);
 };
 
 /**
  * Text input
  */
 const textInput = async (message, defaultVal = '') => {
-  prepareStdin();
-  const { value } = await inquirer.prompt([{
-    type: 'input',
-    name: 'value',
-    message,
-    default: defaultVal,
-    prefix: ''
-  }]);
-  return value;
+  const value = await nativePrompt(message);
+  return value || defaultVal;
 };
 
 /**
