@@ -27,6 +27,41 @@ let currentService = null;
 let currentPlatform = null; // 'projectx' or 'rithmic'
 
 /**
+ * Global terminal restoration - ensures terminal is always restored on exit
+ */
+const restoreTerminal = () => {
+  try {
+    // Exit alternate screen buffer
+    process.stdout.write('\x1B[?1049l');
+    // Show cursor
+    process.stdout.write('\x1B[?25h');
+    // Disable raw mode
+    if (process.stdin.isTTY && process.stdin.isRaw) {
+      process.stdin.setRawMode(false);
+    }
+    // Remove all keypress listeners
+    process.stdin.removeAllListeners('keypress');
+  } catch (e) {
+    // Ignore errors during cleanup
+  }
+};
+
+// Register global handlers to restore terminal on exit/crash
+process.on('exit', restoreTerminal);
+process.on('SIGINT', () => { restoreTerminal(); process.exit(0); });
+process.on('SIGTERM', () => { restoreTerminal(); process.exit(0); });
+process.on('uncaughtException', (err) => {
+  restoreTerminal();
+  console.error(chalk.red('Uncaught Exception:'), err.message);
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  restoreTerminal();
+  console.error(chalk.red('Unhandled Rejection:'), reason);
+  process.exit(1);
+});
+
+/**
  * Displays the application banner with stats if connected
  */
 const banner = async () => {

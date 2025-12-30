@@ -2137,6 +2137,16 @@ const launchCopyTrading = async (config) => {
     await closePositionsOnBothAccounts('user_stop');
   }
 
+  // Restore stdin to normal mode
+  try {
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(false);
+    }
+    process.stdin.removeAllListeners('keypress');
+  } catch (e) {
+    // Ignore stdin restoration errors
+  }
+
   // Exit alternate screen buffer and show cursor
   process.stdout.write('\x1B[?1049l');
   process.stdout.write('\x1B[?25h');
