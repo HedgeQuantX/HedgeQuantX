@@ -19,89 +19,46 @@ const dashboardMenu = async (service) => {
   // Ensure stdin is ready for prompts
   prepareStdin();
   
-  const user = service.user;
   const boxWidth = getLogoWidth();
-  const W = boxWidth - 2; // Same width as logo (inner width)
+  const W = boxWidth - 2; // Inner width (without borders)
   
-  // Helper to center text
-  const centerLine = (text, width) => {
-    const pad = Math.floor((width - text.length) / 2);
-    return ' '.repeat(Math.max(0, pad)) + text + ' '.repeat(Math.max(0, width - pad - text.length));
-  };
-  
-  // Helper to pad text left
-  const padLine = (text, width) => {
-    return ' ' + text + ' '.repeat(Math.max(0, width - text.length - 1));
+  // Helper to create a line that fits exactly in the box
+  const makeLine = (content, align = 'left') => {
+    const plainLen = content.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const padding = W - plainLen;
+    if (align === 'center') {
+      const leftPad = Math.floor(padding / 2);
+      const rightPad = padding - leftPad;
+      return chalk.cyan('║') + ' '.repeat(leftPad) + content + ' '.repeat(rightPad) + chalk.cyan('║');
+    }
+    return chalk.cyan('║') + content + ' '.repeat(Math.max(0, padding)) + chalk.cyan('║');
   };
   
   // Dashboard box header
   console.log();
   console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
-  console.log(chalk.cyan('║') + chalk.yellow.bold(centerLine('Welcome, HQX Trader!', W)) + chalk.cyan('║'));
+  console.log(makeLine(chalk.yellow.bold('Welcome, HQX Trader!'), 'center'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
-  // Connection info - show all active connections in boxes (max 3 per row)
+  // Show connected propfirms on one line (max 3)
   const allConns = connections.getAll();
   if (allConns.length > 0) {
-    const maxPerRow = 3;
-    const boxPadding = 2; // padding inside each mini-box
-    const gap = 2; // gap between boxes
-    
-    // Calculate box width based on number of connections (max 3)
-    const numBoxes = Math.min(allConns.length, maxPerRow);
-    const totalGaps = (numBoxes - 1) * gap;
-    const connBoxWidth = Math.floor((W - totalGaps - 2) / numBoxes); // -2 for outer padding
-    
-    // Process connections in rows of 3
-    for (let rowStart = 0; rowStart < allConns.length; rowStart += maxPerRow) {
-      const rowConns = allConns.slice(rowStart, rowStart + maxPerRow);
-      const numInRow = rowConns.length;
-      const rowBoxWidth = Math.floor((W - (numInRow - 1) * gap - 2) / numInRow);
-      
-      // Top border of boxes
-      let topLine = ' ';
-      for (let i = 0; i < numInRow; i++) {
-        topLine += '┌' + '─'.repeat(rowBoxWidth - 2) + '┐';
-        if (i < numInRow - 1) topLine += ' '.repeat(gap);
-      }
-      const topPad = W - topLine.length;
-      console.log(chalk.cyan('║') + chalk.green(topLine) + ' '.repeat(Math.max(0, topPad)) + chalk.cyan('║'));
-      
-      // Content of boxes
-      let contentLine = ' ';
-      for (let i = 0; i < numInRow; i++) {
-        const connText = rowConns[i].propfirm || rowConns[i].type || 'Connected';
-        const truncated = connText.length > rowBoxWidth - 4 ? connText.slice(0, rowBoxWidth - 7) + '...' : connText;
-        const innerWidth = rowBoxWidth - 4; // -2 for borders, -2 for padding
-        const textPad = Math.floor((innerWidth - truncated.length) / 2);
-        const textPadRight = innerWidth - truncated.length - textPad;
-        contentLine += '│ ' + ' '.repeat(textPad) + truncated + ' '.repeat(textPadRight) + ' │';
-        if (i < numInRow - 1) contentLine += ' '.repeat(gap);
-      }
-      const contentPad = W - contentLine.length;
-      console.log(chalk.cyan('║') + chalk.green(contentLine) + ' '.repeat(Math.max(0, contentPad)) + chalk.cyan('║'));
-      
-      // Bottom border of boxes
-      let bottomLine = ' ';
-      for (let i = 0; i < numInRow; i++) {
-        bottomLine += '└' + '─'.repeat(rowBoxWidth - 2) + '┘';
-        if (i < numInRow - 1) bottomLine += ' '.repeat(gap);
-      }
-      const bottomPad = W - bottomLine.length;
-      console.log(chalk.cyan('║') + chalk.green(bottomLine) + ' '.repeat(Math.max(0, bottomPad)) + chalk.cyan('║'));
-    }
+    const propfirms = allConns.slice(0, 3).map(c => c.propfirm || c.type || 'Connected');
+    const propfirmLine = '  ' + propfirms.map(p => chalk.green('● ') + chalk.white(p)).join('    ');
+    console.log(makeLine(propfirmLine));
   }
+  
+  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
   // Menu options in 2 columns
   const col1Width = Math.floor(W / 2);
-  const col2Width = W - col1Width;
   
   const menuRow = (left, right) => {
     const leftPlain = left.replace(/\x1b\[[0-9;]*m/g, '');
-    const rightPlain = right ? right.replace(/\x1b\[[0-9;]*m/g, '') : '';
-    const leftPad = ' '.repeat(Math.max(0, col1Width - leftPlain.length - 2));
-    const rightPad = ' '.repeat(Math.max(0, col2Width - rightPlain.length - 2));
-    console.log(chalk.cyan('║') + '  ' + left + leftPad + '  ' + (right || '') + rightPad + chalk.cyan('║'));
+    const rightPlain = right.replace(/\x1b\[[0-9;]*m/g, '');
+    const leftPadded = '  ' + left + ' '.repeat(Math.max(0, col1Width - leftPlain.length - 2));
+    const rightPadded = right + ' '.repeat(Math.max(0, W - col1Width - rightPlain.length));
+    console.log(chalk.cyan('║') + leftPadded + rightPadded + chalk.cyan('║'));
   };
   
   // Display menu items in 2 columns inside the box
@@ -109,18 +66,16 @@ const dashboardMenu = async (service) => {
   menuRow(chalk.cyan('[+] Add Prop-Account'), chalk.magenta('[A] Algo-Trading'));
   menuRow(chalk.yellow('[U] Update HQX'), chalk.red('[X] Disconnect'));
   
-  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
+  console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
+  console.log();
   
-  // Input prompt inside box - we'll close the box after input
-  process.stdout.write(chalk.cyan('║') + '  Select: ');
-  
+  // Input prompt
   const { choice } = await inquirer.prompt([
     {
       type: 'input',
       name: 'choice',
-      message: '',
-      prefix: '',
-      suffix: ''
+      message: chalk.cyan('Select:'),
+      prefix: ''
     }
   ]);
   
