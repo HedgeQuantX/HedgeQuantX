@@ -24,6 +24,26 @@ const {
 } = require('./table');
 const { createBoxMenu } = require('./menu');
 
+/**
+ * Ensure stdin is ready for inquirer prompts
+ * This fixes input leaking to bash after session restore or algo trading
+ */
+const prepareStdin = () => {
+  try {
+    // Remove any raw mode that might be left from previous operations
+    if (process.stdin.isTTY && process.stdin.isRaw) {
+      process.stdin.setRawMode(false);
+    }
+    // Remove any lingering keypress listeners
+    process.stdin.removeAllListeners('keypress');
+    process.stdin.removeAllListeners('data');
+    // Pause stdin so inquirer can take control
+    process.stdin.pause();
+  } catch (e) {
+    // Ignore errors
+  }
+};
+
 module.exports = {
   // Device
   detectDevice,
@@ -47,5 +67,7 @@ module.exports = {
   draw2ColSeparator,
   fmtRow,
   // Menu
-  createBoxMenu
+  createBoxMenu,
+  // Stdin
+  prepareStdin
 };

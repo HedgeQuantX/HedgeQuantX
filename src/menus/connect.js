@@ -11,7 +11,7 @@ const { ProjectXService, connections } = require('../services');
 const { RithmicService } = require('../services/rithmic');
 const { TradovateService } = require('../services/tradovate');
 const { getPropFirmsByPlatform } = require('../config');
-const { getDevice, getLogoWidth, centerText } = require('../ui');
+const { getDevice, getLogoWidth, centerText, prepareStdin } = require('../ui');
 const { validateUsername, validatePassword } = require('../security');
 
 /**
@@ -20,6 +20,7 @@ const { validateUsername, validatePassword } = require('../security');
  * @returns {Promise<{username: string, password: string}>}
  */
 const loginPrompt = async (propfirmName) => {
+  prepareStdin();
   const device = getDevice();
   console.log();
   console.log(chalk.cyan(`Connecting to ${propfirmName}...`));

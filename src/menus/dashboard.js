@@ -9,13 +9,16 @@ const ora = require('ora');
 const { execSync, spawn } = require('child_process');
 
 const { connections } = require('../services');
-const { getLogoWidth, centerText } = require('../ui');
+const { getLogoWidth, centerText, prepareStdin } = require('../ui');
 
 /**
  * Dashboard menu after login
  * @param {Object} service - Connected service
  */
 const dashboardMenu = async (service) => {
+  // Ensure stdin is ready for prompts
+  prepareStdin();
+  
   const user = service.user;
   const boxWidth = getLogoWidth();
   const W = boxWidth - 2; // Same width as logo (inner width)
@@ -140,71 +143,172 @@ const dashboardMenu = async (service) => {
 };
 
 /**
+ * Wait for user to press Enter
+ */
+const waitForEnter = async () => {
+  prepareStdin();
+  try {
+    await inquirer.prompt([{ type: 'input', name: 'c', message: 'Press Enter to continue...' }]);
+  } catch (e) {
+    // Ignore prompt errors
+  }
+};
+
+/**
  * Handles the update process with auto-restart
+ * Robust version that handles all edge cases
  */
 const handleUpdate = async () => {
-  const pkg = require('../../package.json');
-  const currentVersion = pkg.version;
-  const spinner = ora('Checking for updates...').start();
+  prepareStdin();
+  
+  let spinner = null;
+  let currentVersion = 'unknown';
+  let latestVersion = null;
   
   try {
-    // Check latest version on npm
-    spinner.text = 'Checking npm registry...';
-    let latestVersion;
+    // Get current version safely
     try {
-      latestVersion = execSync('npm view hedgequantx version', { stdio: 'pipe' }).toString().trim();
+      const pkg = require('../../package.json');
+      currentVersion = pkg.version || 'unknown';
+    } catch (e) {
+      currentVersion = 'unknown';
+    }
+    
+    spinner = ora('Checking for updates...').start();
+    
+    // Check latest version on npm with timeout
+    spinner.text = 'Checking npm registry...';
+    try {
+      const result = execSync('npm view hedgequantx version 2>/dev/null', { 
+        stdio: 'pipe',
+        timeout: 15000,  // 15 second timeout
+        encoding: 'utf8'
+      });
+      latestVersion = (result || '').toString().trim();
+      
+      // Validate version format (x.y.z)
+      if (!latestVersion || !/^\d+\.\d+\.\d+/.test(latestVersion)) {
+        throw new Error('Invalid version format received');
+      }
     } catch (e) {
       spinner.fail('Cannot reach npm registry');
+      console.log(chalk.gray('  Check your internet connection'));
       console.log();
-      await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+      await waitForEnter();
       return;
     }
     
+    // Compare versions
     if (currentVersion === latestVersion) {
       spinner.succeed('Already up to date!');
       console.log();
-      console.log(chalk.green(`  ✓ You have the latest version of HedgeQuantX CLI: v${currentVersion}`));
+      console.log(chalk.green(`  You have the latest version: v${currentVersion}`));
       console.log();
-      await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+      await waitForEnter();
+      return;
+    }
+    
+    // Ask user before updating
+    spinner.stop();
+    console.log();
+    console.log(chalk.cyan(`  Current version: v${currentVersion}`));
+    console.log(chalk.green(`  Latest version:  v${latestVersion}`));
+    console.log();
+    
+    prepareStdin();
+    const { confirm } = await inquirer.prompt([{
+      type: 'confirm',
+      name: 'confirm',
+      message: 'Do you want to update now?',
+      default: true
+    }]);
+    
+    if (!confirm) {
+      console.log(chalk.gray('  Update cancelled'));
+      console.log();
+      await waitForEnter();
       return;
     }
     
     // Update via npm
-    spinner.text = `Updating v${currentVersion} -> v${latestVersion}...`;
+    spinner = ora(`Updating v${currentVersion} -> v${latestVersion}...`).start();
+    
     try {
-      execSync('npm install -g hedgequantx@latest', { stdio: 'pipe' });
+      execSync('npm install -g hedgequantx@latest 2>/dev/null', { 
+        stdio: 'pipe',
+        timeout: 120000,  // 2 minute timeout for install
+        encoding: 'utf8'
+      });
     } catch (e) {
-      spinner.fail('Update failed - try manually: npm install -g hedgequantx@latest');
-      console.log(chalk.gray(`  Error: ${e.message}`));
+      spinner.fail('Update failed');
       console.log();
-      await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+      console.log(chalk.yellow('  Try manually:'));
+      console.log(chalk.white('  npm install -g hedgequantx@latest'));
+      console.log();
+      if (e.message) {
+        console.log(chalk.gray(`  Error: ${e.message.substring(0, 100)}`));
+        console.log();
+      }
+      await waitForEnter();
       return;
     }
     
-    spinner.succeed('CLI updated!');
+    spinner.succeed('Update complete!');
     console.log();
-    console.log(chalk.green(`  ✓ Updated: v${currentVersion} -> v${latestVersion}`));
-    console.log();
-    console.log(chalk.cyan('  Restarting HedgeQuantX CLI...'));
+    console.log(chalk.green(`  Updated: v${currentVersion} -> v${latestVersion}`));
     console.log();
     
-    // Small delay so user can see the message
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    // Ask if user wants to restart
+    prepareStdin();
+    const { restart } = await inquirer.prompt([{
+      type: 'confirm',
+      name: 'restart',
+      message: 'Restart HQX now?',
+      default: true
+    }]);
     
-    // Restart the CLI automatically
-    const child = spawn('hedgequantx', [], {
-      stdio: 'inherit',
-      detached: true,
-      shell: true
-    });
-    child.unref();
-    process.exit(0);
+    if (restart) {
+      console.log();
+      console.log(chalk.cyan('  Restarting HedgeQuantX CLI...'));
+      console.log();
+      
+      // Small delay so user can see the message
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Restart the CLI
+      try {
+        const child = spawn('hedgequantx', [], {
+          stdio: 'inherit',
+          detached: true,
+          shell: true
+        });
+        child.unref();
+        process.exit(0);
+      } catch (e) {
+        console.log(chalk.yellow('  Could not auto-restart. Please run: hedgequantx'));
+        console.log();
+        await waitForEnter();
+      }
+    } else {
+      console.log(chalk.gray('  Run "hedgequantx" to use the new version'));
+      console.log();
+      await waitForEnter();
+    }
     
   } catch (error) {
-    spinner.fail('Update failed: ' + error.message);
+    // Catch-all for any unexpected errors
+    if (spinner) {
+      try { spinner.fail('Update error'); } catch (e) {}
+    }
+    console.log();
+    console.log(chalk.red('  An error occurred during update'));
+    if (error && error.message) {
+      console.log(chalk.gray(`  ${error.message.substring(0, 100)}`));
+    }
+    console.log();
     console.log(chalk.yellow('  Try manually: npm install -g hedgequantx@latest'));
     console.log();
-    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+    await waitForEnter();
   }
 };
 

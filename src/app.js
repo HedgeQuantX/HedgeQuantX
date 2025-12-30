@@ -8,7 +8,7 @@ const inquirer = require('inquirer');
 const ora = require('ora');
 
 const { connections } = require('./services');
-const { getLogoWidth, centerText } = require('./ui');
+const { getLogoWidth, centerText, prepareStdin } = require('./ui');
 
 // Pages
 const { showStats } = require('./pages/stats');
@@ -39,27 +39,6 @@ const restoreTerminal = () => {
     process.stdin.removeAllListeners('keypress');
   } catch (e) {
     // Ignore errors during cleanup
-  }
-};
-
-/**
- * Ensure stdin is ready for inquirer prompts
- * This fixes input leaking to bash after session restore
- */
-const prepareStdin = () => {
-  try {
-    // Remove any raw mode that might be left from previous operations
-    if (process.stdin.isTTY && process.stdin.isRaw) {
-      process.stdin.setRawMode(false);
-    }
-    // Remove any lingering keypress listeners
-    process.stdin.removeAllListeners('keypress');
-    process.stdin.removeAllListeners('data');
-    // Pause stdin so inquirer can take control
-    process.stdin.pause();
-    // Small delay to let event loop settle
-  } catch (e) {
-    // Ignore errors
   }
 };
 
