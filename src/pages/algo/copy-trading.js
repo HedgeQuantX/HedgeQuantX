@@ -287,9 +287,12 @@ const launchCopyTrading = async (config) => {
   
   // Combined stats
   const stats = {
-    accountName: `${leadName} -> ${followerName}`,
-    symbol: `${lead.symbol.name} / ${follower.symbol.name}`,
-    contracts: `${lead.contracts}/${follower.contracts}`,
+    leadName,
+    followerName,
+    leadSymbol: lead.symbol.name,
+    followerSymbol: follower.symbol.name,
+    leadQty: lead.contracts,
+    followerQty: follower.contracts,
     target: dailyTarget,
     risk: maxRisk,
     pnl: 0,

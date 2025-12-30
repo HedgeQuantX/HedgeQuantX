@@ -146,37 +146,55 @@ class AlgoUI {
     
     this._line(chalk.cyan(GT));
     
-    // Row 1: Account | Symbol (truncate long values)
-    const accName = (stats.accountName || 'N/A').substring(0, 35);
-    const symName = (stats.symbol || 'N/A').substring(0, 25);
-    const qtyStr = stats.contracts || '1/1';
+    // Row 1: Lead Account | Follower Account
+    const leadName = (stats.leadName || stats.accountName || 'N/A').substring(0, 40);
+    const followerName = (stats.followerName || 'N/A').substring(0, 40);
     
-    const r1c1 = buildCell('Account', accName, chalk.cyan, colL);
-    const r1c2t = ` Symbol: ${chalk.yellow(symName)}  Qty: ${chalk.cyan(qtyStr)}`;
-    const r1c2p = ` Symbol: ${symName}  Qty: ${qtyStr}`;
-    row(r1c1.padded, r1c2t + pad(Math.max(0, colR - r1c2p.length)));
+    const r1c1 = buildCell('Lead', leadName, chalk.cyan, colL);
+    const r1c2 = buildCell('Follower', followerName, chalk.magenta, colR);
+    row(r1c1.padded, r1c2.padded);
     
     this._line(chalk.cyan(GM));
     
-    // Row 2: Target | Risk
-    const r2c1 = buildCell('Target', '$' + (stats.target || 0).toFixed(2), chalk.green, colL);
-    const r2c2 = buildCell('Risk', '$' + (stats.risk || 0).toFixed(2), chalk.red, colR);
+    // Row 2: Lead Symbol | Follower Symbol
+    const leadSymbol = (stats.leadSymbol || stats.symbol || 'N/A').substring(0, 35);
+    const followerSymbol = (stats.followerSymbol || 'N/A').substring(0, 35);
+    
+    const r2c1 = buildCell('Symbol', leadSymbol, chalk.yellow, colL);
+    const r2c2 = buildCell('Symbol', followerSymbol, chalk.yellow, colR);
     row(r2c1.padded, r2c2.padded);
     
     this._line(chalk.cyan(GM));
     
-    // Row 3: P&L | Server
-    const r3c1 = buildCell('P&L', pnlStr, pnlColor, colL);
-    const r3c2 = buildCell('Server', stats.connected ? 'ON' : 'OFF', serverColor, colR);
+    // Row 3: Lead Qty | Follower Qty
+    const leadQty = stats.leadQty || '1';
+    const followerQty = stats.followerQty || '1';
+    
+    const r3c1 = buildCell('Qty', leadQty.toString(), chalk.cyan, colL);
+    const r3c2 = buildCell('Qty', followerQty.toString(), chalk.cyan, colR);
     row(r3c1.padded, r3c2.padded);
     
     this._line(chalk.cyan(GM));
     
-    // Row 4: Trades | Latency
-    const r4c1t = ` Trades: ${chalk.cyan(stats.trades || 0)}  W/L: ${chalk.green(stats.wins || 0)}/${chalk.red(stats.losses || 0)}`;
-    const r4c1p = ` Trades: ${stats.trades || 0}  W/L: ${stats.wins || 0}/${stats.losses || 0}`;
-    const r4c2 = buildCell('Latency', `${stats.latency || 0}ms`, latencyColor, colR);
-    row(r4c1t + pad(colL - r4c1p.length), r4c2.padded);
+    // Row 4: Target | Risk
+    const r4c1 = buildCell('Target', '$' + (stats.target || 0).toFixed(2), chalk.green, colL);
+    const r4c2 = buildCell('Risk', '$' + (stats.risk || 0).toFixed(2), chalk.red, colR);
+    row(r4c1.padded, r4c2.padded);
+    
+    this._line(chalk.cyan(GM));
+    
+    // Row 5: P&L | Server
+    const r5c1 = buildCell('P&L', pnlStr, pnlColor, colL);
+    const r5c2 = buildCell('Server', stats.connected ? 'ON' : 'OFF', serverColor, colR);
+    row(r5c1.padded, r5c2.padded);
+    
+    this._line(chalk.cyan(GM));
+    
+    // Row 6: Trades | Latency
+    const r6c1t = ` Trades: ${chalk.cyan(stats.trades || 0)}  W/L: ${chalk.green(stats.wins || 0)}/${chalk.red(stats.losses || 0)}`;
+    const r6c1p = ` Trades: ${stats.trades || 0}  W/L: ${stats.wins || 0}/${stats.losses || 0}`;
+    const r6c2 = buildCell('Latency', `${stats.latency || 0}ms`, latencyColor, colR);
+    row(r6c1t + pad(colL - r6c1p.length), r6c2.padded);
     
     this._line(chalk.cyan(GB));
   }
