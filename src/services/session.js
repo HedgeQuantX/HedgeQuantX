@@ -262,6 +262,30 @@ const connections = {
   },
 
   /**
+   * Gets the service for a specific account
+   * @param {string|number} accountId - Account ID to find
+   * @returns {Object|null} Service instance or null
+   */
+  getServiceForAccount(accountId) {
+    for (const conn of this.services) {
+      try {
+        // Check if this service has this account
+        if (conn.service && conn.service.accounts) {
+          const found = conn.service.accounts.find(acc => 
+            acc.accountId == accountId || 
+            acc.rithmicAccountId == accountId ||
+            acc.accountName == accountId
+          );
+          if (found) return conn.service;
+        }
+      } catch (e) {
+        // Skip
+      }
+    }
+    return null;
+  },
+
+  /**
    * Checks if any connection is active
    * @returns {boolean} True if connected
    */

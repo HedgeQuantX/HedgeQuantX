@@ -19,15 +19,16 @@ const { AlgoUI, checkMarketStatus } = require('./ui');
 const oneAccountMenu = async (service) => {
   const spinner = ora('Fetching active accounts...').start();
   
-  const result = await service.getTradingAccounts();
+  // Get ALL accounts from ALL connections
+  const allAccounts = await connections.getAllAccounts();
   
-  if (!result.success || !result.accounts?.length) {
+  if (!allAccounts?.length) {
     spinner.fail('No accounts found');
     await inquirer.prompt([{ type: 'input', name: 'c', message: 'Press Enter...' }]);
     return;
   }
   
-  const activeAccounts = result.accounts.filter(acc => acc.status === 0);
+  const activeAccounts = allAccounts.filter(acc => acc.status === 0);
   
   if (!activeAccounts.length) {
     spinner.fail('No active accounts');
@@ -37,14 +38,16 @@ const oneAccountMenu = async (service) => {
   
   spinner.succeed(`Found ${activeAccounts.length} active account(s)`);
   
-  // Select account
+  // Select account - show propfirm for clarity
   const { selectedAccount } = await inquirer.prompt([{
     type: 'list',
     name: 'selectedAccount',
     message: 'Select Account:',
     choices: [
       ...activeAccounts.map(acc => ({
-        name: chalk.cyan(`${acc.accountName || acc.accountId} - $${acc.balance.toLocaleString()}`),
+        name: chalk.cyan(`${acc.accountName || acc.accountId}`) + 
+              chalk.gray(` (${acc.propfirm || 'Unknown'})`) + 
+              chalk.white(` - $${(acc.balance || 0).toLocaleString()}`),
         value: acc
       })),
       new inquirer.Separator(),
@@ -54,16 +57,19 @@ const oneAccountMenu = async (service) => {
   
   if (selectedAccount === 'back') return;
   
+  // Find the service for this account
+  const accountService = connections.getServiceForAccount(selectedAccount.accountId) || service;
+  
   // Select symbol
-  const contract = await selectSymbol(service, selectedAccount);
+  const contract = await selectSymbol(accountService, selectedAccount);
   if (!contract) return;
   
   // Configure algo
   const config = await configureAlgo(selectedAccount, contract);
   if (!config) return;
   
-  // Launch
-  await launchAlgo(service, selectedAccount, contract, config);
+  // Launch with the correct service for this account
+  await launchAlgo(accountService, selectedAccount, contract, config);
 };
 
 /**
