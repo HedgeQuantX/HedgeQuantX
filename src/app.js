@@ -189,50 +189,14 @@ const banner = async () => {
   const tagline = isMobile ? `HQX v${version}` : `Prop Futures Algo Trading  v${version}`;
   console.log(chalk.cyan('║') + chalk.white(centerText(tagline, innerWidth)) + chalk.cyan('║'));
   
-  // Stats bar if connected
-  // STRICT: Only display verified values from API, show '--' for unavailable data
-  if (statsInfo) {
-    console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
-    
-    const connStr = `Connections: ${statsInfo.connections}`;
-    const accStr = `Accounts: ${statsInfo.accounts}`;
-    
-    // Balance: show '--' if not available from API
-    const balStr = statsInfo.balance !== null 
-      ? `Balance: $${statsInfo.balance.toLocaleString()}` 
-      : `Balance: --`;
-    const balColor = statsInfo.balance !== null ? chalk.green : chalk.gray;
-    
-    // P&L: show '--' if not available from API
-    let pnlDisplay;
-    let pnlColor;
-    if (statsInfo.pnl !== null) {
-      const pnlSign = statsInfo.pnl >= 0 ? '+' : '';
-      pnlColor = statsInfo.pnl >= 0 ? chalk.green : chalk.red;
-      pnlDisplay = `$${statsInfo.pnl.toLocaleString()} (${pnlSign}${statsInfo.pnl.toFixed(1)})`;
-    } else {
-      pnlColor = chalk.gray;
-      pnlDisplay = '--';
-    }
-    
-    // Build full stats text and calculate padding
-    const statsText = `${connStr}    ${accStr}    ${balStr}    P&L: ${pnlDisplay}`;
-    const statsLen = statsText.length;
-    const statsLeftPad = Math.floor((innerWidth - statsLen) / 2);
-    const statsRightPad = innerWidth - statsLen - statsLeftPad;
-    
-    console.log(chalk.cyan('║') + ' '.repeat(statsLeftPad) +
-      chalk.white(connStr) + '    ' +
-      chalk.white(accStr) + '    ' +
-      chalk.white('Balance: ') + balColor(statsInfo.balance !== null ? `$${statsInfo.balance.toLocaleString()}` : '--') + '    ' +
-      chalk.white('P&L: ') + pnlColor(pnlDisplay) + 
-      ' '.repeat(Math.max(0, statsRightPad)) + chalk.cyan('║')
-    );
-  }
-  
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
   console.log();
 };
+
+/**
+ * Get cached stats for dashboard
+ */
+const getCachedStats = () => cachedStats;
 
 /**
  * Main connection menu
@@ -412,4 +376,4 @@ const run = async () => {
   }
 };
 
-module.exports = { run, banner, mainMenu, dashboardMenu };
+module.exports = { run, banner, mainMenu, dashboardMenu, getCachedStats };

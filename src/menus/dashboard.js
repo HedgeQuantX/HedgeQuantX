@@ -10,6 +10,7 @@ const { execSync, spawn } = require('child_process');
 
 const { connections } = require('../services');
 const { getLogoWidth, centerText, prepareStdin } = require('../ui');
+const { getCachedStats } = require('../app');
 
 /**
  * Dashboard menu after login
@@ -46,6 +47,44 @@ const dashboardMenu = async (service) => {
     const propfirms = allConns.slice(0, 3).map(c => c.propfirm || c.type || 'Connected');
     const propfirmText = propfirms.map(p => chalk.green('● ') + chalk.white(p)).join('    ');
     console.log(makeLine(propfirmText, 'center'));
+  }
+  
+  // Show stats bar (Connections, Accounts, Balance, P&L)
+  let statsInfo = null;
+  try { statsInfo = getCachedStats(); } catch (e) {}
+  
+  if (statsInfo) {
+    console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
+    
+    const connStr = `Connections: ${statsInfo.connections}`;
+    const accStr = `Accounts: ${statsInfo.accounts}`;
+    
+    const balStr = statsInfo.balance !== null 
+      ? `$${statsInfo.balance.toLocaleString()}` 
+      : '--';
+    const balColor = statsInfo.balance !== null ? chalk.green : chalk.gray;
+    
+    let pnlDisplay, pnlColor;
+    if (statsInfo.pnl !== null) {
+      const pnlSign = statsInfo.pnl >= 0 ? '+' : '';
+      pnlColor = statsInfo.pnl >= 0 ? chalk.green : chalk.red;
+      pnlDisplay = `${pnlSign}$${Math.abs(statsInfo.pnl).toLocaleString()}`;
+    } else {
+      pnlColor = chalk.gray;
+      pnlDisplay = '--';
+    }
+    
+    const statsText = connStr + '    ' + accStr + '    Balance: ' + balStr + '    P&L: ' + pnlDisplay;
+    const statsPlain = `${connStr}    ${accStr}    Balance: ${balStr}    P&L: ${pnlDisplay}`;
+    const statsLeftPad = Math.floor((W - statsPlain.length) / 2);
+    const statsRightPad = W - statsPlain.length - statsLeftPad;
+    
+    console.log(chalk.cyan('║') + ' '.repeat(statsLeftPad) +
+      chalk.white(connStr) + '    ' +
+      chalk.white(accStr) + '    ' +
+      chalk.white('Balance: ') + balColor(balStr) + '    ' +
+      chalk.white('P&L: ') + pnlColor(pnlDisplay) +
+      ' '.repeat(Math.max(0, statsRightPad)) + chalk.cyan('║'));
   }
   
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
