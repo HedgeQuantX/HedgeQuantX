@@ -4,9 +4,10 @@
  */
 
 const https = require('https');
-const WebSocket = require('ws');
 const EventEmitter = require('events');
 const { TRADOVATE_URLS, API_PATHS, WS_EVENTS, getBaseUrl, getTradingWebSocketUrl } = require('./constants');
+const { checkMarketHours, isDST } = require('./market');
+const { connectWebSocket, wsSend, disconnectWebSocket } = require('./websocket');
 
 class TradovateService extends EventEmitter {
   constructor(propfirmKey) {
@@ -21,6 +22,7 @@ class TradovateService extends EventEmitter {
     this.user = null;
     this.isDemo = true; // Default to demo
     this.ws = null;
+    this.wsRequestId = 1;
     this.renewalTimer = null;
     this.credentials = null; // Store for session restore
   }
@@ -39,9 +41,6 @@ class TradovateService extends EventEmitter {
 
   /**
    * Login to Tradovate
-   * @param {string} username - Tradovate username
-   * @param {string} password - Tradovate password
-   * @param {object} options - Optional { cid, sec } for API key auth
    */
   async login(username, password, options = {}) {
     try {
@@ -53,7 +52,6 @@ class TradovateService extends EventEmitter {
         deviceId: this.generateDeviceId(),
       };
 
-      // Add API key if provided
       if (options.cid) authData.cid = options.cid;
       if (options.sec) authData.sec = options.sec;
 
@@ -72,16 +70,12 @@ class TradovateService extends EventEmitter {
       this.userId = result.userId;
       this.tokenExpiration = new Date(result.expirationTime);
       this.user = { userName: result.name, userId: result.userId };
-      this.credentials = { username, password }; // Store for session restore
+      this.credentials = { username, password };
 
-      // Setup token renewal
       this.setupTokenRenewal();
-
-      // Fetch accounts
       await this.fetchAccounts();
 
       return { success: true };
-
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -97,7 +91,6 @@ class TradovateService extends EventEmitter {
       if (Array.isArray(accounts)) {
         this.accounts = accounts;
         
-        // Fetch cash balance for each account
         for (const acc of this.accounts) {
           try {
             const cashBalance = await this._request(
@@ -142,10 +135,10 @@ class TradovateService extends EventEmitter {
         startingBalance: startingBalance,
         profitAndLoss: profitAndLoss,
         openPnL: openPnL,
-        status: acc.active ? 0 : 3, // 0=Active, 3=Inactive
+        status: acc.active ? 0 : 3,
         platform: 'Tradovate',
         propfirm: this.propfirm.name,
-        accountType: acc.accountType, // 'Customer' or 'Demo'
+        accountType: acc.accountType,
       };
     });
 
@@ -263,7 +256,7 @@ class TradovateService extends EventEmitter {
    * Get market status
    */
   async getMarketStatus(accountId) {
-    const marketHours = this.checkMarketHours();
+    const marketHours = checkMarketHours();
     return {
       success: true,
       isOpen: marketHours.isOpen,
@@ -359,44 +352,6 @@ class TradovateService extends EventEmitter {
   }
 
   /**
-   * Check market hours (same logic as ProjectX)
-   */
-  checkMarketHours() {
-    const now = new Date();
-    const utcDay = now.getUTCDay();
-    const utcHour = now.getUTCHours();
-
-    const ctOffset = this.isDST(now) ? 5 : 6;
-    const ctHour = (utcHour - ctOffset + 24) % 24;
-    const ctDay = utcHour < ctOffset ? (utcDay + 6) % 7 : utcDay;
-
-    if (ctDay === 6) {
-      return { isOpen: false, message: 'Market closed (Saturday)' };
-    }
-
-    if (ctDay === 0 && ctHour < 17) {
-      return { isOpen: false, message: 'Market opens Sunday 5:00 PM CT' };
-    }
-
-    if (ctDay === 5 && ctHour >= 16) {
-      return { isOpen: false, message: 'Market closed (Friday after 4PM CT)' };
-    }
-
-    if (ctHour === 16 && ctDay >= 1 && ctDay <= 4) {
-      return { isOpen: false, message: 'Daily maintenance (4:00-5:00 PM CT)' };
-    }
-
-    return { isOpen: true, message: 'Market is open' };
-  }
-
-  isDST(date) {
-    const jan = new Date(date.getFullYear(), 0, 1);
-    const jul = new Date(date.getFullYear(), 6, 1);
-    const stdOffset = Math.max(jan.getTimezoneOffset(), jul.getTimezoneOffset());
-    return date.getTimezoneOffset() < stdOffset;
-  }
-
-  /**
    * Setup automatic token renewal
    */
   setupTokenRenewal() {
@@ -440,77 +395,14 @@ class TradovateService extends EventEmitter {
    * Connect to WebSocket for real-time updates
    */
   async connectWebSocket() {
-    return new Promise((resolve, reject) => {
-      const wsUrl = getTradingWebSocketUrl(this.isDemo);
-      this.ws = new WebSocket(wsUrl);
-
-      this.ws.on('open', () => {
-        // Authorize
-        this.wsSend('authorize', '', { token: this.accessToken });
-        resolve(true);
-      });
-
-      this.ws.on('message', (data) => {
-        this.handleWsMessage(data);
-      });
-
-      this.ws.on('error', (err) => {
-        this.emit('error', err);
-        reject(err);
-      });
-
-      this.ws.on('close', () => {
-        this.emit('disconnected');
-      });
-
-      setTimeout(() => reject(new Error('WebSocket timeout')), 10000);
-    });
+    return connectWebSocket(this);
   }
 
   /**
    * Send WebSocket message
    */
   wsSend(url, query = '', body = null) {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-
-    const msg = body
-      ? `${url}\n${this.wsRequestId++}\n${query}\n${JSON.stringify(body)}`
-      : `${url}\n${this.wsRequestId++}\n${query}\n`;
-
-    this.ws.send(msg);
-  }
-
-  wsRequestId = 1;
-
-  /**
-   * Handle WebSocket message
-   */
-  handleWsMessage(data) {
-    try {
-      const str = data.toString();
-      
-      // Tradovate WS format: frame\nid\ndata
-      if (str.startsWith('a')) {
-        const json = JSON.parse(str.slice(1));
-        if (Array.isArray(json)) {
-          json.forEach(msg => this.processWsEvent(msg));
-        }
-      }
-    } catch (e) {
-      // Ignore parse errors
-    }
-  }
-
-  /**
-   * Process WebSocket event
-   */
-  processWsEvent(msg) {
-    if (msg.e === 'props') {
-      // User data sync
-      if (msg.d?.orders) this.emit(WS_EVENTS.ORDER, msg.d.orders);
-      if (msg.d?.positions) this.emit(WS_EVENTS.POSITION, msg.d.positions);
-      if (msg.d?.cashBalances) this.emit(WS_EVENTS.CASH_BALANCE, msg.d.cashBalances);
-    }
+    return wsSend(this, url, query, body);
   }
 
   /**
@@ -522,10 +414,7 @@ class TradovateService extends EventEmitter {
       this.renewalTimer = null;
     }
 
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
+    disconnectWebSocket(this);
 
     this.accessToken = null;
     this.mdAccessToken = null;
