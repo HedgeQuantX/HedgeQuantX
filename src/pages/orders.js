@@ -1,25 +1,22 @@
 /**
- * @fileoverview Orders page
- * @module pages/orders
+ * Orders page
  */
 
 const chalk = require('chalk');
 const ora = require('ora');
-const inquirer = require('inquirer');
 
 const { connections } = require('../services');
 const { ORDER_STATUS, ORDER_TYPE, ORDER_SIDE } = require('../config');
-const { getLogoWidth, drawBoxHeader, drawBoxFooter, drawBoxRow, drawBoxSeparator, visibleLength, padText } = require('../ui');
+const { getLogoWidth, drawBoxHeader, drawBoxFooter, drawBoxRow, drawBoxSeparator } = require('../ui');
+const { prompts } = require('../utils');
 
 /**
- * Shows all orders from all connections
- * @param {Object} service - Current service
+ * Show all orders
  */
 const showOrders = async (service) => {
   const spinner = ora({ text: 'Fetching orders...', color: 'yellow' }).start();
   const boxWidth = getLogoWidth();
 
-  // Get all accounts first
   let allAccounts = [];
   
   if (connections.count() > 0) {
@@ -28,14 +25,10 @@ const showOrders = async (service) => {
         const result = await conn.service.getTradingAccounts();
         if (result.success && result.accounts) {
           result.accounts.forEach(account => {
-            allAccounts.push({
-              ...account,
-              propfirm: conn.propfirm || conn.type,
-              service: conn.service
-            });
+            allAccounts.push({ ...account, propfirm: conn.propfirm || conn.type, service: conn.service });
           });
         }
-      } catch (e) { /* ignore */ }
+      } catch (e) {}
     }
   } else if (service) {
     const result = await service.getTradingAccounts();
@@ -44,22 +37,17 @@ const showOrders = async (service) => {
     }
   }
 
-  // Get orders for each account
   let allOrders = [];
   
   for (const account of allAccounts) {
     try {
       const result = await account.service.getOrders(account.accountId);
-      if (result.success && result.orders && result.orders.length > 0) {
+      if (result.success && result.orders?.length > 0) {
         result.orders.forEach(order => {
-          allOrders.push({
-            ...order,
-            accountName: account.accountName || account.name,
-            propfirm: account.propfirm
-          });
+          allOrders.push({ ...order, accountName: account.accountName || account.name, propfirm: account.propfirm });
         });
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) {}
   }
 
   spinner.succeed(`Found ${allOrders.length} order(s)`);
@@ -70,19 +58,10 @@ const showOrders = async (service) => {
   if (allOrders.length === 0) {
     drawBoxRow(chalk.gray('  No orders found'), boxWidth);
   } else {
-    // Header row
-    const header = '  ' +
-      'Symbol'.padEnd(12) +
-      'Side'.padEnd(6) +
-      'Type'.padEnd(8) +
-      'Qty'.padEnd(6) +
-      'Price'.padEnd(10) +
-      'Status'.padEnd(12) +
-      'Account';
+    const header = '  ' + 'Symbol'.padEnd(12) + 'Side'.padEnd(6) + 'Type'.padEnd(8) + 'Qty'.padEnd(6) + 'Price'.padEnd(10) + 'Status'.padEnd(12) + 'Account';
     drawBoxRow(chalk.white.bold(header), boxWidth);
     drawBoxSeparator(boxWidth);
 
-    // Order rows
     for (const order of allOrders) {
       const symbol = (order.contractId || order.symbol || 'Unknown').substring(0, 11);
       const sideInfo = ORDER_SIDE[order.side] || { text: '?', color: 'white' };
@@ -108,7 +87,7 @@ const showOrders = async (service) => {
   drawBoxFooter(boxWidth);
   console.log();
 
-  await inquirer.prompt([{ type: 'input', name: 'c', message: 'Press Enter to continue...' }]);
+  await prompts.waitForEnter();
 };
 
 module.exports = { showOrders };

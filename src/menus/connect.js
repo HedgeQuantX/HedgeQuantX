@@ -1,87 +1,56 @@
 /**
  * Connection Menus - PropFirm platform selection and login
- * Handles ProjectX, Rithmic, and Tradovate connections
  */
 
 const chalk = require('chalk');
-const inquirer = require('inquirer');
 const ora = require('ora');
 
 const { ProjectXService, connections } = require('../services');
 const { RithmicService } = require('../services/rithmic');
 const { TradovateService } = require('../services/tradovate');
 const { getPropFirmsByPlatform } = require('../config');
-const { getDevice, getLogoWidth, centerText, prepareStdin } = require('../ui');
+const { getLogoWidth, centerText, prepareStdin } = require('../ui');
 const { validateUsername, validatePassword } = require('../security');
+const { prompts } = require('../utils');
 
 /**
- * Login prompt with validation
- * @param {string} propfirmName - PropFirm display name
- * @returns {Promise<{username: string, password: string}>}
+ * Login prompt
  */
 const loginPrompt = async (propfirmName) => {
   prepareStdin();
-  const device = getDevice();
   console.log();
   console.log(chalk.cyan(`Connecting to ${propfirmName}...`));
   console.log();
 
-  const credentials = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'username',
-      message: chalk.white.bold('Username:'),
-      validate: (input) => {
-        try {
-          validateUsername(input);
-          return true;
-        } catch (e) {
-          return e.message;
-        }
-      }
-    },
-    {
-      type: 'password',
-      name: 'password',
-      message: chalk.white.bold('Password:'),
-      mask: '*',
-      validate: (input) => {
-        try {
-          validatePassword(input);
-          return true;
-        } catch (e) {
-          return e.message;
-        }
-      }
-    }
-  ]);
+  const username = await prompts.textInput('Username:', '', (input) => {
+    try { validateUsername(input); return undefined; } catch (e) { return e.message; }
+  });
+  if (!username) return null;
+  
+  const pwd = await prompts.passwordInput('Password:', (input) => {
+    try { validatePassword(input); return undefined; } catch (e) { return e.message; }
+  });
+  if (!pwd) return null;
 
-  return credentials;
+  return { username, password: pwd };
 };
 
 /**
- * ProjectX platform connection menu
+ * ProjectX menu
  */
 const projectXMenu = async () => {
   const propfirms = getPropFirmsByPlatform('ProjectX');
   const boxWidth = getLogoWidth();
-  const W = boxWidth - 2; // Inner width
+  const W = boxWidth - 2;
   const col1Width = Math.floor(W / 2);
   
-  // Build numbered list
-  const numbered = propfirms.map((pf, i) => ({
-    num: i + 1,
-    key: pf.key,
-    name: pf.displayName
-  }));
+  const numbered = propfirms.map((pf, i) => ({ num: i + 1, key: pf.key, name: pf.displayName }));
   
-  // PropFirm selection box
   console.log();
   console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
   console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PROPFIRM (ProjectX)', W)) + chalk.cyan('║'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
-  // Display in 2 columns
   const menuRow = (left, right) => {
     const leftPlain = left ? left.replace(/\x1b\[[0-9;]*m/g, '') : '';
     const rightPlain = right ? right.replace(/\x1b\[[0-9;]*m/g, '') : '';
@@ -90,7 +59,6 @@ const projectXMenu = async () => {
     console.log(chalk.cyan('║') + leftPadded + rightPadded + chalk.cyan('║'));
   };
   
-  // Display propfirms in 2 columns
   for (let i = 0; i < numbered.length; i += 2) {
     const left = numbered[i];
     const right = numbered[i + 1];
@@ -99,31 +67,20 @@ const projectXMenu = async () => {
     menuRow(leftText, rightText);
   }
   
-  // Back option
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
-  const backLine = '  ' + chalk.red('[X] Back') + ' '.repeat(W - 10);
-  console.log(chalk.cyan('║') + backLine + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + '  ' + chalk.red('[X] Back') + ' '.repeat(W - 10) + chalk.cyan('║'));
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
-  console.log();
 
-  const { action } = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'action',
-      message: chalk.cyan('Select:'),
-      prefix: ''
-    }
-  ]);
-
-  const input = (action || '').toLowerCase().trim();
-  if (input === 'x') return null;
+  const options = numbered.map(pf => ({ value: pf.num, label: `[${pf.num}] ${pf.name}` }));
+  options.push({ value: -1, label: '[X] Back' });
   
-  const selectedIdx = parseInt(input) - 1;
-  if (isNaN(selectedIdx) || selectedIdx < 0 || selectedIdx >= numbered.length) return null;
+  const action = await prompts.selectOption('Select:', options);
+  if (!action || action === -1) return null;
   
-  const selectedPropfirm = numbered[selectedIdx];
-
+  const selectedPropfirm = numbered[action - 1];
   const credentials = await loginPrompt(selectedPropfirm.name);
+  if (!credentials) return null;
+
   const spinner = ora({ text: 'Authenticating...', color: 'yellow' }).start();
 
   try {
@@ -146,7 +103,7 @@ const projectXMenu = async () => {
 };
 
 /**
- * Rithmic platform connection menu
+ * Rithmic menu
  */
 const rithmicMenu = async () => {
   const propfirms = getPropFirmsByPlatform('Rithmic');
@@ -155,23 +112,14 @@ const rithmicMenu = async () => {
   const numCols = 3;
   const colWidth = Math.floor(innerWidth / numCols);
   
-  // Build numbered list
-  const numbered = propfirms.map((pf, i) => ({
-    num: i + 1,
-    key: pf.key,
-    name: pf.displayName,
-    systemName: pf.rithmicSystem
-  }));
+  const numbered = propfirms.map((pf, i) => ({ num: i + 1, key: pf.key, name: pf.displayName, systemName: pf.rithmicSystem }));
   
-  // PropFirm selection box
   console.log();
   console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
   console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PROPFIRM (RITHMIC)', innerWidth)) + chalk.cyan('║'));
   console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
   
-  // Display in 3 columns with fixed width alignment
   const rows = Math.ceil(numbered.length / numCols);
-  
   for (let row = 0; row < rows; row++) {
     let line = '';
     for (let col = 0; col < numCols; col++) {
@@ -181,45 +129,29 @@ const rithmicMenu = async () => {
         const numStr = item.num.toString().padStart(2, ' ');
         const coloredText = chalk.cyan(`[${numStr}]`) + ' ' + chalk.white(item.name);
         const textLen = 4 + 1 + item.name.length;
-        const padding = colWidth - textLen - 2;
-        line += '  ' + coloredText + ' '.repeat(Math.max(0, padding));
+        line += '  ' + coloredText + ' '.repeat(Math.max(0, colWidth - textLen - 2));
       } else {
         line += ' '.repeat(colWidth);
       }
     }
     const lineLen = line.replace(/\x1b\[[0-9;]*m/g, '').length;
-    const adjust = innerWidth - lineLen;
-    console.log(chalk.cyan('║') + line + ' '.repeat(Math.max(0, adjust)) + chalk.cyan('║'));
+    console.log(chalk.cyan('║') + line + ' '.repeat(Math.max(0, innerWidth - lineLen)) + chalk.cyan('║'));
   }
   
   console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
-  const backText = '  ' + chalk.red('[X] Back');
-  const backLen = '[X] Back'.length + 2;
-  console.log(chalk.cyan('║') + backText + ' '.repeat(innerWidth - backLen) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + '  ' + chalk.red('[X] Back') + ' '.repeat(innerWidth - 10) + chalk.cyan('║'));
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
-  console.log();
 
-  const validInputs = numbered.map(n => n.num.toString());
-  validInputs.push('x', 'X');
+  const options = numbered.map(pf => ({ value: pf.num, label: `[${pf.num}] ${pf.name}` }));
+  options.push({ value: -1, label: '[X] Back' });
   
-  const { action } = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'action',
-      message: chalk.cyan(`Enter choice (1-${numbered.length}/X):`),
-      validate: (input) => {
-        if (validInputs.includes(input)) return true;
-        return `Please enter 1-${numbered.length} or X`;
-      }
-    }
-  ]);
-
-  if (action.toLowerCase() === 'x') return null;
+  const action = await prompts.selectOption('Select:', options);
+  if (!action || action === -1) return null;
   
-  const selectedIdx = parseInt(action) - 1;
-  const selectedPropfirm = numbered[selectedIdx];
-
+  const selectedPropfirm = numbered[action - 1];
   const credentials = await loginPrompt(selectedPropfirm.name);
+  if (!credentials) return null;
+
   const spinner = ora({ text: 'Connecting to Rithmic...', color: 'yellow' }).start();
 
   try {
@@ -229,11 +161,8 @@ const rithmicMenu = async () => {
     if (result.success) {
       spinner.text = 'Fetching accounts...';
       const accResult = await service.getTradingAccounts();
-      
       connections.add('rithmic', service, service.propfirm.name);
       spinner.succeed(`Connected to ${service.propfirm.name} (${accResult.accounts?.length || 0} accounts)`);
-      
-      // Small pause to see the success message
       await new Promise(r => setTimeout(r, 1500));
       return service;
     } else {
@@ -249,27 +178,20 @@ const rithmicMenu = async () => {
 };
 
 /**
- * Tradovate platform connection menu
+ * Tradovate menu
  */
 const tradovateMenu = async () => {
   const propfirms = getPropFirmsByPlatform('Tradovate');
   const boxWidth = getLogoWidth();
   const innerWidth = boxWidth - 2;
   
-  // Build numbered list
-  const numbered = propfirms.map((pf, i) => ({
-    num: i + 1,
-    key: pf.key,
-    name: pf.displayName
-  }));
+  const numbered = propfirms.map((pf, i) => ({ num: i + 1, key: pf.key, name: pf.displayName }));
   
-  // PropFirm selection box
   console.log();
   console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
   console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PROPFIRM (TRADOVATE)', innerWidth)) + chalk.cyan('║'));
   console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
   
-  // Display propfirms
   for (const item of numbered) {
     const numStr = item.num.toString().padStart(2, ' ');
     const text = '  ' + chalk.cyan(`[${numStr}]`) + ' ' + chalk.white(item.name);
@@ -278,33 +200,19 @@ const tradovateMenu = async () => {
   }
   
   console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
-  const backText = '  ' + chalk.red('[X] Back');
-  const backLen = '[X] Back'.length + 2;
-  console.log(chalk.cyan('║') + backText + ' '.repeat(innerWidth - backLen) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + '  ' + chalk.red('[X] Back') + ' '.repeat(innerWidth - 10) + chalk.cyan('║'));
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
-  console.log();
 
-  const validInputs = numbered.map(n => n.num.toString());
-  validInputs.push('x', 'X');
+  const options = numbered.map(pf => ({ value: pf.num, label: `[${pf.num}] ${pf.name}` }));
+  options.push({ value: -1, label: '[X] Back' });
   
-  const { action } = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'action',
-      message: chalk.cyan(`Enter choice (1-${numbered.length}/X):`),
-      validate: (input) => {
-        if (validInputs.includes(input)) return true;
-        return `Please enter 1-${numbered.length} or X`;
-      }
-    }
-  ]);
-
-  if (action.toLowerCase() === 'x') return null;
+  const action = await prompts.selectOption('Select:', options);
+  if (!action || action === -1) return null;
   
-  const selectedIdx = parseInt(action) - 1;
-  const selectedPropfirm = numbered[selectedIdx];
-
+  const selectedPropfirm = numbered[action - 1];
   const credentials = await loginPrompt(selectedPropfirm.name);
+  if (!credentials) return null;
+
   const spinner = ora({ text: 'Connecting to Tradovate...', color: 'yellow' }).start();
 
   try {
@@ -314,7 +222,6 @@ const tradovateMenu = async () => {
     if (result.success) {
       spinner.text = 'Fetching accounts...';
       await service.getTradingAccounts();
-      
       connections.add('tradovate', service, service.propfirm.name);
       spinner.succeed(`Connected to ${service.propfirm.name}`);
       return service;
@@ -329,11 +236,11 @@ const tradovateMenu = async () => {
 };
 
 /**
- * Add Prop Account menu (select platform)
+ * Add Prop Account menu
  */
 const addPropAccountMenu = async () => {
   const boxWidth = getLogoWidth();
-  const W = boxWidth - 2; // Inner width
+  const W = boxWidth - 2;
   const col1Width = Math.floor(W / 2);
   
   console.log();
@@ -353,32 +260,13 @@ const addPropAccountMenu = async () => {
   menuRow(chalk.cyan('[3] Tradovate'), chalk.red('[X] Back'));
   
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
-  console.log();
 
-  const { action } = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'action',
-      message: chalk.cyan('Select:'),
-      prefix: ''
-    }
+  return await prompts.selectOption('Select:', [
+    { value: 'projectx', label: '[1] ProjectX' },
+    { value: 'rithmic', label: '[2] Rithmic' },
+    { value: 'tradovate', label: '[3] Tradovate' },
+    { value: null, label: '[X] Back' }
   ]);
-
-  const input = (action || '').toLowerCase().trim();
-  const actionMap = {
-    '1': 'projectx',
-    '2': 'rithmic',
-    '3': 'tradovate',
-    'x': null
-  };
-
-  return actionMap[input] || null;
 };
 
-module.exports = {
-  loginPrompt,
-  projectXMenu,
-  rithmicMenu,
-  tradovateMenu,
-  addPropAccountMenu
-};
+module.exports = { loginPrompt, projectXMenu, rithmicMenu, tradovateMenu, addPropAccountMenu };

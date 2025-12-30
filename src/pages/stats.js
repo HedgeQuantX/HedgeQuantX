@@ -4,21 +4,12 @@
 
 const chalk = require('chalk');
 const ora = require('ora');
-const inquirer = require('inquirer');
 const asciichart = require('asciichart');
 
 const { connections } = require('../services');
 const { ACCOUNT_STATUS, ACCOUNT_TYPE } = require('../config');
-const {
-  getLogoWidth,
-  visibleLength,
-  drawBoxHeader,
-  drawBoxFooter,
-  getColWidths,
-  draw2ColHeader,
-  draw2ColSeparator,
-  fmtRow
-} = require('../ui');
+const { getLogoWidth, visibleLength, drawBoxHeader, drawBoxFooter, getColWidths, draw2ColHeader, draw2ColSeparator, fmtRow } = require('../ui');
+const { prompts } = require('../utils');
 
 /**
  * Show Stats Page
@@ -53,7 +44,7 @@ const showStats = async (service) => {
   
   if (allAccountsData.length === 0) {
     spinner.fail('No accounts found');
-    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+    await prompts.waitForEnter();
     return;
   }
 
@@ -70,7 +61,7 @@ const showStats = async (service) => {
   
   if (activeAccounts.length === 0) {
     spinner.fail('No active accounts found');
-    await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+    await prompts.waitForEnter();
     return;
   }
 
@@ -498,7 +489,7 @@ const showStats = async (service) => {
   drawBoxFooter(boxWidth);
   console.log();
   
-  await inquirer.prompt([{ type: 'input', name: 'continue', message: 'Press Enter to continue...' }]);
+  await prompts.waitForEnter();
 };
 
 module.exports = { showStats };

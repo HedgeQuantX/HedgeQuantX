@@ -1,35 +1,30 @@
 /**
- * @fileoverview Accounts page
- * @module pages/accounts
+ * Accounts page
  */
 
 const chalk = require('chalk');
 const ora = require('ora');
-const inquirer = require('inquirer');
 
 const { connections } = require('../services');
 const { ACCOUNT_STATUS, ACCOUNT_TYPE } = require('../config');
-const { getLogoWidth, getColWidths, drawBoxHeader, drawBoxFooter, draw2ColHeader, visibleLength, padText } = require('../ui');
+const { getLogoWidth, getColWidths, drawBoxHeader, drawBoxFooter, draw2ColHeader, visibleLength } = require('../ui');
+const { prompts } = require('../utils');
 
 /**
- * Shows all accounts from all connections
- * @param {Object} service - Current service
+ * Show all accounts
  */
 const showAccounts = async (service) => {
   const spinner = ora({ text: 'Fetching accounts...', color: 'yellow' }).start();
   const boxWidth = getLogoWidth();
   const { col1, col2 } = getColWidths(boxWidth);
 
-  // Helper for row formatting
   const fmtRow = (label, value, colW) => {
     const labelStr = ' ' + label.padEnd(12);
     const valueVisible = visibleLength(value || '');
-    const totalVisible = labelStr.length + valueVisible;
-    const padding = Math.max(0, colW - totalVisible);
+    const padding = Math.max(0, colW - labelStr.length - valueVisible);
     return chalk.white(labelStr) + value + ' '.repeat(padding);
   };
 
-  // Get accounts from all connections
   let allAccounts = [];
 
   if (connections.count() > 0) {
@@ -38,14 +33,10 @@ const showAccounts = async (service) => {
         const result = await conn.service.getTradingAccounts();
         if (result.success && result.accounts) {
           result.accounts.forEach(account => {
-            allAccounts.push({
-              ...account,
-              propfirm: conn.propfirm || conn.type,
-              service: conn.service
-            });
+            allAccounts.push({ ...account, propfirm: conn.propfirm || conn.type, service: conn.service });
           });
         }
-      } catch (e) { /* ignore */ }
+      } catch (e) {}
     }
   } else if (service) {
     const result = await service.getTradingAccounts();
@@ -56,7 +47,7 @@ const showAccounts = async (service) => {
 
   if (allAccounts.length === 0) {
     spinner.fail('No accounts found');
-    await inquirer.prompt([{ type: 'input', name: 'c', message: 'Press Enter to continue...' }]);
+    await prompts.waitForEnter();
     return;
   }
 
@@ -65,7 +56,6 @@ const showAccounts = async (service) => {
 
   drawBoxHeader('TRADING ACCOUNTS', boxWidth);
 
-  // Display accounts 2 per row
   for (let i = 0; i < allAccounts.length; i += 2) {
     const acc1 = allAccounts[i];
     const acc2 = allAccounts[i + 1];
@@ -80,7 +70,7 @@ const showAccounts = async (service) => {
     const pf2 = acc2 ? chalk.magenta(acc2.propfirm || 'Unknown') : '';
     console.log(chalk.cyan('║') + fmtRow('PropFirm:', pf1, col1) + chalk.cyan('│') + (acc2 ? fmtRow('PropFirm:', pf2, col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
-    // Balance - show '--' if null (not available from API)
+    // Balance
     const bal1 = acc1.balance;
     const bal2 = acc2 ? acc2.balance : null;
     const balStr1 = bal1 !== null && bal1 !== undefined ? '$' + bal1.toLocaleString() : '--';
@@ -99,10 +89,9 @@ const showAccounts = async (service) => {
     const type2 = acc2 ? (ACCOUNT_TYPE[acc2.type] || { text: 'Unknown', color: 'white' }) : null;
     console.log(chalk.cyan('║') + fmtRow('Type:', chalk[type1.color](type1.text), col1) + chalk.cyan('│') + (acc2 ? fmtRow('Type:', chalk[type2.color](type2.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
-    // Account ID
+    // ID
     console.log(chalk.cyan('║') + fmtRow('ID:', chalk.gray(acc1.accountId), col1) + chalk.cyan('│') + (acc2 ? fmtRow('ID:', chalk.gray(acc2.accountId), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
-    // Separator between pairs
     if (i + 2 < allAccounts.length) {
       console.log(chalk.cyan('╠') + chalk.cyan('═'.repeat(col1)) + chalk.cyan('╪') + chalk.cyan('═'.repeat(col2)) + chalk.cyan('╣'));
     }
@@ -111,7 +100,7 @@ const showAccounts = async (service) => {
   drawBoxFooter(boxWidth);
   console.log();
 
-  await inquirer.prompt([{ type: 'input', name: 'c', message: 'Press Enter to continue...' }]);
+  await prompts.waitForEnter();
 };
 
 module.exports = { showAccounts };

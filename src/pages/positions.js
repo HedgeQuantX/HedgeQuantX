@@ -1,26 +1,22 @@
 /**
- * @fileoverview Positions page
- * @module pages/positions
+ * Positions page
  */
 
 const chalk = require('chalk');
 const ora = require('ora');
-const inquirer = require('inquirer');
 
 const { connections } = require('../services');
 const { ORDER_SIDE } = require('../config');
-const { getLogoWidth, drawBoxHeader, drawBoxFooter, drawBoxRow, drawBoxSeparator, visibleLength, padText } = require('../ui');
+const { getLogoWidth, drawBoxHeader, drawBoxFooter, drawBoxRow, drawBoxSeparator } = require('../ui');
+const { prompts } = require('../utils');
 
 /**
- * Shows all open positions from all connections
- * @param {Object} service - Current service
+ * Show all open positions
  */
 const showPositions = async (service) => {
   const spinner = ora({ text: 'Fetching positions...', color: 'yellow' }).start();
   const boxWidth = getLogoWidth();
-  const innerWidth = boxWidth - 2;
 
-  // Get all accounts first
   let allAccounts = [];
   
   if (connections.count() > 0) {
@@ -29,14 +25,10 @@ const showPositions = async (service) => {
         const result = await conn.service.getTradingAccounts();
         if (result.success && result.accounts) {
           result.accounts.forEach(account => {
-            allAccounts.push({
-              ...account,
-              propfirm: conn.propfirm || conn.type,
-              service: conn.service
-            });
+            allAccounts.push({ ...account, propfirm: conn.propfirm || conn.type, service: conn.service });
           });
         }
-      } catch (e) { /* ignore */ }
+      } catch (e) {}
     }
   } else if (service) {
     const result = await service.getTradingAccounts();
@@ -45,22 +37,17 @@ const showPositions = async (service) => {
     }
   }
 
-  // Get positions for each account
   let allPositions = [];
   
   for (const account of allAccounts) {
     try {
       const result = await account.service.getPositions(account.accountId);
-      if (result.success && result.positions && result.positions.length > 0) {
+      if (result.success && result.positions?.length > 0) {
         result.positions.forEach(pos => {
-          allPositions.push({
-            ...pos,
-            accountName: account.accountName || account.name,
-            propfirm: account.propfirm
-          });
+          allPositions.push({ ...pos, accountName: account.accountName || account.name, propfirm: account.propfirm });
         });
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) {}
   }
 
   spinner.succeed(`Found ${allPositions.length} position(s)`);
@@ -71,18 +58,10 @@ const showPositions = async (service) => {
   if (allPositions.length === 0) {
     drawBoxRow(chalk.gray('  No open positions'), boxWidth);
   } else {
-    // Header row
-    const header = '  ' + 
-      'Symbol'.padEnd(15) + 
-      'Side'.padEnd(8) + 
-      'Size'.padEnd(8) + 
-      'Entry'.padEnd(12) + 
-      'P&L'.padEnd(12) + 
-      'Account';
+    const header = '  ' + 'Symbol'.padEnd(15) + 'Side'.padEnd(8) + 'Size'.padEnd(8) + 'Entry'.padEnd(12) + 'P&L'.padEnd(12) + 'Account';
     drawBoxRow(chalk.white.bold(header), boxWidth);
     drawBoxSeparator(boxWidth);
 
-    // Position rows
     for (const pos of allPositions) {
       const symbol = (pos.contractId || pos.symbol || 'Unknown').substring(0, 14);
       const sideInfo = ORDER_SIDE[pos.side] || { text: 'Unknown', color: 'white' };
@@ -109,7 +88,7 @@ const showPositions = async (service) => {
   drawBoxFooter(boxWidth);
   console.log();
 
-  await inquirer.prompt([{ type: 'input', name: 'c', message: 'Press Enter to continue...' }]);
+  await prompts.waitForEnter();
 };
 
 module.exports = { showPositions };

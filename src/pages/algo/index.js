@@ -1,12 +1,10 @@
 /**
  * Algo Trading - Main Menu
- * Lightweight entry point
  */
 
 const chalk = require('chalk');
-const inquirer = require('inquirer');
 const { getSeparator } = require('../../ui');
-const { logger } = require('../../utils');
+const { logger, prompts } = require('../../utils');
 
 const log = logger.scope('AlgoMenu');
 
@@ -25,21 +23,16 @@ const algoTradingMenu = async (service) => {
   console.log(chalk.gray(getSeparator()));
   console.log();
 
-  const { action } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'action',
-      message: chalk.white.bold('Select Mode:'),
-      choices: [
-        { name: chalk.cyan('One Account'), value: 'one_account' },
-        { name: chalk.green('Copy Trading'), value: 'copy_trading' },
-        new inquirer.Separator(),
-        { name: chalk.yellow('< Back'), value: 'back' }
-      ],
-      pageSize: 10,
-      loop: false
-    }
+  const action = await prompts.selectOption('Select Mode:', [
+    { value: 'one_account', label: 'One Account' },
+    { value: 'copy_trading', label: 'Copy Trading' },
+    { value: 'back', label: '< Back' }
   ]);
+
+  if (!action || action === 'back') {
+    log.debug('User went back');
+    return 'back';
+  }
 
   log.debug('Algo mode selected', { action });
 
@@ -51,9 +44,6 @@ const algoTradingMenu = async (service) => {
     case 'copy_trading':
       log.info('Starting Copy Trading mode');
       await copyTradingMenu();
-      break;
-    case 'back':
-      log.debug('User went back');
       break;
   }
   

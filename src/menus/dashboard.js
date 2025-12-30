@@ -1,46 +1,40 @@
 /**
  * Dashboard Menu - Main menu after login
- * Shows connected PropFirms and navigation options
  */
 
 const chalk = require('chalk');
-const inquirer = require('inquirer');
 const ora = require('ora');
 const { execSync, spawn } = require('child_process');
 
 const { connections } = require('../services');
 const { getLogoWidth, centerText, prepareStdin } = require('../ui');
 const { getCachedStats } = require('../services/stats-cache');
+const { prompts } = require('../utils');
 
 /**
  * Dashboard menu after login
- * @param {Object} service - Connected service
  */
 const dashboardMenu = async (service) => {
-  // Ensure stdin is ready for prompts
   prepareStdin();
   
   const boxWidth = getLogoWidth();
-  const W = boxWidth - 2; // Inner width (without borders)
+  const W = boxWidth - 2;
   
-  // Helper to create a line that fits exactly in the box
   const makeLine = (content, align = 'left') => {
     const plainLen = content.replace(/\x1b\[[0-9;]*m/g, '').length;
     const padding = W - plainLen;
     if (align === 'center') {
       const leftPad = Math.floor(padding / 2);
-      const rightPad = padding - leftPad;
-      return chalk.cyan('║') + ' '.repeat(leftPad) + content + ' '.repeat(rightPad) + chalk.cyan('║');
+      return chalk.cyan('║') + ' '.repeat(leftPad) + content + ' '.repeat(padding - leftPad) + chalk.cyan('║');
     }
     return chalk.cyan('║') + content + ' '.repeat(Math.max(0, padding)) + chalk.cyan('║');
   };
   
-  // Dashboard box header
   console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
   console.log(makeLine(chalk.yellow.bold('Welcome, HQX Trader!'), 'center'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
-  // Show connected propfirms centered on one line (max 3)
+  // Show connected propfirms
   const allConns = connections.getAll();
   if (allConns.length > 0) {
     const propfirms = allConns.slice(0, 3).map(c => c.propfirm || c.type || 'Connected');
@@ -48,38 +42,30 @@ const dashboardMenu = async (service) => {
     console.log(makeLine(propfirmText, 'center'));
   }
   
-  // Show stats bar (Connections, Accounts, Balance, P&L)
+  // Stats bar
   const statsInfo = getCachedStats();
-  
   if (statsInfo) {
     console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
     
-    const connStr = `Connections: ${statsInfo.connections}`;
-    const accStr = `Accounts: ${statsInfo.accounts}`;
-    
-    const balStr = statsInfo.balance !== null 
-      ? `$${statsInfo.balance.toLocaleString()}` 
-      : '--';
+    const balStr = statsInfo.balance !== null ? `$${statsInfo.balance.toLocaleString()}` : '--';
     const balColor = statsInfo.balance !== null ? chalk.green : chalk.gray;
     
     let pnlDisplay, pnlColor;
     if (statsInfo.pnl !== null) {
-      const pnlSign = statsInfo.pnl >= 0 ? '+' : '';
       pnlColor = statsInfo.pnl >= 0 ? chalk.green : chalk.red;
-      pnlDisplay = `${pnlSign}$${Math.abs(statsInfo.pnl).toLocaleString()}`;
+      pnlDisplay = `${statsInfo.pnl >= 0 ? '+' : ''}$${Math.abs(statsInfo.pnl).toLocaleString()}`;
     } else {
       pnlColor = chalk.gray;
       pnlDisplay = '--';
     }
     
-    const statsText = connStr + '    ' + accStr + '    Balance: ' + balStr + '    P&L: ' + pnlDisplay;
-    const statsPlain = `${connStr}    ${accStr}    Balance: ${balStr}    P&L: ${pnlDisplay}`;
+    const statsPlain = `Connections: ${statsInfo.connections}    Accounts: ${statsInfo.accounts}    Balance: ${balStr}    P&L: ${pnlDisplay}`;
     const statsLeftPad = Math.floor((W - statsPlain.length) / 2);
     const statsRightPad = W - statsPlain.length - statsLeftPad;
     
     console.log(chalk.cyan('║') + ' '.repeat(statsLeftPad) +
-      chalk.white(connStr) + '    ' +
-      chalk.white(accStr) + '    ' +
+      chalk.white(`Connections: ${statsInfo.connections}`) + '    ' +
+      chalk.white(`Accounts: ${statsInfo.accounts}`) + '    ' +
       chalk.white('Balance: ') + balColor(balStr) + '    ' +
       chalk.white('P&L: ') + pnlColor(pnlDisplay) +
       ' '.repeat(Math.max(0, statsRightPad)) + chalk.cyan('║'));
@@ -87,9 +73,8 @@ const dashboardMenu = async (service) => {
   
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
-  // Menu options in 2 columns
+  // Menu in 2 columns
   const col1Width = Math.floor(W / 2);
-  
   const menuRow = (left, right) => {
     const leftPlain = left.replace(/\x1b\[[0-9;]*m/g, '');
     const rightPlain = right.replace(/\x1b\[[0-9;]*m/g, '');
@@ -98,153 +83,93 @@ const dashboardMenu = async (service) => {
     console.log(chalk.cyan('║') + leftPadded + rightPadded + chalk.cyan('║'));
   };
   
+  menuRow(chalk.cyan('[1] View Accounts'), chalk.cyan('[2] View Stats'));
+  menuRow(chalk.cyan('[+] Add Prop-Account'), chalk.magenta('[A] Algo-Trading'));
+  menuRow(chalk.yellow('[U] Update HQX'), chalk.red('[X] Disconnect'));
+  
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
   
-  // Use list type for stable input handling
-  const { action } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'action',
-      message: chalk.cyan('Select:'),
-      choices: [
-        { name: chalk.cyan('[1] View Accounts'), value: 'accounts' },
-        { name: chalk.cyan('[2] View Stats'), value: 'stats' },
-        { name: chalk.cyan('[+] Add Prop-Account'), value: 'add_prop_account' },
-        { name: chalk.magenta('[A] Algo-Trading'), value: 'algotrading' },
-        { name: chalk.yellow('[U] Update HQX'), value: 'update' },
-        { name: chalk.red('[X] Disconnect'), value: 'disconnect' }
-      ],
-      loop: false
-    }
+  const action = await prompts.selectOption('Select:', [
+    { value: 'accounts', label: '[1] View Accounts' },
+    { value: 'stats', label: '[2] View Stats' },
+    { value: 'add_prop_account', label: '[+] Add Prop-Account' },
+    { value: 'algotrading', label: '[A] Algo-Trading' },
+    { value: 'update', label: '[U] Update HQX' },
+    { value: 'disconnect', label: '[X] Disconnect' }
   ]);
   
-  return action;
+  return action || 'disconnect';
 };
 
 /**
- * Wait for user to press Enter
- */
-const waitForEnter = async () => {
-  prepareStdin();
-  try {
-    await inquirer.prompt([{ type: 'input', name: 'c', message: 'Press Enter to continue...' }]);
-  } catch (e) {
-    // Ignore prompt errors
-  }
-};
-
-/**
- * Handles the update process with auto-restart
- * Robust version that handles all edge cases
+ * Handle update process
  */
 const handleUpdate = async () => {
   prepareStdin();
   
   let spinner = null;
   let currentVersion = 'unknown';
-  let latestVersion = null;
   
   try {
-    // Get current version safely
     try {
-      const pkg = require('../../package.json');
-      currentVersion = pkg.version || 'unknown';
-    } catch (e) {
-      currentVersion = 'unknown';
-    }
+      currentVersion = require('../../package.json').version || 'unknown';
+    } catch (e) {}
     
     spinner = ora({ text: 'Checking for updates...', color: 'yellow' }).start();
     
-    // Check latest version on npm with timeout
-    spinner.text = 'Checking npm registry...';
+    let latestVersion;
     try {
-      const result = execSync('npm view hedgequantx version 2>/dev/null', { 
-        stdio: 'pipe',
-        timeout: 15000,  // 15 second timeout
-        encoding: 'utf8'
-      });
-      latestVersion = (result || '').toString().trim();
+      latestVersion = execSync('npm view hedgequantx version 2>/dev/null', { 
+        stdio: 'pipe', timeout: 15000, encoding: 'utf8'
+      }).trim();
       
-      // Validate version format (x.y.z)
       if (!latestVersion || !/^\d+\.\d+\.\d+/.test(latestVersion)) {
-        throw new Error('Invalid version format received');
+        throw new Error('Invalid version');
       }
     } catch (e) {
       spinner.fail('Cannot reach npm registry');
-      console.log(chalk.gray('  Check your internet connection'));
-      console.log();
-      await waitForEnter();
+      await prompts.waitForEnter();
       return;
     }
     
-    // Compare versions
     if (currentVersion === latestVersion) {
       spinner.succeed(`Already up to date! (v${currentVersion})`);
-      console.log();
       await new Promise(r => setTimeout(r, 2000));
       return;
     }
     
-    // Show version info and update automatically
     spinner.text = `Updating v${currentVersion} → v${latestVersion}...`;
     
     try {
       execSync('npm install -g hedgequantx@latest 2>/dev/null', { 
-        stdio: 'pipe',
-        timeout: 120000,
-        encoding: 'utf8'
+        stdio: 'pipe', timeout: 120000, encoding: 'utf8'
       });
     } catch (e) {
       spinner.fail('Update failed');
-      console.log();
-      console.log(chalk.yellow('  Try manually:'));
-      console.log(chalk.white('  npm install -g hedgequantx@latest'));
-      console.log();
-      await waitForEnter();
+      console.log(chalk.yellow('  Try: npm install -g hedgequantx@latest'));
+      await prompts.waitForEnter();
       return;
     }
     
     spinner.succeed(`Updated: v${currentVersion} → v${latestVersion}`);
-    console.log();
-    console.log(chalk.cyan('  Restarting HedgeQuantX CLI...'));
-    console.log();
+    console.log(chalk.cyan('  Restarting...'));
     
-    // Auto restart after 2 seconds
     await new Promise(r => setTimeout(r, 2000));
     
-    // Restart the CLI
     try {
-      const child = spawn('hedgequantx', [], {
-        stdio: 'inherit',
-        detached: true,
-        shell: true
-      });
+      const child = spawn('hedgequantx', [], { stdio: 'inherit', detached: true, shell: true });
       child.unref();
       process.exit(0);
     } catch (e) {
-      console.log(chalk.yellow('  Could not auto-restart. Please run: hedgequantx'));
-      console.log();
-      await waitForEnter();
+      console.log(chalk.yellow('  Please run: hedgequantx'));
+      await prompts.waitForEnter();
     }
     
   } catch (error) {
-    // Catch-all for any unexpected errors
-    if (spinner) {
-      try { spinner.fail('Update error'); } catch (e) {}
-    }
-    console.log();
-    console.log(chalk.red('  An error occurred during update'));
-    if (error && error.message) {
-      console.log(chalk.gray(`  ${error.message.substring(0, 100)}`));
-    }
-    console.log();
-    console.log(chalk.yellow('  Try manually: npm install -g hedgequantx@latest'));
-    console.log();
-    await waitForEnter();
+    if (spinner) spinner.fail('Update error');
+    console.log(chalk.yellow('  Try: npm install -g hedgequantx@latest'));
+    await prompts.waitForEnter();
   }
 };
 
-module.exports = {
-  dashboardMenu,
-  handleUpdate
-};
+module.exports = { dashboardMenu, handleUpdate };
