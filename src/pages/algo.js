@@ -1584,6 +1584,10 @@ const launchCopyTrading = async (config) => {
     bufferLine(chalk.cyan(V) + chalk.white(center(title1, W)) + chalk.cyan(V));
     bufferLine(chalk.cyan(MID));
     
+    // Centered subtitle
+    const title2 = 'HQX Ultra-Scalping Algorithm';
+    bufferLine(chalk.cyan(V) + chalk.yellow(center(title2, W)) + chalk.cyan(V));
+    
     // Grid layout - 2 columns
     const VS = '\u2502'; // Vertical separator (thin)
     const colL = 48, colR = 47;
@@ -1679,7 +1683,7 @@ const launchCopyTrading = async (config) => {
     };
     
     // Logs inside the rectangle - newest first, max 30 lines
-    const MAX_VISIBLE_LOGS = 30;
+    const MAX_VISIBLE_LOGS = 50;
     
     if (logs.length === 0) {
       const emptyLine = ' Waiting for activity...';
