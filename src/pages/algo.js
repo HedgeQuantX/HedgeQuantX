@@ -1507,6 +1507,11 @@ const launchCopyTrading = async (config) => {
   let spinnerFrame = 0;
   const spinnerChars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
   
+  // HQX Server connection state (declared here so displayUI can access it)
+  const hqxServer = new HQXServerService();
+  let hqxConnected = false;
+  let latency = 0;
+  
   const bufferLine = (text) => {
     screenBuffer += text + '\x1B[K\n';
   };
@@ -1710,15 +1715,10 @@ const launchCopyTrading = async (config) => {
   }, 250);
 
   addLog('info', 'Copy trading initialized');
+  addLog('info', 'Connecting to HQX Server...');
   displayUI();
 
-  // Connect to HQX Server for Ultra-Scalping signals
-  const hqxServer = new HQXServerService();
-  let hqxConnected = false;
-  let latency = 0;
-
   // Authenticate with HQX Server
-  addLog('info', 'Connecting to HQX Server...');
   displayUI();
 
   try {
