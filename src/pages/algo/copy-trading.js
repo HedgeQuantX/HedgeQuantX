@@ -136,33 +136,41 @@ const copyTradingMenu = async () => {
   console.log();
   console.log(chalk.cyan('  Step 5: Configure Parameters'));
   
-  const { leadContracts } = await inquirer.prompt([{
-    type: 'number',
-    name: 'leadContracts',
+  const { leadContractsInput } = await inquirer.prompt([{
+    type: 'input',
+    name: 'leadContractsInput',
     message: 'Lead contracts:',
-    default: 1
+    default: '1',
+    validate: v => !isNaN(parseInt(v)) && parseInt(v) > 0 ? true : 'Enter a positive number'
   }]);
+  const leadContracts = parseInt(leadContractsInput) || 1;
   
-  const { followerContracts } = await inquirer.prompt([{
-    type: 'number',
-    name: 'followerContracts',
+  const { followerContractsInput } = await inquirer.prompt([{
+    type: 'input',
+    name: 'followerContractsInput',
     message: 'Follower contracts:',
-    default: leadContracts
+    default: String(leadContracts),
+    validate: v => !isNaN(parseInt(v)) && parseInt(v) > 0 ? true : 'Enter a positive number'
   }]);
+  const followerContracts = parseInt(followerContractsInput) || leadContracts;
   
-  const { dailyTarget } = await inquirer.prompt([{
-    type: 'number',
-    name: 'dailyTarget',
+  const { dailyTargetInput } = await inquirer.prompt([{
+    type: 'input',
+    name: 'dailyTargetInput',
     message: 'Daily target ($):',
-    default: 400
+    default: '400',
+    validate: v => !isNaN(parseInt(v)) && parseInt(v) > 0 ? true : 'Enter a positive number'
   }]);
+  const dailyTarget = parseInt(dailyTargetInput) || 400;
   
-  const { maxRisk } = await inquirer.prompt([{
-    type: 'number',
-    name: 'maxRisk',
+  const { maxRiskInput } = await inquirer.prompt([{
+    type: 'input',
+    name: 'maxRiskInput',
     message: 'Max risk ($):',
-    default: 200
+    default: '200',
+    validate: v => !isNaN(parseInt(v)) && parseInt(v) > 0 ? true : 'Enter a positive number'
   }]);
+  const maxRisk = parseInt(maxRiskInput) || 200;
   
   // Step 6: Privacy
   const { showNames } = await inquirer.prompt([{

@@ -146,11 +146,15 @@ class AlgoUI {
     
     this._line(chalk.cyan(GT));
     
-    // Row 1: Account | Symbol
-    const r1c1 = buildCell('Account', stats.accountName || 'N/A', chalk.cyan, colL);
-    const r1c2t = ` Symbol: ${chalk.yellow(stats.symbol || 'N/A')}  Qty: ${chalk.cyan(stats.contracts || 1)}`;
-    const r1c2p = ` Symbol: ${stats.symbol || 'N/A'}  Qty: ${stats.contracts || 1}`;
-    row(r1c1.padded, r1c2t + pad(colR - r1c2p.length));
+    // Row 1: Account | Symbol (truncate long values)
+    const accName = (stats.accountName || 'N/A').substring(0, 35);
+    const symName = (stats.symbol || 'N/A').substring(0, 25);
+    const qtyStr = stats.contracts || '1/1';
+    
+    const r1c1 = buildCell('Account', accName, chalk.cyan, colL);
+    const r1c2t = ` Symbol: ${chalk.yellow(symName)}  Qty: ${chalk.cyan(qtyStr)}`;
+    const r1c2p = ` Symbol: ${symName}  Qty: ${qtyStr}`;
+    row(r1c1.padded, r1c2t + pad(Math.max(0, colR - r1c2p.length)));
     
     this._line(chalk.cyan(GM));
     
@@ -193,9 +197,9 @@ class AlgoUI {
     this._line(chalk.cyan(BOX.V) + chalk.white(left) + ' '.repeat(midPad) + chalk.cyan(mid) + ' '.repeat(space - midPad - mid.length) + chalk.yellow(right) + chalk.cyan(BOX.V));
     this._line(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
     
-    // Logs (oldest at top, newest at bottom - like a terminal)
-    // Take the last maxLogs entries (most recent), keep chronological order
-    const visible = logs.slice(-maxLogs);
+    // Logs: newest at top, oldest at bottom
+    // Take the last maxLogs entries and reverse for display
+    const visible = logs.slice(-maxLogs).reverse();
     
     if (visible.length === 0) {
       this._line(chalk.cyan(BOX.V) + chalk.gray(fitToWidth(' Waiting for activity...', W)) + chalk.cyan(BOX.V));
@@ -203,17 +207,17 @@ class AlgoUI {
         this._line(chalk.cyan(BOX.V) + ' '.repeat(W) + chalk.cyan(BOX.V));
       }
     } else {
-      // First draw empty lines for padding (so logs stick to bottom)
-      for (let i = visible.length; i < maxLogs; i++) {
-        this._line(chalk.cyan(BOX.V) + ' '.repeat(W) + chalk.cyan(BOX.V));
-      }
-      // Then draw logs (oldest first, newest last/at bottom)
+      // Draw logs (newest first at top)
       visible.forEach(log => {
         const color = LOG_COLORS[log.type] || chalk.white;
         const icon = LOG_ICONS[log.type] || LOG_ICONS.info;
         const line = ` [${log.timestamp}] ${icon} ${log.message}`;
         this._line(chalk.cyan(BOX.V) + color(fitToWidth(line, W)) + chalk.cyan(BOX.V));
       });
+      // Pad remaining lines at bottom
+      for (let i = visible.length; i < maxLogs; i++) {
+        this._line(chalk.cyan(BOX.V) + ' '.repeat(W) + chalk.cyan(BOX.V));
+      }
     }
     
     // Bottom border
