@@ -3,7 +3,7 @@
  * @module services
  */
 
-const { ProjectXService } = require('./projectx');
+const { ProjectXService } = require('./projectx/index');
 const { storage, connections } = require('./session');
 
 module.exports = {
