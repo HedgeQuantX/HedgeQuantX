@@ -213,7 +213,7 @@ const launchCopyTrading = async (config) => {
   const leadName = showNames ? (lead.account.accountName || lead.account.accountId) : 'HQX Lead *****';
   const followerName = showNames ? (follower.account.accountName || follower.account.accountId) : 'HQX Follower *****';
   
-  const ui = new AlgoUI({ subtitle: 'HQX Copy Trading' });
+  const ui = new AlgoUI({ subtitle: 'HQX Copy Trading', mode: 'copy-trading' });
   
   const stats = {
     leadName, followerName,

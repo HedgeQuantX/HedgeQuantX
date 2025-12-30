@@ -126,20 +126,83 @@ class AlgoUI {
 
   _drawStats(stats) {
     const { W } = this;
-    const colL = 48, colR = 47;
-    const pad = (len) => ' '.repeat(Math.max(0, len));
+    const isCopyTrading = this.config.mode === 'copy-trading';
     
     const pnlColor = stats.pnl >= 0 ? chalk.green : chalk.red;
     const pnlStr = (stats.pnl >= 0 ? '+$' : '-$') + Math.abs(stats.pnl).toFixed(2);
     const latencyColor = stats.latency < 100 ? chalk.green : (stats.latency < 300 ? chalk.yellow : chalk.red);
     const serverColor = stats.connected ? chalk.green : chalk.red;
     
-    // Grid borders
+    if (isCopyTrading) {
+      this._drawCopyTradingStats(stats, pnlColor, pnlStr, latencyColor, serverColor);
+    } else {
+      this._drawOneAccountStats(stats, pnlColor, pnlStr, latencyColor, serverColor);
+    }
+  }
+
+  _drawOneAccountStats(stats, pnlColor, pnlStr, latencyColor, serverColor) {
+    const { W } = this;
+    const colL = 48, colR = 47;
+    const pad = (len) => ' '.repeat(Math.max(0, len));
+    
     const GT = BOX.ML + BOX.H.repeat(colL) + BOX.TM + BOX.H.repeat(colR) + BOX.MR;
     const GM = BOX.ML + BOX.H.repeat(colL) + BOX.MM + BOX.H.repeat(colR) + BOX.MR;
     const GB = BOX.ML + BOX.H.repeat(colL) + BOX.BM + BOX.H.repeat(colR) + BOX.MR;
     
-    // Row builders
+    const row = (c1, c2) => {
+      this._line(chalk.cyan(BOX.V) + c1 + chalk.cyan(BOX.VS) + c2 + chalk.cyan(BOX.V));
+    };
+    
+    this._line(chalk.cyan(GT));
+    
+    // Row 1: Account | Symbol
+    const accountName = (stats.accountName || 'N/A').substring(0, 40);
+    const symbol = (stats.symbol || 'N/A').substring(0, 35);
+    const r1c1 = buildCell('Account', accountName, chalk.cyan, colL);
+    const r1c2 = buildCell('Symbol', symbol, chalk.yellow, colR);
+    row(r1c1.padded, r1c2.padded);
+    
+    this._line(chalk.cyan(GM));
+    
+    // Row 2: Qty | P&L
+    const r2c1 = buildCell('Qty', (stats.qty || '1').toString(), chalk.cyan, colL);
+    const r2c2 = buildCell('P&L', pnlStr, pnlColor, colR);
+    row(r2c1.padded, r2c2.padded);
+    
+    this._line(chalk.cyan(GM));
+    
+    // Row 3: Target | Risk
+    const r3c1 = buildCell('Target', '$' + (stats.target || 0).toFixed(2), chalk.green, colL);
+    const r3c2 = buildCell('Risk', '$' + (stats.risk || 0).toFixed(2), chalk.red, colR);
+    row(r3c1.padded, r3c2.padded);
+    
+    this._line(chalk.cyan(GM));
+    
+    // Row 4: Trades | Server
+    const r4c1t = ` Trades: ${chalk.cyan(stats.trades || 0)}  W/L: ${chalk.green(stats.wins || 0)}/${chalk.red(stats.losses || 0)}`;
+    const r4c1p = ` Trades: ${stats.trades || 0}  W/L: ${stats.wins || 0}/${stats.losses || 0}`;
+    const r4c2 = buildCell('Server', stats.connected ? 'ON' : 'OFF', serverColor, colR);
+    row(r4c1t + pad(colL - r4c1p.length), r4c2.padded);
+    
+    this._line(chalk.cyan(GM));
+    
+    // Row 5: Latency | Platform
+    const r5c1 = buildCell('Latency', `${stats.latency || 0}ms`, latencyColor, colL);
+    const r5c2 = buildCell('Platform', stats.platform || 'N/A', chalk.cyan, colR);
+    row(r5c1.padded, r5c2.padded);
+    
+    this._line(chalk.cyan(GB));
+  }
+
+  _drawCopyTradingStats(stats, pnlColor, pnlStr, latencyColor, serverColor) {
+    const { W } = this;
+    const colL = 48, colR = 47;
+    const pad = (len) => ' '.repeat(Math.max(0, len));
+    
+    const GT = BOX.ML + BOX.H.repeat(colL) + BOX.TM + BOX.H.repeat(colR) + BOX.MR;
+    const GM = BOX.ML + BOX.H.repeat(colL) + BOX.MM + BOX.H.repeat(colR) + BOX.MR;
+    const GB = BOX.ML + BOX.H.repeat(colL) + BOX.BM + BOX.H.repeat(colR) + BOX.MR;
+    
     const row = (c1, c2) => {
       this._line(chalk.cyan(BOX.V) + c1 + chalk.cyan(BOX.VS) + c2 + chalk.cyan(BOX.V));
     };
@@ -147,9 +210,8 @@ class AlgoUI {
     this._line(chalk.cyan(GT));
     
     // Row 1: Lead Account | Follower Account
-    const leadName = (stats.leadName || stats.accountName || 'N/A').substring(0, 40);
+    const leadName = (stats.leadName || 'N/A').substring(0, 40);
     const followerName = (stats.followerName || 'N/A').substring(0, 40);
-    
     const r1c1 = buildCell('Lead', leadName, chalk.cyan, colL);
     const r1c2 = buildCell('Follower', followerName, chalk.magenta, colR);
     row(r1c1.padded, r1c2.padded);
@@ -158,8 +220,7 @@ class AlgoUI {
     
     // Row 2: Lead Symbol | Follower Symbol
     const leadSymbol = (stats.leadSymbol || stats.symbol || 'N/A').substring(0, 35);
-    const followerSymbol = (stats.followerSymbol || 'N/A').substring(0, 35);
-    
+    const followerSymbol = (stats.followerSymbol || stats.symbol || 'N/A').substring(0, 35);
     const r2c1 = buildCell('Symbol', leadSymbol, chalk.yellow, colL);
     const r2c2 = buildCell('Symbol', followerSymbol, chalk.yellow, colR);
     row(r2c1.padded, r2c2.padded);
@@ -167,11 +228,8 @@ class AlgoUI {
     this._line(chalk.cyan(GM));
     
     // Row 3: Lead Qty | Follower Qty
-    const leadQty = stats.leadQty || '1';
-    const followerQty = stats.followerQty || '1';
-    
-    const r3c1 = buildCell('Qty', leadQty.toString(), chalk.cyan, colL);
-    const r3c2 = buildCell('Qty', followerQty.toString(), chalk.cyan, colR);
+    const r3c1 = buildCell('Qty', (stats.leadQty || '1').toString(), chalk.cyan, colL);
+    const r3c2 = buildCell('Qty', (stats.followerQty || '1').toString(), chalk.cyan, colR);
     row(r3c1.padded, r3c2.padded);
     
     this._line(chalk.cyan(GM));

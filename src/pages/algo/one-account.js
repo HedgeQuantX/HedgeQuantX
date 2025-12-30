@@ -132,7 +132,7 @@ const launchAlgo = async (service, account, contract, config) => {
   const accountName = showName ? (account.accountName || account.accountId) : 'HQX *****';
   const symbolName = contract.name || contract.symbol;
   
-  const ui = new AlgoUI({ subtitle: 'HQX Ultra-Scalping' });
+  const ui = new AlgoUI({ subtitle: 'HQX Ultra-Scalping', mode: 'one-account' });
   
   const stats = {
     accountName, symbol: symbolName, contracts,
