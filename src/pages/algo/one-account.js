@@ -71,34 +71,27 @@ const oneAccountMenu = async (service) => {
 };
 
 /**
- * Symbol selection
+ * Symbol selection - same as copy-trading
  */
 const selectSymbol = async (service, account) => {
-  const spinner = ora({ text: 'Loading contracts...', color: 'yellow' }).start();
+  const spinner = ora({ text: 'Loading symbols...', color: 'yellow' }).start();
   
   const contractsResult = await service.getContracts();
-  if (!contractsResult.success) {
+  if (!contractsResult.success || !contractsResult.contracts?.length) {
     spinner.fail('Failed to load contracts');
     return null;
   }
   
-  spinner.succeed('Contracts loaded');
+  // Normalize contract structure - API returns { name: "ESH6", description: "E-mini S&P 500..." }
+  const contracts = contractsResult.contracts.map(c => ({
+    ...c,
+    symbol: c.name || c.symbol,
+    name: c.description || c.name || c.symbol
+  }));
   
-  // Group by category
-  const categories = {};
-  for (const c of contractsResult.contracts) {
-    const cat = c.group || 'Other';
-    if (!categories[cat]) categories[cat] = [];
-    categories[cat].push(c);
-  }
+  spinner.succeed(`Found ${contracts.length} contracts`);
   
-  // Flatten with categories as hints
-  const options = [];
-  for (const [cat, contracts] of Object.entries(categories)) {
-    for (const c of contracts.slice(0, 10)) {
-      options.push({ label: `[${cat}] ${c.name || c.symbol}`, value: c });
-    }
-  }
+  const options = contracts.map(c => ({ label: c.name, value: c }));
   options.push({ label: '< Back', value: 'back' });
   
   const contract = await prompts.selectOption('Select Symbol:', options);
