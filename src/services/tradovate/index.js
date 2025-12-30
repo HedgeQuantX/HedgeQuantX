@@ -1,6 +1,8 @@
 /**
  * Tradovate Service
  * Main service for Tradovate prop firm connections (Apex, TakeProfitTrader)
+ * 
+ * STRICT RULE: Display ONLY values returned by API. No estimation, no simulation.
  */
 
 const https = require('https');
@@ -112,7 +114,8 @@ class TradovateService extends EventEmitter {
   }
 
   /**
-   * Get trading accounts (formatted for HQX)
+   * Get trading accounts - ONLY returns values from API
+   * No estimation, no simulation
    */
   async getTradingAccounts() {
     if (this.accounts.length === 0) {
@@ -121,20 +124,34 @@ class TradovateService extends EventEmitter {
 
     const tradingAccounts = this.accounts.map((acc) => {
       const cb = acc.cashBalance || {};
-      const balance = cb.totalCashValue || cb.netLiquidatingValue || this.propfirm.defaultBalance;
-      const startingBalance = this.propfirm.defaultBalance;
-      const profitAndLoss = cb.totalPnL || (balance - startingBalance);
-      const openPnL = cb.openPnL || 0;
+      
+      // ONLY use values from API - null if not available
+      const balance = cb.totalCashValue !== undefined ? cb.totalCashValue : 
+                      (cb.netLiquidatingValue !== undefined ? cb.netLiquidatingValue : null);
+      
+      // P&L from API only - null if not available
+      const realizedPnL = cb.realizedPnL !== undefined ? cb.realizedPnL : null;
+      const openPnL = cb.openPnL !== undefined ? cb.openPnL : null;
+      
+      // Total P&L from API
+      let profitAndLoss = null;
+      if (cb.totalPnL !== undefined) {
+        profitAndLoss = cb.totalPnL;
+      } else if (realizedPnL !== null || openPnL !== null) {
+        profitAndLoss = (realizedPnL || 0) + (openPnL || 0);
+      }
 
       return {
         accountId: acc.id,
         tradovateAccountId: acc.id,
         accountName: acc.name,
         name: acc.name,
+        // From API only - null if not available
         balance: balance,
-        startingBalance: startingBalance,
-        profitAndLoss: profitAndLoss,
+        todayPnL: realizedPnL,
         openPnL: openPnL,
+        profitAndLoss: profitAndLoss,
+        startingBalance: null,  // API doesn't provide this
         status: acc.active ? 0 : 3,
         platform: 'Tradovate',
         propfirm: this.propfirm.name,

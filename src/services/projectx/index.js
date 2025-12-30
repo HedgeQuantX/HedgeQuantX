@@ -1,6 +1,8 @@
 /**
  * ProjectX API Service
  * Main service for ProjectX prop firm connections
+ * 
+ * STRICT RULE: Display ONLY values returned by API. No estimation, no simulation.
  */
 
 const https = require('https');
@@ -145,15 +147,128 @@ class ProjectXService {
 
   // ==================== ACCOUNTS ====================
 
+  /**
+   * Get trading accounts - ONLY returns values from API
+   * P&L comes from: today's trades + open positions (both from API)
+   */
   async getTradingAccounts() {
     try {
       const response = await this._request(this.propfirm.userApi, '/TradingAccount', 'GET');
-      if (response.statusCode === 200) {
-        return { success: true, accounts: Array.isArray(response.data) ? response.data : [] };
+      if (response.statusCode !== 200) {
+        return { success: false, accounts: [], error: 'Failed to get accounts' };
       }
-      return { success: false, accounts: [], error: 'Failed to get accounts' };
+
+      const accounts = Array.isArray(response.data) ? response.data : [];
+      const enrichedAccounts = [];
+
+      for (const account of accounts) {
+        // Start with RAW API data only
+        const enriched = {
+          accountId: account.accountId,
+          accountName: account.accountName,
+          balance: account.balance,  // From API
+          status: account.status,    // From API
+          type: account.type,        // From API
+          platform: 'ProjectX',
+          propfirm: this.propfirm.name,
+          // P&L fields - will be populated from API calls
+          todayPnL: null,
+          openPnL: null,
+          profitAndLoss: null,
+          startingBalance: null,
+        };
+
+        // Only fetch P&L for active accounts
+        if (account.status === 0) {
+          // Get today's realized P&L from trades API
+          const todayPnL = await this._getTodayRealizedPnL(account.accountId);
+          enriched.todayPnL = todayPnL;
+
+          // Get unrealized P&L from open positions API
+          const openPnL = await this._getOpenPositionsPnL(account.accountId);
+          enriched.openPnL = openPnL;
+
+          // Total P&L = realized + unrealized (both from API)
+          if (todayPnL !== null || openPnL !== null) {
+            enriched.profitAndLoss = (todayPnL || 0) + (openPnL || 0);
+          }
+        }
+
+        enrichedAccounts.push(enriched);
+      }
+
+      return { success: true, accounts: enrichedAccounts };
     } catch (error) {
       return { success: false, accounts: [], error: error.message };
+    }
+  }
+
+  /**
+   * Get today's realized P&L from Trade API
+   * Returns null if API fails (not 0)
+   * @private
+   */
+  async _getTodayRealizedPnL(accountId) {
+    try {
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      const response = await this._request(
+        this.propfirm.gatewayApi, '/api/Trade/search', 'POST',
+        { 
+          accountId: accountId, 
+          startTimestamp: startOfDay.toISOString(), 
+          endTimestamp: now.toISOString() 
+        }
+      );
+
+      if (response.statusCode === 200 && response.data) {
+        const trades = Array.isArray(response.data) 
+          ? response.data 
+          : (response.data.trades || []);
+        
+        // Sum P&L from API response only
+        let totalPnL = 0;
+        for (const trade of trades) {
+          if (trade.profitAndLoss !== undefined && trade.profitAndLoss !== null) {
+            totalPnL += trade.profitAndLoss;
+          }
+        }
+        return totalPnL;
+      }
+      return null; // API failed - return null, not 0
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * Get unrealized P&L from open positions API
+   * Returns null if API fails (not 0)
+   * @private
+   */
+  async _getOpenPositionsPnL(accountId) {
+    try {
+      const response = await this._request(
+        this.propfirm.gatewayApi, '/api/Position/searchOpen', 'POST',
+        { accountId: accountId }
+      );
+
+      if (response.statusCode === 200 && response.data) {
+        const positions = response.data.positions || response.data || [];
+        if (Array.isArray(positions)) {
+          let totalPnL = 0;
+          for (const pos of positions) {
+            if (pos.profitAndLoss !== undefined && pos.profitAndLoss !== null) {
+              totalPnL += pos.profitAndLoss;
+            }
+          }
+          return totalPnL;
+        }
+      }
+      return null;
+    } catch (e) {
+      return null;
     }
   }
 

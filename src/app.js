@@ -70,30 +70,40 @@ const banner = async () => {
   const version = require('../package.json').version;
   
   // Get stats if connected (only active accounts: status === 0)
+  // STRICT: Only display values from API, no estimation
   let statsInfo = null;
   if (connections.count() > 0) {
     try {
       const allAccounts = await connections.getAllAccounts();
       const activeAccounts = allAccounts.filter(acc => acc.status === 0);
-      let totalBalance = 0;
-      let totalStartingBalance = 0;
-      let totalPnl = 0;
+      
+      // Sum only non-null values from API
+      let totalBalance = null;
+      let totalPnl = null;
+      let hasBalanceData = false;
+      let hasPnlData = false;
       
       activeAccounts.forEach(account => {
-        totalBalance += account.balance || 0;
-        totalStartingBalance += account.startingBalance || 0;
-        totalPnl += account.profitAndLoss || 0;
+        // Balance: only sum if API returned a value
+        if (account.balance !== null && account.balance !== undefined) {
+          totalBalance = (totalBalance || 0) + account.balance;
+          hasBalanceData = true;
+        }
+        
+        // P&L: only sum if API returned a value
+        if (account.profitAndLoss !== null && account.profitAndLoss !== undefined) {
+          totalPnl = (totalPnl || 0) + account.profitAndLoss;
+          hasPnlData = true;
+        }
       });
-      
-      const pnl = totalPnl !== 0 ? totalPnl : (totalBalance - totalStartingBalance);
-      const pnlPercent = totalStartingBalance > 0 ? ((pnl / totalStartingBalance) * 100).toFixed(1) : '0.0';
       
       statsInfo = {
         connections: connections.count(),
         accounts: activeAccounts.length,
-        balance: totalBalance,
-        pnl: pnl,
-        pnlPercent: pnlPercent
+        balance: hasBalanceData ? totalBalance : null,
+        pnl: hasPnlData ? totalPnl : null,
+        // No percentage calculation if no verified data
+        pnlPercent: null
       };
     } catch (e) {
       // Ignore errors
@@ -168,19 +178,33 @@ const banner = async () => {
   console.log(chalk.cyan('║') + chalk.white(centerText(tagline, innerWidth)) + chalk.cyan('║'));
   
   // Stats bar if connected
+  // STRICT: Only display verified values from API, show '--' for unavailable data
   if (statsInfo) {
     console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
     
-    const pnlColor = statsInfo.pnl >= 0 ? chalk.green : chalk.red;
-    const pnlSign = statsInfo.pnl >= 0 ? '+' : '';
-    
     const connStr = `Connections: ${statsInfo.connections}`;
     const accStr = `Accounts: ${statsInfo.accounts}`;
-    const balStr = `Balance: $${statsInfo.balance.toLocaleString()}`;
-    const pnlStr = `P&L: $${statsInfo.pnl.toLocaleString()} (${pnlSign}${statsInfo.pnlPercent}%)`;
+    
+    // Balance: show '--' if not available from API
+    const balStr = statsInfo.balance !== null 
+      ? `Balance: $${statsInfo.balance.toLocaleString()}` 
+      : `Balance: --`;
+    const balColor = statsInfo.balance !== null ? chalk.green : chalk.gray;
+    
+    // P&L: show '--' if not available from API
+    let pnlDisplay;
+    let pnlColor;
+    if (statsInfo.pnl !== null) {
+      const pnlSign = statsInfo.pnl >= 0 ? '+' : '';
+      pnlColor = statsInfo.pnl >= 0 ? chalk.green : chalk.red;
+      pnlDisplay = `$${statsInfo.pnl.toLocaleString()} (${pnlSign}${statsInfo.pnl.toFixed(1)})`;
+    } else {
+      pnlColor = chalk.gray;
+      pnlDisplay = '--';
+    }
     
     // Build full stats text and calculate padding
-    const statsText = `${connStr}    ${accStr}    ${balStr}    ${pnlStr}`;
+    const statsText = `${connStr}    ${accStr}    ${balStr}    P&L: ${pnlDisplay}`;
     const statsLen = statsText.length;
     const statsLeftPad = Math.floor((innerWidth - statsLen) / 2);
     const statsRightPad = innerWidth - statsLen - statsLeftPad;
@@ -188,9 +212,9 @@ const banner = async () => {
     console.log(chalk.cyan('║') + ' '.repeat(statsLeftPad) +
       chalk.white(connStr) + '    ' +
       chalk.white(accStr) + '    ' +
-      chalk.white('Balance: ') + chalk.green(`$${statsInfo.balance.toLocaleString()}`) + '    ' +
-      chalk.white('P&L: ') + pnlColor(`$${statsInfo.pnl.toLocaleString()} (${pnlSign}${statsInfo.pnlPercent}%)`) + 
-      ' '.repeat(statsRightPad) + chalk.cyan('║')
+      chalk.white('Balance: ') + balColor(statsInfo.balance !== null ? `$${statsInfo.balance.toLocaleString()}` : '--') + '    ' +
+      chalk.white('P&L: ') + pnlColor(pnlDisplay) + 
+      ' '.repeat(Math.max(0, statsRightPad)) + chalk.cyan('║')
     );
   }
   

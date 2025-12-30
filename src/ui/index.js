@@ -37,8 +37,10 @@ const prepareStdin = () => {
     // Remove any lingering keypress listeners
     process.stdin.removeAllListeners('keypress');
     process.stdin.removeAllListeners('data');
-    // Pause stdin so inquirer can take control
-    process.stdin.pause();
+    // Resume stdin so inquirer can take control
+    if (process.stdin.isPaused()) {
+      process.stdin.resume();
+    }
   } catch (e) {
     // Ignore errors
   }
