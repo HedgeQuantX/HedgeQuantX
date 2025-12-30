@@ -293,6 +293,33 @@ class HQXServerService {
   }
 
   /**
+   * Start copy trading session
+   */
+  startCopyTrading(config) {
+    this.send('start_copy_trading', {
+      // Lead account
+      leadAccountId: config.leadAccountId,
+      leadContractId: config.leadContractId,
+      leadSymbol: config.leadSymbol,
+      leadContracts: config.leadContracts,
+      leadPropfirm: config.leadPropfirm,
+      leadToken: config.leadToken,
+      leadRithmicCredentials: config.leadRithmicCredentials,
+      // Follower account
+      followerAccountId: config.followerAccountId,
+      followerContractId: config.followerContractId,
+      followerSymbol: config.followerSymbol,
+      followerContracts: config.followerContracts,
+      followerPropfirm: config.followerPropfirm,
+      followerToken: config.followerToken,
+      followerRithmicCredentials: config.followerRithmicCredentials,
+      // Targets
+      dailyTarget: config.dailyTarget,
+      maxRisk: config.maxRisk
+    });
+  }
+
+  /**
    * Event listeners
    */
   on(event, callback) {
