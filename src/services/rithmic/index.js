@@ -626,6 +626,26 @@ class RithmicService extends EventEmitter {
   }
 
   /**
+   * Get propfirm name
+   */
+  getPropfirm() {
+    return this.propfirmKey || 'apex';
+  }
+
+  /**
+   * Get Rithmic credentials for HQX Server
+   */
+  getRithmicCredentials() {
+    if (!this.credentials) return null;
+    return {
+      userId: this.credentials.username,
+      password: this.credentials.password,
+      systemName: this.propfirm.systemName,
+      gateway: this.propfirm.gateway || 'wss://rprotocol.rithmic.com:443'
+    };
+  }
+
+  /**
    * Search contracts (stub - would need TICKER_PLANT)
    */
   async searchContracts(searchText) {

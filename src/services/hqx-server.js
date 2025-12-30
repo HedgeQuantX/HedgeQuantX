@@ -275,7 +275,13 @@ class HQXServerService {
       dailyTarget: config.dailyTarget,
       maxRisk: config.maxRisk,
       propfirm: config.propfirm,
-      propfirmToken: config.propfirmToken
+      propfirmToken: config.propfirmToken,
+      // Rithmic credentials (for Apex, TopstepTrader Rithmic, etc.)
+      rithmicCredentials: config.rithmicCredentials || null,
+      // Copy trading mode
+      copyTrading: config.copyTrading || false,
+      followerSymbol: config.followerSymbol,
+      followerContracts: config.followerContracts
     });
   }
 

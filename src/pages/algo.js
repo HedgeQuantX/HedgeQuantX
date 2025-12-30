@@ -1906,6 +1906,19 @@ const launchCopyTrading = async (config) => {
     
     const propfirmToken = lead.service.getToken ? lead.service.getToken() : null;
     const propfirmId = lead.service.getPropfirm ? lead.service.getPropfirm() : (lead.account.propfirm || 'topstep');
+    
+    // Get Rithmic credentials if this is a Rithmic account
+    let rithmicCredentials = null;
+    if (lead.service.getRithmicCredentials) {
+      rithmicCredentials = lead.service.getRithmicCredentials();
+    } else if (lead.account.rithmicUserId && lead.account.rithmicPassword) {
+      rithmicCredentials = {
+        userId: lead.account.rithmicUserId,
+        password: lead.account.rithmicPassword,
+        systemName: lead.account.rithmicSystem || 'Apex',
+        gateway: lead.account.rithmicGateway || 'wss://rprotocol.rithmic.com:443'
+      };
+    }
 
     hqxServer.startAlgo({
       accountId: lead.account.accountId,
@@ -1916,6 +1929,7 @@ const launchCopyTrading = async (config) => {
       maxRisk: maxRisk,
       propfirm: propfirmId,
       propfirmToken: propfirmToken,
+      rithmicCredentials: rithmicCredentials,
       copyTrading: true, // Flag for copy trading mode
       followerSymbol: follower.symbol.value,
       followerContracts: follower.contracts
