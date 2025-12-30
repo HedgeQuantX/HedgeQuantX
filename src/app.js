@@ -46,6 +46,27 @@ const restoreTerminal = () => {
   }
 };
 
+/**
+ * Ensure stdin is ready for inquirer prompts
+ * This fixes input leaking to bash after session restore
+ */
+const prepareStdin = () => {
+  try {
+    // Remove any raw mode that might be left from previous operations
+    if (process.stdin.isTTY && process.stdin.isRaw) {
+      process.stdin.setRawMode(false);
+    }
+    // Remove any lingering keypress listeners
+    process.stdin.removeAllListeners('keypress');
+    process.stdin.removeAllListeners('data');
+    // Pause stdin so inquirer can take control
+    process.stdin.pause();
+    // Small delay to let event loop settle
+  } catch (e) {
+    // Ignore errors
+  }
+};
+
 // Register global handlers to restore terminal on exit/crash
 process.on('exit', restoreTerminal);
 process.on('SIGINT', () => { restoreTerminal(); process.exit(0); });
@@ -802,89 +823,102 @@ const handleUpdate = async () => {
  * Main application loop
  */
 const run = async () => {
-  await banner();
-  
-  // Try to restore session
-  const spinner = ora('Restoring session...').start();
-  const restored = await connections.restoreFromStorage();
-  
-  if (restored) {
-    spinner.succeed('Session restored');
-    currentService = connections.getAll()[0].service;
-  } else {
-    spinner.info('No active session');
-  }
-
-  // Main loop
-  while (true) {
-    // Refresh banner with stats
+  try {
     await banner();
     
-    if (!connections.isConnected()) {
-      const choice = await mainMenu();
-      
-      if (choice === 'exit') {
-        console.log(chalk.gray('Goodbye!'));
-        process.exit(0);
-      }
-      
-      if (choice === 'projectx') {
-        const service = await projectXMenu();
-        if (service) currentService = service;
-      }
-      
-      if (choice === 'rithmic') {
-        const service = await rithmicMenu();
-        if (service) currentService = service;
-      }
-      
-      if (choice === 'tradovate') {
-        const service = await tradovateMenu();
-        if (service) currentService = service;
-      }
+    // Try to restore session
+    const spinner = ora('Restoring session...').start();
+    const restored = await connections.restoreFromStorage();
+    
+    if (restored) {
+      spinner.succeed('Session restored');
+      currentService = connections.getAll()[0].service;
     } else {
-      const action = await dashboardMenu(currentService);
-      
-      switch (action) {
-        case 'accounts':
-          await showAccounts(currentService);
-          break;
+      spinner.info('No active session');
+    }
 
-        case 'stats':
-          await showStats(currentService);
-          break;
-        case 'add_prop_account':
-          // Show platform selection menu
-          const platformChoice = await addPropAccountMenu();
-          if (platformChoice === 'projectx') {
-            const newService = await projectXMenu();
-            if (newService) currentService = newService;
-          } else if (platformChoice === 'rithmic') {
-            const newService = await rithmicMenu();
-            if (newService) currentService = newService;
-          } else if (platformChoice === 'tradovate') {
-            const newService = await tradovateMenu();
-            if (newService) currentService = newService;
+    // Main loop
+    while (true) {
+      try {
+        // Ensure stdin is ready for prompts (fixes input leaking to bash)
+        prepareStdin();
+        
+        // Refresh banner with stats
+        await banner();
+        
+        if (!connections.isConnected()) {
+          const choice = await mainMenu();
+          
+          if (choice === 'exit') {
+            console.log(chalk.gray('Goodbye!'));
+            process.exit(0);
           }
-          break;
-        case 'algotrading':
-          await algoTradingMenu(currentService);
-          break;
-        case 'update':
-          const updateResult = await handleUpdate();
-          if (updateResult === 'restart') return; // Stop loop, new process spawned
-          break;
-        case 'disconnect':
-          const connCount = connections.count();
-          connections.disconnectAll();
-          currentService = null;
-          console.log(chalk.yellow(`Disconnected ${connCount} connection${connCount > 1 ? 's' : ''}`));
-          break;
-        case 'exit':
-          console.log(chalk.gray('Goodbye!'));
-          process.exit(0);
+          
+          if (choice === 'projectx') {
+            const service = await projectXMenu();
+            if (service) currentService = service;
+          }
+          
+          if (choice === 'rithmic') {
+            const service = await rithmicMenu();
+            if (service) currentService = service;
+          }
+          
+          if (choice === 'tradovate') {
+            const service = await tradovateMenu();
+            if (service) currentService = service;
+          }
+        } else {
+          const action = await dashboardMenu(currentService);
+          
+          switch (action) {
+            case 'accounts':
+              await showAccounts(currentService);
+              break;
+
+            case 'stats':
+              await showStats(currentService);
+              break;
+            case 'add_prop_account':
+              // Show platform selection menu
+              const platformChoice = await addPropAccountMenu();
+              if (platformChoice === 'projectx') {
+                const newService = await projectXMenu();
+                if (newService) currentService = newService;
+              } else if (platformChoice === 'rithmic') {
+                const newService = await rithmicMenu();
+                if (newService) currentService = newService;
+              } else if (platformChoice === 'tradovate') {
+                const newService = await tradovateMenu();
+                if (newService) currentService = newService;
+              }
+              break;
+            case 'algotrading':
+              await algoTradingMenu(currentService);
+              break;
+            case 'update':
+              const updateResult = await handleUpdate();
+              if (updateResult === 'restart') return; // Stop loop, new process spawned
+              break;
+            case 'disconnect':
+              const connCount = connections.count();
+              connections.disconnectAll();
+              currentService = null;
+              console.log(chalk.yellow(`Disconnected ${connCount} connection${connCount > 1 ? 's' : ''}`));
+              break;
+            case 'exit':
+              console.log(chalk.gray('Goodbye!'));
+              process.exit(0);
+          }
+        }
+      } catch (loopError) {
+        console.error(chalk.red('Error in main loop:'), loopError.message);
+        // Continue the loop
       }
     }
+  } catch (error) {
+    console.error(chalk.red('Fatal error:'), error.message);
+    process.exit(1);
   }
 };
 
