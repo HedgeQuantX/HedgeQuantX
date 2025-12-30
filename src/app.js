@@ -133,7 +133,15 @@ const banner = async () => {
   console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
   const tagline = isMobile ? `HQX v${version}` : `Prop Futures Algo Trading  v${version}`;
   console.log(chalk.cyan('║') + chalk.white(centerText(tagline, innerWidth)) + chalk.cyan('║'));
-  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
+};
+
+/**
+ * Display banner with closing border (for loading states)
+ */
+const bannerClosed = async () => {
+  await banner();
+  const boxWidth = process.stdout.columns < 60 ? Math.max(process.stdout.columns - 2, 40) : Math.max(getLogoWidth(), 98);
+  console.log(chalk.cyan('╚' + '═'.repeat(boxWidth - 2) + '╝'));
 };
 
 /**
@@ -152,7 +160,8 @@ const mainMenu = async () => {
     console.log(chalk.cyan('║') + leftPadded + rightPadded + chalk.cyan('║'));
   };
   
-  console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
+  // Continue from banner (use ╠ not ╔)
+  console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
   console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PLATFORM', innerWidth)) + chalk.cyan('║'));
   console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
   
