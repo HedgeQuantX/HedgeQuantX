@@ -216,17 +216,16 @@ class RithmicService extends EventEmitter {
    * For now, returns common futures contracts that are available on Rithmic
    */
   async getContracts() {
-    // These are the standard Rithmic contract symbols
-    // In production, this should connect to TICKER_PLANT
+    // Standard futures contracts - same list as ProjectX for consistency
     const contracts = [
       { symbol: 'ESH5', name: 'E-mini S&P 500 (Mar 25)', exchange: 'CME' },
       { symbol: 'NQH5', name: 'E-mini NASDAQ-100 (Mar 25)', exchange: 'CME' },
       { symbol: 'MESH5', name: 'Micro E-mini S&P 500 (Mar 25)', exchange: 'CME' },
       { symbol: 'MNQH5', name: 'Micro E-mini NASDAQ-100 (Mar 25)', exchange: 'CME' },
-      { symbol: 'RTYH5', name: 'E-mini Russell 2000 (Mar 25)', exchange: 'CME' },
-      { symbol: 'YMH5', name: 'E-mini Dow Jones (Mar 25)', exchange: 'CBOT' },
       { symbol: 'CLG5', name: 'Crude Oil (Feb 25)', exchange: 'NYMEX' },
       { symbol: 'GCG5', name: 'Gold (Feb 25)', exchange: 'COMEX' },
+      { symbol: 'RTYH5', name: 'E-mini Russell 2000 (Mar 25)', exchange: 'CME' },
+      { symbol: 'YMH5', name: 'E-mini Dow Jones (Mar 25)', exchange: 'CBOT' },
       { symbol: 'SIH5', name: 'Silver (Mar 25)', exchange: 'COMEX' },
       { symbol: 'NGG5', name: 'Natural Gas (Feb 25)', exchange: 'NYMEX' },
     ];
