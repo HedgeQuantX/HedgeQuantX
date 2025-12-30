@@ -95,29 +95,30 @@ const getTradingAccounts = async (service) => {
   let tradingAccounts = service.accounts.map((acc) => {
     // Get P&L data from accountPnL map (populated by PNL_PLANT messages)
     const pnlData = service.accountPnL.get(acc.accountId) || {};
-    debug(`Account ${acc.accountId} pnlData:`, pnlData);
+    debug(`Account ${acc.accountId} pnlData:`, JSON.stringify(pnlData));
+    debug(`  accountPnL map size:`, service.accountPnL.size);
     
-    // Use API values if available, otherwise use defaults
+    // Use API values if available
     const accountBalance = parseFloat(pnlData.accountBalance || 0);
     const openPnL = parseFloat(pnlData.openPositionPnl || 0);
     const closedPnL = parseFloat(pnlData.closedPositionPnl || 0);
     const dayPnL = parseFloat(pnlData.dayPnl || 0);
     
-    // Balance: use API value if available, otherwise default
-    const balance = accountBalance > 0 ? accountBalance : service.propfirm.defaultBalance;
+    // Balance: use API value if > 0, otherwise default
+    // Most prop firms don't report balance via PnL stream, so we use default
     const startingBalance = service.propfirm.defaultBalance;
+    const balance = accountBalance > 0 ? accountBalance : startingBalance;
     
-    // P&L: prefer dayPnl from API, otherwise calculate
+    // P&L: prefer dayPnl from API, otherwise calculate from open+closed
     let profitAndLoss = 0;
     if (dayPnL !== 0) {
       profitAndLoss = dayPnL;
     } else if (openPnL !== 0 || closedPnL !== 0) {
       profitAndLoss = openPnL + closedPnL;
-    } else if (accountBalance > 0) {
-      profitAndLoss = accountBalance - startingBalance;
     }
+    // Don't calculate P&L from balance difference - that's estimation
 
-    debug(`  balance: ${balance}, P&L: ${profitAndLoss}`);
+    debug(`  balance: ${balance}, startingBalance: ${startingBalance}, P&L: ${profitAndLoss}`);
 
     return {
       accountId: hashAccountId(acc.accountId),

@@ -6,6 +6,10 @@
 const { proto, decodeAccountPnL, decodeInstrumentPnL } = require('./protobuf');
 const { RES, STREAM } = require('./constants');
 
+// Debug mode
+const DEBUG = process.env.HQX_DEBUG === '1';
+const debug = (...args) => DEBUG && console.log('[Rithmic:Handler]', ...args);
+
 /**
  * Create ORDER_PLANT message handler
  * @param {RithmicService} service - The Rithmic service instance
@@ -44,18 +48,24 @@ const createOrderHandler = (service) => {
 const createPnLHandler = (service) => {
   return (msg) => {
     const { templateId, data } = msg;
+    
+    debug('PNL message received, templateId:', templateId);
 
     switch (templateId) {
       case RES.PNL_POSITION_SNAPSHOT:
       case RES.PNL_POSITION_UPDATES:
-        // OK response, nothing to do
+        debug('PNL snapshot/updates response OK');
         break;
       case STREAM.ACCOUNT_PNL_UPDATE:
+        debug('Account PNL update received');
         handleAccountPnLUpdate(service, data);
         break;
       case STREAM.INSTRUMENT_PNL_UPDATE:
+        debug('Instrument PNL update received');
         handleInstrumentPnLUpdate(service, data);
         break;
+      default:
+        debug('Unknown PNL templateId:', templateId);
     }
   };
 };
@@ -136,19 +146,25 @@ const handleShowOrdersResponse = (service, data) => {
 const handleAccountPnLUpdate = (service, data) => {
   try {
     const pnl = decodeAccountPnL(data);
+    debug('Decoded Account PNL:', JSON.stringify(pnl));
+    
     if (pnl.accountId) {
-      service.accountPnL.set(pnl.accountId, {
+      const pnlData = {
         accountBalance: parseFloat(pnl.accountBalance || 0),
         cashOnHand: parseFloat(pnl.cashOnHand || 0),
         marginBalance: parseFloat(pnl.marginBalance || 0),
         openPositionPnl: parseFloat(pnl.openPositionPnl || 0),
         closedPositionPnl: parseFloat(pnl.closedPositionPnl || 0),
         dayPnl: parseFloat(pnl.dayPnl || 0),
-      });
+      };
+      debug('Storing PNL for account:', pnl.accountId, pnlData);
+      service.accountPnL.set(pnl.accountId, pnlData);
       service.emit('pnlUpdate', pnl);
+    } else {
+      debug('No accountId in PNL response');
     }
   } catch (e) {
-    // Ignore decode errors
+    debug('Error decoding Account PNL:', e.message);
   }
 };
 

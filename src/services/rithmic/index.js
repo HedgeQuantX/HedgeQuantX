@@ -10,6 +10,10 @@ const { createOrderHandler, createPnLHandler } = require('./handlers');
 const { fetchAccounts, getTradingAccounts, requestPnLSnapshot, subscribePnLUpdates, getPositions, hashAccountId } = require('./accounts');
 const { placeOrder, cancelOrder, getOrders, getOrderHistory, closePosition } = require('./orders');
 
+// Debug mode
+const DEBUG = process.env.HQX_DEBUG === '1';
+const debug = (...args) => DEBUG && console.log('[Rithmic:Service]', ...args);
+
 // PropFirm configurations
 const PROPFIRM_CONFIGS = {
   'apex': { name: 'Apex Trader Funding', systemName: 'Apex', defaultBalance: 300000, gateway: RITHMIC_ENDPOINTS.CHICAGO },
@@ -94,19 +98,28 @@ class RithmicService extends EventEmitter {
           
           this.credentials = { username, password };
           
+          debug('Accounts found:', this.accounts.length);
+          debug('Account IDs:', this.accounts.map(a => a.accountId));
+          
           // Connect to PNL_PLANT for balance/P&L data
           try {
-            await this.connectPnL(username, password);
+            debug('Connecting to PNL_PLANT...');
+            const pnlConnected = await this.connectPnL(username, password);
+            debug('PNL_PLANT connected:', pnlConnected, 'pnlConn:', !!this.pnlConn);
+            
             if (this.pnlConn) {
+              debug('Requesting P&L snapshot...');
               await requestPnLSnapshot(this);
+              debug('accountPnL map size after snapshot:', this.accountPnL.size);
               subscribePnLUpdates(this);
             }
           } catch (e) {
-            // PnL connection failed, continue without it
+            debug('PnL connection failed:', e.message);
           }
           
           // Get accounts with P&L data (if available)
           const result = await getTradingAccounts(this);
+          debug('Final accounts:', result.accounts.length);
           
           resolve({ success: true, user: this.user, accounts: result.accounts });
         });
