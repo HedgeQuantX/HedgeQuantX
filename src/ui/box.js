@@ -10,14 +10,23 @@ let logoWidth = null;
 
 /**
  * Get logo width for consistent box sizing
+ * Adapts to terminal width for mobile devices
  */
 const getLogoWidth = () => {
+  const termWidth = process.stdout.columns || 80;
+  
+  // Mobile: use terminal width
+  if (termWidth < 60) {
+    return Math.max(termWidth - 2, 40);
+  }
+  
+  // Desktop: use logo width
   if (!logoWidth) {
     const logoText = figlet.textSync('HEDGEQUANTX', { font: 'ANSI Shadow' });
     const lines = logoText.split('\n').filter(line => line.trim().length > 0);
     logoWidth = Math.max(...lines.map(line => line.length)) + 4;
   }
-  return logoWidth;
+  return Math.min(logoWidth, termWidth - 2);
 };
 
 /**

@@ -101,40 +101,74 @@ const banner = async () => {
     }
   }
   
-  // Draw logo HEDGEQUANTX
+  // Draw logo - compact for mobile, full for desktop
+  const termWidth = process.stdout.columns || 80;
+  const isMobile = termWidth < 60;
+  
   console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
   
-  const logo = [
-    '██╗  ██╗███████╗██████╗  ██████╗ ███████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗',
-    '██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝',
-    '███████║█████╗  ██║  ██║██║  ███╗█████╗  ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║   ',
-    '██╔══██║██╔══╝  ██║  ██║██║   ██║██╔══╝  ██║▄▄ ██║██║   ██║██╔══██║██║╚██╗██║   ██║   ',
-    '██║  ██║███████╗██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ',
-    '╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   '
-  ];
-  const logoX = [
-    '██╗  ██╗',
-    '╚██╗██╔╝',
-    ' ╚███╔╝ ',
-    ' ██╔██╗ ',
-    '██╔╝ ██╗',
-    '╚═╝  ╚═╝'
-  ];
-  
-  logo.forEach((line, i) => {
-    const mainPart = chalk.cyan(line);
-    const xPart = chalk.yellow(logoX[i]);
-    const fullLine = mainPart + xPart;
-    const totalLen = line.length + logoX[i].length;
-    const padding = innerWidth - totalLen;
-    const leftPad = Math.floor(padding / 2);
-    const rightPad = padding - leftPad;
-    console.log(chalk.cyan('║') + ' '.repeat(leftPad) + fullLine + ' '.repeat(rightPad) + chalk.cyan('║'));
-  });
+  if (isMobile) {
+    // Compact HQX logo for mobile - X in yellow
+    const logoHQ = [
+      '██╗  ██╗ ██████╗ ',
+      '██║  ██║██╔═══██╗',
+      '███████║██║   ██║',
+      '██╔══██║██║▄▄ ██║',
+      '██║  ██║╚██████╔╝',
+      '╚═╝  ╚═╝ ╚══▀▀═╝ '
+    ];
+    const logoX = [
+      '██╗  ██╗',
+      '╚██╗██╔╝',
+      ' ╚███╔╝ ',
+      ' ██╔██╗ ',
+      '██╔╝ ██╗',
+      '╚═╝  ╚═╝'
+    ];
+    
+    logoHQ.forEach((line, i) => {
+      const fullLine = chalk.cyan(line) + chalk.yellow(logoX[i]);
+      const totalLen = line.length + logoX[i].length;
+      const padding = innerWidth - totalLen;
+      const leftPad = Math.floor(padding / 2);
+      const rightPad = padding - leftPad;
+      console.log(chalk.cyan('║') + ' '.repeat(leftPad) + fullLine + ' '.repeat(rightPad) + chalk.cyan('║'));
+    });
+  } else {
+    // Full HEDGEQUANTX logo for desktop
+    const logo = [
+      '██╗  ██╗███████╗██████╗  ██████╗ ███████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗',
+      '██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝',
+      '███████║█████╗  ██║  ██║██║  ███╗█████╗  ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║   ',
+      '██╔══██║██╔══╝  ██║  ██║██║   ██║██╔══╝  ██║▄▄ ██║██║   ██║██╔══██║██║╚██╗██║   ██║   ',
+      '██║  ██║███████╗██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ',
+      '╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   '
+    ];
+    const logoX = [
+      '██╗  ██╗',
+      '╚██╗██╔╝',
+      ' ╚███╔╝ ',
+      ' ██╔██╗ ',
+      '██╔╝ ██╗',
+      '╚═╝  ╚═╝'
+    ];
+    
+    logo.forEach((line, i) => {
+      const mainPart = chalk.cyan(line);
+      const xPart = chalk.yellow(logoX[i]);
+      const fullLine = mainPart + xPart;
+      const totalLen = line.length + logoX[i].length;
+      const padding = innerWidth - totalLen;
+      const leftPad = Math.floor(padding / 2);
+      const rightPad = padding - leftPad;
+      console.log(chalk.cyan('║') + ' '.repeat(leftPad) + fullLine + ' '.repeat(rightPad) + chalk.cyan('║'));
+    });
+  }
   
   // Tagline
   console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
-  console.log(chalk.cyan('║') + chalk.white(centerText(`Prop Futures Algo Trading  v${version}`, innerWidth)) + chalk.cyan('║'));
+  const tagline = isMobile ? `HQX v${version}` : `Prop Futures Algo Trading  v${version}`;
+  console.log(chalk.cyan('║') + chalk.white(centerText(tagline, innerWidth)) + chalk.cyan('║'));
   
   // Stats bar if connected
   if (statsInfo) {
