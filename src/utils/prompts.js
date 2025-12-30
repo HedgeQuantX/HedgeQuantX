@@ -6,12 +6,27 @@
 const inquirer = require('inquirer');
 
 /**
- * Ensure stdin is ready
+ * Ensure stdin is ready and clear any buffered input
  */
 const prepareStdin = () => {
   try {
+    // Resume if paused
     if (process.stdin.isPaused()) process.stdin.resume();
-    if (process.stdin.isTTY && process.stdin.isRaw) process.stdin.setRawMode(false);
+    
+    // Ensure raw mode is off for line-based input
+    if (process.stdin.isTTY && process.stdin.setRawMode) {
+      process.stdin.setRawMode(false);
+    }
+    
+    // Clear any buffered data by removing all listeners temporarily
+    const listeners = process.stdin.listeners('data');
+    process.stdin.removeAllListeners('data');
+    
+    // Drain any pending input
+    process.stdin.read();
+    
+    // Restore listeners
+    listeners.forEach(l => process.stdin.on('data', l));
   } catch (e) {}
 };
 
