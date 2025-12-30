@@ -186,9 +186,9 @@ class AlgoUI {
     
     this._line(chalk.cyan(GM));
     
-    // Row 5: Latency | Platform
+    // Row 5: Latency | Propfirm
     const r5c1 = buildCell('Latency', `${stats.latency || 0}ms`, latencyColor, colL);
-    const r5c2 = buildCell('Platform', stats.platform || 'N/A', chalk.cyan, colR);
+    const r5c2 = buildCell('Propfirm', stats.propfirm || 'N/A', chalk.cyan, colR);
     row(r5c1.padded, r5c2.padded);
     
     this._line(chalk.cyan(GB));
