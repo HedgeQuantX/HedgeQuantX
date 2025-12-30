@@ -210,17 +210,37 @@ class RithmicService extends EventEmitter {
     };
   }
 
+  /**
+   * Get contracts from Rithmic
+   * TODO: Implement TICKER_PLANT connection to fetch real contracts
+   * For now, returns common futures contracts that are available on Rithmic
+   */
   async getContracts() {
-    const { getContractsWithMonthCode } = require('../../config/contracts');
-    return { success: true, contracts: getContractsWithMonthCode() };
+    // These are the standard Rithmic contract symbols
+    // In production, this should connect to TICKER_PLANT
+    const contracts = [
+      { symbol: 'ESH5', name: 'E-mini S&P 500 (Mar 25)', exchange: 'CME' },
+      { symbol: 'NQH5', name: 'E-mini NASDAQ-100 (Mar 25)', exchange: 'CME' },
+      { symbol: 'MESH5', name: 'Micro E-mini S&P 500 (Mar 25)', exchange: 'CME' },
+      { symbol: 'MNQH5', name: 'Micro E-mini NASDAQ-100 (Mar 25)', exchange: 'CME' },
+      { symbol: 'RTYH5', name: 'E-mini Russell 2000 (Mar 25)', exchange: 'CME' },
+      { symbol: 'YMH5', name: 'E-mini Dow Jones (Mar 25)', exchange: 'CBOT' },
+      { symbol: 'CLG5', name: 'Crude Oil (Feb 25)', exchange: 'NYMEX' },
+      { symbol: 'GCG5', name: 'Gold (Feb 25)', exchange: 'COMEX' },
+      { symbol: 'SIH5', name: 'Silver (Mar 25)', exchange: 'COMEX' },
+      { symbol: 'NGG5', name: 'Natural Gas (Feb 25)', exchange: 'NYMEX' },
+    ];
+    return { success: true, contracts };
   }
 
   async searchContracts(searchText) {
-    const { getContractsWithMonthCode } = require('../../config/contracts');
-    const contracts = getContractsWithMonthCode();
-    if (!searchText) return contracts;
+    const result = await this.getContracts();
+    if (!searchText || !result.success) return result.contracts || [];
     const search = searchText.toUpperCase();
-    return contracts.filter(c => c.symbol.includes(search) || c.name.toUpperCase().includes(search));
+    return result.contracts.filter(c => 
+      c.symbol.toUpperCase().includes(search) || 
+      c.name.toUpperCase().includes(search)
+    );
   }
 
   checkMarketHours() {
