@@ -10,6 +10,7 @@ const { connections } = require('../../services');
 const { HQXServerService } = require('../../services/hqx-server');
 const { AlgoUI } = require('./ui');
 const { logger, prompts } = require('../../utils');
+const { checkMarketHours } = require('../../services/projectx/market');
 
 const log = logger.scope('CopyTrading');
 
@@ -18,6 +19,18 @@ const log = logger.scope('CopyTrading');
  */
 const copyTradingMenu = async () => {
   log.info('Copy Trading menu opened');
+  
+  // Check if market is open
+  const market = checkMarketHours();
+  if (!market.isOpen) {
+    console.log();
+    console.log(chalk.red(`  ${market.message}`));
+    console.log(chalk.gray('  Algo trading is only available when market is open'));
+    console.log();
+    await prompts.waitForEnter();
+    return;
+  }
+  
   const allConns = connections.getAll();
   
   if (allConns.length < 2) {

@@ -10,11 +10,23 @@ const { connections } = require('../../services');
 const { HQXServerService } = require('../../services/hqx-server');
 const { AlgoUI } = require('./ui');
 const { prompts } = require('../../utils');
+const { checkMarketHours } = require('../../services/projectx/market');
 
 /**
  * One Account Menu
  */
 const oneAccountMenu = async (service) => {
+  // Check if market is open
+  const market = checkMarketHours();
+  if (!market.isOpen) {
+    console.log();
+    console.log(chalk.red(`  ${market.message}`));
+    console.log(chalk.gray('  Algo trading is only available when market is open'));
+    console.log();
+    await prompts.waitForEnter();
+    return;
+  }
+  
   const spinner = ora({ text: 'Fetching active accounts...', color: 'yellow' }).start();
   
   const allAccounts = await connections.getAllAccounts();
