@@ -205,50 +205,45 @@ const copyTradingMenu = async () => {
 const selectSymbol = async (service, label) => {
   log.debug('selectSymbol called', { label, hasGetContracts: typeof service.getContracts === 'function' });
   try {
-    // Check if service has getContracts method
-    if (typeof service.getContracts !== 'function') {
-      log.warn('Service does not have getContracts method, using searchContracts fallback');
-      // Fallback: use searchContracts or return predefined list
-      if (typeof service.searchContracts === 'function') {
-        const contracts = await service.searchContracts('');
-        log.debug('searchContracts result', { count: contracts?.length });
-        if (contracts && contracts.length > 0) {
-          const choices = contracts.map(c => ({ name: c.name || c.symbol, value: c }));
-          choices.push({ name: chalk.yellow('< Cancel'), value: null });
-          
-          const { symbol } = await inquirer.prompt([{
-            type: 'list',
-            name: 'symbol',
-            message: `${label} Symbol:`,
-            choices,
-            pageSize: 15
-          }]);
-          return symbol;
-        }
+    let contracts = [];
+    
+    // Try getContracts first
+    if (typeof service.getContracts === 'function') {
+      const result = await service.getContracts();
+      log.debug('getContracts result', { success: result?.success, count: result?.contracts?.length });
+      if (result.success && result.contracts?.length > 0) {
+        contracts = result.contracts;
       }
-      log.error('No contract fetching method available');
+    }
+    
+    // Fallback to searchContracts if no contracts yet
+    if (contracts.length === 0 && typeof service.searchContracts === 'function') {
+      log.debug('Trying searchContracts fallback');
+      // For Rithmic, searchContracts returns array directly
+      const searchResult = await service.searchContracts('ES');
+      log.debug('searchContracts result', { result: searchResult });
+      
+      if (Array.isArray(searchResult)) {
+        contracts = searchResult;
+      } else if (searchResult?.contracts) {
+        contracts = searchResult.contracts;
+      }
+    }
+    
+    // If still no contracts, show error
+    if (!contracts || contracts.length === 0) {
+      log.error('No contracts available');
+      console.log(chalk.red('  No contracts available for this service'));
       return null;
     }
     
-    const result = await service.getContracts();
-    log.debug('getContracts result', { success: result?.success, count: result?.contracts?.length });
-    if (!result.success) return null;
+    log.debug('Contracts loaded', { count: contracts.length });
     
-    const choices = [];
-    const cats = {};
-    
-    for (const c of result.contracts) {
-      const cat = c.group || 'Other';
-      if (!cats[cat]) cats[cat] = [];
-      cats[cat].push(c);
-    }
-    
-    for (const [cat, list] of Object.entries(cats)) {
-      choices.push(new inquirer.Separator(chalk.gray(`--- ${cat} ---`)));
-      for (const c of list.slice(0, 8)) {
-        choices.push({ name: c.name || c.symbol, value: c });
-      }
-    }
+    // Build choices - simple list without categories
+    const choices = contracts.map(c => ({ 
+      name: c.name || c.symbol, 
+      value: c 
+    }));
     choices.push(new inquirer.Separator());
     choices.push({ name: chalk.yellow('< Cancel'), value: null });
     

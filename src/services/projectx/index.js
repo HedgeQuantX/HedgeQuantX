@@ -443,6 +443,35 @@ class ProjectXService {
 
   // ==================== CONTRACTS ====================
 
+  /**
+   * Get popular contracts for trading
+   */
+  async getContracts() {
+    try {
+      // Search for popular futures symbols
+      const symbols = ['ES', 'NQ', 'MES', 'MNQ', 'CL', 'GC', 'RTY', 'YM'];
+      const allContracts = [];
+      
+      for (const sym of symbols) {
+        const response = await this._request(
+          this.propfirm.gatewayApi, '/api/Contract/search', 'POST',
+          { searchText: sym, live: false }
+        );
+        if (response.statusCode === 200) {
+          const contracts = response.data.contracts || response.data || [];
+          // Take first contract for each symbol (front month)
+          if (contracts.length > 0) {
+            allContracts.push(contracts[0]);
+          }
+        }
+      }
+      
+      return { success: true, contracts: allContracts };
+    } catch (error) {
+      return { success: false, contracts: [], error: error.message };
+    }
+  }
+
   async searchContracts(searchText) {
     try {
       const response = await this._request(
