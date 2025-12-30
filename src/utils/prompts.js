@@ -54,16 +54,21 @@ const passwordInput = async (message) => {
 };
 
 /**
- * Confirm Y/n
+ * Confirm - arrow keys selection
  */
 const confirmPrompt = async (message, defaultVal = true) => {
   prepareStdin();
+  const choices = defaultVal 
+    ? [{ name: 'Yes', value: true }, { name: 'No', value: false }]
+    : [{ name: 'No', value: false }, { name: 'Yes', value: true }];
+  
   const { value } = await inquirer.prompt([{
-    type: 'confirm',
+    type: 'list',
     name: 'value',
     message,
-    default: defaultVal,
-    prefix: ''
+    choices,
+    prefix: '',
+    loop: false
   }]);
   return value;
 };

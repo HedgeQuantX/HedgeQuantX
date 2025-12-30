@@ -149,7 +149,12 @@ const getContractsFromAPI = async () => {
   if (projectxConn && typeof projectxConn.service.getContracts === 'function') {
     const result = await projectxConn.service.getContracts();
     if (result.success && result.contracts?.length > 0) {
-      cachedContracts = result.contracts;
+      // Normalize contract structure - API returns { name: "ESH6", description: "E-mini S&P 500..." }
+      cachedContracts = result.contracts.map(c => ({
+        ...c,
+        symbol: c.name || c.symbol,
+        name: c.description || c.name || c.symbol
+      }));
       return cachedContracts;
     }
   }
@@ -162,6 +167,8 @@ const getContractsFromAPI = async () => {
  */
 const selectSymbol = async (service, label) => {
   try {
+    const spinner = ora({ text: 'Loading symbols...', color: 'yellow' }).start();
+    
     // Always use contracts from ProjectX API for consistency
     let contracts = await getContractsFromAPI();
     
@@ -174,15 +181,18 @@ const selectSymbol = async (service, label) => {
     }
     
     if (!contracts || contracts.length === 0) {
-      console.log(chalk.red('  No contracts available'));
+      spinner.fail('No contracts available');
       return null;
     }
+    
+    spinner.succeed(`Found ${contracts.length} contracts`);
     
     const options = contracts.map(c => ({ label: c.name || c.symbol, value: c }));
     options.push({ label: '< Cancel', value: null });
     
     return await prompts.selectOption(`${label} Symbol:`, options);
   } catch (e) {
+    console.log(chalk.red('  Error loading contracts'));
     return null;
   }
 };
