@@ -12,12 +12,17 @@ const { connections } = require('../../services');
 const { HQXServerService } = require('../../services/hqx-server');
 const { FUTURES_SYMBOLS } = require('../../config');
 const { AlgoUI } = require('./ui');
+const { logger } = require('../../utils');
+
+const log = logger.scope('CopyTrading');
 
 /**
  * Copy Trading Menu
  */
 const copyTradingMenu = async () => {
+  log.info('Copy Trading menu opened');
   const allConns = connections.getAll();
+  log.debug('Connections found', { count: allConns.length });
   
   if (allConns.length < 2) {
     console.log();
@@ -60,6 +65,7 @@ const copyTradingMenu = async () => {
   }
   
   spinner.succeed(`Found ${allAccounts.length} active accounts`);
+  log.debug('Active accounts loaded', { count: allAccounts.length, accounts: allAccounts.map(a => ({ propfirm: a.propfirm, name: a.account.accountName })) });
   
   // Step 1: Select Lead Account
   console.log(chalk.cyan('  Step 1: Select LEAD Account (source of trades)'));
@@ -76,8 +82,12 @@ const copyTradingMenu = async () => {
     choices: leadChoices
   }]);
   
-  if (leadIdx === -1) return;
+  if (leadIdx === -1) {
+    log.debug('User cancelled at lead selection');
+    return;
+  }
   const lead = allAccounts[leadIdx];
+  log.debug('Lead account selected', { propfirm: lead.propfirm, account: lead.account.accountName });
   
   // Step 2: Select Follower Account
   console.log();
@@ -98,14 +108,23 @@ const copyTradingMenu = async () => {
     choices: followerChoices
   }]);
   
-  if (followerIdx === -1) return;
+  if (followerIdx === -1) {
+    log.debug('User cancelled at follower selection');
+    return;
+  }
   const follower = allAccounts[followerIdx];
+  log.debug('Follower account selected', { propfirm: follower.propfirm, account: follower.account.accountName });
   
   // Step 3: Select Symbol for Lead
   console.log();
   console.log(chalk.cyan('  Step 3: Select Symbol for LEAD'));
+  log.debug('Selecting symbol for lead', { serviceType: lead.type });
   const leadSymbol = await selectSymbol(lead.service, 'Lead');
-  if (!leadSymbol) return;
+  if (!leadSymbol) {
+    log.debug('Lead symbol selection failed or cancelled');
+    return;
+  }
+  log.debug('Lead symbol selected', { symbol: leadSymbol.name || leadSymbol.symbol });
   
   // Step 4: Select Symbol for Follower
   console.log();
@@ -184,8 +203,35 @@ const copyTradingMenu = async () => {
  * Symbol selection helper
  */
 const selectSymbol = async (service, label) => {
+  log.debug('selectSymbol called', { label, hasGetContracts: typeof service.getContracts === 'function' });
   try {
+    // Check if service has getContracts method
+    if (typeof service.getContracts !== 'function') {
+      log.warn('Service does not have getContracts method, using searchContracts fallback');
+      // Fallback: use searchContracts or return predefined list
+      if (typeof service.searchContracts === 'function') {
+        const contracts = await service.searchContracts('');
+        log.debug('searchContracts result', { count: contracts?.length });
+        if (contracts && contracts.length > 0) {
+          const choices = contracts.map(c => ({ name: c.name || c.symbol, value: c }));
+          choices.push({ name: chalk.yellow('< Cancel'), value: null });
+          
+          const { symbol } = await inquirer.prompt([{
+            type: 'list',
+            name: 'symbol',
+            message: `${label} Symbol:`,
+            choices,
+            pageSize: 15
+          }]);
+          return symbol;
+        }
+      }
+      log.error('No contract fetching method available');
+      return null;
+    }
+    
     const result = await service.getContracts();
+    log.debug('getContracts result', { success: result?.success, count: result?.contracts?.length });
     if (!result.success) return null;
     
     const choices = [];

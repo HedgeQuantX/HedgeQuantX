@@ -9,6 +9,9 @@ const ora = require('ora');
 
 const { connections } = require('./services');
 const { getLogoWidth, centerText, prepareStdin } = require('./ui');
+const { logger } = require('./utils');
+
+const log = logger.scope('App');
 
 // Pages
 const { showStats } = require('./pages/stats');
@@ -292,19 +295,23 @@ const mainMenu = async () => {
  */
 const run = async () => {
   try {
+    log.info('Starting HQX CLI');
     await banner();
     
     // Try to restore session
+    log.debug('Attempting to restore session');
     const spinner = ora({ text: 'Restoring session...', color: 'yellow' }).start();
     const restored = await connections.restoreFromStorage();
     
     if (restored) {
       spinner.succeed('Session restored');
       currentService = connections.getAll()[0].service;
+      log.info('Session restored', { connections: connections.count() });
       // Refresh stats after session restore
       await refreshStats();
     } else {
       spinner.info('No active session');
+      log.debug('No session to restore');
     }
 
     // Main loop
@@ -318,8 +325,10 @@ const run = async () => {
         
         if (!connections.isConnected()) {
           const choice = await mainMenu();
+          log.debug('Main menu choice', { choice });
           
           if (choice === 'exit') {
+            log.info('User exit');
             console.log(chalk.gray('Goodbye!'));
             process.exit(0);
           }
@@ -349,6 +358,7 @@ const run = async () => {
           }
         } else {
           const action = await dashboardMenu(currentService);
+          log.debug('Dashboard action', { action });
           
           switch (action) {
             case 'accounts':
