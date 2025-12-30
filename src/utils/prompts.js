@@ -91,10 +91,17 @@ const numberInput = async (message, defaultVal = 1, min = 1, max = 1000) => {
 };
 
 /**
- * Select - just text input, map to value
+ * Select - display options and text input, map to value
  */
 const selectOption = async (message, options) => {
   prepareStdin();
+  
+  // Display options
+  options.forEach((opt, i) => {
+    console.log(`  [${i + 1}] ${opt.label}`);
+  });
+  console.log();
+  
   const { value } = await inquirer.prompt([{
     type: 'input',
     name: 'value',
