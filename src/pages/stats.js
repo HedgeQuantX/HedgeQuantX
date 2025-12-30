@@ -24,7 +24,7 @@ const {
  * Show Stats Page
  */
 const showStats = async (service) => {
-  const spinner = ora('Fetching stats for all accounts...').start();
+  const spinner = ora({ text: 'Fetching stats for all accounts...', color: 'yellow' }).start();
   
   let allAccountsData = [];
   

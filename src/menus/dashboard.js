@@ -178,7 +178,7 @@ const handleUpdate = async () => {
       currentVersion = 'unknown';
     }
     
-    spinner = ora('Checking for updates...').start();
+    spinner = ora({ text: 'Checking for updates...', color: 'yellow' }).start();
     
     // Check latest version on npm with timeout
     spinner.text = 'Checking npm registry...';
@@ -235,7 +235,7 @@ const handleUpdate = async () => {
     }
     
     // Update via npm
-    spinner = ora(`Updating v${currentVersion} -> v${latestVersion}...`).start();
+    spinner = ora({ text: `Updating v${currentVersion} -> v${latestVersion}...`, color: 'yellow' }).start();
     
     try {
       execSync('npm install -g hedgequantx@latest 2>/dev/null', { 

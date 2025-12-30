@@ -17,7 +17,7 @@ const { AlgoUI, checkMarketStatus } = require('./ui');
  * One Account Menu - Select account and launch
  */
 const oneAccountMenu = async (service) => {
-  const spinner = ora('Fetching active accounts...').start();
+  const spinner = ora({ text: 'Fetching active accounts...', color: 'yellow' }).start();
   
   // Get ALL accounts from ALL connections
   const allAccounts = await connections.getAllAccounts();
@@ -76,7 +76,7 @@ const oneAccountMenu = async (service) => {
  * Symbol selection
  */
 const selectSymbol = async (service, account) => {
-  const spinner = ora('Loading contracts...').start();
+  const spinner = ora({ text: 'Loading contracts...', color: 'yellow' }).start();
   
   const contractsResult = await service.getContracts();
   if (!contractsResult.success) {
@@ -199,7 +199,7 @@ const launchAlgo = async (service, account, contract, config) => {
   // Connect to HQX Server
   const hqx = new HQXServerService();
   
-  const spinner = ora('Connecting to HQX Server...').start();
+  const spinner = ora({ text: 'Connecting to HQX Server...', color: 'yellow' }).start();
   
   try {
     const auth = await hqx.authenticate(account.accountId.toString(), account.propfirm || 'topstep');

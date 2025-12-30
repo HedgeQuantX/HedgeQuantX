@@ -16,7 +16,7 @@ const { getLogoWidth, drawBoxHeader, drawBoxFooter, drawBoxRow, drawBoxSeparator
  * @param {Object} service - Current service
  */
 const showOrders = async (service) => {
-  const spinner = ora('Fetching orders...').start();
+  const spinner = ora({ text: 'Fetching orders...', color: 'yellow' }).start();
   const boxWidth = getLogoWidth();
 
   // Get all accounts first

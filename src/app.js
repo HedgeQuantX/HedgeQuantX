@@ -286,7 +286,7 @@ const run = async () => {
     await banner();
     
     // Try to restore session
-    const spinner = ora('Restoring session...').start();
+    const spinner = ora({ text: 'Restoring session...', color: 'yellow' }).start();
     const restored = await connections.restoreFromStorage();
     
     if (restored) {

@@ -16,7 +16,7 @@ const { getLogoWidth, drawBoxHeader, drawBoxFooter, drawBoxRow, drawBoxSeparator
  * @param {Object} service - Current service
  */
 const showPositions = async (service) => {
-  const spinner = ora('Fetching positions...').start();
+  const spinner = ora({ text: 'Fetching positions...', color: 'yellow' }).start();
   const boxWidth = getLogoWidth();
   const innerWidth = boxWidth - 2;
 

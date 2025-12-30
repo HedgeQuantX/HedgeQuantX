@@ -136,7 +136,7 @@ const projectXMenu = async () => {
   const selectedPropfirm = numbered[selectedIdx];
 
   const credentials = await loginPrompt(selectedPropfirm.name);
-  const spinner = ora('Authenticating...').start();
+  const spinner = ora({ text: 'Authenticating...', color: 'yellow' }).start();
 
   try {
     const service = new ProjectXService(selectedPropfirm.key);
@@ -232,7 +232,7 @@ const rithmicMenu = async () => {
   const selectedPropfirm = numbered[selectedIdx];
 
   const credentials = await loginPrompt(selectedPropfirm.name);
-  const spinner = ora('Connecting to Rithmic...').start();
+  const spinner = ora({ text: 'Connecting to Rithmic...', color: 'yellow' }).start();
 
   try {
     const service = new RithmicService(selectedPropfirm.key);
@@ -317,7 +317,7 @@ const tradovateMenu = async () => {
   const selectedPropfirm = numbered[selectedIdx];
 
   const credentials = await loginPrompt(selectedPropfirm.name);
-  const spinner = ora('Connecting to Tradovate...').start();
+  const spinner = ora({ text: 'Connecting to Tradovate...', color: 'yellow' }).start();
 
   try {
     const service = new TradovateService(selectedPropfirm.key);

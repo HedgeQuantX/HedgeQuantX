@@ -249,7 +249,7 @@ const launchCopyTrading = async (config) => {
   // Connect to HQX Server
   const hqx = new HQXServerService();
   
-  const spinner = ora('Connecting to HQX Server...').start();
+  const spinner = ora({ text: 'Connecting to HQX Server...', color: 'yellow' }).start();
   
   try {
     const auth = await hqx.authenticate(lead.account.accountId.toString(), lead.propfirm || 'topstep');
