@@ -1880,13 +1880,23 @@ const launchCopyTrading = async (config) => {
     });
 
     hqxServer.on('error', (data) => {
-      addLog('error', data.message || 'Unknown error');
+      const errorMsg = data.message || 'Unknown error';
+      addLog('error', errorMsg);
+      
+      // If algo failed to start, switch to monitor mode
+      if (errorMsg.includes('Failed to start') || errorMsg.includes('WebSocket failed') || errorMsg.includes('Échec')) {
+        if (hqxConnected) {
+          hqxConnected = false;
+          addLog('warning', 'Switching to Monitor Mode (watching Lead positions)');
+          displayUI();
+        }
+      }
     });
 
     hqxServer.on('disconnected', () => {
       hqxConnected = false;
       if (!stopReason) {
-        addLog('error', 'HQX Server disconnected');
+        addLog('warning', 'HQX Server disconnected - Switching to Monitor Mode');
       }
     });
 
