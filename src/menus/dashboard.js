@@ -98,35 +98,27 @@ const dashboardMenu = async (service) => {
     console.log(chalk.cyan('║') + leftPadded + rightPadded + chalk.cyan('║'));
   };
   
-  // Display menu items in 2 columns inside the box
-  menuRow(chalk.cyan('[1] View Accounts'), chalk.cyan('[2] View Stats'));
-  menuRow(chalk.cyan('[+] Add Prop-Account'), chalk.magenta('[A] Algo-Trading'));
-  menuRow(chalk.yellow('[U] Update HQX'), chalk.red('[X] Disconnect'));
-  
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
   
-  // Input prompt
-  const { choice } = await inquirer.prompt([
+  // Use list type for stable input handling
+  const { action } = await inquirer.prompt([
     {
-      type: 'input',
-      name: 'choice',
+      type: 'list',
+      name: 'action',
       message: chalk.cyan('Select:'),
-      prefix: ''
+      choices: [
+        { name: chalk.cyan('[1] View Accounts'), value: 'accounts' },
+        { name: chalk.cyan('[2] View Stats'), value: 'stats' },
+        { name: chalk.cyan('[+] Add Prop-Account'), value: 'add_prop_account' },
+        { name: chalk.magenta('[A] Algo-Trading'), value: 'algotrading' },
+        { name: chalk.yellow('[U] Update HQX'), value: 'update' },
+        { name: chalk.red('[X] Disconnect'), value: 'disconnect' }
+      ],
+      loop: false
     }
   ]);
   
-  // Map input to action
-  const input = (choice || '').toString().toLowerCase().trim();
-  const actionMap = {
-    '1': 'accounts',
-    '2': 'stats',
-    '+': 'add_prop_account',
-    'a': 'algotrading',
-    'u': 'update',
-    'x': 'disconnect'
-  };
-  
-  return actionMap[input] || null;
+  return action;
 };
 
 /**
