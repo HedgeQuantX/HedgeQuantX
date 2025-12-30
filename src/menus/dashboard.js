@@ -36,7 +36,6 @@ const dashboardMenu = async (service) => {
   };
   
   // Dashboard box header
-  console.log();
   console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
   console.log(makeLine(chalk.yellow.bold('Welcome, HQX Trader!'), 'center'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
