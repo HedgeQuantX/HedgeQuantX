@@ -1587,13 +1587,8 @@ const launchCopyTrading = async (config) => {
     bufferLine(chalk.cyan(V) + chalk.cyan(' ╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ') + chalk.yellow('╚═╝  ╚═╝') + ' ' + chalk.cyan(V));
     bufferLine(chalk.cyan(MID));
     
-    // Centered title
-    const title1 = `Copy Trading System  v${version}`;
-    bufferLine(chalk.cyan(V) + chalk.white(center(title1, W)) + chalk.cyan(V));
-    bufferLine(chalk.cyan(MID));
-    
-    // Centered subtitle
-    const title2 = 'HQX Ultra-Scalping Algorithm';
+    // Centered subtitle only
+    const title2 = 'HQX Ultra-Scalping';
     bufferLine(chalk.cyan(V) + chalk.yellow(center(title2, W)) + chalk.cyan(V));
     
     // Grid layout - 2 columns
