@@ -65,9 +65,8 @@ const loginPrompt = async (propfirmName) => {
 const projectXMenu = async () => {
   const propfirms = getPropFirmsByPlatform('ProjectX');
   const boxWidth = getLogoWidth();
-  const innerWidth = boxWidth - 2;
-  const numCols = 3;
-  const colWidth = Math.floor(innerWidth / numCols);
+  const W = boxWidth - 2; // Inner width
+  const col1Width = Math.floor(W / 2);
   
   // Build numbered list
   const numbered = propfirms.map((pf, i) => ({
@@ -78,61 +77,50 @@ const projectXMenu = async () => {
   
   // PropFirm selection box
   console.log();
-  console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
-  console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PROPFIRM', innerWidth)) + chalk.cyan('║'));
-  console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
+  console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
+  console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PROPFIRM (ProjectX)', W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
-  // Display in 3 columns with fixed width alignment
-  const rows = Math.ceil(numbered.length / numCols);
-  const maxNum = numbered.length;
-  const numWidth = maxNum >= 10 ? 4 : 3; // [XX] or [X]
+  // Display in 2 columns
+  const menuRow = (left, right) => {
+    const leftPlain = left ? left.replace(/\x1b\[[0-9;]*m/g, '') : '';
+    const rightPlain = right ? right.replace(/\x1b\[[0-9;]*m/g, '') : '';
+    const leftPadded = '  ' + (left || '') + ' '.repeat(Math.max(0, col1Width - leftPlain.length - 2));
+    const rightPadded = (right || '') + ' '.repeat(Math.max(0, W - col1Width - rightPlain.length));
+    console.log(chalk.cyan('║') + leftPadded + rightPadded + chalk.cyan('║'));
+  };
   
-  for (let row = 0; row < rows; row++) {
-    let line = '';
-    for (let col = 0; col < numCols; col++) {
-      const idx = row + col * rows;
-      if (idx < numbered.length) {
-        const item = numbered[idx];
-        const numStr = item.num.toString().padStart(2, ' ');
-        const coloredText = chalk.cyan(`[${numStr}]`) + ' ' + chalk.white(item.name);
-        const textLen = 4 + 1 + item.name.length; // [XX] + space + name
-        const padding = colWidth - textLen - 2;
-        line += '  ' + coloredText + ' '.repeat(Math.max(0, padding));
-      } else {
-        line += ' '.repeat(colWidth);
-      }
-    }
-    // Adjust for exact width
-    const lineLen = line.replace(/\x1b\[[0-9;]*m/g, '').length;
-    const adjust = innerWidth - lineLen;
-    console.log(chalk.cyan('║') + line + ' '.repeat(Math.max(0, adjust)) + chalk.cyan('║'));
+  // Display propfirms in 2 columns
+  for (let i = 0; i < numbered.length; i += 2) {
+    const left = numbered[i];
+    const right = numbered[i + 1];
+    const leftText = chalk.cyan(`[${left.num.toString().padStart(2, ' ')}]`) + ' ' + chalk.white(left.name);
+    const rightText = right ? chalk.cyan(`[${right.num.toString().padStart(2, ' ')}]`) + ' ' + chalk.white(right.name) : '';
+    menuRow(leftText, rightText);
   }
   
-  console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
-  const backText = '  ' + chalk.red('[X] Back');
-  const backLen = '[X] Back'.length + 2;
-  console.log(chalk.cyan('║') + backText + ' '.repeat(innerWidth - backLen) + chalk.cyan('║'));
-  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
+  // Back option
+  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
+  const backLine = '  ' + chalk.red('[X] Back') + ' '.repeat(W - 10);
+  console.log(chalk.cyan('║') + backLine + chalk.cyan('║'));
+  console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
   console.log();
 
-  const validInputs = numbered.map(n => n.num.toString());
-  validInputs.push('x', 'X');
-  
   const { action } = await inquirer.prompt([
     {
       type: 'input',
       name: 'action',
-      message: chalk.cyan(`Enter choice (1-${numbered.length}/X):`),
-      validate: (input) => {
-        if (validInputs.includes(input)) return true;
-        return `Please enter 1-${numbered.length} or X`;
-      }
+      message: chalk.cyan('Select:'),
+      prefix: ''
     }
   ]);
 
-  if (action.toLowerCase() === 'x') return null;
+  const input = (action || '').toLowerCase().trim();
+  if (input === 'x') return null;
   
-  const selectedIdx = parseInt(action) - 1;
+  const selectedIdx = parseInt(input) - 1;
+  if (isNaN(selectedIdx) || selectedIdx < 0 || selectedIdx >= numbered.length) return null;
+  
   const selectedPropfirm = numbered[selectedIdx];
 
   const credentials = await loginPrompt(selectedPropfirm.name);
@@ -345,53 +333,46 @@ const tradovateMenu = async () => {
  */
 const addPropAccountMenu = async () => {
   const boxWidth = getLogoWidth();
-  const innerWidth = boxWidth - 2;
-  const col1Width = Math.floor(innerWidth / 2);
-  const col2Width = innerWidth - col1Width;
+  const W = boxWidth - 2; // Inner width
+  const col1Width = Math.floor(W / 2);
   
   console.log();
-  console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
-  console.log(chalk.cyan('║') + chalk.white.bold(centerText('ADD PROP ACCOUNT', innerWidth)) + chalk.cyan('║'));
-  console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+  console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
+  console.log(chalk.cyan('║') + chalk.white.bold(centerText('ADD PROP ACCOUNT', W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
   const menuRow = (left, right) => {
-    const leftText = '  ' + left;
-    const rightText = right ? '  ' + right : '';
-    const leftLen = leftText.replace(/\x1b\[[0-9;]*m/g, '').length;
-    const rightLen = rightText.replace(/\x1b\[[0-9;]*m/g, '').length;
-    const leftPad = col1Width - leftLen;
-    const rightPad = col2Width - rightLen;
-    console.log(chalk.cyan('║') + leftText + ' '.repeat(Math.max(0, leftPad)) + rightText + ' '.repeat(Math.max(0, rightPad)) + chalk.cyan('║'));
+    const leftPlain = left.replace(/\x1b\[[0-9;]*m/g, '');
+    const rightPlain = right.replace(/\x1b\[[0-9;]*m/g, '');
+    const leftPadded = '  ' + left + ' '.repeat(Math.max(0, col1Width - leftPlain.length - 2));
+    const rightPadded = right + ' '.repeat(Math.max(0, W - col1Width - rightPlain.length));
+    console.log(chalk.cyan('║') + leftPadded + rightPadded + chalk.cyan('║'));
   };
   
   menuRow(chalk.cyan('[1] ProjectX'), chalk.cyan('[2] Rithmic'));
   menuRow(chalk.cyan('[3] Tradovate'), chalk.red('[X] Back'));
   
-  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
+  console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
   console.log();
 
   const { action } = await inquirer.prompt([
     {
       type: 'input',
       name: 'action',
-      message: chalk.cyan('Enter choice (1/2/3/X):'),
-      validate: (input) => {
-        const valid = ['1', '2', '3', 'x', 'X'];
-        if (valid.includes(input)) return true;
-        return 'Please enter 1, 2, 3 or X';
-      }
+      message: chalk.cyan('Select:'),
+      prefix: ''
     }
   ]);
 
+  const input = (action || '').toLowerCase().trim();
   const actionMap = {
     '1': 'projectx',
     '2': 'rithmic',
     '3': 'tradovate',
-    'x': null,
-    'X': null
+    'x': null
   };
 
-  return actionMap[action];
+  return actionMap[input] || null;
 };
 
 module.exports = {

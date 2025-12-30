@@ -40,12 +40,12 @@ const dashboardMenu = async (service) => {
   console.log(makeLine(chalk.yellow.bold('Welcome, HQX Trader!'), 'center'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
-  // Show connected propfirms on one line (max 3)
+  // Show connected propfirms centered on one line (max 3)
   const allConns = connections.getAll();
   if (allConns.length > 0) {
     const propfirms = allConns.slice(0, 3).map(c => c.propfirm || c.type || 'Connected');
-    const propfirmLine = '  ' + propfirms.map(p => chalk.green('● ') + chalk.white(p)).join('    ');
-    console.log(makeLine(propfirmLine));
+    const propfirmText = propfirms.map(p => chalk.green('● ') + chalk.white(p)).join('    ');
+    console.log(makeLine(propfirmText, 'center'));
   }
   
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
