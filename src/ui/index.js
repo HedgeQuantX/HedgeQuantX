@@ -36,25 +36,9 @@ const prepareStdin = () => {
     }
     
     // Reset stdin to proper state for inquirer
-    if (process.stdin.isTTY) {
-      // Disable raw mode if it was left on
-      if (process.stdin.isRaw) {
-        process.stdin.setRawMode(false);
-      }
+    if (process.stdin.isTTY && process.stdin.isRaw) {
+      process.stdin.setRawMode(false);
     }
-    
-    // Clear any buffered input by removing old listeners temporarily
-    const oldListeners = process.stdin.listeners('data');
-    process.stdin.removeAllListeners('data');
-    
-    // Restore listeners after a tick
-    setImmediate(() => {
-      oldListeners.forEach(listener => {
-        if (!process.stdin.listeners('data').includes(listener)) {
-          process.stdin.on('data', listener);
-        }
-      });
-    });
   } catch (e) {
     // Ignore errors
   }

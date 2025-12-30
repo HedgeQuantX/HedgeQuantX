@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "HQX CLI Debug",
+      "program": "${workspaceFolder}/bin/cli.js",
+      "console": "integratedTerminal",
+      "env": {
+        "HQX_DEBUG": "1",
+        "HQX_LOG_FILE": "1"
+      }
+    }
+  ]
+}
