@@ -33,6 +33,8 @@ const copyTradingMenu = async () => {
   console.log();
   
   // Get all active accounts from all connections
+  const spinner = ora({ text: 'Fetching accounts...', color: 'yellow' }).start();
+  
   const allAccounts = [];
   for (const conn of allConns) {
     try {
@@ -52,10 +54,12 @@ const copyTradingMenu = async () => {
   }
   
   if (allAccounts.length < 2) {
-    console.log(chalk.yellow('  Need at least 2 active accounts'));
+    spinner.fail('Need at least 2 active accounts');
     await inquirer.prompt([{ type: 'input', name: 'c', message: 'Press Enter...' }]);
     return;
   }
+  
+  spinner.succeed(`Found ${allAccounts.length} active accounts`);
   
   // Step 1: Select Lead Account
   console.log(chalk.cyan('  Step 1: Select LEAD Account (source of trades)'));
