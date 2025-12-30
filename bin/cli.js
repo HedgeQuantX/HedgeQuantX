@@ -27,7 +27,8 @@ process.on('unhandledRejection', (err) => {
 program
   .name('hedgequantx')
   .description('Prop Futures Algo Trading CLI')
-  .version(pkg.version);
+  .version(pkg.version)
+  .option('-u, --update', 'Update HQX to latest version');
 
 program
   .command('start', { isDefault: true })
@@ -43,6 +44,19 @@ program
   .action(() => {
     console.log(`HedgeQuantX CLI v${pkg.version}`);
   });
+
+// Handle -u flag before parsing commands
+if (process.argv.includes('-u') || process.argv.includes('--update')) {
+  const { execSync } = require('child_process');
+  console.log('Updating HedgeQuantX...');
+  try {
+    execSync('npm install -g hedgequantx@latest', { stdio: 'inherit' });
+    console.log('Update complete! Run "hqx" to start.');
+  } catch (e) {
+    console.error('Update failed:', e.message);
+  }
+  process.exit(0);
+}
 
 // Parse and run
 program.parse(process.argv);
