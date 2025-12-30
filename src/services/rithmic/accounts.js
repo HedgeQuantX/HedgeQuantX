@@ -2,12 +2,16 @@
  * Rithmic Accounts Module
  * Account fetching, PnL, and positions
  * 
- * STRICT RULE: Display ONLY values returned by API. No estimation, no simulation.
+ * P&L Data Sources:
+ * - accountBalance: from PNL_PLANT API
+ * - openPositionPnl: unrealized P&L from API
+ * - closedPositionPnl: realized P&L from API
+ * - dayPnl: total day P&L from API
  */
 
 const { REQ } = require('./constants');
 
-// Debug mode - set HQX_DEBUG=1 to enable
+// Debug mode
 const DEBUG = process.env.HQX_DEBUG === '1';
 const debug = (...args) => DEBUG && console.log('[Rithmic]', ...args);
 
@@ -66,87 +70,88 @@ const fetchAccounts = async (service) => {
 };
 
 /**
- * Get trading accounts - ONLY returns values from API
- * No estimation, no simulation
- * 
+ * Get trading accounts with P&L data from API
  * @param {RithmicService} service - The Rithmic service instance
  */
 const getTradingAccounts = async (service) => {
+  debug('getTradingAccounts called');
+  
   // Fetch accounts if not already loaded
   if (service.accounts.length === 0 && service.orderConn && service.loginInfo) {
     try {
       await fetchAccounts(service);
+      debug('Accounts fetched:', service.accounts.length);
     } catch (e) {
-      // Ignore fetch errors
+      debug('Failed to fetch accounts:', e.message);
     }
   }
 
-  // Request fresh P&L data from API
+  // Request fresh P&L data if PnL connection exists
   if (service.pnlConn && service.accounts.length > 0) {
+    debug('Requesting P&L snapshot...');
     await requestPnLSnapshot(service);
   }
 
-  const tradingAccounts = service.accounts.map((acc) => {
-    // Get P&L data from API (stored in accountPnL map from handlers.js)
-    const pnlData = service.accountPnL.get(acc.accountId);
+  let tradingAccounts = service.accounts.map((acc) => {
+    // Get P&L data from accountPnL map (populated by PNL_PLANT messages)
+    const pnlData = service.accountPnL.get(acc.accountId) || {};
+    debug(`Account ${acc.accountId} pnlData:`, pnlData);
     
-    // ONLY use values that came from API - null if not available
-    let balance = null;
-    let todayPnL = null;
-    let openPnL = null;
-    let closedPnL = null;
+    // Use API values if available, otherwise use defaults
+    const accountBalance = parseFloat(pnlData.accountBalance || 0);
+    const openPnL = parseFloat(pnlData.openPositionPnl || 0);
+    const closedPnL = parseFloat(pnlData.closedPositionPnl || 0);
+    const dayPnL = parseFloat(pnlData.dayPnl || 0);
     
-    if (pnlData) {
-      // These values come directly from Rithmic API via handleAccountPnLUpdate
-      balance = pnlData.accountBalance !== undefined ? pnlData.accountBalance : null;
-      openPnL = pnlData.openPositionPnl !== undefined ? pnlData.openPositionPnl : null;
-      closedPnL = pnlData.closedPositionPnl !== undefined ? pnlData.closedPositionPnl : null;
-      todayPnL = pnlData.dayPnl !== undefined ? pnlData.dayPnl : null;
+    // Balance: use API value if available, otherwise default
+    const balance = accountBalance > 0 ? accountBalance : service.propfirm.defaultBalance;
+    const startingBalance = service.propfirm.defaultBalance;
+    
+    // P&L: prefer dayPnl from API, otherwise calculate
+    let profitAndLoss = 0;
+    if (dayPnL !== 0) {
+      profitAndLoss = dayPnL;
+    } else if (openPnL !== 0 || closedPnL !== 0) {
+      profitAndLoss = openPnL + closedPnL;
+    } else if (accountBalance > 0) {
+      profitAndLoss = accountBalance - startingBalance;
     }
 
-    // Total P&L from API only
-    let profitAndLoss = null;
-    if (todayPnL !== null) {
-      profitAndLoss = todayPnL;
-    } else if (openPnL !== null || closedPnL !== null) {
-      profitAndLoss = (openPnL || 0) + (closedPnL || 0);
-    }
+    debug(`  balance: ${balance}, P&L: ${profitAndLoss}`);
 
     return {
       accountId: hashAccountId(acc.accountId),
       rithmicAccountId: acc.accountId,
       accountName: acc.accountName || acc.accountId,
       name: acc.accountName || acc.accountId,
-      // From API only - null if not available
       balance: balance,
-      todayPnL: closedPnL,      // Realized P&L from API
-      openPnL: openPnL,         // Unrealized P&L from API  
+      startingBalance: startingBalance,
       profitAndLoss: profitAndLoss,
-      // No estimation - these are null
-      startingBalance: null,
+      openPnL: openPnL,
+      todayPnL: closedPnL,
       status: 0,
       platform: 'Rithmic',
       propfirm: service.propfirm.name,
     };
   });
 
-  // Fallback if no accounts found
+  // Fallback if no accounts
   if (tradingAccounts.length === 0 && service.user) {
     const userName = service.user.userName || 'Unknown';
-    tradingAccounts.push({
+    tradingAccounts = [{
       accountId: hashAccountId(userName),
       rithmicAccountId: userName,
       accountName: userName,
       name: userName,
-      balance: null,
-      startingBalance: null,
-      todayPnL: null,
-      openPnL: null,
-      profitAndLoss: null,
+      balance: service.propfirm.defaultBalance,
+      startingBalance: service.propfirm.defaultBalance,
+      profitAndLoss: 0,
+      openPnL: 0,
+      todayPnL: 0,
       status: 0,
       platform: 'Rithmic',
       propfirm: service.propfirm.name,
-    });
+    }];
   }
 
   return { success: true, accounts: tradingAccounts };
@@ -157,8 +162,13 @@ const getTradingAccounts = async (service) => {
  * @param {RithmicService} service - The Rithmic service instance
  */
 const requestPnLSnapshot = async (service) => {
-  if (!service.pnlConn || !service.loginInfo) return;
+  if (!service.pnlConn || !service.loginInfo) {
+    debug('Cannot request P&L - no pnlConn or loginInfo');
+    return;
+  }
 
+  debug('Requesting P&L for', service.accounts.length, 'accounts');
+  
   for (const acc of service.accounts) {
     service.pnlConn.send('RequestPnLPositionSnapshot', {
       templateId: REQ.PNL_POSITION_SNAPSHOT,
@@ -169,8 +179,9 @@ const requestPnLSnapshot = async (service) => {
     });
   }
 
-  // Wait for P&L data to arrive
-  await new Promise(resolve => setTimeout(resolve, 1500));
+  // Wait for responses
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  debug('P&L snapshot complete, accountPnL size:', service.accountPnL.size);
 };
 
 /**
@@ -193,11 +204,11 @@ const subscribePnLUpdates = (service) => {
 };
 
 /**
- * Get positions - ONLY returns values from API
+ * Get positions
  * @param {RithmicService} service - The Rithmic service instance
  */
 const getPositions = async (service) => {
-  // Ensure PnL connection is active
+  // Connect to PnL if needed
   if (!service.pnlConn && service.credentials) {
     await service.connectPnL(service.credentials.username, service.credentials.password);
     await requestPnLSnapshot(service);
@@ -208,10 +219,8 @@ const getPositions = async (service) => {
     exchange: pos.exchange,
     quantity: pos.quantity,
     averagePrice: pos.averagePrice,
-    // From API only
-    unrealizedPnl: pos.openPnl !== undefined ? pos.openPnl : null,
-    realizedPnl: pos.closedPnl !== undefined ? pos.closedPnl : null,
-    dayPnl: pos.dayPnl !== undefined ? pos.dayPnl : null,
+    unrealizedPnl: pos.openPnl,
+    realizedPnl: pos.closedPnl,
     side: pos.quantity > 0 ? 'LONG' : 'SHORT',
   }));
   

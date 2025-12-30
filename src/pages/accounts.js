@@ -80,12 +80,14 @@ const showAccounts = async (service) => {
     const pf2 = acc2 ? chalk.magenta(acc2.propfirm || 'Unknown') : '';
     console.log(chalk.cyan('║') + fmtRow('PropFirm:', pf1, col1) + chalk.cyan('│') + (acc2 ? fmtRow('PropFirm:', pf2, col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
-    // Balance
-    const bal1 = acc1.balance || 0;
-    const bal2 = acc2 ? (acc2.balance || 0) : 0;
-    const balColor1 = bal1 >= 0 ? chalk.green : chalk.red;
-    const balColor2 = bal2 >= 0 ? chalk.green : chalk.red;
-    console.log(chalk.cyan('║') + fmtRow('Balance:', balColor1('$' + bal1.toLocaleString()), col1) + chalk.cyan('│') + (acc2 ? fmtRow('Balance:', balColor2('$' + bal2.toLocaleString()), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+    // Balance - show '--' if null (not available from API)
+    const bal1 = acc1.balance;
+    const bal2 = acc2 ? acc2.balance : null;
+    const balStr1 = bal1 !== null && bal1 !== undefined ? '$' + bal1.toLocaleString() : '--';
+    const balStr2 = bal2 !== null && bal2 !== undefined ? '$' + bal2.toLocaleString() : '--';
+    const balColor1 = bal1 === null ? chalk.gray : (bal1 >= 0 ? chalk.green : chalk.red);
+    const balColor2 = bal2 === null ? chalk.gray : (bal2 >= 0 ? chalk.green : chalk.red);
+    console.log(chalk.cyan('║') + fmtRow('Balance:', balColor1(balStr1), col1) + chalk.cyan('│') + (acc2 ? fmtRow('Balance:', balColor2(balStr2), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
     // Status
     const status1 = ACCOUNT_STATUS[acc1.status] || { text: 'Unknown', color: 'gray' };

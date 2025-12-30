@@ -94,16 +94,21 @@ class RithmicService extends EventEmitter {
           
           this.credentials = { username, password };
           
-          const formattedAccounts = this.accounts.map(acc => ({
-            accountId: acc.accountId,
-            accountName: acc.accountName || acc.accountId,
-            balance: this.propfirm.defaultBalance,
-            startingBalance: this.propfirm.defaultBalance,
-            profitAndLoss: 0,
-            status: 0
-          }));
+          // Connect to PNL_PLANT for balance/P&L data
+          try {
+            await this.connectPnL(username, password);
+            if (this.pnlConn) {
+              await requestPnLSnapshot(this);
+              subscribePnLUpdates(this);
+            }
+          } catch (e) {
+            // PnL connection failed, continue without it
+          }
           
-          resolve({ success: true, user: this.user, accounts: formattedAccounts });
+          // Get accounts with P&L data (if available)
+          const result = await getTradingAccounts(this);
+          
+          resolve({ success: true, user: this.user, accounts: result.accounts });
         });
 
         this.orderConn.once('loginFailed', (data) => {
