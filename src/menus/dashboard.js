@@ -151,43 +151,19 @@ const handleUpdate = async () => {
     
     // Compare versions
     if (currentVersion === latestVersion) {
-      spinner.succeed('Already up to date!');
+      spinner.succeed(`Already up to date! (v${currentVersion})`);
       console.log();
-      console.log(chalk.green(`  You have the latest version: v${currentVersion}`));
-      console.log();
-      await waitForEnter();
+      await new Promise(r => setTimeout(r, 2000));
       return;
     }
     
-    // Ask user before updating
-    spinner.stop();
-    console.log();
-    console.log(chalk.cyan(`  Current version: v${currentVersion}`));
-    console.log(chalk.green(`  Latest version:  v${latestVersion}`));
-    console.log();
-    
-    prepareStdin();
-    const { confirm } = await inquirer.prompt([{
-      type: 'confirm',
-      name: 'confirm',
-      message: 'Do you want to update now?',
-      default: true
-    }]);
-    
-    if (!confirm) {
-      console.log(chalk.gray('  Update cancelled'));
-      console.log();
-      await waitForEnter();
-      return;
-    }
-    
-    // Update via npm
-    spinner = ora({ text: `Updating v${currentVersion} -> v${latestVersion}...`, color: 'yellow' }).start();
+    // Show version info and update automatically
+    spinner.text = `Updating v${currentVersion} → v${latestVersion}...`;
     
     try {
       execSync('npm install -g hedgequantx@latest 2>/dev/null', { 
         stdio: 'pipe',
-        timeout: 120000,  // 2 minute timeout for install
+        timeout: 120000,
         encoding: 'utf8'
       });
     } catch (e) {
@@ -196,52 +172,29 @@ const handleUpdate = async () => {
       console.log(chalk.yellow('  Try manually:'));
       console.log(chalk.white('  npm install -g hedgequantx@latest'));
       console.log();
-      if (e.message) {
-        console.log(chalk.gray(`  Error: ${e.message.substring(0, 100)}`));
-        console.log();
-      }
       await waitForEnter();
       return;
     }
     
-    spinner.succeed('Update complete!');
+    spinner.succeed(`Updated: v${currentVersion} → v${latestVersion}`);
     console.log();
-    console.log(chalk.green(`  Updated: v${currentVersion} -> v${latestVersion}`));
+    console.log(chalk.cyan('  Restarting HedgeQuantX CLI...'));
     console.log();
     
-    // Ask if user wants to restart
-    prepareStdin();
-    const { restart } = await inquirer.prompt([{
-      type: 'confirm',
-      name: 'restart',
-      message: 'Restart HQX now?',
-      default: true
-    }]);
+    // Auto restart after 2 seconds
+    await new Promise(r => setTimeout(r, 2000));
     
-    if (restart) {
-      console.log();
-      console.log(chalk.cyan('  Restarting HedgeQuantX CLI...'));
-      console.log();
-      
-      // Small delay so user can see the message
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Restart the CLI
-      try {
-        const child = spawn('hedgequantx', [], {
-          stdio: 'inherit',
-          detached: true,
-          shell: true
-        });
-        child.unref();
-        process.exit(0);
-      } catch (e) {
-        console.log(chalk.yellow('  Could not auto-restart. Please run: hedgequantx'));
-        console.log();
-        await waitForEnter();
-      }
-    } else {
-      console.log(chalk.gray('  Run "hedgequantx" to use the new version'));
+    // Restart the CLI
+    try {
+      const child = spawn('hedgequantx', [], {
+        stdio: 'inherit',
+        detached: true,
+        shell: true
+      });
+      child.unref();
+      process.exit(0);
+    } catch (e) {
+      console.log(chalk.yellow('  Could not auto-restart. Please run: hedgequantx'));
       console.log();
       await waitForEnter();
     }
