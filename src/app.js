@@ -185,7 +185,6 @@ const banner = async () => {
   console.log(chalk.cyan('║') + chalk.white(centerText(tagline, innerWidth)) + chalk.cyan('║'));
   
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
-  console.log();
 };
 
 /**
