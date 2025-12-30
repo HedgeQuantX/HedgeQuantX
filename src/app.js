@@ -188,7 +188,7 @@ const mainMenu = async () => {
 const run = async () => {
   try {
     log.info('Starting HQX CLI');
-    await banner();
+    await bannerClosed();
     
     const spinner = ora({ text: 'Restoring session...', color: 'yellow' }).start();
     const restored = await connections.restoreFromStorage();
