@@ -1335,18 +1335,16 @@ const copyTradingMenu = async () => {
 
   const { leadContracts } = await inquirer.prompt([
     {
-      type: 'input',
+      type: 'number',
       name: 'leadContracts',
       message: chalk.white.bold('Lead Number of Contracts:'),
-      default: '1',
+      default: 1,
       validate: (input) => {
-        const num = parseInt(input);
-        if (isNaN(num) || num <= 0 || num > 100) {
+        if (isNaN(input) || input <= 0 || input > 100) {
           return 'Please enter a valid number between 1 and 100';
         }
         return true;
-      },
-      filter: (input) => parseInt(input)
+      }
     }
   ]);
 
@@ -1371,18 +1369,16 @@ const copyTradingMenu = async () => {
 
   const { followerContracts } = await inquirer.prompt([
     {
-      type: 'input',
+      type: 'number',
       name: 'followerContracts',
       message: chalk.white.bold('Follower Number of Contracts:'),
-      default: '1',
+      default: 1,
       validate: (input) => {
-        const num = parseInt(input);
-        if (isNaN(num) || num <= 0 || num > 100) {
+        if (isNaN(input) || input <= 0 || input > 100) {
           return 'Please enter a valid number between 1 and 100';
         }
         return true;
-      },
-      filter: (input) => parseInt(input)
+      }
     }
   ]);
 
@@ -1397,15 +1393,15 @@ const copyTradingMenu = async () => {
   console.log(chalk.white(`    Max Risk:     ${chalk.red('$' + maxRisk.toFixed(2))}`));
   console.log();
   console.log(chalk.white('  LEAD ACCOUNT'));
-  console.log(chalk.white(`    Account:   ${chalk.cyan(leadAccount.accountName || leadAccount.name)}`));
-  console.log(chalk.white(`    PropFirm:  ${chalk.magenta(leadAccount.propfirm)}`));
-  console.log(chalk.white(`    Symbol:    ${chalk.cyan(leadSymbol.name)}`));
+  console.log(chalk.white(`    Account:   ${chalk.cyan(leadAccount.accountName || leadAccount.name || 'N/A')}`));
+  console.log(chalk.white(`    PropFirm:  ${chalk.magenta(leadAccount.propfirm || 'N/A')}`));
+  console.log(chalk.white(`    Symbol:    ${chalk.cyan(leadSymbol.name || 'N/A')}`));
   console.log(chalk.white(`    Contracts: ${chalk.cyan(leadContracts)}`));
   console.log();
   console.log(chalk.white('  FOLLOWER ACCOUNT'));
-  console.log(chalk.white(`    Account:   ${chalk.cyan(followerAccount.accountName || followerAccount.name)}`));
-  console.log(chalk.white(`    PropFirm:  ${chalk.magenta(followerAccount.propfirm)}`));
-  console.log(chalk.white(`    Symbol:    ${chalk.cyan(followerSymbol.name)}`));
+  console.log(chalk.white(`    Account:   ${chalk.cyan(followerAccount.accountName || followerAccount.name || 'N/A')}`));
+  console.log(chalk.white(`    PropFirm:  ${chalk.magenta(followerAccount.propfirm || 'N/A')}`));
+  console.log(chalk.white(`    Symbol:    ${chalk.cyan(followerSymbol.name || 'N/A')}`));
   console.log(chalk.white(`    Contracts: ${chalk.cyan(followerContracts)}`));
   console.log();
   console.log(chalk.gray(getSeparator()));
