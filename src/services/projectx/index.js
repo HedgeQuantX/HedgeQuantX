@@ -152,12 +152,18 @@ class ProjectXService {
   // ==================== ACCOUNTS ====================
 
   /**
-   * Get trading accounts - ONLY returns values from API
-   * For banner display: returns basic account info quickly
-   * Use getAccountPnL() for detailed P&L data
+   * Get trading accounts with REAL P&L from API
+   * 
+   * Data sources (all from userApi):
+   * - /TradingAccount: accountId, accountName, balance, status, type
+   * - /AccountTemplate/userTemplates: startingBalance
+   * - /Position?accountId=X: profitAndLoss (unrealized P&L from open positions)
+   * 
+   * All values come from API. No estimation.
    */
   async getTradingAccounts() {
     try {
+      // 1. Get accounts
       const response = await this._request(this.propfirm.userApi, '/TradingAccount', 'GET');
       debug('getTradingAccounts response:', JSON.stringify(response.data, null, 2));
       
@@ -167,126 +173,81 @@ class ProjectXService {
 
       const accounts = Array.isArray(response.data) ? response.data : [];
       
-      // Return RAW API data only - no additional calls for speed
-      const enrichedAccounts = accounts.map(account => ({
-        accountId: account.accountId,
-        accountName: account.accountName,
-        balance: account.balance,  // From API
-        status: account.status,    // From API
-        type: account.type,        // From API
-        platform: 'ProjectX',
-        propfirm: this.propfirm.name,
-        // P&L not available from /TradingAccount endpoint
-        todayPnL: null,
-        openPnL: null,
-        profitAndLoss: null,
-        startingBalance: null,
-      }));
+      // 2. Get account templates (for startingBalance)
+      let templates = [];
+      try {
+        const templateRes = await this._request(this.propfirm.userApi, '/AccountTemplate/userTemplates', 'GET');
+        if (templateRes.statusCode === 200 && Array.isArray(templateRes.data)) {
+          templates = templateRes.data;
+          debug('Templates:', JSON.stringify(templates, null, 2));
+        }
+      } catch (e) {
+        debug('Failed to get templates:', e.message);
+      }
+
+      const enrichedAccounts = [];
+
+      for (const account of accounts) {
+        // Find matching template for startingBalance
+        const template = templates.find(t => 
+          account.accountName && (
+            account.accountName.includes(t.title) || 
+            t.title.includes(account.accountName)
+          )
+        );
+        
+        const enriched = {
+          accountId: account.accountId,
+          accountName: account.accountName,
+          balance: account.balance,                              // From /TradingAccount
+          status: account.status,                                // From /TradingAccount
+          type: account.type,                                    // From /TradingAccount
+          startingBalance: template?.startingBalance || null,    // From /AccountTemplate
+          platform: 'ProjectX',
+          propfirm: this.propfirm.name,
+          openPnL: null,
+          profitAndLoss: null,
+        };
+
+        // Get P&L for active accounts only
+        if (account.status === 0) {
+          // Get unrealized P&L from /Position endpoint (userApi)
+          try {
+            const posRes = await this._request(
+              this.propfirm.userApi, 
+              `/Position?accountId=${account.accountId}`, 
+              'GET'
+            );
+            debug(`Positions for ${account.accountId}:`, JSON.stringify(posRes.data, null, 2));
+            
+            if (posRes.statusCode === 200 && Array.isArray(posRes.data)) {
+              let openPnL = 0;
+              for (const pos of posRes.data) {
+                if (pos.profitAndLoss !== undefined && pos.profitAndLoss !== null) {
+                  openPnL += pos.profitAndLoss;
+                }
+              }
+              enriched.openPnL = openPnL;
+              enriched.profitAndLoss = openPnL;  // Open P&L from positions
+            }
+          } catch (e) {
+            debug('Failed to get positions:', e.message);
+          }
+        }
+
+        debug(`Account ${account.accountId}:`, {
+          balance: enriched.balance,
+          startingBalance: enriched.startingBalance,
+          openPnL: enriched.openPnL,
+          profitAndLoss: enriched.profitAndLoss
+        });
+
+        enrichedAccounts.push(enriched);
+      }
 
       return { success: true, accounts: enrichedAccounts };
     } catch (error) {
       return { success: false, accounts: [], error: error.message };
-    }
-  }
-
-  /**
-   * Get detailed P&L for a specific account
-   * Call this separately when P&L details are needed (e.g., stats page)
-   */
-  async getAccountPnL(accountId) {
-    const todayPnL = await this._getTodayRealizedPnL(accountId);
-    const openPnL = await this._getOpenPositionsPnL(accountId);
-    
-    let totalPnL = null;
-    if (todayPnL !== null || openPnL !== null) {
-      totalPnL = (todayPnL || 0) + (openPnL || 0);
-    }
-    
-    debug(`Account ${accountId} P&L:`, { todayPnL, openPnL, totalPnL });
-    
-    return {
-      todayPnL,
-      openPnL,
-      profitAndLoss: totalPnL
-    };
-  }
-
-  /**
-   * Get today's realized P&L from Trade API
-   * Returns null if API fails (not 0)
-   * @private
-   */
-  async _getTodayRealizedPnL(accountId) {
-    try {
-      const now = new Date();
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      
-      const response = await this._request(
-        this.propfirm.gatewayApi, '/api/Trade/search', 'POST',
-        { 
-          accountId: accountId, 
-          startTimestamp: startOfDay.toISOString(), 
-          endTimestamp: now.toISOString() 
-        }
-      );
-
-      if (response.statusCode === 200 && response.data) {
-        const trades = Array.isArray(response.data) 
-          ? response.data 
-          : (response.data.trades || []);
-        
-        debug(`_getTodayRealizedPnL: ${trades.length} trades found`);
-        
-        // Sum P&L from API response only
-        let totalPnL = 0;
-        for (const trade of trades) {
-          if (trade.profitAndLoss !== undefined && trade.profitAndLoss !== null) {
-            totalPnL += trade.profitAndLoss;
-            debug(`  Trade P&L: ${trade.profitAndLoss}`);
-          }
-        }
-        debug(`  Total realized P&L: ${totalPnL}`);
-        return totalPnL;
-      }
-      debug('_getTodayRealizedPnL: API failed or no data');
-      return null; // API failed - return null, not 0
-    } catch (e) {
-      return null;
-    }
-  }
-
-  /**
-   * Get unrealized P&L from open positions API
-   * Returns null if API fails (not 0)
-   * @private
-   */
-  async _getOpenPositionsPnL(accountId) {
-    try {
-      const response = await this._request(
-        this.propfirm.gatewayApi, '/api/Position/searchOpen', 'POST',
-        { accountId: accountId }
-      );
-
-      if (response.statusCode === 200 && response.data) {
-        const positions = response.data.positions || response.data || [];
-        debug(`_getOpenPositionsPnL: ${positions.length} positions found`);
-        
-        if (Array.isArray(positions)) {
-          let totalPnL = 0;
-          for (const pos of positions) {
-            if (pos.profitAndLoss !== undefined && pos.profitAndLoss !== null) {
-              totalPnL += pos.profitAndLoss;
-              debug(`  Position ${pos.symbolId || 'unknown'} P&L: ${pos.profitAndLoss}`);
-            }
-          }
-          debug(`  Total open P&L: ${totalPnL}`);
-          return totalPnL;
-        }
-      }
-      debug('_getOpenPositionsPnL: API failed or no data');
-      return null;
-    } catch (e) {
-      return null;
     }
   }
 
