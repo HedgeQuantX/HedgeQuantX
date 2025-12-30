@@ -117,9 +117,6 @@ const banner = async () => {
   const innerWidth = boxWidth - 2;
   const version = require('../package.json').version;
   
-  // Use cached stats (no refetch on every banner display)
-  const statsInfo = cachedStats;
-  
   // Draw logo - compact for mobile, full for desktop
   
   console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
