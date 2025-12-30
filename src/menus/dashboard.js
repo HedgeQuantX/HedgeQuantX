@@ -104,7 +104,6 @@ const dashboardMenu = async (service) => {
   menuRow(chalk.yellow('[U] Update HQX'), chalk.red('[X] Disconnect'));
   
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
-  console.log();
   
   // Input prompt
   const { choice } = await inquirer.prompt([
