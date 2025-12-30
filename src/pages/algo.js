@@ -1467,7 +1467,10 @@ const launchCopyTrading = async (config) => {
     followerTrades: 0,
     signals: 0,
     errors: 0,
-    pnl: 0
+    pnl: 0,
+    trades: 0,
+    wins: 0,
+    losses: 0
   };
 
   // Log colors
@@ -1537,6 +1540,11 @@ const launchCopyTrading = async (config) => {
     // Stats
     const pnlColor = stats.pnl >= 0 ? chalk.green : chalk.red;
     const pnlStr = (stats.pnl >= 0 ? '+$' : '-$') + Math.abs(stats.pnl).toFixed(2);
+    
+    // Latency formatting
+    const latencyMs = latency > 0 ? latency : 0;
+    const latencyStr = `${latencyMs}ms`;
+    const latencyColor = latencyMs < 100 ? chalk.green : (latencyMs < 300 ? chalk.yellow : chalk.red);
     
     // Current date
     const now = new Date();
@@ -1626,6 +1634,12 @@ const launchCopyTrading = async (config) => {
     const r5c2plain = ` Copied: ${stats.copiedTrades}  Errors: ${stats.errors}`;
     const r5c2 = r5c2text + safePad(colR - r5c2plain.length);
     
+    // Row 6: Trades + W/L | Latency
+    const r6c1text = ` Trades: ${chalk.cyan(stats.trades || 0)}  W/L: ${chalk.green(stats.wins || 0)}/${chalk.red(stats.losses || 0)}`;
+    const r6c1plain = ` Trades: ${stats.trades || 0}  W/L: ${stats.wins || 0}/${stats.losses || 0}`;
+    const r6c1 = r6c1text + safePad(colL - r6c1plain.length);
+    const r6c2 = buildCell('Latency', latencyStr, latencyColor, colR);
+    
     // Grid separators
     const GRID_TOP = '\u2560' + '\u2550'.repeat(colL) + '\u2564' + '\u2550'.repeat(colR) + '\u2563';
     const GRID_MID = '\u2560' + '\u2550'.repeat(colL) + '\u256A' + '\u2550'.repeat(colR) + '\u2563';
@@ -1642,6 +1656,8 @@ const launchCopyTrading = async (config) => {
     bufferLine(chalk.cyan(V) + r4c1.padded + chalk.cyan(VS) + r4c2.padded + chalk.cyan(V));
     bufferLine(chalk.cyan(GRID_MID));
     bufferLine(chalk.cyan(V) + r5c1 + chalk.cyan(VS) + r5c2 + chalk.cyan(V));
+    bufferLine(chalk.cyan(GRID_MID));
+    bufferLine(chalk.cyan(V) + r6c1 + chalk.cyan(VS) + r6c2.padded + chalk.cyan(V));
     bufferLine(chalk.cyan(GRID_BOT));
     
     // Activity log header with spinner and centered date
@@ -1824,81 +1840,95 @@ const launchCopyTrading = async (config) => {
     }
   };
 
-  // Setup HQX Server event handlers
-  if (hqxConnected) {
-    hqxServer.on('latency', (data) => {
-      latency = data.latency || 0;
-    });
+  // Setup HQX Server event handlers (attach before connection, check hqxConnected inside)
+  hqxServer.on('latency', (data) => {
+    latency = data.latency || 0;
+  });
 
-    hqxServer.on('log', (data) => {
-      addLog(data.type || 'info', data.message);
-    });
+  hqxServer.on('log', (data) => {
+    addLog(data.type || 'info', data.message);
+  });
 
-    hqxServer.on('signal', async (data) => {
-      stats.signals = (stats.signals || 0) + 1;
-      const side = data.side === 'long' ? 'BUY' : 'SELL';
-      addLog('signal', `${side} Signal @ ${data.entry?.toFixed(2) || 'N/A'} | SL: ${data.stop?.toFixed(2) || 'N/A'} | TP: ${data.target?.toFixed(2) || 'N/A'}`);
-      
-      // Execute on both accounts
+  hqxServer.on('signal', async (data) => {
+    stats.signals = (stats.signals || 0) + 1;
+    const side = data.side === 'long' ? 'BUY' : 'SELL';
+    addLog('signal', `${side} Signal @ ${data.entry?.toFixed(2) || 'N/A'} | SL: ${data.stop?.toFixed(2) || 'N/A'} | TP: ${data.target?.toFixed(2) || 'N/A'}`);
+    
+    // Execute on both accounts
+    if (hqxConnected) {
       await executeSignalOnBothAccounts(data);
-      displayUI();
-    });
+    }
+    displayUI();
+  });
 
-    hqxServer.on('trade', async (data) => {
-      stats.pnl += data.pnl || 0;
-      if (data.pnl > 0) {
-        addLog('trade', `Closed +$${data.pnl.toFixed(2)} (${data.reason || 'take_profit'})`);
-      } else {
-        addLog('loss', `Closed -$${Math.abs(data.pnl).toFixed(2)} (${data.reason || 'stop_loss'})`);
+  hqxServer.on('trade', async (data) => {
+    stats.pnl += data.pnl || 0;
+    if (data.pnl > 0) {
+      stats.wins = (stats.wins || 0) + 1;
+      addLog('trade', `Closed +$${data.pnl.toFixed(2)} (${data.reason || 'take_profit'})`);
+    } else {
+      stats.losses = (stats.losses || 0) + 1;
+      addLog('loss', `Closed -$${Math.abs(data.pnl).toFixed(2)} (${data.reason || 'stop_loss'})`);
+    }
+    stats.trades = (stats.trades || 0) + 1;
+    
+    // Print updated stats like One Account
+    const statsType = stats.pnl >= 0 ? 'info' : 'loss';
+    addLog(statsType, `Stats: Trades: ${stats.trades} | Wins: ${stats.wins || 0} | P&L: $${stats.pnl.toFixed(2)}`);
+
+    // Check daily target
+    if (stats.pnl >= dailyTarget) {
+      stopReason = 'target';
+      addLog('success', `Daily target reached! +$${stats.pnl.toFixed(2)}`);
+      isRunning = false;
+      if (hqxConnected) hqxServer.stopAlgo();
+      await closePositionsOnBothAccounts('target');
+    }
+
+    // Check max risk
+    if (stats.pnl <= -maxRisk) {
+      stopReason = 'risk';
+      addLog('error', `Max risk reached! -$${Math.abs(stats.pnl).toFixed(2)}`);
+      isRunning = false;
+      if (hqxConnected) hqxServer.stopAlgo();
+      await closePositionsOnBothAccounts('risk');
+    }
+
+    displayUI();
+  });
+
+  hqxServer.on('stats', (data) => {
+    const realizedPnl = data.pnl || 0;
+    const unrealizedPnl = data.position?.pnl || 0;
+    stats.pnl = realizedPnl + unrealizedPnl;
+    stats.trades = data.trades || stats.trades;
+    stats.wins = data.wins || stats.wins;
+    stats.losses = data.losses || stats.losses;
+  });
+
+  hqxServer.on('error', (data) => {
+    const errorMsg = data.message || 'Unknown error';
+    addLog('error', errorMsg);
+    
+    // If algo failed to start, switch to monitor mode
+    if (errorMsg.includes('Failed to start') || errorMsg.includes('WebSocket failed') || errorMsg.includes('Échec')) {
+      if (hqxConnected) {
+        hqxConnected = false;
+        addLog('warning', 'Switching to Monitor Mode (watching Lead positions)');
+        displayUI();
       }
+    }
+  });
 
-      // Check daily target
-      if (stats.pnl >= dailyTarget) {
-        stopReason = 'target';
-        addLog('success', `Daily target reached! +$${stats.pnl.toFixed(2)}`);
-        isRunning = false;
-        hqxServer.stopAlgo();
-        await closePositionsOnBothAccounts('target');
-      }
+  hqxServer.on('disconnected', () => {
+    hqxConnected = false;
+    if (!stopReason) {
+      addLog('warning', 'HQX Server disconnected - Switching to Monitor Mode');
+    }
+  });
 
-      // Check max risk
-      if (stats.pnl <= -maxRisk) {
-        stopReason = 'risk';
-        addLog('error', `Max risk reached! -$${Math.abs(stats.pnl).toFixed(2)}`);
-        isRunning = false;
-        hqxServer.stopAlgo();
-        await closePositionsOnBothAccounts('risk');
-      }
-
-      displayUI();
-    });
-
-    hqxServer.on('stats', (data) => {
-      const realizedPnl = data.pnl || 0;
-      const unrealizedPnl = data.position?.pnl || 0;
-      stats.pnl = realizedPnl + unrealizedPnl;
-    });
-
-    hqxServer.on('error', (data) => {
-      const errorMsg = data.message || 'Unknown error';
-      addLog('error', errorMsg);
-      
-      // If algo failed to start, switch to monitor mode
-      if (errorMsg.includes('Failed to start') || errorMsg.includes('WebSocket failed') || errorMsg.includes('Échec')) {
-        if (hqxConnected) {
-          hqxConnected = false;
-          addLog('warning', 'Switching to Monitor Mode (watching Lead positions)');
-          displayUI();
-        }
-      }
-    });
-
-    hqxServer.on('disconnected', () => {
-      hqxConnected = false;
-      if (!stopReason) {
-        addLog('warning', 'HQX Server disconnected - Switching to Monitor Mode');
-      }
-    });
+  // Start algo if connected
+  if (hqxConnected) {
 
     // Start the Ultra-Scalping algo
     addLog('info', 'Starting HQX Ultra-Scalping...');
@@ -2058,20 +2088,27 @@ const launchCopyTrading = async (config) => {
 
     // Also listen for X key
     if (process.stdin.isTTY) {
-      readline.emitKeypressEvents(process.stdin);
-      process.stdin.setRawMode(true);
-      
-      const onKeypress = (str, key) => {
-        if (key && (key.name === 'x' || key.name === 'X' || (key.ctrl && key.name === 'c'))) {
-          clearInterval(checkInterval);
-          clearInterval(monitorInterval);
-          process.stdin.setRawMode(false);
-          process.stdin.removeListener('keypress', onKeypress);
-          resolve();
-        }
-      };
-      
-      process.stdin.on('keypress', onKeypress);
+      try {
+        readline.emitKeypressEvents(process.stdin);
+        process.stdin.setRawMode(true);
+        process.stdin.resume();
+        
+        const onKeypress = (str, key) => {
+          if (!key) return;
+          const keyName = key.name?.toLowerCase();
+          if (keyName === 'x' || (key.ctrl && keyName === 'c')) {
+            clearInterval(checkInterval);
+            clearInterval(monitorInterval);
+            process.stdin.setRawMode(false);
+            process.stdin.removeListener('keypress', onKeypress);
+            resolve();
+          }
+        };
+        
+        process.stdin.on('keypress', onKeypress);
+      } catch (e) {
+        // Fallback: just wait for auto-stop
+      }
     }
   });
 
