@@ -113,6 +113,10 @@ const dashboardMenu = async (service) => {
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
   console.log();
 
+  // Small delay to ensure stdin is ready
+  await new Promise(resolve => setTimeout(resolve, 50));
+  prepareStdin();
+
   const { action } = await inquirer.prompt([
     {
       type: 'input',
