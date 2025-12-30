@@ -210,15 +210,32 @@ class RithmicService extends EventEmitter {
     };
   }
 
-  async searchContracts(searchText) {
-    const contracts = [
-      { symbol: 'ESH5', name: 'E-mini S&P 500 Mar 2025', exchange: 'CME' },
-      { symbol: 'NQH5', name: 'E-mini NASDAQ-100 Mar 2025', exchange: 'CME' },
-      { symbol: 'CLH5', name: 'Crude Oil Mar 2025', exchange: 'NYMEX' },
-      { symbol: 'GCG5', name: 'Gold Feb 2025', exchange: 'COMEX' },
-      { symbol: 'MESH5', name: 'Micro E-mini S&P 500 Mar 2025', exchange: 'CME' },
-      { symbol: 'MNQH5', name: 'Micro E-mini NASDAQ-100 Mar 2025', exchange: 'CME' },
+  // All available contracts for Rithmic
+  _getAvailableContracts() {
+    return [
+      { symbol: 'ESH5', name: 'E-mini S&P 500 Mar 2025', exchange: 'CME', group: 'Index' },
+      { symbol: 'NQH5', name: 'E-mini NASDAQ-100 Mar 2025', exchange: 'CME', group: 'Index' },
+      { symbol: 'MESH5', name: 'Micro E-mini S&P 500 Mar 2025', exchange: 'CME', group: 'Micro' },
+      { symbol: 'MNQH5', name: 'Micro E-mini NASDAQ-100 Mar 2025', exchange: 'CME', group: 'Micro' },
+      { symbol: 'MCLE5', name: 'Micro Crude Oil Mar 2025', exchange: 'NYMEX', group: 'Micro' },
+      { symbol: 'MGCG5', name: 'Micro Gold Feb 2025', exchange: 'COMEX', group: 'Micro' },
+      { symbol: 'CLH5', name: 'Crude Oil Mar 2025', exchange: 'NYMEX', group: 'Energy' },
+      { symbol: 'GCG5', name: 'Gold Feb 2025', exchange: 'COMEX', group: 'Metals' },
+      { symbol: 'SIH5', name: 'Silver Mar 2025', exchange: 'COMEX', group: 'Metals' },
+      { symbol: 'RTYH5', name: 'E-mini Russell 2000 Mar 2025', exchange: 'CME', group: 'Index' },
+      { symbol: 'YMH5', name: 'E-mini Dow Jones Mar 2025', exchange: 'CBOT', group: 'Index' },
+      { symbol: 'ZBH5', name: '30-Year US Treasury Bond Mar 2025', exchange: 'CBOT', group: 'Bonds' },
+      { symbol: 'ZNH5', name: '10-Year US Treasury Note Mar 2025', exchange: 'CBOT', group: 'Bonds' },
     ];
+  }
+
+  async getContracts() {
+    return { success: true, contracts: this._getAvailableContracts() };
+  }
+
+  async searchContracts(searchText) {
+    const contracts = this._getAvailableContracts();
+    if (!searchText) return contracts;
     const search = searchText.toUpperCase();
     return contracts.filter(c => c.symbol.includes(search) || c.name.toUpperCase().includes(search));
   }
