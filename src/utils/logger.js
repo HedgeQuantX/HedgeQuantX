@@ -32,18 +32,19 @@ const COLORS = {
 class Logger {
   constructor() {
     this.enabled = process.env.HQX_DEBUG === '1';
-    this.fileEnabled = process.env.HQX_LOG_FILE === '1';
     this.level = LEVELS.DEBUG;
     this.logFile = path.join(os.homedir(), '.hedgequantx', 'debug.log');
     
-    // Create log directory if file logging enabled
-    if (this.fileEnabled) {
+    // Always write to file when debug is enabled
+    if (this.enabled) {
       const dir = path.dirname(this.logFile);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
       // Clear log file on start
       fs.writeFileSync(this.logFile, `=== HQX Debug Log Started ${new Date().toISOString()} ===\n`);
+      fs.appendFileSync(this.logFile, `Platform: ${process.platform}, Node: ${process.version}\n`);
+      fs.appendFileSync(this.logFile, `CWD: ${process.cwd()}\n\n`);
     }
   }
 
@@ -59,17 +60,15 @@ class Logger {
     const formatted = this._format(levelName, module, message, data);
     const color = COLORS[levelName] || COLORS.RESET;
     
+    // Always write to file first (survives crashes)
+    try {
+      fs.appendFileSync(this.logFile, formatted + '\n');
+    } catch (e) {
+      // Ignore file write errors
+    }
+    
     // Console output (stderr to not interfere with CLI UI)
     console.error(`${color}${formatted}${COLORS.RESET}`);
-    
-    // File output
-    if (this.fileEnabled) {
-      try {
-        fs.appendFileSync(this.logFile, formatted + '\n');
-      } catch (e) {
-        // Ignore file write errors
-      }
-    }
   }
 
   error(module, message, data) {
