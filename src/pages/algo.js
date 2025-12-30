@@ -1382,6 +1382,27 @@ const copyTradingMenu = async () => {
     }
   ]);
 
+  // Privacy option - show or hide account names
+  console.log();
+  console.log(chalk.cyan.bold('  Step 6: Privacy Settings'));
+  console.log();
+  
+  const { showAccountNames } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'showAccountNames',
+      message: chalk.white.bold('Account names visibility:'),
+      choices: [
+        { name: chalk.cyan('[>] Show account names'), value: true },
+        { name: chalk.gray('[.] Hide account names'), value: false }
+      ],
+      loop: false
+    }
+  ]);
+  
+  const displayLeadName = showAccountNames ? (leadAccount.accountName || leadAccount.name || 'N/A') : 'HQX Lead *****';
+  const displayFollowerName = showAccountNames ? (followerAccount.accountName || followerAccount.name || 'N/A') : 'HQX Follower *****';
+
   // Configuration Summary
   console.log();
   console.log(chalk.gray(getSeparator()));
@@ -1393,13 +1414,13 @@ const copyTradingMenu = async () => {
   console.log(chalk.white(`    Max Risk:     ${chalk.red('$' + maxRisk.toFixed(2))}`));
   console.log();
   console.log(chalk.white('  LEAD ACCOUNT'));
-  console.log(chalk.white(`    Account:   ${chalk.cyan(leadAccount.accountName || leadAccount.name || 'N/A')}`));
+  console.log(chalk.white(`    Account:   ${chalk.cyan(displayLeadName)}`));
   console.log(chalk.white(`    PropFirm:  ${chalk.magenta(leadAccount.propfirm || 'N/A')}`));
   console.log(chalk.white(`    Symbol:    ${chalk.cyan(leadSymbol.name || 'N/A')}`));
   console.log(chalk.white(`    Contracts: ${chalk.cyan(leadContracts)}`));
   console.log();
   console.log(chalk.white('  FOLLOWER ACCOUNT'));
-  console.log(chalk.white(`    Account:   ${chalk.cyan(followerAccount.accountName || followerAccount.name || 'N/A')}`));
+  console.log(chalk.white(`    Account:   ${chalk.cyan(displayFollowerName)}`));
   console.log(chalk.white(`    PropFirm:  ${chalk.magenta(followerAccount.propfirm || 'N/A')}`));
   console.log(chalk.white(`    Symbol:    ${chalk.cyan(followerSymbol.name || 'N/A')}`));
   console.log(chalk.white(`    Contracts: ${chalk.cyan(followerContracts)}`));
@@ -1430,13 +1451,15 @@ const copyTradingMenu = async () => {
       account: leadAccount,
       symbol: leadSymbol,
       contracts: leadContracts,
-      service: leadAccount.service
+      service: leadAccount.service,
+      displayName: displayLeadName
     },
     follower: {
       account: followerAccount,
       symbol: followerSymbol,
       contracts: followerContracts,
-      service: followerAccount.service
+      service: followerAccount.service,
+      displayName: displayFollowerName
     }
   });
 };
@@ -1592,7 +1615,7 @@ const launchCopyTrading = async (config) => {
     const colL = 48, colR = 47;
     
     // Row 1: Lead Account | Lead Symbol
-    const leadName = (lead.account.accountName || '').substring(0, 30);
+    const leadName = (lead.displayName || lead.account.accountName || '').substring(0, 30);
     const leadSym = lead.symbol.value || lead.symbol.name || '';
     const r1c1 = buildCell('Lead', leadName, chalk.cyan, colL);
     const r1c2text = ` Symbol: ${chalk.yellow(leadSym)}  Qty: ${chalk.cyan(lead.contracts)}`;
@@ -1600,7 +1623,7 @@ const launchCopyTrading = async (config) => {
     const r1c2 = r1c2text + safePad(colR - r1c2plain.length);
     
     // Row 2: Follower Account | Follower Symbol
-    const followerName = (follower.account.accountName || '').substring(0, 30);
+    const followerName = (follower.displayName || follower.account.accountName || '').substring(0, 30);
     const followerSym = follower.symbol.value || follower.symbol.name || '';
     const r2c1 = buildCell('Follower', followerName, chalk.magenta, colL);
     const r2c2text = ` Symbol: ${chalk.yellow(followerSym)}  Qty: ${chalk.cyan(follower.contracts)}`;
