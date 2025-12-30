@@ -85,7 +85,7 @@ class AlgoUI {
     this.config = config;
     this.W = 96; // Fixed width
     this.logs = [];
-    this.maxLogs = 15; // Fixed 15 lines to keep logo visible
+    this.maxLogs = 50; // Max visible logs
     this.spinnerFrame = 0;
     this.firstDraw = true;
     this.isDrawing = false;
