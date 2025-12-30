@@ -7,6 +7,10 @@
 
 const https = require('https');
 const { PROPFIRMS } = require('../../config');
+
+// Debug mode - set HQX_DEBUG=1 to enable
+const DEBUG = process.env.HQX_DEBUG === '1';
+const debug = (...args) => DEBUG && console.log('[ProjectX]', ...args);
 const { 
   validateUsername, 
   validatePassword, 
@@ -149,58 +153,62 @@ class ProjectXService {
 
   /**
    * Get trading accounts - ONLY returns values from API
-   * P&L comes from: today's trades + open positions (both from API)
+   * For banner display: returns basic account info quickly
+   * Use getAccountPnL() for detailed P&L data
    */
   async getTradingAccounts() {
     try {
       const response = await this._request(this.propfirm.userApi, '/TradingAccount', 'GET');
+      debug('getTradingAccounts response:', JSON.stringify(response.data, null, 2));
+      
       if (response.statusCode !== 200) {
         return { success: false, accounts: [], error: 'Failed to get accounts' };
       }
 
       const accounts = Array.isArray(response.data) ? response.data : [];
-      const enrichedAccounts = [];
-
-      for (const account of accounts) {
-        // Start with RAW API data only
-        const enriched = {
-          accountId: account.accountId,
-          accountName: account.accountName,
-          balance: account.balance,  // From API
-          status: account.status,    // From API
-          type: account.type,        // From API
-          platform: 'ProjectX',
-          propfirm: this.propfirm.name,
-          // P&L fields - will be populated from API calls
-          todayPnL: null,
-          openPnL: null,
-          profitAndLoss: null,
-          startingBalance: null,
-        };
-
-        // Only fetch P&L for active accounts
-        if (account.status === 0) {
-          // Get today's realized P&L from trades API
-          const todayPnL = await this._getTodayRealizedPnL(account.accountId);
-          enriched.todayPnL = todayPnL;
-
-          // Get unrealized P&L from open positions API
-          const openPnL = await this._getOpenPositionsPnL(account.accountId);
-          enriched.openPnL = openPnL;
-
-          // Total P&L = realized + unrealized (both from API)
-          if (todayPnL !== null || openPnL !== null) {
-            enriched.profitAndLoss = (todayPnL || 0) + (openPnL || 0);
-          }
-        }
-
-        enrichedAccounts.push(enriched);
-      }
+      
+      // Return RAW API data only - no additional calls for speed
+      const enrichedAccounts = accounts.map(account => ({
+        accountId: account.accountId,
+        accountName: account.accountName,
+        balance: account.balance,  // From API
+        status: account.status,    // From API
+        type: account.type,        // From API
+        platform: 'ProjectX',
+        propfirm: this.propfirm.name,
+        // P&L not available from /TradingAccount endpoint
+        todayPnL: null,
+        openPnL: null,
+        profitAndLoss: null,
+        startingBalance: null,
+      }));
 
       return { success: true, accounts: enrichedAccounts };
     } catch (error) {
       return { success: false, accounts: [], error: error.message };
     }
+  }
+
+  /**
+   * Get detailed P&L for a specific account
+   * Call this separately when P&L details are needed (e.g., stats page)
+   */
+  async getAccountPnL(accountId) {
+    const todayPnL = await this._getTodayRealizedPnL(accountId);
+    const openPnL = await this._getOpenPositionsPnL(accountId);
+    
+    let totalPnL = null;
+    if (todayPnL !== null || openPnL !== null) {
+      totalPnL = (todayPnL || 0) + (openPnL || 0);
+    }
+    
+    debug(`Account ${accountId} P&L:`, { todayPnL, openPnL, totalPnL });
+    
+    return {
+      todayPnL,
+      openPnL,
+      profitAndLoss: totalPnL
+    };
   }
 
   /**
@@ -227,15 +235,20 @@ class ProjectXService {
           ? response.data 
           : (response.data.trades || []);
         
+        debug(`_getTodayRealizedPnL: ${trades.length} trades found`);
+        
         // Sum P&L from API response only
         let totalPnL = 0;
         for (const trade of trades) {
           if (trade.profitAndLoss !== undefined && trade.profitAndLoss !== null) {
             totalPnL += trade.profitAndLoss;
+            debug(`  Trade P&L: ${trade.profitAndLoss}`);
           }
         }
+        debug(`  Total realized P&L: ${totalPnL}`);
         return totalPnL;
       }
+      debug('_getTodayRealizedPnL: API failed or no data');
       return null; // API failed - return null, not 0
     } catch (e) {
       return null;
@@ -256,16 +269,21 @@ class ProjectXService {
 
       if (response.statusCode === 200 && response.data) {
         const positions = response.data.positions || response.data || [];
+        debug(`_getOpenPositionsPnL: ${positions.length} positions found`);
+        
         if (Array.isArray(positions)) {
           let totalPnL = 0;
           for (const pos of positions) {
             if (pos.profitAndLoss !== undefined && pos.profitAndLoss !== null) {
               totalPnL += pos.profitAndLoss;
+              debug(`  Position ${pos.symbolId || 'unknown'} P&L: ${pos.profitAndLoss}`);
             }
           }
+          debug(`  Total open P&L: ${totalPnL}`);
           return totalPnL;
         }
       }
+      debug('_getOpenPositionsPnL: API failed or no data');
       return null;
     } catch (e) {
       return null;

@@ -29,15 +29,8 @@ const { createBoxMenu } = require('./menu');
  * This fixes input leaking to bash after session restore or algo trading
  */
 const prepareStdin = () => {
+  // Minimal intervention - just ensure stdin is flowing
   try {
-    // Remove any raw mode that might be left from previous operations
-    if (process.stdin.isTTY && process.stdin.isRaw) {
-      process.stdin.setRawMode(false);
-    }
-    // Remove any lingering keypress listeners
-    process.stdin.removeAllListeners('keypress');
-    process.stdin.removeAllListeners('data');
-    // Resume stdin so inquirer can take control
     if (process.stdin.isPaused()) {
       process.stdin.resume();
     }
