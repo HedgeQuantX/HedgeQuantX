@@ -92,8 +92,6 @@ const dashboardMenu = async (service) => {
     }
   }
   
-  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
-  
   // Menu options in 2 columns
   const col1Width = Math.floor(W / 2);
   const col2Width = W - col1Width;
@@ -106,55 +104,38 @@ const dashboardMenu = async (service) => {
     console.log(chalk.cyan('║') + '  ' + left + leftPad + '  ' + (right || '') + rightPad + chalk.cyan('║'));
   };
   
-  // Menu options displayed inside the box
-  const menuItems = [
-    { label: '[1] View Accounts', color: chalk.cyan },
-    { label: '[2] View Stats', color: chalk.cyan },
-    { label: '[+] Add Prop-Account', color: chalk.cyan },
-    { label: '[A] Algo-Trading', color: chalk.magenta },
-    { label: '[U] Update HQX', color: chalk.yellow },
-    { label: '[X] Disconnect', color: chalk.red }
-  ];
-  
   // Display menu items in 2 columns inside the box
-  for (let i = 0; i < menuItems.length; i += 2) {
-    const left = menuItems[i];
-    const right = menuItems[i + 1];
-    
-    const leftText = '  ' + left.color(left.label);
-    const rightText = right ? '  ' + right.color(right.label) : '';
-    
-    const leftPlain = left.label.length + 2;
-    const rightPlain = right ? right.label.length + 2 : 0;
-    
-    const leftPad = col1Width - leftPlain;
-    const rightPad = col2Width - rightPlain;
-    
-    console.log(chalk.cyan('║') + leftText + ' '.repeat(Math.max(0, leftPad)) + rightText + ' '.repeat(Math.max(0, rightPad)) + chalk.cyan('║'));
-  }
+  menuRow(chalk.cyan('[1] View Accounts'), chalk.cyan('[2] View Stats'));
+  menuRow(chalk.cyan('[+] Add Prop-Account'), chalk.magenta('[A] Algo-Trading'));
+  menuRow(chalk.yellow('[U] Update HQX'), chalk.red('[X] Disconnect'));
   
-  console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
-  console.log();
-
-  // Use list type instead of input - more stable stdin handling
-  const { action } = await inquirer.prompt([
+  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
+  
+  // Input prompt inside box - we'll close the box after input
+  process.stdout.write(chalk.cyan('║') + '  Select: ');
+  
+  const { choice } = await inquirer.prompt([
     {
-      type: 'list',
-      name: 'action',
-      message: chalk.cyan('Select action:'),
-      choices: [
-        { name: chalk.cyan('[1] View Accounts'), value: 'accounts' },
-        { name: chalk.cyan('[2] View Stats'), value: 'stats' },
-        { name: chalk.cyan('[+] Add Prop-Account'), value: 'add_prop_account' },
-        { name: chalk.magenta('[A] Algo-Trading'), value: 'algotrading' },
-        { name: chalk.yellow('[U] Update HQX'), value: 'update' },
-        { name: chalk.red('[X] Disconnect'), value: 'disconnect' }
-      ],
-      loop: false
+      type: 'input',
+      name: 'choice',
+      message: '',
+      prefix: '',
+      suffix: ''
     }
   ]);
-
-  return action;
+  
+  // Map input to action
+  const input = (choice || '').toString().toLowerCase().trim();
+  const actionMap = {
+    '1': 'accounts',
+    '2': 'stats',
+    '+': 'add_prop_account',
+    'a': 'algotrading',
+    'u': 'update',
+    'x': 'disconnect'
+  };
+  
+  return actionMap[input] || null;
 };
 
 /**
