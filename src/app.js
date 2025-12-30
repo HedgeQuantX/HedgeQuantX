@@ -10,6 +10,7 @@ const ora = require('ora');
 const { connections } = require('./services');
 const { getLogoWidth, centerText, prepareStdin } = require('./ui');
 const { logger } = require('./utils');
+const { setCachedStats, clearCachedStats } = require('./services/stats-cache');
 
 const log = logger.scope('App');
 
@@ -24,9 +25,6 @@ const { projectXMenu, rithmicMenu, tradovateMenu, addPropAccountMenu, dashboardM
 // Current service reference
 let currentService = null;
 let currentPlatform = null; // 'projectx' or 'rithmic'
-
-// Cached stats for banner (avoid refetching on every screen)
-let cachedStats = null;
 
 /**
  * Global terminal restoration - ensures terminal is always restored on exit
@@ -92,18 +90,18 @@ const refreshStats = async () => {
         }
       });
       
-      cachedStats = {
+      setCachedStats({
         connections: connections.count(),
         accounts: activeAccounts.length,
         balance: hasBalanceData ? totalBalance : null,
         pnl: hasPnlData ? totalPnl : null,
         pnlPercent: null
-      };
+      });
     } catch (e) {
       // Ignore errors
     }
   } else {
-    cachedStats = null;
+    clearCachedStats();
   }
 };
 
@@ -192,11 +190,6 @@ const banner = async () => {
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
   console.log();
 };
-
-/**
- * Get cached stats for dashboard
- */
-const getCachedStats = () => cachedStats;
 
 /**
  * Main connection menu
@@ -357,7 +350,7 @@ const run = async () => {
               const connCount = connections.count();
               connections.disconnectAll();
               currentService = null;
-              cachedStats = null; // Clear cached stats
+              clearCachedStats();
               console.log(chalk.yellow(`Disconnected ${connCount} connection${connCount > 1 ? 's' : ''}`));
               break;
             case 'exit':
@@ -376,4 +369,4 @@ const run = async () => {
   }
 };
 
-module.exports = { run, banner, mainMenu, dashboardMenu, getCachedStats };
+module.exports = { run, banner, mainMenu, dashboardMenu };

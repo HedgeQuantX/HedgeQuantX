@@ -10,7 +10,7 @@ const { execSync, spawn } = require('child_process');
 
 const { connections } = require('../services');
 const { getLogoWidth, centerText, prepareStdin } = require('../ui');
-const { getCachedStats } = require('../app');
+const { getCachedStats } = require('../services/stats-cache');
 
 /**
  * Dashboard menu after login
@@ -50,8 +50,7 @@ const dashboardMenu = async (service) => {
   }
   
   // Show stats bar (Connections, Accounts, Balance, P&L)
-  let statsInfo = null;
-  try { statsInfo = getCachedStats(); } catch (e) {}
+  const statsInfo = getCachedStats();
   
   if (statsInfo) {
     console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
