@@ -116,10 +116,10 @@ const copyTradingMenu = async () => {
   // Confirm
   console.log();
   console.log(chalk.white('  Summary:'));
-  console.log(chalk.gray(`  Symbol: ${symbol.name}`));
-  console.log(chalk.gray(`  Lead: ${lead.propfirm} x${leadContracts}`));
-  console.log(chalk.gray(`  Follower: ${follower.propfirm} x${followerContracts}`));
-  console.log(chalk.gray(`  Target: $${dailyTarget} | Risk: $${maxRisk}`));
+  console.log(chalk.cyan(`  Symbol: ${symbol.name}`));
+  console.log(chalk.cyan(`  Lead: ${lead.propfirm} x${leadContracts}`));
+  console.log(chalk.cyan(`  Follower: ${follower.propfirm} x${followerContracts}`));
+  console.log(chalk.cyan(`  Target: $${dailyTarget} | Risk: $${maxRisk}`));
   console.log();
   
   const confirm = await prompts.confirmPrompt('Start Copy Trading?', true);
