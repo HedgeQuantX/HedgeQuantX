@@ -91,36 +91,27 @@ const numberInput = async (message, defaultVal = 1, min = 1, max = 1000) => {
 };
 
 /**
- * Select - display options and text input, map to value
+ * Select - arrow keys navigation
  */
 const selectOption = async (message, options) => {
   prepareStdin();
   
-  // Display options
-  options.forEach((opt, i) => {
-    console.log(`  [${i + 1}] ${opt.label}`);
-  });
-  console.log();
+  const choices = options.map(opt => ({
+    name: opt.label,
+    value: opt.value
+  }));
   
   const { value } = await inquirer.prompt([{
-    type: 'input',
+    type: 'list',
     name: 'value',
     message,
-    prefix: ''
+    choices,
+    prefix: '',
+    loop: false,
+    pageSize: 15
   }]);
   
-  const input = (value || '').toLowerCase().trim();
-  
-  // Find by value
-  for (const opt of options) {
-    if (String(opt.value).toLowerCase() === input) return opt.value;
-  }
-  
-  // Find by index (1-based)
-  const idx = parseInt(input) - 1;
-  if (idx >= 0 && idx < options.length) return options[idx].value;
-  
-  return null;
+  return value;
 };
 
 module.exports = {
