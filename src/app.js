@@ -133,7 +133,7 @@ const banner = async () => {
   console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
   const tagline = isMobile ? `HQX v${version}` : `Prop Futures Algo Trading  v${version}`;
   console.log(chalk.cyan('║') + chalk.white(centerText(tagline, innerWidth)) + chalk.cyan('║'));
-  // No closing line - dashboard will continue the box
+  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
 };
 
 /**
@@ -152,8 +152,7 @@ const mainMenu = async () => {
     console.log(chalk.cyan('║') + leftPadded + rightPadded + chalk.cyan('║'));
   };
   
-  // Continue from banner
-  console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+  console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
   console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PLATFORM', innerWidth)) + chalk.cyan('║'));
   console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
   
