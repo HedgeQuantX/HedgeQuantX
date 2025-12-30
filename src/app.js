@@ -22,6 +22,9 @@ const { projectXMenu, rithmicMenu, tradovateMenu, addPropAccountMenu, dashboardM
 let currentService = null;
 let currentPlatform = null; // 'projectx' or 'rithmic'
 
+// Cached stats for banner (avoid refetching on every screen)
+let cachedStats = null;
+
 /**
  * Global terminal restoration - ensures terminal is always restored on exit
  */
@@ -58,20 +61,9 @@ process.on('unhandledRejection', (reason) => {
 });
 
 /**
- * Displays the application banner with stats if connected
+ * Refresh cached stats (call after connection/disconnection/add account)
  */
-const banner = async () => {
-  console.clear();
-  const termWidth = process.stdout.columns || 100;
-  const isMobile = termWidth < 60;
-  // Logo HEDGEQUANTX + X = 94 chars, need 98 for box (94 + 2 borders + 2 padding)
-  const boxWidth = isMobile ? Math.max(termWidth - 2, 40) : Math.max(getLogoWidth(), 98);
-  const innerWidth = boxWidth - 2;
-  const version = require('../package.json').version;
-  
-  // Get stats if connected (only active accounts: status === 0)
-  // STRICT: Only display values from API, no estimation
-  let statsInfo = null;
+const refreshStats = async () => {
   if (connections.count() > 0) {
     try {
       const allAccounts = await connections.getAllAccounts();
@@ -97,18 +89,35 @@ const banner = async () => {
         }
       });
       
-      statsInfo = {
+      cachedStats = {
         connections: connections.count(),
         accounts: activeAccounts.length,
         balance: hasBalanceData ? totalBalance : null,
         pnl: hasPnlData ? totalPnl : null,
-        // No percentage calculation if no verified data
         pnlPercent: null
       };
     } catch (e) {
       // Ignore errors
     }
+  } else {
+    cachedStats = null;
   }
+};
+
+/**
+ * Displays the application banner with stats if connected
+ */
+const banner = async () => {
+  console.clear();
+  const termWidth = process.stdout.columns || 100;
+  const isMobile = termWidth < 60;
+  // Logo HEDGEQUANTX + X = 94 chars, need 98 for box (94 + 2 borders + 2 padding)
+  const boxWidth = isMobile ? Math.max(termWidth - 2, 40) : Math.max(getLogoWidth(), 98);
+  const innerWidth = boxWidth - 2;
+  const version = require('../package.json').version;
+  
+  // Use cached stats (no refetch on every banner display)
+  const statsInfo = cachedStats;
   
   // Draw logo - compact for mobile, full for desktop
   
@@ -292,6 +301,8 @@ const run = async () => {
     if (restored) {
       spinner.succeed('Session restored');
       currentService = connections.getAll()[0].service;
+      // Refresh stats after session restore
+      await refreshStats();
     } else {
       spinner.info('No active session');
     }
@@ -302,7 +313,7 @@ const run = async () => {
         // Ensure stdin is ready for prompts (fixes input leaking to bash)
         prepareStdin();
         
-        // Refresh banner with stats
+        // Display banner (uses cached stats, no refetch)
         await banner();
         
         if (!connections.isConnected()) {
@@ -315,17 +326,26 @@ const run = async () => {
           
           if (choice === 'projectx') {
             const service = await projectXMenu();
-            if (service) currentService = service;
+            if (service) {
+              currentService = service;
+              await refreshStats(); // Refresh after new connection
+            }
           }
           
           if (choice === 'rithmic') {
             const service = await rithmicMenu();
-            if (service) currentService = service;
+            if (service) {
+              currentService = service;
+              await refreshStats(); // Refresh after new connection
+            }
           }
           
           if (choice === 'tradovate') {
             const service = await tradovateMenu();
-            if (service) currentService = service;
+            if (service) {
+              currentService = service;
+              await refreshStats(); // Refresh after new connection
+            }
           }
         } else {
           const action = await dashboardMenu(currentService);
@@ -343,13 +363,22 @@ const run = async () => {
               const platformChoice = await addPropAccountMenu();
               if (platformChoice === 'projectx') {
                 const newService = await projectXMenu();
-                if (newService) currentService = newService;
+                if (newService) {
+                  currentService = newService;
+                  await refreshStats(); // Refresh after adding account
+                }
               } else if (platformChoice === 'rithmic') {
                 const newService = await rithmicMenu();
-                if (newService) currentService = newService;
+                if (newService) {
+                  currentService = newService;
+                  await refreshStats(); // Refresh after adding account
+                }
               } else if (platformChoice === 'tradovate') {
                 const newService = await tradovateMenu();
-                if (newService) currentService = newService;
+                if (newService) {
+                  currentService = newService;
+                  await refreshStats(); // Refresh after adding account
+                }
               }
               break;
             case 'algotrading':
@@ -363,6 +392,7 @@ const run = async () => {
               const connCount = connections.count();
               connections.disconnectAll();
               currentService = null;
+              cachedStats = null; // Clear cached stats
               console.log(chalk.yellow(`Disconnected ${connCount} connection${connCount > 1 ? 's' : ''}`));
               break;
             case 'exit':
