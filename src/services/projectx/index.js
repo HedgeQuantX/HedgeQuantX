@@ -211,7 +211,10 @@ class ProjectXService {
 
         // Get P&L for active accounts only
         if (account.status === 0) {
-          // Get unrealized P&L from /Position endpoint (userApi)
+          let openPnL = 0;
+          let todayPnL = 0;
+          
+          // 1. Get unrealized P&L from open positions
           try {
             const posRes = await this._request(
               this.propfirm.userApi, 
@@ -221,18 +224,49 @@ class ProjectXService {
             debug(`Positions for ${account.accountId}:`, JSON.stringify(posRes.data, null, 2));
             
             if (posRes.statusCode === 200 && Array.isArray(posRes.data)) {
-              let openPnL = 0;
               for (const pos of posRes.data) {
                 if (pos.profitAndLoss !== undefined && pos.profitAndLoss !== null) {
                   openPnL += pos.profitAndLoss;
                 }
               }
-              enriched.openPnL = openPnL;
-              enriched.profitAndLoss = openPnL;  // Open P&L from positions
             }
           } catch (e) {
             debug('Failed to get positions:', e.message);
           }
+          
+          // 2. Get realized P&L from today's closed trades
+          try {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const now = new Date();
+            
+            const tradesRes = await this._request(
+              this.propfirm.gatewayApi, 
+              '/api/Trade/search', 
+              'POST',
+              { 
+                accountId: account.accountId, 
+                startTimestamp: today.toISOString(), 
+                endTimestamp: now.toISOString() 
+              }
+            );
+            debug(`Today trades for ${account.accountId}:`, JSON.stringify(tradesRes.data, null, 2));
+            
+            if (tradesRes.statusCode === 200) {
+              const trades = Array.isArray(tradesRes.data) ? tradesRes.data : (tradesRes.data.trades || []);
+              for (const trade of trades) {
+                if (trade.profitAndLoss !== undefined && trade.profitAndLoss !== null) {
+                  todayPnL += trade.profitAndLoss;
+                }
+              }
+            }
+          } catch (e) {
+            debug('Failed to get today trades:', e.message);
+          }
+          
+          enriched.openPnL = openPnL;
+          enriched.todayPnL = todayPnL;
+          enriched.profitAndLoss = openPnL + todayPnL;  // Total day P&L = unrealized + realized
         }
 
         debug(`Account ${account.accountId}:`, {
