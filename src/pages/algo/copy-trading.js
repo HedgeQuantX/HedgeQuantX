@@ -133,15 +133,10 @@ const copyTradingMenu = async () => {
   });
 };
 
-// Cached contracts from API
-let cachedContracts = null;
-
 /**
  * Get contracts from ProjectX API (shared for all services)
  */
 const getContractsFromAPI = async () => {
-  if (cachedContracts) return cachedContracts;
-  
   // Find a ProjectX connection to get contracts from API
   const allConns = connections.getAll();
   const projectxConn = allConns.find(c => c.type === 'projectx');
@@ -150,12 +145,11 @@ const getContractsFromAPI = async () => {
     const result = await projectxConn.service.getContracts();
     if (result.success && result.contracts?.length > 0) {
       // Normalize contract structure - API returns { name: "ESH6", description: "E-mini S&P 500..." }
-      cachedContracts = result.contracts.map(c => ({
+      return result.contracts.map(c => ({
         ...c,
         symbol: c.name || c.symbol,
         name: c.description || c.name || c.symbol
       }));
-      return cachedContracts;
     }
   }
   

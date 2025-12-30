@@ -444,29 +444,26 @@ class ProjectXService {
   // ==================== CONTRACTS ====================
 
   /**
-   * Get popular contracts for trading from API
+   * Get all available contracts from API
    */
   async getContracts() {
     try {
-      // Search for popular futures symbols from API
-      const symbols = ['ES', 'NQ', 'MES', 'MNQ', 'CL', 'GC', 'RTY', 'YM', 'SI', 'ZB', 'ZN', 'NG', 'MCL', 'MGC'];
-      const allContracts = [];
+      const response = await this._request(
+        this.propfirm.gatewayApi, '/api/Contract/available', 'POST',
+        { live: false }
+      );
       
-      for (const sym of symbols) {
-        const response = await this._request(
-          this.propfirm.gatewayApi, '/api/Contract/search', 'POST',
-          { searchText: sym, live: false }
-        );
-        if (response.statusCode === 200) {
-          const contracts = response.data.contracts || response.data || [];
-          // Take first contract for each symbol (front month)
-          if (contracts.length > 0) {
-            allContracts.push(contracts[0]);
-          }
-        }
+      if (response.statusCode === 200) {
+        const contracts = response.data.contracts || response.data || [];
+        // Filter only active contracts and sort by description
+        const activeContracts = contracts
+          .filter(c => c.activeContract === true)
+          .sort((a, b) => (a.description || '').localeCompare(b.description || ''));
+        
+        return { success: true, contracts: activeContracts };
       }
       
-      return { success: true, contracts: allContracts };
+      return { success: false, contracts: [], error: 'Failed to fetch contracts' };
     } catch (error) {
       return { success: false, contracts: [], error: error.message };
     }
