@@ -91,7 +91,7 @@ const dashboardMenu = async (service) => {
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
   
   // Simple input - no duplicate menu
-  const input = await prompts.textInput('Select (1/2/+/A/U/X)');
+  const input = await prompts.textInput(chalk.cyan('Select (1/2/+/A/U/X)'));
   
   const actionMap = {
     '1': 'accounts',

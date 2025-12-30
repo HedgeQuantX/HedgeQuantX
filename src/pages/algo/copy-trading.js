@@ -84,20 +84,15 @@ const copyTradingMenu = async () => {
   if (followerIdx === null || followerIdx === -1) return;
   const follower = allAccounts[followerIdx];
   
-  // Step 3-4: Select Symbols
+  // Step 3: Select Trading Symbol
   console.log();
-  console.log(chalk.cyan('  Step 3: Select Symbol for LEAD'));
-  const leadSymbol = await selectSymbol(lead.service, 'Lead');
-  if (!leadSymbol) return;
+  console.log(chalk.cyan('  Step 3: Select Trading Symbol'));
+  const symbol = await selectSymbol(lead.service, 'Trading');
+  if (!symbol) return;
   
+  // Step 4: Configure parameters
   console.log();
-  console.log(chalk.cyan('  Step 4: Select Symbol for FOLLOWER'));
-  const followerSymbol = await selectSymbol(follower.service, 'Follower');
-  if (!followerSymbol) return;
-  
-  // Step 5: Configure parameters
-  console.log();
-  console.log(chalk.cyan('  Step 5: Configure Parameters'));
+  console.log(chalk.cyan('  Step 4: Configure Parameters'));
   
   const leadContracts = await prompts.numberInput('Lead contracts:', 1, 1, 10);
   if (leadContracts === null) return;
@@ -111,7 +106,7 @@ const copyTradingMenu = async () => {
   const maxRisk = await prompts.numberInput('Max risk ($):', 200, 1, 5000);
   if (maxRisk === null) return;
   
-  // Step 6: Privacy
+  // Step 5: Privacy
   const showNames = await prompts.selectOption('Account names:', [
     { label: 'Hide account names', value: false },
     { label: 'Show account names', value: true }
@@ -121,8 +116,9 @@ const copyTradingMenu = async () => {
   // Confirm
   console.log();
   console.log(chalk.white('  Summary:'));
-  console.log(chalk.gray(`  Lead: ${lead.propfirm} -> ${leadSymbol.name} x${leadContracts}`));
-  console.log(chalk.gray(`  Follower: ${follower.propfirm} -> ${followerSymbol.name} x${followerContracts}`));
+  console.log(chalk.gray(`  Symbol: ${symbol.name}`));
+  console.log(chalk.gray(`  Lead: ${lead.propfirm} x${leadContracts}`));
+  console.log(chalk.gray(`  Follower: ${follower.propfirm} x${followerContracts}`));
   console.log(chalk.gray(`  Target: $${dailyTarget} | Risk: $${maxRisk}`));
   console.log();
   
@@ -131,8 +127,8 @@ const copyTradingMenu = async () => {
   
   // Launch
   await launchCopyTrading({
-    lead: { ...lead, symbol: leadSymbol, contracts: leadContracts },
-    follower: { ...follower, symbol: followerSymbol, contracts: followerContracts },
+    lead: { ...lead, symbol, contracts: leadContracts },
+    follower: { ...follower, symbol, contracts: followerContracts },
     dailyTarget, maxRisk, showNames
   });
 };

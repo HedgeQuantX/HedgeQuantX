@@ -170,7 +170,7 @@ const mainMenu = async () => {
   
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
 
-  const input = await prompts.textInput('Select (1/2/3/X)');
+  const input = await prompts.textInput(chalk.cyan('Select (1/2/3/X)'));
   
   const actionMap = {
     '1': 'projectx',
