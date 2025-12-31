@@ -68,6 +68,7 @@ const textInput = async (message, defaultVal = '') => {
  * Password input
  */
 const passwordInput = async (message) => {
+  if (rl && !rl.closed) { rl.close(); rl = null; }
   prepareStdin();
   const { value } = await inquirer.prompt([{
     type: 'password',
@@ -83,6 +84,7 @@ const passwordInput = async (message) => {
  * Confirm - arrow keys selection
  */
 const confirmPrompt = async (message, defaultVal = true) => {
+  if (rl && !rl.closed) { rl.close(); rl = null; }
   prepareStdin();
   const choices = defaultVal 
     ? [{ name: 'Yes', value: true }, { name: 'No', value: false }]
@@ -103,6 +105,7 @@ const confirmPrompt = async (message, defaultVal = true) => {
  * Number input
  */
 const numberInput = async (message, defaultVal = 1, min = 1, max = 1000) => {
+  if (rl && !rl.closed) { rl.close(); rl = null; }
   prepareStdin();
   const { value } = await inquirer.prompt([{
     type: 'input',
@@ -125,6 +128,11 @@ const numberInput = async (message, defaultVal = 1, min = 1, max = 1000) => {
  * Select - arrow keys navigation
  */
 const selectOption = async (message, options) => {
+  // Close shared readline before inquirer to avoid conflicts
+  if (rl && !rl.closed) {
+    rl.close();
+    rl = null;
+  }
   prepareStdin();
   
   const choices = options.map(opt => ({
