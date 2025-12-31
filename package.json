@@ -1,6 +1,6 @@
 {
   "name": "hedgequantx",
-  "version": "1.8.18",
+  "version": "1.8.19",
   "description": "Prop Futures Algo Trading CLI - Connect to Topstep, Alpha Futures, and other prop firms",
   "main": "src/app.js",
   "bin": {
