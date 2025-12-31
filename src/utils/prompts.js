@@ -6,6 +6,23 @@
 const inquirer = require('inquirer');
 const readline = require('readline');
 
+// Shared readline instance
+let rl = null;
+
+/**
+ * Get or create readline interface
+ */
+const getReadline = () => {
+  if (!rl || rl.closed) {
+    rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      terminal: true
+    });
+  }
+  return rl;
+};
+
 /**
  * Ensure stdin is ready
  */
@@ -19,17 +36,14 @@ const prepareStdin = () => {
 };
 
 /**
- * Native readline prompt - more reliable than inquirer for simple input
+ * Native readline prompt
  */
 const nativePrompt = (message) => {
   return new Promise((resolve) => {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout
-    });
+    prepareStdin();
+    const r = getReadline();
     
-    rl.question(message + ' ', (answer) => {
-      rl.close();
+    r.question(message + ' ', (answer) => {
       resolve(answer || '');
     });
   });
