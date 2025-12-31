@@ -216,16 +216,18 @@ class AlgoUI {
     const r1c2 = buildCell('Follower', followerName, chalk.magenta, colR);
     row(r1c1.padded, r1c2.padded);
     
-    this._line(chalk.cyan(GM));
+    // Full width separator
+    const GF = BOX.ML + BOX.H.repeat(W) + BOX.MR;
     
-    // Row 2: Lead Symbol | Follower Symbol
-    const leadSymbol = (stats.leadSymbol || stats.symbol || 'N/A').substring(0, 35);
-    const followerSymbol = (stats.followerSymbol || stats.symbol || 'N/A').substring(0, 35);
-    const r2c1 = buildCell('Symbol', leadSymbol, chalk.yellow, colL);
-    const r2c2 = buildCell('Symbol', followerSymbol, chalk.yellow, colR);
-    row(r2c1.padded, r2c2.padded);
+    this._line(chalk.cyan(GF));
     
-    this._line(chalk.cyan(GM));
+    // Row 2: Symbol (centered, single row)
+    const symbol = (stats.symbol || stats.leadSymbol || 'N/A').substring(0, 60);
+    const symbolText = `Symbol: ${symbol}`;
+    const symbolPadded = center(symbolText, W);
+    this._line(chalk.cyan(BOX.V) + chalk.yellow(symbolPadded) + chalk.cyan(BOX.V));
+    
+    this._line(chalk.cyan(GT));
     
     // Row 3: Lead Qty | Follower Qty
     const r3c1 = buildCell('Qty', (stats.leadQty || '1').toString(), chalk.cyan, colL);
