@@ -244,11 +244,15 @@ const launchAlgo = async (service, account, contract, config) => {
   // Summary
   console.clear();
   console.log();
-  console.log(chalk.cyan('  === Session Summary ==='));
-  console.log();
-  console.log(chalk.white(`  Stop Reason: ${stopReason || 'unknown'}`));
-  console.log(chalk.white(`  Trades: ${stats.trades} (W: ${stats.wins} / L: ${stats.losses})`));
-  console.log((stats.pnl >= 0 ? chalk.green : chalk.red)(`  P&L: ${stats.pnl >= 0 ? '+' : ''}$${stats.pnl.toFixed(2)}`));
+  console.log(chalk.cyan('╔════════════════════════════════════════════════════════════════╗'));
+  console.log(chalk.cyan('║') + chalk.white('                        Session Summary                        ') + chalk.cyan('║'));
+  console.log(chalk.cyan('╠════════════════════════════════════════════════════════════════╣'));
+  console.log(chalk.cyan('║') + chalk.white(`  Stop Reason: ${(stopReason || 'unknown').padEnd(47)}`) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + chalk.white(`  Trades: ${String(stats.trades).padEnd(10)} Wins: ${String(stats.wins).padEnd(10)} Losses: ${String(stats.losses).padEnd(10)}`) + chalk.cyan('║'));
+  const pnlColor = stats.pnl >= 0 ? chalk.green : chalk.red;
+  const pnlStr = `${stats.pnl >= 0 ? '+' : ''}$${stats.pnl.toFixed(2)}`;
+  console.log(chalk.cyan('║') + chalk.white('  P&L: ') + pnlColor(pnlStr.padEnd(55)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╚════════════════════════════════════════════════════════════════╝'));
   console.log();
   
   await prompts.waitForEnter();
