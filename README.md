@@ -214,7 +214,7 @@ Mirror trades from Lead to Follower accounts.
 
 ## License
 
-Proprietary - HedgeQuantX
+MIT License - Open Source
 
 ---
 
