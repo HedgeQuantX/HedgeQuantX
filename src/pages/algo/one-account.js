@@ -78,7 +78,7 @@ const oneAccountMenu = async (service) => {
 };
 
 /**
- * Symbol selection - RAW API data only
+ * Symbol selection - sorted with popular indices first
  */
 const selectSymbol = async (service, account) => {
   const spinner = ora({ text: 'Loading symbols...', color: 'yellow' }).start();
@@ -89,10 +89,32 @@ const selectSymbol = async (service, account) => {
     return null;
   }
   
-  const contracts = contractsResult.contracts;
+  let contracts = contractsResult.contracts;
+  
+  // Sort: Popular indices first (ES, NQ, MES, MNQ, RTY, YM, etc.)
+  const popularPrefixes = ['ES', 'NQ', 'MES', 'MNQ', 'M2K', 'RTY', 'YM', 'MYM', 'NKD', 'GC', 'SI', 'CL'];
+  
+  contracts.sort((a, b) => {
+    const nameA = a.name || '';
+    const nameB = b.name || '';
+    
+    // Check if names start with popular prefixes
+    const idxA = popularPrefixes.findIndex(p => nameA.startsWith(p));
+    const idxB = popularPrefixes.findIndex(p => nameB.startsWith(p));
+    
+    // Both are popular - sort by popularity order
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    // Only A is popular - A first
+    if (idxA !== -1) return -1;
+    // Only B is popular - B first
+    if (idxB !== -1) return 1;
+    // Neither - alphabetical
+    return nameA.localeCompare(nameB);
+  });
+  
   spinner.succeed(`Found ${contracts.length} contracts`);
   
-  // Display EXACTLY what API returns - no modifications
+  // Display sorted contracts from API
   const options = contracts.map(c => ({
     label: `${c.name} - ${c.description}`,
     value: c
