@@ -168,7 +168,7 @@ const selectAccount = async (message, accounts, excludeIdx) => {
       const acc = x.a.account;
       const balance = acc.balance !== null ? ` ($${acc.balance.toLocaleString()})` : '';
       return {
-        label: `${x.a.propfirm} - ${acc.rithmicAccountId || acc.name || acc.accountId}${balance}`,
+        label: `${x.a.propfirm} - ${acc.accountName || acc.rithmicAccountId || acc.name || acc.accountId}${balance}`,
         value: x.i,
       };
     });

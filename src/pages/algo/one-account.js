@@ -48,8 +48,9 @@ const oneAccountMenu = async (service) => {
   spinner.succeed(`Found ${activeAccounts.length} active account(s)`);
   
   // Select account
+  // Display name priority: accountName (ProjectX) > rithmicAccountId (Rithmic) > name > accountId
   const options = activeAccounts.map(acc => ({
-    label: `${acc.rithmicAccountId || acc.name || acc.accountId} (${acc.propfirm || 'Unknown'})${acc.balance !== null ? ` - $${acc.balance.toLocaleString()}` : ''}`,
+    label: `${acc.accountName || acc.rithmicAccountId || acc.name || acc.accountId} (${acc.propfirm || 'Unknown'})${acc.balance !== null ? ` - $${acc.balance.toLocaleString()}` : ''}`,
     value: acc
   }));
   options.push({ label: '< Back', value: 'back' });

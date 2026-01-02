@@ -68,7 +68,7 @@ const showOrders = async (service) => {
     let allOrders = [];
     
     for (const account of allAccounts) {
-      const accName = String(account.accountId || account.accountName || 'Unknown').substring(0, 20);
+      const accName = String(account.accountName || account.rithmicAccountId || account.accountId || 'Unknown').substring(0, 20);
       spinner = ora({ text: `Fetching orders for ${accName}...`, color: 'yellow' }).start();
       
       try {
@@ -77,7 +77,7 @@ const showOrders = async (service) => {
           result.orders.forEach(order => {
             allOrders.push({ 
               ...order, 
-              accountName: account.accountId, 
+              accountName: account.accountName || account.rithmicAccountId || account.accountId, 
               propfirm: account.propfirm 
             });
           });

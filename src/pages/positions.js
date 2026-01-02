@@ -68,7 +68,7 @@ const showPositions = async (service) => {
     let allPositions = [];
     
     for (const account of allAccounts) {
-      const accName = String(account.accountId || account.accountName || 'Unknown').substring(0, 20);
+      const accName = String(account.accountName || account.rithmicAccountId || account.accountId || 'Unknown').substring(0, 20);
       spinner = ora({ text: `Fetching positions for ${accName}...`, color: 'yellow' }).start();
       
       try {
@@ -77,7 +77,7 @@ const showPositions = async (service) => {
           result.positions.forEach(pos => {
             allPositions.push({ 
               ...pos, 
-              accountName: account.accountId, 
+              accountName: account.accountName || account.rithmicAccountId || account.accountId, 
               propfirm: account.propfirm 
             });
           });

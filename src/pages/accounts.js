@@ -88,8 +88,8 @@ const showAccounts = async (service) => {
       const acc1 = allAccounts[i];
       const acc2 = allAccounts[i + 1];
 
-      const name1 = String(acc1.accountId || acc1.accountName || `Account #${i + 1}`);
-      const name2 = acc2 ? String(acc2.accountId || acc2.accountName || `Account #${i + 2}`) : '';
+      const name1 = String(acc1.accountName || acc1.rithmicAccountId || acc1.accountId || `Account #${i + 1}`);
+      const name2 = acc2 ? String(acc2.accountName || acc2.rithmicAccountId || acc2.accountId || `Account #${i + 2}`) : '';
 
       draw2ColHeader(name1.substring(0, col1 - 4), name2 ? name2.substring(0, col2 - 4) : '', boxWidth);
 
