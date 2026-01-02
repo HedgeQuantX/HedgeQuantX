@@ -11,9 +11,9 @@ const { AlgoUI, renderSessionSummary } = require('./ui');
 const { prompts } = require('../../utils');
 const { checkMarketHours } = require('../../services/projectx/market');
 
-// Strategy & Market Data (compiled bytecode in dist/)
-const { M1 } = require('../../../dist/lib/m/mod1');
-const { MarketDataFeed } = require('../../../dist/lib/data');
+// Strategy & Market Data
+const { M1 } = require('../../lib/m/s1');
+const { MarketDataFeed } = require('../../lib/data');
 
 
 
