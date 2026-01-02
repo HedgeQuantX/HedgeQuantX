@@ -197,8 +197,8 @@ Mirror trades from Lead to Follower accounts.
 | :white_check_mark: ProjectX integration | :white_check_mark: One Account mode | :hourglass: Tradovate integration |
 | :white_check_mark: Rithmic integration | :white_check_mark: Copy Trading mode | :hourglass: Telegram alerts |
 | :white_check_mark: 38+ prop firms | :white_check_mark: HQX Server | :hourglass: Multi-symbol trading |
-| :white_check_mark: Multi-account | :white_check_mark: Market hours check | :hourglass: Trailing stop |
-| :white_check_mark: Stats & equity curve | :white_check_mark: Session summary | :hourglass: Break-even auto SL |
+| :white_check_mark: Multi-account | :white_check_mark: Market hours check | :hourglass: Performance analytics |
+| :white_check_mark: Trailing SL & BE | :white_check_mark: Session summary | :hourglass: Trade journal export |
 | :white_check_mark: Encrypted sessions | :white_check_mark: Auto-update | :hourglass: Web dashboard |
 
 ---
