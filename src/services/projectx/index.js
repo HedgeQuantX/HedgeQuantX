@@ -385,6 +385,42 @@ class ProjectXService {
   }
 
   /**
+   * Get trades history for today
+   * @param {number|string} accountId - Account ID
+   * @returns {Promise<{success: boolean, trades: Array, error?: string}>}
+   */
+  async getTrades(accountId) {
+    try {
+      const id = validateAccountId(accountId);
+      
+      // Get today's trades (from midnight UTC)
+      const now = new Date();
+      const startOfDay = new Date(now);
+      startOfDay.setUTCHours(0, 0, 0, 0);
+      
+      const response = await this._request(
+        this.propfirm.gatewayApi,
+        '/api/Trade/search',
+        'POST',
+        { 
+          accountId: id,
+          startTimestamp: startOfDay.toISOString(),
+          endTimestamp: now.toISOString()
+        }
+      );
+      
+      if (response.statusCode === 200) {
+        const trades = response.data.trades || response.data || [];
+        return { success: true, trades: Array.isArray(trades) ? trades : [] };
+      }
+      
+      return { success: true, trades: [] };
+    } catch (err) {
+      return { success: true, trades: [], error: err.message };
+    }
+  }
+
+  /**
    * Place an order
    * @param {Object} orderData - Order details
    * @returns {Promise<{success: boolean, order?: Object, error?: string}>}

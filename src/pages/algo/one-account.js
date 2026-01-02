@@ -206,6 +206,8 @@ const launchAlgo = async (service, account, contract, config) => {
   let currentPosition = 0; // Current position qty (+ long, - short)
   let pendingOrder = false; // Prevent duplicate orders
   let tickCount = 0;
+  let lastTradeCount = 0; // Track number of trades from API
+  let lastPositionQty = 0; // Track position changes
   
   // Initialize Strategy (M1 is singleton instance)
   const strategy = M1;
@@ -375,24 +377,20 @@ const launchAlgo = async (service, account, contract, config) => {
     algoLogger.error(ui, 'CONNECTION ERROR', e.message.substring(0, 50));
   }
   
-  // Poll account P&L from API
+  // Poll account P&L and sync with real trades from API
   const pollPnL = async () => {
     try {
+      // Get account P&L
       const accountResult = await service.getTradingAccounts();
       if (accountResult.success && accountResult.accounts) {
         const acc = accountResult.accounts.find(a => a.accountId === account.accountId);
         if (acc && acc.profitAndLoss !== undefined) {
           if (startingPnL === null) startingPnL = acc.profitAndLoss;
           stats.pnl = acc.profitAndLoss - startingPnL;
-          
-          // Record trade result in strategy
-          if (stats.pnl !== 0) {
-            strategy.recordTradeResult(stats.pnl);
-          }
         }
       }
       
-      // Check positions
+      // Check positions - detect when position closes
       const posResult = await service.getPositions(account.accountId);
       if (posResult.success && posResult.positions) {
         const pos = posResult.positions.find(p => {
@@ -400,24 +398,67 @@ const launchAlgo = async (service, account, contract, config) => {
           return sym.includes(contract.name) || sym.includes(contractId);
         });
         
-        if (pos && pos.quantity !== 0) {
-          currentPosition = pos.quantity;
-          const side = pos.quantity > 0 ? 'LONG' : 'SHORT';
-          const pnl = pos.profitAndLoss || 0;
+        const newPositionQty = pos?.quantity || 0;
+        
+        // Position just closed - cancel remaining orders and log result
+        if (lastPositionQty !== 0 && newPositionQty === 0) {
+          // Cancel all open orders to prevent new positions
+          try {
+            await service.cancelAllOrders(account.accountId);
+            algoLogger.info(ui, 'ORDERS CANCELLED', 'Position closed - brackets removed');
+          } catch (e) {
+            // Silent fail
+          }
           
-          // Check if position closed (win/loss)
-          if (pnl > 0) stats.wins = Math.max(stats.wins, 1);
-          else if (pnl < 0) stats.losses = Math.max(stats.losses, 1);
-        } else {
-          currentPosition = 0;
+          // Get real trade data from API
+          try {
+            const tradesResult = await service.getTrades(account.accountId);
+            if (tradesResult.success && tradesResult.trades?.length > 0) {
+              // Count completed trades (those with profitAndLoss not null)
+              const completedTrades = tradesResult.trades.filter(t => t.profitAndLoss !== null);
+              
+              // Update stats from real trades
+              let wins = 0, losses = 0;
+              for (const trade of completedTrades) {
+                if (trade.profitAndLoss > 0) wins++;
+                else if (trade.profitAndLoss < 0) losses++;
+              }
+              stats.trades = completedTrades.length;
+              stats.wins = wins;
+              stats.losses = losses;
+              
+              // Log the trade that just closed
+              const lastTrade = completedTrades[completedTrades.length - 1];
+              if (lastTrade) {
+                const pnl = lastTrade.profitAndLoss || 0;
+                const side = lastTrade.side === 0 ? 'LONG' : 'SHORT';
+                const exitPrice = lastTrade.price || 0;
+                
+                if (pnl >= 0) {
+                  algoLogger.targetHit(ui, symbolName, exitPrice, pnl);
+                } else {
+                  algoLogger.stopHit(ui, symbolName, exitPrice, Math.abs(pnl));
+                }
+                algoLogger.positionClosed(ui, symbolName, side, contracts, exitPrice, pnl);
+                
+                // Record in strategy for adaptation
+                strategy.recordTradeResult(pnl);
+              }
+            }
+          } catch (e) {
+            // Silent fail - trades API might not be available
+          }
         }
+        
+        lastPositionQty = newPositionQty;
+        currentPosition = newPositionQty;
       }
       
       // Check target/risk
       if (stats.pnl >= dailyTarget) {
         stopReason = 'target';
         running = false;
-        algoLogger.targetHit(ui, symbolName, 0, stats.pnl);
+        algoLogger.info(ui, 'DAILY TARGET REACHED', `+$${stats.pnl.toFixed(2)}`);
       } else if (stats.pnl <= -maxRisk) {
         stopReason = 'risk';
         running = false;

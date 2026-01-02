@@ -186,8 +186,8 @@ const showStats = async (service) => {
       } catch (e) {}
     }
 
-    // ========== AGGREGATE STATS FROM API DATA ==========
-    // Stats come from API (lifetimeStats) or calculated from API trade data
+    // ========== AGGREGATE STATS FROM TRADE HISTORY (API DATA) ==========
+    // Calculate stats from actual trades to ensure consistency with displayed trades
     
     let stats = {
       totalTrades: 0, winningTrades: 0, losingTrades: 0,
@@ -197,27 +197,8 @@ const showStats = async (service) => {
       longTrades: 0, shortTrades: 0, longWins: 0, shortWins: 0
     };
     
-    // First: aggregate lifetimeStats from APIs (ProjectX)
-    for (const account of activeAccounts) {
-      if (account.lifetimeStats) {
-        const s = account.lifetimeStats;
-        stats.totalTrades += s.totalTrades || 0;
-        stats.winningTrades += s.winningTrades || 0;
-        stats.losingTrades += s.losingTrades || 0;
-        stats.totalWinAmount += s.totalWinAmount || 0;
-        stats.totalLossAmount += s.totalLossAmount || 0;
-        stats.bestTrade = Math.max(stats.bestTrade, s.bestTrade || 0);
-        stats.worstTrade = Math.min(stats.worstTrade, s.worstTrade || 0);
-        stats.totalVolume += s.totalVolume || 0;
-        stats.maxConsecutiveWins = Math.max(stats.maxConsecutiveWins, s.maxConsecutiveWins || 0);
-        stats.maxConsecutiveLosses = Math.max(stats.maxConsecutiveLosses, s.maxConsecutiveLosses || 0);
-        stats.longTrades += s.longTrades || 0;
-        stats.shortTrades += s.shortTrades || 0;
-      }
-    }
-    
-    // If no lifetimeStats, calculate from trade history (still 100% API data)
-    if (stats.totalTrades === 0 && allTrades.length > 0) {
+    // Calculate stats from trade history (100% API data, consistent with displayed trades)
+    if (allTrades.length > 0) {
       stats.totalTrades = allTrades.length;
       let consecutiveWins = 0, consecutiveLosses = 0;
       
@@ -464,11 +445,16 @@ const showStats = async (service) => {
       // Header
       const header = ` ${'Time'.padEnd(colTime)}| ${'Symbol'.padEnd(colSymbol)}| ${'Price'.padEnd(colPrice)}| ${'P&L'.padEnd(colPnl)}| ${'Side'.padEnd(colSide)}| ${'Account'.padEnd(colAccount - 2)}`;
       console.log(chalk.cyan('\u2551') + chalk.white(header) + chalk.cyan('\u2551'));
-      console.log(chalk.cyan('\u2551') + chalk.gray('\u2500'.repeat(innerWidth)) + chalk.cyan('\u2551'));
+      console.log(chalk.cyan('\u255F') + chalk.cyan('\u2500'.repeat(innerWidth)) + chalk.cyan('\u2562'));
       
-      const recentTrades = allTrades.slice(-10).reverse();
+      // Show ALL trades, sorted by time (most recent first)
+      const sortedTrades = [...allTrades].sort((a, b) => {
+        const timeA = new Date(a.creationTimestamp || a.timestamp || 0).getTime();
+        const timeB = new Date(b.creationTimestamp || b.timestamp || 0).getTime();
+        return timeB - timeA;
+      });
       
-      for (const trade of recentTrades) {
+      for (const trade of sortedTrades) {
         const timestamp = trade.creationTimestamp || trade.timestamp;
         const time = timestamp ? new Date(timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
         const symbol = extractSymbol(trade.contractId || trade.symbol);
@@ -492,11 +478,6 @@ const showStats = async (service) => {
         
         const row = ` ${timeStr}| ${symbolStr}| ${priceStr}| ${pnlColored}| ${sideColored}| ${accountStr}`;
         console.log(chalk.cyan('\u2551') + row + chalk.cyan('\u2551'));
-      }
-      
-      if (allTrades.length > 10) {
-        const moreMsg = `  ... and ${allTrades.length - 10} more trades`;
-        console.log(chalk.cyan('\u2551') + moreMsg.padEnd(innerWidth) + chalk.cyan('\u2551'));
       }
     } else {
       const msg = connectionTypes.rithmic > 0 
