@@ -447,8 +447,14 @@ const showStats = async (service) => {
       console.log(chalk.cyan('\u2551') + chalk.white(header) + chalk.cyan('\u2551'));
       console.log(chalk.cyan('\u255F') + chalk.cyan('\u2500'.repeat(innerWidth)) + chalk.cyan('\u2562'));
       
-      // Show ALL trades, sorted by time (most recent first)
-      const sortedTrades = [...allTrades].sort((a, b) => {
+      // Show only COMPLETED trades (with P&L), sorted by time (most recent first)
+      // Filter out entry fills (P&L = 0 or null) - only show exit fills with real P&L
+      const completedTrades = allTrades.filter(t => {
+        const pnl = t.profitAndLoss || t.pnl;
+        return pnl !== null && pnl !== undefined && pnl !== 0;
+      });
+      
+      const sortedTrades = [...completedTrades].sort((a, b) => {
         const timeA = new Date(a.creationTimestamp || a.timestamp || 0).getTime();
         const timeB = new Date(b.creationTimestamp || b.timestamp || 0).getTime();
         return timeB - timeA;
@@ -461,7 +467,9 @@ const showStats = async (service) => {
         const price = (trade.price || 0).toFixed(2);
         const pnl = trade.profitAndLoss || trade.pnl || 0;
         const pnlText = pnl >= 0 ? `+$${pnl.toFixed(0)}` : `-$${Math.abs(pnl).toFixed(0)}`;
-        const side = trade.side === 0 ? 'BUY' : trade.side === 1 ? 'SELL' : 'N/A';
+        // For completed trades, show the original direction (opposite of exit side)
+        const exitSide = trade.side; // 0=BUY exit means was SHORT, 1=SELL exit means was LONG
+        const tradeSide = exitSide === 0 ? 'SHORT' : 'LONG';
         const accountName = (trade.accountName || 'N/A').substring(0, colAccount - 3);
         
         // Build row with exact widths
@@ -469,15 +477,20 @@ const showStats = async (service) => {
         const symbolStr = symbol.padEnd(colSymbol);
         const priceStr = price.padEnd(colPrice);
         const pnlStr = pnlText.padEnd(colPnl);
-        const sideStr = side.padEnd(colSide);
+        const sideStr = tradeSide.padEnd(colSide);
         const accountStr = accountName.padEnd(colAccount - 2);
         
         // Colored versions
         const pnlColored = pnl >= 0 ? chalk.green(pnlStr) : chalk.red(pnlStr);
-        const sideColored = trade.side === 0 ? chalk.green(sideStr) : chalk.red(sideStr);
+        const sideColored = tradeSide === 'LONG' ? chalk.green(sideStr) : chalk.red(sideStr);
         
         const row = ` ${timeStr}| ${symbolStr}| ${priceStr}| ${pnlColored}| ${sideColored}| ${accountStr}`;
         console.log(chalk.cyan('\u2551') + row + chalk.cyan('\u2551'));
+      }
+      
+      if (sortedTrades.length === 0) {
+        const msg = '  No completed trades yet';
+        console.log(chalk.cyan('\u2551') + chalk.gray(msg.padEnd(innerWidth)) + chalk.cyan('\u2551'));
       }
     } else {
       const msg = connectionTypes.rithmic > 0 
