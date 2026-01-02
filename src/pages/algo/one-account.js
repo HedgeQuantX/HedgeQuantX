@@ -189,7 +189,8 @@ const launchAlgo = async (service, account, contract, config) => {
   
   let running = true;
   let stopReason = null;
-  let lastPnL = 0;
+  let startingPnL = null; // P&L at algo start (from API)
+  let lastPositionPnL = 0;
   
   // Log startup info from API
   ui.addLog('info', `Connection: ${connectionType}`);
@@ -212,6 +213,25 @@ const launchAlgo = async (service, account, contract, config) => {
   // Poll data from API - 100% real data
   const pollAPI = async () => {
     try {
+      // Get account P&L from API
+      const accountResult = await service.getTradingAccounts();
+      if (accountResult.success && accountResult.accounts) {
+        const acc = accountResult.accounts.find(a => a.accountId === account.accountId);
+        if (acc && acc.profitAndLoss !== undefined) {
+          const accountPnL = acc.profitAndLoss;
+          
+          // Set starting P&L on first poll
+          if (startingPnL === null) {
+            startingPnL = accountPnL;
+            ui.addLog('info', `Starting P&L: $${startingPnL.toFixed(2)}`);
+          }
+          
+          // Session P&L = current - starting (both from API)
+          const sessionPnL = accountPnL - startingPnL;
+          stats.pnl = sessionPnL;
+        }
+      }
+      
       // Get positions from API
       const posResult = await service.getPositions(account.accountId);
       
@@ -223,62 +243,49 @@ const launchAlgo = async (service, account, contract, config) => {
         });
         
         if (position) {
-          // P&L directly from API - no calculation
-          const apiPnL = position.profitAndLoss || 0;
+          const positionPnL = position.profitAndLoss || 0;
           
-          // Detect trade completion (P&L changed)
-          if (lastPnL !== 0 && Math.abs(apiPnL - lastPnL) > 0.01) {
-            const tradePnL = apiPnL - lastPnL;
+          // Detect trade completion (position P&L changed significantly)
+          if (lastPositionPnL !== 0 && Math.abs(positionPnL - lastPositionPnL) > 0.01) {
+            const tradePnL = positionPnL - lastPositionPnL;
             stats.trades++;
             
             if (tradePnL > 0) {
               stats.wins++;
-              ui.addLog('trade', `+$${tradePnL.toFixed(2)} (from API)`);
+              ui.addLog('trade', `+$${tradePnL.toFixed(2)}`);
             } else {
               stats.losses++;
-              ui.addLog('loss', `-$${Math.abs(tradePnL).toFixed(2)} (from API)`);
+              ui.addLog('loss', `-$${Math.abs(tradePnL).toFixed(2)}`);
             }
           }
           
-          lastPnL = apiPnL;
-          stats.pnl = apiPnL;
+          lastPositionPnL = positionPnL;
           
           // Log position info from API
           if (position.quantity && position.quantity !== 0) {
             const side = position.quantity > 0 ? 'LONG' : 'SHORT';
             const qty = Math.abs(position.quantity);
-            ui.addLog('info', `Position: ${side} ${qty}x | P&L: $${apiPnL.toFixed(2)}`);
+            ui.addLog('info', `${side} ${qty}x @ P&L: $${positionPnL.toFixed(2)}`);
           }
         } else {
-          // No position - flat
-          if (stats.pnl !== 0) {
-            ui.addLog('info', 'Position closed - Flat');
-          }
+          // No position for this symbol
+          lastPositionPnL = 0;
         }
       }
       
-      // Get account balance from API
-      const accountResult = await service.getTradingAccounts();
-      if (accountResult.success && accountResult.accounts) {
-        const acc = accountResult.accounts.find(a => a.accountId === account.accountId);
-        if (acc && acc.profitAndLoss !== undefined) {
-          stats.pnl = acc.profitAndLoss;
-        }
-      }
-      
-      // Check target/risk limits (using API P&L)
+      // Check target/risk limits (using SESSION P&L, not account total)
       if (stats.pnl >= dailyTarget) {
         stopReason = 'target';
         running = false;
-        ui.addLog('success', `TARGET REACHED! +$${stats.pnl.toFixed(2)}`);
+        ui.addLog('success', `SESSION TARGET! +$${stats.pnl.toFixed(2)}`);
       } else if (stats.pnl <= -maxRisk) {
         stopReason = 'risk';
         running = false;
-        ui.addLog('error', `MAX RISK! -$${Math.abs(stats.pnl).toFixed(2)}`);
+        ui.addLog('error', `SESSION MAX RISK! -$${Math.abs(stats.pnl).toFixed(2)}`);
       }
       
     } catch (e) {
-      ui.addLog('error', `API Error: ${e.message}`);
+      ui.addLog('error', `API: ${e.message}`);
     }
   };
   
