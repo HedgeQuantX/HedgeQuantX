@@ -1,5 +1,10 @@
 /**
  * Stats Page
+ * 
+ * STRICT RULE: Display ONLY values returned by API
+ * - ProjectX: Uses /api/Trade/search, /Position, /TradingAccount APIs
+ * - Rithmic: Uses PNL_PLANT for balance/P&L, ORDER_PLANT for accounts
+ * - NO estimation, NO simulation, NO mock data
  */
 
 const chalk = require('chalk');
@@ -12,14 +17,15 @@ const { prompts } = require('../utils');
 
 /**
  * Show Stats Page
+ * Aggregates data from all connections (ProjectX, Rithmic, Tradovate)
  */
 const showStats = async (service) => {
   let spinner;
   
   try {
-    // Single spinner for loading
     spinner = ora({ text: 'Loading stats...', color: 'yellow' }).start();
     
+    // Get all connections
     const allConns = connections.count() > 0 
       ? connections.getAll() 
       : (service ? [{ service, propfirm: service.propfirm?.name || 'Unknown', type: 'single' }] : []);
@@ -30,11 +36,24 @@ const showStats = async (service) => {
       return;
     }
 
-    // Fetch accounts from each connection
+    // Track connection types for display
+    const connectionTypes = {
+      projectx: 0,
+      rithmic: 0,
+      tradovate: 0
+    };
+
+    // Fetch accounts from each connection with type detection
     let allAccountsData = [];
     
     for (const conn of allConns) {
+      const connType = conn.type || 'projectx';
       const propfirmName = conn.propfirm || conn.type || 'Unknown';
+      
+      // Count connection types
+      if (connType === 'projectx') connectionTypes.projectx++;
+      else if (connType === 'rithmic') connectionTypes.rithmic++;
+      else if (connType === 'tradovate') connectionTypes.tradovate++;
       
       try {
         const result = await conn.service.getTradingAccounts();
@@ -43,11 +62,14 @@ const showStats = async (service) => {
             allAccountsData.push({
               ...account,
               propfirm: propfirmName,
+              connectionType: connType,
               service: conn.service
             });
           });
         }
-      } catch (e) {}
+      } catch (e) {
+        // Silently skip failed connections
+      }
     }
     
     if (allAccountsData.length === 0) {
@@ -74,40 +96,51 @@ const showStats = async (service) => {
       return;
     }
 
-    // Collect stats for each account
+    // ========== AGGREGATE DATA FROM APIs ==========
+    // All values come from APIs - NO local calculation for P&L
+    
     let totalBalance = 0;
     let totalPnL = 0;
     let totalStartingBalance = 0;
     let allTrades = [];
     let totalOpenPositions = 0;
     let totalOpenOrders = 0;
+    
+    // Track data availability (null means no data from API)
     let hasBalanceData = false;
     let hasPnLData = false;
+    let hasTradeData = false;
 
     for (let i = 0; i < activeAccounts.length; i++) {
       const account = activeAccounts[i];
       const svc = account.service;
+      const connType = account.connectionType || 'projectx';
       
       try {
-        // Balance
+        // ===== BALANCE (from API) =====
         if (account.balance !== null && account.balance !== undefined) {
           totalBalance += account.balance;
           hasBalanceData = true;
         }
         
-        // P&L
+        // ===== P&L (from API - NEVER calculated locally) =====
+        // ProjectX: profitAndLoss comes from /Position API (unrealized) + /Trade API (realized)
+        // Rithmic: profitAndLoss comes from PNL_PLANT (dayPnl or openPnl + closedPnl)
         if (account.profitAndLoss !== null && account.profitAndLoss !== undefined) {
           totalPnL += account.profitAndLoss;
           hasPnLData = true;
         }
         
-        // Starting balance
-        if (account.balance !== null && account.balance !== undefined) {
+        // ===== STARTING BALANCE =====
+        // Derived: startingBalance from API or calculated as balance - P&L
+        if (account.startingBalance !== null && account.startingBalance !== undefined) {
+          totalStartingBalance += account.startingBalance;
+        } else if (account.balance !== null && account.balance !== undefined) {
           const pnl = account.profitAndLoss || 0;
           totalStartingBalance += (account.balance - pnl);
         }
         
-        // Positions
+        // ===== POSITIONS (from API) =====
         try {
           const posResult = await svc.getPositions(account.accountId);
           if (posResult.success && posResult.positions) {
@@ -115,15 +148,16 @@ const showStats = async (service) => {
           }
         } catch (e) {}
         
-        // Orders
+        // ===== ORDERS (from API) =====
         try {
           const ordResult = await svc.getOrders(account.accountId);
           if (ordResult.success && ordResult.orders) {
-            totalOpenOrders += ordResult.orders.filter(o => o.status === 1).length;
+            totalOpenOrders += ordResult.orders.filter(o => o.status === 1 || o.status === 'Working').length;
           }
         } catch (e) {}
         
-        // Lifetime stats
+        // ===== LIFETIME STATS (from API - ProjectX only) =====
+        // Rithmic doesn't have getLifetimeStats - returns null
         if (typeof svc.getLifetimeStats === 'function') {
           try {
             const lifetimeResult = await svc.getLifetimeStats(account.accountId);
@@ -133,15 +167,18 @@ const showStats = async (service) => {
           } catch (e) {}
         }
         
-        // Trade history
+        // ===== TRADE HISTORY (from API - ProjectX only) =====
+        // Rithmic doesn't have getTradeHistory - returns empty array
         if (typeof svc.getTradeHistory === 'function') {
           try {
             const tradesResult = await svc.getTradeHistory(account.accountId, 30);
             if (tradesResult.success && tradesResult.trades && tradesResult.trades.length > 0) {
+              hasTradeData = true;
               allTrades = allTrades.concat(tradesResult.trades.map(t => ({
                 ...t,
                 accountName: account.accountName,
-                propfirm: account.propfirm
+                propfirm: account.propfirm,
+                connectionType: connType
               })));
             }
           } catch (e) {}
@@ -149,7 +186,8 @@ const showStats = async (service) => {
       } catch (e) {}
     }
 
-    // Aggregate stats
+    // ========== AGGREGATE STATS FROM API DATA ==========
+    // Stats come from API (lifetimeStats) or calculated from API trade data
     
     let stats = {
       totalTrades: 0, winningTrades: 0, losingTrades: 0,
@@ -159,6 +197,7 @@ const showStats = async (service) => {
       longTrades: 0, shortTrades: 0, longWins: 0, shortWins: 0
     };
     
+    // First: aggregate lifetimeStats from APIs (ProjectX)
     for (const account of activeAccounts) {
       if (account.lifetimeStats) {
         const s = account.lifetimeStats;
@@ -177,18 +216,20 @@ const showStats = async (service) => {
       }
     }
     
-    // If no stats from API, calculate from trades
+    // If no lifetimeStats, calculate from trade history (still 100% API data)
     if (stats.totalTrades === 0 && allTrades.length > 0) {
       stats.totalTrades = allTrades.length;
       let consecutiveWins = 0, consecutiveLosses = 0;
       
       for (const trade of allTrades) {
+        // P&L comes directly from API response
         const pnl = trade.profitAndLoss || trade.pnl || 0;
         const size = trade.size || trade.quantity || 1;
         const side = trade.side;
         
         stats.totalVolume += Math.abs(size);
         
+        // Side: 0 = Buy/Long, 1 = Sell/Short (ProjectX API format)
         if (side === 0) {
           stats.longTrades++;
           if (pnl > 0) stats.longWins++;
@@ -212,31 +253,30 @@ const showStats = async (service) => {
           if (consecutiveLosses > stats.maxConsecutiveLosses) stats.maxConsecutiveLosses = consecutiveLosses;
           if (pnl < stats.worstTrade) stats.worstTrade = pnl;
         }
+        // pnl === 0 trades are neither win nor loss
       }
     }
 
-    spinner.succeed('All stats loaded');
+    spinner.succeed('Stats loaded');
     console.log();
     
-    // Display
+    // ========== DISPLAY ==========
     const boxWidth = getLogoWidth();
     const { col1, col2 } = getColWidths(boxWidth);
     
-    // Use 0 if null
-    if (!hasBalanceData) totalBalance = 0;
-    if (!hasPnLData) totalPnL = 0;
-    
-    // Calculated metrics
-    const winRate = stats.totalTrades > 0 ? ((stats.winningTrades / stats.totalTrades) * 100).toFixed(1) : '0.0';
+    // Calculate metrics (using API data only)
+    const winRate = stats.totalTrades > 0 ? ((stats.winningTrades / stats.totalTrades) * 100).toFixed(1) : 'N/A';
     const avgWin = stats.winningTrades > 0 ? (stats.totalWinAmount / stats.winningTrades).toFixed(2) : '0.00';
     const avgLoss = stats.losingTrades > 0 ? (stats.totalLossAmount / stats.losingTrades).toFixed(2) : '0.00';
-    const profitFactor = stats.totalLossAmount > 0 ? (stats.totalWinAmount / stats.totalLossAmount).toFixed(2) : (stats.totalWinAmount > 0 ? '∞' : '0.00');
+    const profitFactor = stats.totalLossAmount > 0 
+      ? (stats.totalWinAmount / stats.totalLossAmount).toFixed(2) 
+      : (stats.totalWinAmount > 0 ? '∞' : 'N/A');
     const netPnL = stats.totalWinAmount - stats.totalLossAmount;
-    const returnPercent = totalStartingBalance > 0 ? ((totalPnL / totalStartingBalance) * 100).toFixed(2) : '0.00';
-    const longWinRate = stats.longTrades > 0 ? ((stats.longWins / stats.longTrades) * 100).toFixed(1) : '0.0';
-    const shortWinRate = stats.shortTrades > 0 ? ((stats.shortWins / stats.shortTrades) * 100).toFixed(1) : '0.0';
+    const returnPercent = totalStartingBalance > 0 ? ((totalPnL / totalStartingBalance) * 100).toFixed(2) : 'N/A';
+    const longWinRate = stats.longTrades > 0 ? ((stats.longWins / stats.longTrades) * 100).toFixed(1) : 'N/A';
+    const shortWinRate = stats.shortTrades > 0 ? ((stats.shortWins / stats.shortTrades) * 100).toFixed(1) : 'N/A';
     
-    // Advanced quantitative metrics
+    // Quantitative metrics (calculated from API trade data)
     const tradePnLs = allTrades.map(t => t.profitAndLoss || t.pnl || 0);
     const avgReturn = tradePnLs.length > 0 ? tradePnLs.reduce((a, b) => a + b, 0) / tradePnLs.length : 0;
     
@@ -254,73 +294,94 @@ const showStats = async (service) => {
     const downsideDev = Math.sqrt(downsideVariance);
     
     // Ratios
-    const sharpeRatio = stdDev > 0 ? (avgReturn / stdDev).toFixed(2) : '0.00';
-    const sortinoRatio = downsideDev > 0 ? (avgReturn / downsideDev).toFixed(2) : '0.00';
+    const sharpeRatio = stdDev > 0 ? (avgReturn / stdDev).toFixed(2) : 'N/A';
+    const sortinoRatio = downsideDev > 0 ? (avgReturn / downsideDev).toFixed(2) : 'N/A';
     
     // Max Drawdown
     let maxDrawdown = 0;
-    let peak = totalStartingBalance || 100000;
+    let peak = totalStartingBalance || 0;
     let equity = peak;
-    tradePnLs.forEach(pnl => {
-      equity += pnl;
-      if (equity > peak) peak = equity;
-      const drawdown = peak > 0 ? (peak - equity) / peak * 100 : 0;
-      if (drawdown > maxDrawdown) maxDrawdown = drawdown;
-    });
+    if (peak > 0 && tradePnLs.length > 0) {
+      tradePnLs.forEach(pnl => {
+        equity += pnl;
+        if (equity > peak) peak = equity;
+        const drawdown = peak > 0 ? (peak - equity) / peak * 100 : 0;
+        if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+      });
+    }
     
     const expectancy = stats.totalTrades > 0 ? netPnL / stats.totalTrades : 0;
-    const riskRewardRatio = parseFloat(avgLoss) > 0 ? (parseFloat(avgWin) / parseFloat(avgLoss)).toFixed(2) : '0.00';
-    const calmarRatio = maxDrawdown > 0 ? (parseFloat(returnPercent) / maxDrawdown).toFixed(2) : '0.00';
+    const riskRewardRatio = parseFloat(avgLoss) > 0 ? (parseFloat(avgWin) / parseFloat(avgLoss)).toFixed(2) : 'N/A';
+    const calmarRatio = maxDrawdown > 0 && returnPercent !== 'N/A' ? (parseFloat(returnPercent) / maxDrawdown).toFixed(2) : 'N/A';
     
-    const totalBalanceColor = totalBalance >= 0 ? chalk.green : chalk.red;
-    const pnlColor = totalPnL >= 0 ? chalk.green : chalk.red;
+    // Colors
+    const totalBalanceColor = hasBalanceData ? (totalBalance >= 0 ? chalk.green : chalk.red) : chalk.gray;
+    const pnlColor = hasPnLData ? (totalPnL >= 0 ? chalk.green : chalk.red) : chalk.gray;
     
-    // Main Summary
+    // Connection type string
+    const connTypeStr = [];
+    if (connectionTypes.projectx > 0) connTypeStr.push(`ProjectX(${connectionTypes.projectx})`);
+    if (connectionTypes.rithmic > 0) connTypeStr.push(`Rithmic(${connectionTypes.rithmic})`);
+    if (connectionTypes.tradovate > 0) connTypeStr.push(`Tradovate(${connectionTypes.tradovate})`);
+    
+    // ========== MAIN SUMMARY ==========
     drawBoxHeader('HQX STATS', boxWidth);
     draw2ColHeader('ACCOUNT OVERVIEW', 'TRADING PERFORMANCE', boxWidth);
     
-    console.log(chalk.cyan('\u2551') + fmtRow('Connections:', chalk.cyan(String(connections.count() || 1)), col1) + chalk.cyan('\u2502') + fmtRow('Total Trades:', chalk.white(String(stats.totalTrades)), col2) + chalk.cyan('\u2551'));
-    console.log(chalk.cyan('\u2551') + fmtRow('Total Accounts:', chalk.cyan(String(activeAccounts.length)), col1) + chalk.cyan('\u2502') + fmtRow('Winning Trades:', chalk.green(String(stats.winningTrades)), col2) + chalk.cyan('\u2551'));
-    console.log(chalk.cyan('\u2551') + fmtRow('Total Balance:', totalBalanceColor('$' + totalBalance.toLocaleString(undefined, {minimumFractionDigits: 2})), col1) + chalk.cyan('\u2502') + fmtRow('Losing Trades:', chalk.red(String(stats.losingTrades)), col2) + chalk.cyan('\u2551'));
-    console.log(chalk.cyan('\u2551') + fmtRow('Starting Balance:', chalk.white('$' + totalStartingBalance.toLocaleString(undefined, {minimumFractionDigits: 2})), col1) + chalk.cyan('\u2502') + fmtRow('Win Rate:', parseFloat(winRate) >= 50 ? chalk.green(winRate + '%') : chalk.yellow(winRate + '%'), col2) + chalk.cyan('\u2551'));
-    console.log(chalk.cyan('\u2551') + fmtRow('Total P&L:', pnlColor((totalPnL >= 0 ? '+' : '') + '$' + totalPnL.toLocaleString(undefined, {minimumFractionDigits: 2}) + ' (' + returnPercent + '%)'), col1) + chalk.cyan('\u2502') + fmtRow('Long Trades:', chalk.white(stats.longTrades + ' (' + longWinRate + '%)'), col2) + chalk.cyan('\u2551'));
-    console.log(chalk.cyan('\u2551') + fmtRow('Open Positions:', chalk.white(String(totalOpenPositions)), col1) + chalk.cyan('\u2502') + fmtRow('Short Trades:', chalk.white(stats.shortTrades + ' (' + shortWinRate + '%)'), col2) + chalk.cyan('\u2551'));
-    console.log(chalk.cyan('\u2551') + fmtRow('Open Orders:', chalk.white(String(totalOpenOrders)), col1) + chalk.cyan('\u2502') + fmtRow('Volume:', chalk.white(stats.totalVolume + ' contracts'), col2) + chalk.cyan('\u2551'));
+    // Format balance/P&L - show "N/A" if no data from API
+    const balanceStr = hasBalanceData ? '$' + totalBalance.toLocaleString(undefined, {minimumFractionDigits: 2}) : 'N/A';
+    const pnlStr = hasPnLData 
+      ? (totalPnL >= 0 ? '+' : '') + '$' + totalPnL.toLocaleString(undefined, {minimumFractionDigits: 2}) + (returnPercent !== 'N/A' ? ' (' + returnPercent + '%)' : '')
+      : 'N/A';
+    const startBalStr = totalStartingBalance > 0 ? '$' + totalStartingBalance.toLocaleString(undefined, {minimumFractionDigits: 2}) : 'N/A';
     
-    // P&L Metrics
+    console.log(chalk.cyan('\u2551') + fmtRow('Connections:', chalk.cyan(connTypeStr.join(', ') || String(connections.count() || 1)), col1) + chalk.cyan('\u2502') + fmtRow('Total Trades:', hasTradeData || stats.totalTrades > 0 ? chalk.white(String(stats.totalTrades)) : chalk.gray('N/A'), col2) + chalk.cyan('\u2551'));
+    console.log(chalk.cyan('\u2551') + fmtRow('Total Accounts:', chalk.cyan(String(activeAccounts.length)), col1) + chalk.cyan('\u2502') + fmtRow('Winning Trades:', hasTradeData || stats.winningTrades > 0 ? chalk.green(String(stats.winningTrades)) : chalk.gray('N/A'), col2) + chalk.cyan('\u2551'));
+    console.log(chalk.cyan('\u2551') + fmtRow('Total Balance:', totalBalanceColor(balanceStr), col1) + chalk.cyan('\u2502') + fmtRow('Losing Trades:', hasTradeData || stats.losingTrades > 0 ? chalk.red(String(stats.losingTrades)) : chalk.gray('N/A'), col2) + chalk.cyan('\u2551'));
+    console.log(chalk.cyan('\u2551') + fmtRow('Starting Balance:', chalk.white(startBalStr), col1) + chalk.cyan('\u2502') + fmtRow('Win Rate:', winRate !== 'N/A' ? (parseFloat(winRate) >= 50 ? chalk.green(winRate + '%') : chalk.yellow(winRate + '%')) : chalk.gray('N/A'), col2) + chalk.cyan('\u2551'));
+    console.log(chalk.cyan('\u2551') + fmtRow('Total P&L:', pnlColor(pnlStr), col1) + chalk.cyan('\u2502') + fmtRow('Long Trades:', hasTradeData ? chalk.white(stats.longTrades + (longWinRate !== 'N/A' ? ' (' + longWinRate + '%)' : '')) : chalk.gray('N/A'), col2) + chalk.cyan('\u2551'));
+    console.log(chalk.cyan('\u2551') + fmtRow('Open Positions:', chalk.white(String(totalOpenPositions)), col1) + chalk.cyan('\u2502') + fmtRow('Short Trades:', hasTradeData ? chalk.white(stats.shortTrades + (shortWinRate !== 'N/A' ? ' (' + shortWinRate + '%)' : '')) : chalk.gray('N/A'), col2) + chalk.cyan('\u2551'));
+    console.log(chalk.cyan('\u2551') + fmtRow('Open Orders:', chalk.white(String(totalOpenOrders)), col1) + chalk.cyan('\u2502') + fmtRow('Volume:', hasTradeData ? chalk.white(stats.totalVolume + ' contracts') : chalk.gray('N/A'), col2) + chalk.cyan('\u2551'));
+    
+    // ========== P&L METRICS ==========
     draw2ColSeparator(boxWidth);
     draw2ColHeader('P&L METRICS', 'RISK METRICS', boxWidth);
     
-    // Profit Factor coloring - ∞ is best (green)
-    const pfNum = profitFactor === '∞' ? Infinity : parseFloat(profitFactor);
-    const pfColor = pfNum === Infinity ? chalk.green(profitFactor) : pfNum >= 1.5 ? chalk.green(profitFactor) : pfNum >= 1 ? chalk.yellow(profitFactor) : chalk.red(profitFactor);
+    // Profit Factor coloring
+    const pfColor = profitFactor === '∞' ? chalk.green(profitFactor) 
+      : profitFactor === 'N/A' ? chalk.gray(profitFactor)
+      : parseFloat(profitFactor) >= 1.5 ? chalk.green(profitFactor) 
+      : parseFloat(profitFactor) >= 1 ? chalk.yellow(profitFactor) 
+      : chalk.red(profitFactor);
     
-    // Worst trade display - show as negative if it's a loss
+    // Worst trade display
     const worstTradeStr = stats.worstTrade < 0 ? '-$' + Math.abs(stats.worstTrade).toFixed(2) : '$' + stats.worstTrade.toFixed(2);
     
-    console.log(chalk.cyan('\u2551') + fmtRow('Net P&L:', netPnL >= 0 ? chalk.green('$' + netPnL.toFixed(2)) : chalk.red('-$' + Math.abs(netPnL).toFixed(2)), col1) + chalk.cyan('\u2502') + fmtRow('Profit Factor:', pfColor, col2) + chalk.cyan('\u2551'));
-    console.log(chalk.cyan('\u2551') + fmtRow('Gross Profit:', chalk.green('$' + stats.totalWinAmount.toFixed(2)), col1) + chalk.cyan('\u2502') + fmtRow('Max Consec. Wins:', chalk.green(String(stats.maxConsecutiveWins)), col2) + chalk.cyan('\u2551'));
-    console.log(chalk.cyan('\u2551') + fmtRow('Gross Loss:', chalk.red('-$' + stats.totalLossAmount.toFixed(2)), col1) + chalk.cyan('\u2502') + fmtRow('Max Consec. Loss:', stats.maxConsecutiveLosses > 0 ? chalk.red(String(stats.maxConsecutiveLosses)) : chalk.green('0'), col2) + chalk.cyan('\u2551'));
-    console.log(chalk.cyan('\u2551') + fmtRow('Avg Win:', chalk.green('$' + avgWin), col1) + chalk.cyan('\u2502') + fmtRow('Best Trade:', chalk.green('$' + stats.bestTrade.toFixed(2)), col2) + chalk.cyan('\u2551'));
-    console.log(chalk.cyan('\u2551') + fmtRow('Avg Loss:', stats.losingTrades > 0 ? chalk.red('-$' + avgLoss) : chalk.green('$0.00'), col1) + chalk.cyan('\u2502') + fmtRow('Worst Trade:', stats.worstTrade < 0 ? chalk.red(worstTradeStr) : chalk.green(worstTradeStr), col2) + chalk.cyan('\u2551'));
+    const netPnLStr = hasTradeData ? (netPnL >= 0 ? chalk.green('$' + netPnL.toFixed(2)) : chalk.red('-$' + Math.abs(netPnL).toFixed(2))) : chalk.gray('N/A');
     
-    // Quantitative Metrics
+    console.log(chalk.cyan('\u2551') + fmtRow('Net P&L:', netPnLStr, col1) + chalk.cyan('\u2502') + fmtRow('Profit Factor:', pfColor, col2) + chalk.cyan('\u2551'));
+    console.log(chalk.cyan('\u2551') + fmtRow('Gross Profit:', hasTradeData ? chalk.green('$' + stats.totalWinAmount.toFixed(2)) : chalk.gray('N/A'), col1) + chalk.cyan('\u2502') + fmtRow('Max Consec. Wins:', hasTradeData ? chalk.green(String(stats.maxConsecutiveWins)) : chalk.gray('N/A'), col2) + chalk.cyan('\u2551'));
+    console.log(chalk.cyan('\u2551') + fmtRow('Gross Loss:', hasTradeData ? chalk.red('-$' + stats.totalLossAmount.toFixed(2)) : chalk.gray('N/A'), col1) + chalk.cyan('\u2502') + fmtRow('Max Consec. Loss:', hasTradeData ? (stats.maxConsecutiveLosses > 0 ? chalk.red(String(stats.maxConsecutiveLosses)) : chalk.green('0')) : chalk.gray('N/A'), col2) + chalk.cyan('\u2551'));
+    console.log(chalk.cyan('\u2551') + fmtRow('Avg Win:', hasTradeData ? chalk.green('$' + avgWin) : chalk.gray('N/A'), col1) + chalk.cyan('\u2502') + fmtRow('Best Trade:', hasTradeData ? chalk.green('$' + stats.bestTrade.toFixed(2)) : chalk.gray('N/A'), col2) + chalk.cyan('\u2551'));
+    console.log(chalk.cyan('\u2551') + fmtRow('Avg Loss:', hasTradeData ? (stats.losingTrades > 0 ? chalk.red('-$' + avgLoss) : chalk.green('$0.00')) : chalk.gray('N/A'), col1) + chalk.cyan('\u2502') + fmtRow('Worst Trade:', hasTradeData ? (stats.worstTrade < 0 ? chalk.red(worstTradeStr) : chalk.green(worstTradeStr)) : chalk.gray('N/A'), col2) + chalk.cyan('\u2551'));
+    
+    // ========== QUANTITATIVE METRICS ==========
     draw2ColSeparator(boxWidth);
     draw2ColHeader('QUANTITATIVE METRICS', 'ADVANCED RATIOS', boxWidth);
     
-    const sharpeColor = parseFloat(sharpeRatio) >= 1 ? chalk.green : parseFloat(sharpeRatio) >= 0.5 ? chalk.yellow : chalk.red;
-    const sortinoColor = parseFloat(sortinoRatio) >= 1.5 ? chalk.green : parseFloat(sortinoRatio) >= 0.5 ? chalk.yellow : chalk.red;
-    const ddColor = maxDrawdown <= 5 ? chalk.green : maxDrawdown <= 15 ? chalk.yellow : chalk.red;
-    const rrColor = parseFloat(riskRewardRatio) >= 2 ? chalk.green : parseFloat(riskRewardRatio) >= 1 ? chalk.yellow : chalk.red;
+    const sharpeColor = sharpeRatio === 'N/A' ? chalk.gray : parseFloat(sharpeRatio) >= 1 ? chalk.green : parseFloat(sharpeRatio) >= 0.5 ? chalk.yellow : chalk.red;
+    const sortinoColor = sortinoRatio === 'N/A' ? chalk.gray : parseFloat(sortinoRatio) >= 1.5 ? chalk.green : parseFloat(sortinoRatio) >= 0.5 ? chalk.yellow : chalk.red;
+    const ddColor = maxDrawdown === 0 ? chalk.gray : maxDrawdown <= 5 ? chalk.green : maxDrawdown <= 15 ? chalk.yellow : chalk.red;
+    const rrColor = riskRewardRatio === 'N/A' ? chalk.gray : parseFloat(riskRewardRatio) >= 2 ? chalk.green : parseFloat(riskRewardRatio) >= 1 ? chalk.yellow : chalk.red;
     
     console.log(chalk.cyan('\u2551') + fmtRow('Sharpe Ratio:', sharpeColor(sharpeRatio), col1) + chalk.cyan('\u2502') + fmtRow('Risk/Reward:', rrColor(riskRewardRatio), col2) + chalk.cyan('\u2551'));
-    console.log(chalk.cyan('\u2551') + fmtRow('Sortino Ratio:', sortinoColor(sortinoRatio), col1) + chalk.cyan('\u2502') + fmtRow('Calmar Ratio:', chalk.white(calmarRatio), col2) + chalk.cyan('\u2551'));
-    console.log(chalk.cyan('\u2551') + fmtRow('Max Drawdown:', ddColor(maxDrawdown.toFixed(2) + '%'), col1) + chalk.cyan('\u2502') + fmtRow('Expectancy:', expectancy >= 0 ? chalk.green('$' + expectancy.toFixed(2)) : chalk.red('$' + expectancy.toFixed(2)), col2) + chalk.cyan('\u2551'));
-    console.log(chalk.cyan('\u2551') + fmtRow('Std Deviation:', chalk.white('$' + stdDev.toFixed(2)), col1) + chalk.cyan('\u2502') + fmtRow('Avg Trade:', avgReturn >= 0 ? chalk.green('$' + avgReturn.toFixed(2)) : chalk.red('$' + avgReturn.toFixed(2)), col2) + chalk.cyan('\u2551'));
+    console.log(chalk.cyan('\u2551') + fmtRow('Sortino Ratio:', sortinoColor(sortinoRatio), col1) + chalk.cyan('\u2502') + fmtRow('Calmar Ratio:', calmarRatio === 'N/A' ? chalk.gray(calmarRatio) : chalk.white(calmarRatio), col2) + chalk.cyan('\u2551'));
+    console.log(chalk.cyan('\u2551') + fmtRow('Max Drawdown:', hasTradeData && maxDrawdown > 0 ? ddColor(maxDrawdown.toFixed(2) + '%') : chalk.gray('N/A'), col1) + chalk.cyan('\u2502') + fmtRow('Expectancy:', hasTradeData ? (expectancy >= 0 ? chalk.green('$' + expectancy.toFixed(2)) : chalk.red('$' + expectancy.toFixed(2))) : chalk.gray('N/A'), col2) + chalk.cyan('\u2551'));
+    console.log(chalk.cyan('\u2551') + fmtRow('Std Deviation:', hasTradeData ? chalk.white('$' + stdDev.toFixed(2)) : chalk.gray('N/A'), col1) + chalk.cyan('\u2502') + fmtRow('Avg Trade:', hasTradeData ? (avgReturn >= 0 ? chalk.green('$' + avgReturn.toFixed(2)) : chalk.red('$' + avgReturn.toFixed(2))) : chalk.gray('N/A'), col2) + chalk.cyan('\u2551'));
     
     drawBoxFooter(boxWidth);
     
-    // Equity Curve
+    // ========== EQUITY CURVE ==========
     console.log();
     drawBoxHeader('EQUITY CURVE', boxWidth);
     
@@ -357,13 +418,15 @@ const showStats = async (service) => {
         console.log(chalk.cyan('\u2551') + chartLine + chalk.cyan('\u2551'));
       });
     } else {
-      const msg = '  No trade data available';
-      console.log(chalk.cyan('\u2551') + chalk.gray(msg) + ' '.repeat(chartInnerWidth - msg.length) + chalk.cyan('\u2551'));
+      const msg = connectionTypes.rithmic > 0 
+        ? '  No trade history (Rithmic does not provide trade history API)'
+        : '  No trade data available';
+      console.log(chalk.cyan('\u2551') + chalk.gray(msg) + ' '.repeat(Math.max(0, chartInnerWidth - msg.length)) + chalk.cyan('\u2551'));
     }
     
     drawBoxFooter(boxWidth);
     
-    // Trades History - Simplified table
+    // ========== TRADES HISTORY ==========
     console.log();
     drawBoxHeader('TRADES HISTORY', boxWidth);
     
@@ -372,20 +435,20 @@ const showStats = async (service) => {
     // Helper to extract symbol from contractId (e.g., "CON.F.US.EP.H25" -> "ES H25")
     const extractSymbol = (contractId) => {
       if (!contractId) return 'N/A';
-      // Format: CON.F.US.{SYMBOL}.{MONTH} -> extract symbol and month
+      // ProjectX format: CON.F.US.{SYMBOL}.{MONTH}
       const parts = contractId.split('.');
       if (parts.length >= 5) {
-        const sym = parts[3]; // EP, ENQ, etc.
-        const month = parts[4]; // H25, M25, etc.
-        // Map common symbols
+        const sym = parts[3];
+        const month = parts[4];
         const symbolMap = { 'EP': 'ES', 'ENQ': 'NQ', 'MES': 'MES', 'MNQ': 'MNQ', 'YM': 'YM', 'NKD': 'NKD', 'RTY': 'RTY' };
         return (symbolMap[sym] || sym) + ' ' + month;
       }
+      // Rithmic format: already clean symbol
+      if (contractId.length <= 10) return contractId;
       return contractId.substring(0, 10);
     };
     
     if (allTrades.length > 0) {
-      // Simple format: Time | Symbol | Price | P&L | Side
       const header = ' Time      | Symbol    | Price      | P&L        | Side  ';
       console.log(chalk.cyan('\u2551') + chalk.white(header.padEnd(innerWidth)) + chalk.cyan('\u2551'));
       console.log(chalk.cyan('\u2551') + chalk.gray('\u2500'.repeat(innerWidth)) + chalk.cyan('\u2551'));
@@ -406,7 +469,6 @@ const showStats = async (service) => {
         const row = ` ${time.padEnd(9)} | ${symbol.padEnd(9)} | ${price.padEnd(10)} | ${pnlText.padEnd(10)} | ${side.padEnd(6)}`;
         const coloredRow = ` ${time.padEnd(9)} | ${symbol.padEnd(9)} | ${price.padEnd(10)} | ${pnlColored} | ${sideColored}`;
         
-        // Calculate visible length without ANSI codes
         const visLen = row.length;
         const padding = Math.max(0, innerWidth - visLen);
         
@@ -418,64 +480,79 @@ const showStats = async (service) => {
         console.log(chalk.cyan('\u2551') + chalk.gray(moreMsg.padEnd(innerWidth)) + chalk.cyan('\u2551'));
       }
     } else {
-      const msg = '  No trade history available';
+      const msg = connectionTypes.rithmic > 0 
+        ? '  No trade history (Rithmic API limitation)'
+        : '  No trade history available';
       console.log(chalk.cyan('\u2551') + chalk.gray(msg.padEnd(innerWidth)) + chalk.cyan('\u2551'));
     }
     
     drawBoxFooter(boxWidth);
     
-    // HQX Score
-    console.log();
-    drawBoxHeader('HQX SCORE', boxWidth);
-    
-    const winRateScore = Math.min(100, parseFloat(winRate) * 1.5);
-    const profitFactorScore = profitFactor === '∞' ? 100 : Math.min(100, parseFloat(profitFactor) * 40);
-    const consistencyScore = stats.maxConsecutiveLosses > 0 ? Math.max(0, 100 - (stats.maxConsecutiveLosses * 15)) : 100;
-    const riskScore = stats.worstTrade !== 0 && totalStartingBalance > 0 
-      ? Math.max(0, 100 - (Math.abs(stats.worstTrade) / totalStartingBalance * 1000)) 
-      : 50;
-    const volumeScore = Math.min(100, stats.totalTrades * 2);
-    const returnScore = Math.min(100, Math.max(0, parseFloat(returnPercent) * 10 + 50));
-    
-    const hqxScore = Math.round((winRateScore + profitFactorScore + consistencyScore + riskScore + volumeScore + returnScore) / 6);
-    const scoreColor = hqxScore >= 70 ? chalk.green : hqxScore >= 50 ? chalk.yellow : chalk.red;
-    const scoreGrade = hqxScore >= 90 ? 'S' : hqxScore >= 80 ? 'A' : hqxScore >= 70 ? 'B' : hqxScore >= 60 ? 'C' : hqxScore >= 50 ? 'D' : 'F';
-    
-    const makeBar = (score, width = 20) => {
-      const filled = Math.round((score / 100) * width);
-      const empty = width - filled;
-      const color = score >= 70 ? chalk.green : score >= 50 ? chalk.yellow : chalk.red;
-      return color('█'.repeat(filled)) + chalk.gray('░'.repeat(empty));
-    };
-    
-    const metricsDisplay = [
-      { name: 'Win Rate', score: winRateScore },
-      { name: 'Profit Factor', score: profitFactorScore },
-      { name: 'Consistency', score: consistencyScore },
-      { name: 'Risk Management', score: riskScore },
-      { name: 'Volume', score: volumeScore },
-      { name: 'Returns', score: returnScore }
-    ];
-    
-    const barWidth = 30;
-    const labelWidth = 18;
-    
-    const overallLine = `  OVERALL SCORE: ${scoreColor(String(hqxScore))} / 100  [Grade: ${scoreColor(scoreGrade)}]`;
-    const overallVisLen = overallLine.replace(/\x1b\[[0-9;]*m/g, '').length;
-    console.log(chalk.cyan('\u2551') + overallLine + ' '.repeat(innerWidth - overallVisLen) + chalk.cyan('\u2551'));
-    console.log(chalk.cyan('\u2551') + chalk.gray('─'.repeat(innerWidth)) + chalk.cyan('\u2551'));
-    
-    for (const metric of metricsDisplay) {
-      const label = ('  ' + metric.name + ':').padEnd(labelWidth);
-      const bar = makeBar(metric.score, barWidth);
-      const pct = (metric.score.toFixed(0) + '%').padStart(5);
-      const line = label + bar + ' ' + pct;
-      const visLen = line.replace(/\x1b\[[0-9;]*m/g, '').length;
-      console.log(chalk.cyan('\u2551') + chalk.white(label) + bar + ' ' + chalk.white(pct) + ' '.repeat(innerWidth - visLen) + chalk.cyan('\u2551'));
+    // ========== HQX SCORE ==========
+    // Only show if we have trade data to score
+    if (hasTradeData || stats.totalTrades > 0) {
+      console.log();
+      drawBoxHeader('HQX SCORE', boxWidth);
+      
+      const winRateNum = winRate !== 'N/A' ? parseFloat(winRate) : 0;
+      const winRateScore = Math.min(100, winRateNum * 1.5);
+      const profitFactorScore = profitFactor === '∞' ? 100 : profitFactor === 'N/A' ? 0 : Math.min(100, parseFloat(profitFactor) * 40);
+      const consistencyScore = stats.maxConsecutiveLosses > 0 ? Math.max(0, 100 - (stats.maxConsecutiveLosses * 15)) : 100;
+      const riskScore = stats.worstTrade !== 0 && totalStartingBalance > 0 
+        ? Math.max(0, 100 - (Math.abs(stats.worstTrade) / totalStartingBalance * 1000)) 
+        : 50;
+      const volumeScore = Math.min(100, stats.totalTrades * 2);
+      const returnNum = returnPercent !== 'N/A' ? parseFloat(returnPercent) : 0;
+      const returnScore = Math.min(100, Math.max(0, returnNum * 10 + 50));
+      
+      const hqxScore = Math.round((winRateScore + profitFactorScore + consistencyScore + riskScore + volumeScore + returnScore) / 6);
+      const scoreColor = hqxScore >= 70 ? chalk.green : hqxScore >= 50 ? chalk.yellow : chalk.red;
+      const scoreGrade = hqxScore >= 90 ? 'S' : hqxScore >= 80 ? 'A' : hqxScore >= 70 ? 'B' : hqxScore >= 60 ? 'C' : hqxScore >= 50 ? 'D' : 'F';
+      
+      const makeBar = (score, width = 20) => {
+        const filled = Math.round((score / 100) * width);
+        const empty = width - filled;
+        const color = score >= 70 ? chalk.green : score >= 50 ? chalk.yellow : chalk.red;
+        return color('\u2588'.repeat(filled)) + chalk.gray('\u2591'.repeat(empty));
+      };
+      
+      const metricsDisplay = [
+        { name: 'Win Rate', score: winRateScore },
+        { name: 'Profit Factor', score: profitFactorScore },
+        { name: 'Consistency', score: consistencyScore },
+        { name: 'Risk Management', score: riskScore },
+        { name: 'Volume', score: volumeScore },
+        { name: 'Returns', score: returnScore }
+      ];
+      
+      const barWidth = 30;
+      const labelWidth = 18;
+      
+      const overallLine = `  OVERALL SCORE: ${scoreColor(String(hqxScore))} / 100  [Grade: ${scoreColor(scoreGrade)}]`;
+      const overallVisLen = overallLine.replace(/\x1b\[[0-9;]*m/g, '').length;
+      console.log(chalk.cyan('\u2551') + overallLine + ' '.repeat(innerWidth - overallVisLen) + chalk.cyan('\u2551'));
+      console.log(chalk.cyan('\u2551') + chalk.gray('\u2500'.repeat(innerWidth)) + chalk.cyan('\u2551'));
+      
+      for (const metric of metricsDisplay) {
+        const label = ('  ' + metric.name + ':').padEnd(labelWidth);
+        const bar = makeBar(metric.score, barWidth);
+        const pct = (metric.score.toFixed(0) + '%').padStart(5);
+        const line = label + bar + ' ' + pct;
+        const visLen = line.replace(/\x1b\[[0-9;]*m/g, '').length;
+        console.log(chalk.cyan('\u2551') + chalk.white(label) + bar + ' ' + chalk.white(pct) + ' '.repeat(innerWidth - visLen) + chalk.cyan('\u2551'));
+      }
+      
+      drawBoxFooter(boxWidth);
     }
     
-    drawBoxFooter(boxWidth);
     console.log();
+    
+    // Show data source notice
+    if (connectionTypes.rithmic > 0 && connectionTypes.projectx === 0) {
+      console.log(chalk.gray('  Note: Rithmic API provides balance/P&L only. Trade history not available.'));
+    } else if (connectionTypes.rithmic > 0 && connectionTypes.projectx > 0) {
+      console.log(chalk.gray('  Note: Trade history shown from ProjectX accounts only.'));
+    }
     
   } catch (error) {
     if (spinner) spinner.fail('Error: ' + error.message);
