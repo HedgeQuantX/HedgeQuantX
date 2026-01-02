@@ -449,8 +449,21 @@ const showStats = async (service) => {
     };
     
     if (allTrades.length > 0) {
-      const header = ' Time      | Symbol    | Price      | P&L        | Side  ';
-      console.log(chalk.cyan('\u2551') + chalk.white(header.padEnd(innerWidth)) + chalk.cyan('\u2551'));
+      // Calculate column widths to fill the entire row
+      // Fixed columns: Time(10), Symbol(12), Price(12), P&L(12), Side(6) = 52 + separators(4*3=12) + padding(2) = 66
+      // Remaining space goes to Account column
+      const colTime = 10;
+      const colSymbol = 12;
+      const colPrice = 12;
+      const colPnl = 12;
+      const colSide = 6;
+      const separators = 15; // 5 separators " | " = 5*3
+      const fixedWidth = colTime + colSymbol + colPrice + colPnl + colSide + separators;
+      const colAccount = Math.max(10, innerWidth - fixedWidth);
+      
+      // Header
+      const header = ` ${'Time'.padEnd(colTime)}| ${'Symbol'.padEnd(colSymbol)}| ${'Price'.padEnd(colPrice)}| ${'P&L'.padEnd(colPnl)}| ${'Side'.padEnd(colSide)}| ${'Account'.padEnd(colAccount - 2)}`;
+      console.log(chalk.cyan('\u2551') + chalk.white(header) + chalk.cyan('\u2551'));
       console.log(chalk.cyan('\u2551') + chalk.gray('\u2500'.repeat(innerWidth)) + chalk.cyan('\u2551'));
       
       const recentTrades = allTrades.slice(-10).reverse();
@@ -462,22 +475,28 @@ const showStats = async (service) => {
         const price = (trade.price || 0).toFixed(2);
         const pnl = trade.profitAndLoss || trade.pnl || 0;
         const pnlText = pnl >= 0 ? `+$${pnl.toFixed(0)}` : `-$${Math.abs(pnl).toFixed(0)}`;
-        const pnlColored = pnl >= 0 ? chalk.green(pnlText.padEnd(10)) : chalk.red(pnlText.padEnd(10));
         const side = trade.side === 0 ? 'BUY' : trade.side === 1 ? 'SELL' : 'N/A';
-        const sideColored = trade.side === 0 ? chalk.green(side.padEnd(6)) : chalk.red(side.padEnd(6));
+        const accountName = (trade.accountName || 'N/A').substring(0, colAccount - 3);
         
-        const row = ` ${time.padEnd(9)} | ${symbol.padEnd(9)} | ${price.padEnd(10)} | ${pnlText.padEnd(10)} | ${side.padEnd(6)}`;
-        const coloredRow = ` ${time.padEnd(9)} | ${symbol.padEnd(9)} | ${price.padEnd(10)} | ${pnlColored} | ${sideColored}`;
+        // Build row with exact widths
+        const timeStr = time.padEnd(colTime);
+        const symbolStr = symbol.padEnd(colSymbol);
+        const priceStr = price.padEnd(colPrice);
+        const pnlStr = pnlText.padEnd(colPnl);
+        const sideStr = side.padEnd(colSide);
+        const accountStr = accountName.padEnd(colAccount - 2);
         
-        const visLen = row.length;
-        const padding = Math.max(0, innerWidth - visLen);
+        // Colored versions
+        const pnlColored = pnl >= 0 ? chalk.green(pnlStr) : chalk.red(pnlStr);
+        const sideColored = trade.side === 0 ? chalk.green(sideStr) : chalk.red(sideStr);
         
-        console.log(chalk.cyan('\u2551') + coloredRow + ' '.repeat(padding) + chalk.cyan('\u2551'));
+        const row = ` ${timeStr}| ${symbolStr}| ${priceStr}| ${pnlColored}| ${sideColored}| ${accountStr}`;
+        console.log(chalk.cyan('\u2551') + row + chalk.cyan('\u2551'));
       }
       
       if (allTrades.length > 10) {
         const moreMsg = `  ... and ${allTrades.length - 10} more trades`;
-        console.log(chalk.cyan('\u2551') + chalk.gray(moreMsg.padEnd(innerWidth)) + chalk.cyan('\u2551'));
+        console.log(chalk.cyan('\u2551') + moreMsg.padEnd(innerWidth) + chalk.cyan('\u2551'));
       }
     } else {
       const msg = connectionTypes.rithmic > 0 
