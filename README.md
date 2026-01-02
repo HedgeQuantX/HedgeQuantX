@@ -2,14 +2,7 @@
 
 <div align="center">
 
-```
-██╗  ██╗███████╗██████╗  ██████╗ ███████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗██╗  ██╗
-██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝╚██╗██╔╝
-███████║█████╗  ██║  ██║██║  ███╗█████╗  ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║    ╚███╔╝
-██╔══██║██╔══╝  ██║  ██║██║   ██║██╔══╝  ██║▄▄ ██║██║   ██║██╔══██║██║╚██╗██║   ██║    ██╔██╗
-██║  ██║███████╗██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ██╔╝ ██╗
-╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝
-```
+<img src="assets/logo.png" alt="HedgeQuantX" width="700">
 
 ### Prop Futures Algo Trading CLI
 
@@ -117,56 +110,40 @@ Mirror trades from Lead to Follower accounts.
 
 ## Supported Prop Firms
 
-<details>
-<summary><b>ProjectX (19 firms)</b></summary>
+### ProjectX Platform (19 firms)
 
-| Firm | Status |
-|------|--------|
-| TopStep | Active |
-| Alpha Futures | Active |
-| TickTickTrader | Active |
-| Bulenox | Active |
-| TradeDay | Active |
-| Blusky | Active |
-| Goat Futures | Active |
-| The Futures Desk | Active |
-| DayTraders | Active |
-| E8 Futures | Active |
-| Blue Guardian Futures | Active |
-| FuturesElite | Active |
-| FXIFY | Active |
-| Hola Prime | Active |
-| Top One Futures | Active |
-| Funding Futures | Active |
-| TX3 Funding | Active |
-| Lucid Trading | Active |
-| Tradeify | Active |
+| Firm | Firm |
+|------|------|
+| TopStep | Alpha Futures |
+| TickTickTrader | Bulenox |
+| TradeDay | Blusky |
+| Goat Futures | The Futures Desk |
+| DayTraders | E8 Futures |
+| Blue Guardian Futures | FuturesElite |
+| FXIFY | Hola Prime |
+| Top One Futures | Funding Futures |
+| TX3 Funding | Lucid Trading |
+| Tradeify | |
 
-</details>
+### Rithmic Platform (16 firms)
 
-<details>
-<summary><b>Rithmic (16 firms)</b></summary>
+| Firm | Firm |
+|------|------|
+| Apex Trader Funding | TopstepTrader |
+| MES Capital | Bulenox |
+| TradeFundrr | TheTradingPit |
+| FundedFuturesNetwork | PropShopTrader |
+| 4PropTrader | DayTraders.com |
+| 10XFutures | LucidTrading |
+| ThriveTrading | LegendsTrading |
+| Earn2Trade | Tradesea |
 
-| Firm | Status |
-|------|--------|
-| Apex Trader Funding | Active |
-| TopstepTrader | Active |
-| MES Capital | Active |
-| Bulenox | Active |
-| TradeFundrr | Active |
-| TheTradingPit | Active |
-| FundedFuturesNetwork | Active |
-| PropShopTrader | Active |
-| 4PropTrader | Active |
-| DayTraders.com | Active |
-| 10XFutures | Active |
-| LucidTrading | Active |
-| ThriveTrading | Active |
-| LegendsTrading | Active |
-| Earn2Trade | Active |
-| Tradesea | Active |
+### Tradovate Platform (3 firms)
 
-</details>
+| Firm | Firm |
+|------|------|
+| Apex | TakeProfitTrader |
+| MyFundedFutures | |
 
 ---
 
