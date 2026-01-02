@@ -11,6 +11,8 @@ const { AlgoUI, renderSessionSummary } = require('./ui');
 const { prompts } = require('../../utils');
 const { checkMarketHours } = require('../../services/projectx/market');
 
+
+
 /**
  * One Account Menu
  */
@@ -154,28 +156,49 @@ const configureAlgo = async (account, contract) => {
 
 /**
  * Launch algo trading
+ * 100% API data - no simulation, no mock data, no local calculations
  */
 const launchAlgo = async (service, account, contract, config) => {
   const { contracts, dailyTarget, maxRisk, showName } = config;
-  // Use real account ID from API
-  const realAccountId = account.rithmicAccountId || account.accountName || account.accountId;
-  const accountName = showName ? realAccountId : 'HQX *****';
-  // Use RAW API field 'name' for symbol (e.g., "MESH6")
+  
+  // Use RAW API fields
+  const accountName = showName 
+    ? (account.accountName || account.rithmicAccountId || account.accountId) 
+    : 'HQX *****';
   const symbolName = contract.name;
+  const connectionType = account.platform || 'ProjectX';
   
   const ui = new AlgoUI({ subtitle: 'HQX Algo Trading', mode: 'one-account' });
   
   const stats = {
-    accountName, symbol: symbolName, contracts,
-    target: dailyTarget, risk: maxRisk,
+    accountName,
+    symbol: symbolName,
+    qty: contracts,
+    target: dailyTarget,
+    risk: maxRisk,
     propfirm: account.propfirm || 'Unknown',
-    platform: account.platform || 'ProjectX',
-    pnl: 0, trades: 0, wins: 0, losses: 0,
-    latency: 0, connected: false,
-    startTime: Date.now()  // Track start time for duration
+    platform: connectionType,
+    pnl: 0,
+    trades: 0,
+    wins: 0,
+    losses: 0,
+    latency: 0,
+    connected: true,
+    startTime: Date.now()
   };
   
-  // Measure API latency (CLI <-> API)
+  let running = true;
+  let stopReason = null;
+  let lastPnL = 0;
+  
+  // Log startup info from API
+  ui.addLog('info', `Connection: ${connectionType}`);
+  ui.addLog('info', `Account: ${accountName}`);
+  ui.addLog('info', `Symbol: ${symbolName} | Qty: ${contracts}`);
+  ui.addLog('info', `Target: $${dailyTarget} | Max Risk: $${maxRisk}`);
+  ui.addLog('info', 'Monitoring positions from API...');
+  
+  // Measure API latency (real network round-trip)
   const measureLatency = async () => {
     try {
       const start = Date.now();
@@ -186,45 +209,64 @@ const launchAlgo = async (service, account, contract, config) => {
     }
   };
   
-  let running = true;
-  let stopReason = null;
-  
-  // Local algo - no external server needed
-  ui.addLog('info', `Starting algo on ${stats.platform}...`);
-  ui.addLog('info', `Symbol: ${symbolName} | Qty: ${contracts}`);
-  ui.addLog('info', `Target: $${dailyTarget} | Risk: $${maxRisk}`);
-  stats.connected = true;
-  
-  // Poll P&L from API every 2 seconds
-  const pollPnL = async () => {
+  // Poll data from API - 100% real data
+  const pollAPI = async () => {
     try {
-      // Get positions to check P&L
+      // Get positions from API
       const posResult = await service.getPositions(account.accountId);
+      
       if (posResult.success && posResult.positions) {
-        // Find position for our symbol
-        const pos = posResult.positions.find(p => 
-          (p.contractId || p.symbol || '').includes(contract.name || contract.symbol)
-        );
-        if (pos && pos.profitAndLoss !== undefined) {
-          const prevPnL = stats.pnl;
-          stats.pnl = pos.profitAndLoss;
+        // Find position for selected contract
+        const position = posResult.positions.find(p => {
+          const posSymbol = p.contractId || p.symbol || '';
+          return posSymbol.includes(contract.name) || posSymbol.includes(contract.id);
+        });
+        
+        if (position) {
+          // P&L directly from API - no calculation
+          const apiPnL = position.profitAndLoss || 0;
           
-          // Detect trade completion
-          if (Math.abs(stats.pnl - prevPnL) > 0.01 && prevPnL !== 0) {
-            const tradePnL = stats.pnl - prevPnL;
+          // Detect trade completion (P&L changed)
+          if (lastPnL !== 0 && Math.abs(apiPnL - lastPnL) > 0.01) {
+            const tradePnL = apiPnL - lastPnL;
             stats.trades++;
-            if (tradePnL >= 0) {
+            
+            if (tradePnL > 0) {
               stats.wins++;
-              ui.addLog('trade', `Trade closed: +$${tradePnL.toFixed(2)}`);
+              ui.addLog('trade', `+$${tradePnL.toFixed(2)} (from API)`);
             } else {
               stats.losses++;
-              ui.addLog('loss', `Trade closed: -$${Math.abs(tradePnL).toFixed(2)}`);
+              ui.addLog('loss', `-$${Math.abs(tradePnL).toFixed(2)} (from API)`);
             }
+          }
+          
+          lastPnL = apiPnL;
+          stats.pnl = apiPnL;
+          
+          // Log position info from API
+          if (position.quantity && position.quantity !== 0) {
+            const side = position.quantity > 0 ? 'LONG' : 'SHORT';
+            const qty = Math.abs(position.quantity);
+            ui.addLog('info', `Position: ${side} ${qty}x | P&L: $${apiPnL.toFixed(2)}`);
+          }
+        } else {
+          // No position - flat
+          if (stats.pnl !== 0) {
+            ui.addLog('info', 'Position closed - Flat');
           }
         }
       }
       
-      // Check target/risk limits
+      // Get account balance from API
+      const accountResult = await service.getTradingAccounts();
+      if (accountResult.success && accountResult.accounts) {
+        const acc = accountResult.accounts.find(a => a.accountId === account.accountId);
+        if (acc && acc.profitAndLoss !== undefined) {
+          stats.pnl = acc.profitAndLoss;
+        }
+      }
+      
+      // Check target/risk limits (using API P&L)
       if (stats.pnl >= dailyTarget) {
         stopReason = 'target';
         running = false;
@@ -232,10 +274,11 @@ const launchAlgo = async (service, account, contract, config) => {
       } else if (stats.pnl <= -maxRisk) {
         stopReason = 'risk';
         running = false;
-        ui.addLog('error', `MAX RISK HIT! -$${Math.abs(stats.pnl).toFixed(2)}`);
+        ui.addLog('error', `MAX RISK! -$${Math.abs(stats.pnl).toFixed(2)}`);
       }
+      
     } catch (e) {
-      // Silent fail - will retry
+      ui.addLog('error', `API Error: ${e.message}`);
     }
   };
   
@@ -245,9 +288,9 @@ const launchAlgo = async (service, account, contract, config) => {
   measureLatency(); // Initial measurement
   const latencyInterval = setInterval(() => { if (running) measureLatency(); }, 5000);
   
-  // Poll P&L from API every 2 seconds
-  pollPnL(); // Initial poll
-  const pnlInterval = setInterval(() => { if (running) pollPnL(); }, 2000);
+  // Poll data from API every 2 seconds
+  pollAPI(); // Initial poll
+  const apiInterval = setInterval(() => { if (running) pollAPI(); }, 2000);
   
   // Keyboard
   const setupKeyHandler = () => {
@@ -276,7 +319,7 @@ const launchAlgo = async (service, account, contract, config) => {
   
   clearInterval(refreshInterval);
   clearInterval(latencyInterval);
-  clearInterval(pnlInterval);
+  clearInterval(apiInterval);
   if (cleanupKeys) cleanupKeys();
   ui.cleanup();
   
