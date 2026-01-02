@@ -8,8 +8,8 @@
 
 *Connect to 37+ prop firms and automate your futures trading*
 
-[![npm version](https://img.shields.io/npm/v/@hedgequantx/cli?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/@hedgequantx/cli)
-[![npm downloads](https://img.shields.io/npm/dm/@hedgequantx/cli?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/@hedgequantx/cli)
+[![npm version](https://img.shields.io/npm/v/hedgequantx?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/hedgequantx)
+[![npm downloads](https://img.shields.io/npm/dm/hedgequantx?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/hedgequantx)
 [![GitHub stars](https://img.shields.io/github/stars/HedgeQuantX/HQX-CLI?style=for-the-badge&logo=github&logoColor=white&color=181717)](https://github.com/HedgeQuantX/HQX-CLI)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 
