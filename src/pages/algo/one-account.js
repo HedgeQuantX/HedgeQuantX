@@ -344,7 +344,9 @@ const launchAlgo = async (service, account, contract, config) => {
   // Summary
   renderSessionSummary(stats, stopReason);
   
-  await prompts.waitForEnter();
+  // Wait 3 seconds then return to menu (avoid stdin issues after raw mode)
+  console.log('\n  Returning to menu in 3 seconds...');
+  await new Promise(resolve => setTimeout(resolve, 3000));
 };
 
 module.exports = { oneAccountMenu };
