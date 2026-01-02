@@ -275,14 +275,18 @@ class AlgoUI {
     const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     
     const leftText = ` EXECUTION LOG ${spinner}`;
-    const rightText = `${dateStr} ${timeStr}  [X] STOP `;
-    const totalLen = leftText.length + rightText.length;
-    const space = W - totalLen;
+    const rightText = `[X] STOP `;
+    
+    const totalFixed = leftText.length + rightText.length;
+    const centerSpace = W - totalFixed;
+    const centerPadLeft = Math.floor((centerSpace - dateStr.length) / 2);
+    const centerPadRight = centerSpace - dateStr.length - centerPadLeft;
     
     const left = ` EXECUTION LOG ${chalk.yellow(spinner)}`;
-    const right = `${chalk.gray(dateStr)} ${chalk.white(timeStr)}  ${chalk.yellow('[X] STOP')} `;
+    const center = ' '.repeat(Math.max(0, centerPadLeft)) + chalk.white(dateStr) + ' '.repeat(Math.max(0, centerPadRight));
+    const right = chalk.yellow('[X] STOP') + ' ';
     
-    this._line(chalk.cyan(BOX.V) + chalk.white.bold(left) + ' '.repeat(Math.max(0, space)) + right + chalk.cyan(BOX.V));
+    this._line(chalk.cyan(BOX.V) + chalk.white.bold(left) + center + right + chalk.cyan(BOX.V));
     this._line(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
     
     // Logs: newest at top
