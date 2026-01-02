@@ -27,9 +27,9 @@ const { createBoxMenu } = require('./menu');
 
 /**
  * Display HQX Banner (without closing border)
+ * Note: console.clear() is handled by app.js banner() to avoid terminal bugs
  */
 const displayBanner = () => {
-  console.clear();
   const termWidth = process.stdout.columns || 100;
   const isMobile = termWidth < 60;
   const boxWidth = isMobile ? Math.max(termWidth - 2, 40) : Math.max(getLogoWidth(), 98);
