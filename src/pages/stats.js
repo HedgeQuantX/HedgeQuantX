@@ -230,7 +230,7 @@ const showStats = async (service) => {
     const winRate = stats.totalTrades > 0 ? ((stats.winningTrades / stats.totalTrades) * 100).toFixed(1) : '0.0';
     const avgWin = stats.winningTrades > 0 ? (stats.totalWinAmount / stats.winningTrades).toFixed(2) : '0.00';
     const avgLoss = stats.losingTrades > 0 ? (stats.totalLossAmount / stats.losingTrades).toFixed(2) : '0.00';
-    const profitFactor = stats.totalLossAmount > 0 ? (stats.totalWinAmount / stats.totalLossAmount).toFixed(2) : '0.00';
+    const profitFactor = stats.totalLossAmount > 0 ? (stats.totalWinAmount / stats.totalLossAmount).toFixed(2) : (stats.totalWinAmount > 0 ? '∞' : '0.00');
     const netPnL = stats.totalWinAmount - stats.totalLossAmount;
     const returnPercent = totalStartingBalance > 0 ? ((totalPnL / totalStartingBalance) * 100).toFixed(2) : '0.00';
     const longWinRate = stats.longTrades > 0 ? ((stats.longWins / stats.longTrades) * 100).toFixed(1) : '0.0';
@@ -392,12 +392,15 @@ const showStats = async (service) => {
       const recentTrades = allTrades.slice(-10).reverse();
       
       for (const trade of recentTrades) {
-        const time = trade.exitTime ? new Date(trade.exitTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--';
-        const symbol = (trade.contractName || trade.symbol || 'N/A').substring(0, colSymbol - 1);
-        const entryTime = trade.entryTime ? new Date(trade.entryTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--';
-        const exitTime = trade.exitTime ? new Date(trade.exitTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--';
-        const entryPrice = trade.entryPrice ? trade.entryPrice.toFixed(2) : 'N/A';
-        const exitPrice = trade.exitPrice ? trade.exitPrice.toFixed(2) : 'N/A';
+        // Use API fields directly: creationTimestamp, contractId, price, profitAndLoss, side
+        const timestamp = trade.creationTimestamp || trade.timestamp || trade.exitTime;
+        const time = timestamp ? new Date(timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+        const symbol = (trade.contractId || trade.contractName || trade.symbol || 'N/A').substring(0, colSymbol - 1);
+        const entryTime = trade.entryTime ? new Date(trade.entryTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : time;
+        const exitTime = trade.exitTime ? new Date(trade.exitTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : time;
+        const price = trade.price || trade.entryPrice || trade.exitPrice || 0;
+        const entryPrice = trade.entryPrice ? trade.entryPrice.toFixed(2) : (price ? price.toFixed(2) : 'N/A');
+        const exitPrice = trade.exitPrice ? trade.exitPrice.toFixed(2) : (price ? price.toFixed(2) : 'N/A');
         const pnl = trade.profitAndLoss || trade.pnl || 0;
         const pnlStr = pnl >= 0 ? chalk.green('+$' + pnl.toFixed(0)) : chalk.red('-$' + Math.abs(pnl).toFixed(0));
         const direction = trade.side === 0 ? chalk.green('LONG') : trade.side === 1 ? chalk.red('SHORT') : chalk.gray('N/A');
@@ -436,7 +439,7 @@ const showStats = async (service) => {
     drawBoxHeader('HQX SCORE', boxWidth);
     
     const winRateScore = Math.min(100, parseFloat(winRate) * 1.5);
-    const profitFactorScore = Math.min(100, parseFloat(profitFactor) * 40);
+    const profitFactorScore = profitFactor === '∞' ? 100 : Math.min(100, parseFloat(profitFactor) * 40);
     const consistencyScore = stats.maxConsecutiveLosses > 0 ? Math.max(0, 100 - (stats.maxConsecutiveLosses * 15)) : 100;
     const riskScore = stats.worstTrade !== 0 && totalStartingBalance > 0 
       ? Math.max(0, 100 - (Math.abs(stats.worstTrade) / totalStartingBalance * 1000)) 
