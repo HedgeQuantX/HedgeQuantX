@@ -213,10 +213,9 @@ const launchAlgo = async (service, account, contract, config) => {
         if (acc && acc.profitAndLoss !== undefined) {
           const accountPnL = acc.profitAndLoss;
           
-          // Set starting P&L on first poll
+          // Set starting P&L on first poll (silent - don't expose account P&L)
           if (startingPnL === null) {
             startingPnL = accountPnL;
-            ui.addLog('info', `Starting P&L: $${startingPnL.toFixed(2)}`);
           }
           
           // Session P&L = current - starting (both from API)
