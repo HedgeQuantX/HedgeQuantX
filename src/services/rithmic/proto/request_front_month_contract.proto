@@ -1,0 +1,11 @@
+
+package rti;
+
+message RequestFrontMonthContract
+	{
+	required int32  template_id     = 154467;  // Template ID = 113
+	repeated string user_msg        = 132760;  // User message for tracking
+	optional string symbol          = 110100;  // Base symbol (e.g., "MNQ", "ES")
+	optional string exchange        = 110101;  // Exchange (e.g., "CME")
+	optional bool   need_updates    = 154352;  // Request updates
+	}

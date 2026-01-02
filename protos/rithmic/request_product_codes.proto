@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package rti;
+
+message RequestProductCodes {
+  int32 template_id = 154467;       // Template ID = 111
+  string exchange = 110101;         // Exchange filter (optional)
+  string user_msg = 132760;         // User message for tracking
+}

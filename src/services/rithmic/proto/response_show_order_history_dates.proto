@@ -1,0 +1,13 @@
+
+package rti;
+
+message ResponseShowOrderHistoryDates
+{
+	// CORRECT field IDs from rundef/async_rithmic (verified Dec 2025)
+	// PB_OFFSET = 100000
+	optional int32           template_id        = 154467;
+	repeated string          user_msg           = 132760;
+	repeated string          rq_handler_rp_code = 132764;
+	repeated string          rp_code            = 132766;
+	repeated string          date               = 110615;    // Available dates (YYYYMMDD)
+}

@@ -1,0 +1,11 @@
+
+package rti;
+
+message ResponseShowOrderHistorySummary
+{
+	// Based on async_rithmic proto definitions
+	optional int32        template_id  = 156580;
+	repeated string       user_msg     = 142744;
+	repeated string       rp_code      = 142750;
+	optional int32        fills_collected = 156569;
+}

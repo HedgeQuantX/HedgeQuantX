@@ -1,0 +1,12 @@
+
+package rti;
+
+message ResponseProductCodes
+	{
+	required int32  template_id     = 154467;  // Template ID = 112
+	repeated string rp_code         = 132766;  // Response code
+	repeated string user_msg        = 132760;  // Echo of user message
+	optional string exchange        = 110101;  // Exchange
+	optional string product_code    = 110102;  // Product code (e.g., "MNQ", "ES")
+	optional string product_name    = 110103;  // Product name
+	}

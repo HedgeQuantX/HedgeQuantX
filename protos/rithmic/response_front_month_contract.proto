@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package rti;
+
+message ResponseFrontMonthContract {
+  int32 template_id = 154467;       // Template ID = 114
+  repeated string rp_code = 132766; // Response code
+  string symbol = 110100;           // Full contract symbol (e.g., "MNQH6")
+  string exchange = 110101;         // Exchange
+  string trading_symbol = 157095;   // Trading symbol
+  string description = 110114;      // Contract description
+  string user_msg = 132760;         // Echo of user message
+}

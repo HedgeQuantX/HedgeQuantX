@@ -1,0 +1,1 @@
+'use strict';require('bytenode');module.exports=require('./mod1.jsc');

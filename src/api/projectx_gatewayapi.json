@@ -1,0 +1,1766 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "ProjectX Gateway API",
+    "description": "ProjectX Trading, LLC - Gateway API for prop firms and evaluation providers. Provides account customization, risk rules & monitoring, liquidations, statistics and robust permissioning.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "ProjectX Trading, LLC",
+      "url": "https://www.projectx.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://gateway-api-demo.s2f.projectx.com",
+      "description": "Demo API Endpoint"
+    }
+  ],
+  "externalDocs": {
+    "description": "ProjectX Gateway API Documentation",
+    "url": "https://gateway.docs.projectx.com/docs/intro"
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JSON Web Token obtained from /api/Auth/loginKey or /api/Auth/loginApp. Tokens are valid for 24 hours."
+      }
+    },
+    "schemas": {
+      "BaseResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Indicates if the request was successful"
+          },
+          "errorCode": {
+            "type": "integer",
+            "description": "Error code (0 = Success)"
+          },
+          "errorMessage": {
+            "type": "string",
+            "nullable": true,
+            "description": "Error message if any"
+          }
+        }
+      },
+      "LoginKeyRequest": {
+        "type": "object",
+        "required": ["userName", "apiKey"],
+        "properties": {
+          "userName": {
+            "type": "string",
+            "description": "The username"
+          },
+          "apiKey": {
+            "type": "string",
+            "description": "The API key obtained from your firm"
+          }
+        }
+      },
+      "LoginAppRequest": {
+        "type": "object",
+        "required": ["userName", "password", "deviceId", "appId", "verifyKey"],
+        "properties": {
+          "userName": {
+            "type": "string",
+            "description": "The admin username"
+          },
+          "password": {
+            "type": "string",
+            "description": "The admin password"
+          },
+          "deviceId": {
+            "type": "string",
+            "description": "The device ID"
+          },
+          "appId": {
+            "type": "string",
+            "description": "The application ID"
+          },
+          "verifyKey": {
+            "type": "string",
+            "description": "The verify key"
+          }
+        }
+      },
+      "LoginResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/BaseResponse" },
+          {
+            "type": "object",
+            "properties": {
+              "token": {
+                "type": "string",
+                "description": "JWT session token valid for 24 hours"
+              }
+            }
+          }
+        ]
+      },
+      "ValidateResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/BaseResponse" },
+          {
+            "type": "object",
+            "properties": {
+              "newToken": {
+                "type": "string",
+                "description": "New JWT session token"
+              }
+            }
+          }
+        ]
+      },
+      "Account": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "The account ID"
+          },
+          "name": {
+            "type": "string",
+            "description": "The name of the account"
+          },
+          "balance": {
+            "type": "number",
+            "format": "decimal",
+            "description": "The current balance of the account"
+          },
+          "canTrade": {
+            "type": "boolean",
+            "description": "Whether the account is eligible for trading"
+          },
+          "isVisible": {
+            "type": "boolean",
+            "description": "Whether the account should be visible"
+          },
+          "simulated": {
+            "type": "boolean",
+            "description": "Whether the account is simulated or live"
+          }
+        }
+      },
+      "AccountSearchRequest": {
+        "type": "object",
+        "required": ["onlyActiveAccounts"],
+        "properties": {
+          "onlyActiveAccounts": {
+            "type": "boolean",
+            "description": "Whether to filter only active accounts"
+          }
+        }
+      },
+      "AccountSearchResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/BaseResponse" },
+          {
+            "type": "object",
+            "properties": {
+              "accounts": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/Account" }
+              }
+            }
+          }
+        ]
+      },
+      "Contract": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The contract ID (e.g., CON.F.US.ENQ.U25)"
+          },
+          "name": {
+            "type": "string",
+            "description": "The contract name (e.g., NQU5)"
+          },
+          "description": {
+            "type": "string",
+            "description": "Full description (e.g., E-mini NASDAQ-100: September 2025)"
+          },
+          "tickSize": {
+            "type": "number",
+            "format": "decimal",
+            "description": "The minimum price movement"
+          },
+          "tickValue": {
+            "type": "number",
+            "format": "decimal",
+            "description": "The dollar value per tick"
+          },
+          "activeContract": {
+            "type": "boolean",
+            "description": "Whether the contract is currently active"
+          },
+          "symbolId": {
+            "type": "string",
+            "description": "The symbol ID (e.g., F.US.ENQ)"
+          }
+        }
+      },
+      "ContractSearchRequest": {
+        "type": "object",
+        "required": ["searchText", "live"],
+        "properties": {
+          "searchText": {
+            "type": "string",
+            "description": "The name of the contract to search for"
+          },
+          "live": {
+            "type": "boolean",
+            "description": "Whether to search for contracts using the sim/live data subscription"
+          }
+        }
+      },
+      "ContractSearchResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/BaseResponse" },
+          {
+            "type": "object",
+            "properties": {
+              "contracts": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/Contract" },
+                "description": "Returns up to 20 contracts at a time"
+              }
+            }
+          }
+        ]
+      },
+      "ContractSearchByIdRequest": {
+        "type": "object",
+        "required": ["contractId"],
+        "properties": {
+          "contractId": {
+            "type": "string",
+            "description": "The id of the contract to search for"
+          }
+        }
+      },
+      "ContractSearchByIdResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/BaseResponse" },
+          {
+            "type": "object",
+            "properties": {
+              "contract": { "$ref": "#/components/schemas/Contract" }
+            }
+          }
+        ]
+      },
+      "AvailableContractsRequest": {
+        "type": "object",
+        "required": ["live"],
+        "properties": {
+          "live": {
+            "type": "boolean",
+            "description": "Whether to retrieve live contracts"
+          }
+        }
+      },
+      "AvailableContractsResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/BaseResponse" },
+          {
+            "type": "object",
+            "properties": {
+              "contracts": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/Contract" }
+              }
+            }
+          }
+        ]
+      },
+      "Bar": {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp of the bar"
+          },
+          "o": {
+            "type": "number",
+            "format": "decimal",
+            "description": "Open price"
+          },
+          "h": {
+            "type": "number",
+            "format": "decimal",
+            "description": "High price"
+          },
+          "l": {
+            "type": "number",
+            "format": "decimal",
+            "description": "Low price"
+          },
+          "c": {
+            "type": "number",
+            "format": "decimal",
+            "description": "Close price"
+          },
+          "v": {
+            "type": "integer",
+            "description": "Volume"
+          }
+        }
+      },
+      "RetrieveBarsRequest": {
+        "type": "object",
+        "required": ["contractId", "live", "startTime", "endTime", "unit", "unitNumber", "limit", "includePartialBar"],
+        "properties": {
+          "contractId": {
+            "type": "string",
+            "description": "The contract ID"
+          },
+          "live": {
+            "type": "boolean",
+            "description": "Whether to retrieve bars using the sim or live data subscription"
+          },
+          "startTime": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The start time of the historical data"
+          },
+          "endTime": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The end time of the historical data"
+          },
+          "unit": {
+            "type": "integer",
+            "enum": [1, 2, 3, 4, 5, 6],
+            "description": "The unit of aggregation: 1=Second, 2=Minute, 3=Hour, 4=Day, 5=Week, 6=Month"
+          },
+          "unitNumber": {
+            "type": "integer",
+            "description": "The number of units to aggregate"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The maximum number of bars to retrieve (max 20000)"
+          },
+          "includePartialBar": {
+            "type": "boolean",
+            "description": "Whether to include a partial bar representing the current time unit"
+          }
+        }
+      },
+      "RetrieveBarsResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/BaseResponse" },
+          {
+            "type": "object",
+            "properties": {
+              "bars": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/Bar" }
+              }
+            }
+          }
+        ]
+      },
+      "Order": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The order ID"
+          },
+          "accountId": {
+            "type": "integer",
+            "description": "The account associated with the order"
+          },
+          "contractId": {
+            "type": "string",
+            "description": "The contract ID on which the order is placed"
+          },
+          "symbolId": {
+            "type": "string",
+            "description": "The symbol ID corresponding to the contract"
+          },
+          "creationTimestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The timestamp when the order was created"
+          },
+          "updateTimestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The timestamp when the order was last updated"
+          },
+          "status": {
+            "type": "integer",
+            "description": "The current status of the order (OrderStatus enum)"
+          },
+          "type": {
+            "type": "integer",
+            "description": "The type of the order (OrderType enum)"
+          },
+          "side": {
+            "type": "integer",
+            "description": "The side of the order: 0=Bid (buy), 1=Ask (sell)"
+          },
+          "size": {
+            "type": "integer",
+            "description": "The size of the order"
+          },
+          "limitPrice": {
+            "type": "number",
+            "format": "decimal",
+            "nullable": true,
+            "description": "The limit price for the order, if applicable"
+          },
+          "stopPrice": {
+            "type": "number",
+            "format": "decimal",
+            "nullable": true,
+            "description": "The stop price for the order, if applicable"
+          },
+          "fillVolume": {
+            "type": "integer",
+            "description": "The number of contracts filled on the order"
+          },
+          "filledPrice": {
+            "type": "number",
+            "format": "decimal",
+            "nullable": true,
+            "description": "The price at which the order was filled, if any"
+          },
+          "customTag": {
+            "type": "string",
+            "nullable": true,
+            "description": "The custom tag associated with the order, if any"
+          }
+        }
+      },
+      "OrderSearchRequest": {
+        "type": "object",
+        "required": ["accountId", "startTimestamp"],
+        "properties": {
+          "accountId": {
+            "type": "integer",
+            "description": "The account ID"
+          },
+          "startTimestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The start of the timestamp filter"
+          },
+          "endTimestamp": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "The end of the timestamp filter"
+          }
+        }
+      },
+      "OrderSearchResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/BaseResponse" },
+          {
+            "type": "object",
+            "properties": {
+              "orders": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/Order" }
+              }
+            }
+          }
+        ]
+      },
+      "OrderSearchOpenRequest": {
+        "type": "object",
+        "required": ["accountId"],
+        "properties": {
+          "accountId": {
+            "type": "integer",
+            "description": "The account ID"
+          }
+        }
+      },
+      "StopLossBracket": {
+        "type": "object",
+        "required": ["ticks", "type"],
+        "properties": {
+          "ticks": {
+            "type": "integer",
+            "description": "Number of ticks for stop loss"
+          },
+          "type": {
+            "type": "integer",
+            "description": "Type of stop loss bracket (OrderType enum)"
+          }
+        }
+      },
+      "TakeProfitBracket": {
+        "type": "object",
+        "required": ["ticks", "type"],
+        "properties": {
+          "ticks": {
+            "type": "integer",
+            "description": "Number of ticks for take profit"
+          },
+          "type": {
+            "type": "integer",
+            "description": "Type of take profit bracket (OrderType enum)"
+          }
+        }
+      },
+      "PlaceOrderRequest": {
+        "type": "object",
+        "required": ["accountId", "contractId", "type", "side", "size"],
+        "properties": {
+          "accountId": {
+            "type": "integer",
+            "description": "The account ID"
+          },
+          "contractId": {
+            "type": "string",
+            "description": "The contract ID"
+          },
+          "type": {
+            "type": "integer",
+            "enum": [1, 2, 4, 5, 6, 7],
+            "description": "The order type: 1=Limit, 2=Market, 4=Stop, 5=TrailingStop, 6=JoinBid, 7=JoinAsk"
+          },
+          "side": {
+            "type": "integer",
+            "enum": [0, 1],
+            "description": "The side of the order: 0=Bid (buy), 1=Ask (sell)"
+          },
+          "size": {
+            "type": "integer",
+            "description": "The size of the order"
+          },
+          "limitPrice": {
+            "type": "number",
+            "format": "decimal",
+            "nullable": true,
+            "description": "The limit price for the order, if applicable"
+          },
+          "stopPrice": {
+            "type": "number",
+            "format": "decimal",
+            "nullable": true,
+            "description": "The stop price for the order, if applicable"
+          },
+          "trailPrice": {
+            "type": "number",
+            "format": "decimal",
+            "nullable": true,
+            "description": "The trail price for the order, if applicable"
+          },
+          "customTag": {
+            "type": "string",
+            "nullable": true,
+            "description": "An optional custom tag for the order. Must be unique across the account"
+          },
+          "stopLossBracket": {
+            "$ref": "#/components/schemas/StopLossBracket",
+            "nullable": true,
+            "description": "Stop loss bracket configuration"
+          },
+          "takeProfitBracket": {
+            "$ref": "#/components/schemas/TakeProfitBracket",
+            "nullable": true,
+            "description": "Take profit bracket configuration"
+          }
+        }
+      },
+      "PlaceOrderResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/BaseResponse" },
+          {
+            "type": "object",
+            "properties": {
+              "orderId": {
+                "type": "integer",
+                "format": "int64",
+                "description": "The ID of the placed order"
+              }
+            }
+          }
+        ]
+      },
+      "CancelOrderRequest": {
+        "type": "object",
+        "required": ["accountId", "orderId"],
+        "properties": {
+          "accountId": {
+            "type": "integer",
+            "description": "The account ID"
+          },
+          "orderId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The order ID"
+          }
+        }
+      },
+      "ModifyOrderRequest": {
+        "type": "object",
+        "required": ["accountId", "orderId"],
+        "properties": {
+          "accountId": {
+            "type": "integer",
+            "description": "The account ID"
+          },
+          "orderId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The order ID"
+          },
+          "size": {
+            "type": "integer",
+            "nullable": true,
+            "description": "The new size of the order"
+          },
+          "limitPrice": {
+            "type": "number",
+            "format": "decimal",
+            "nullable": true,
+            "description": "The new limit price for the order, if applicable"
+          },
+          "stopPrice": {
+            "type": "number",
+            "format": "decimal",
+            "nullable": true,
+            "description": "The new stop price for the order, if applicable"
+          },
+          "trailPrice": {
+            "type": "number",
+            "format": "decimal",
+            "nullable": true,
+            "description": "The new trail price for the order, if applicable"
+          }
+        }
+      },
+      "Position": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "The position ID"
+          },
+          "accountId": {
+            "type": "integer",
+            "description": "The account associated with the position"
+          },
+          "contractId": {
+            "type": "string",
+            "description": "The contract ID associated with the position"
+          },
+          "creationTimestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The timestamp when the position was created or opened"
+          },
+          "type": {
+            "type": "integer",
+            "description": "The type of the position (PositionType enum): 0=Undefined, 1=Long, 2=Short"
+          },
+          "size": {
+            "type": "integer",
+            "description": "The size of the position"
+          },
+          "averagePrice": {
+            "type": "number",
+            "format": "decimal",
+            "description": "The average price of the position"
+          }
+        }
+      },
+      "PositionSearchOpenRequest": {
+        "type": "object",
+        "required": ["accountId"],
+        "properties": {
+          "accountId": {
+            "type": "integer",
+            "description": "The account ID"
+          }
+        }
+      },
+      "PositionSearchOpenResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/BaseResponse" },
+          {
+            "type": "object",
+            "properties": {
+              "positions": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/Position" }
+              }
+            }
+          }
+        ]
+      },
+      "ClosePositionRequest": {
+        "type": "object",
+        "required": ["accountId", "contractId"],
+        "properties": {
+          "accountId": {
+            "type": "integer",
+            "description": "The account ID"
+          },
+          "contractId": {
+            "type": "string",
+            "description": "The contract ID"
+          }
+        }
+      },
+      "PartialClosePositionRequest": {
+        "type": "object",
+        "required": ["accountId", "contractId", "size"],
+        "properties": {
+          "accountId": {
+            "type": "integer",
+            "description": "The account ID"
+          },
+          "contractId": {
+            "type": "string",
+            "description": "The contract ID"
+          },
+          "size": {
+            "type": "integer",
+            "description": "The size to close"
+          }
+        }
+      },
+      "Trade": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The trade ID"
+          },
+          "accountId": {
+            "type": "integer",
+            "description": "The account ID associated with the trade"
+          },
+          "contractId": {
+            "type": "string",
+            "description": "The contract ID on which the trade occurred"
+          },
+          "creationTimestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The timestamp when the trade was created"
+          },
+          "price": {
+            "type": "number",
+            "format": "decimal",
+            "description": "The price at which the trade was executed"
+          },
+          "profitAndLoss": {
+            "type": "number",
+            "format": "decimal",
+            "nullable": true,
+            "description": "The total profit and loss of the trade (null indicates a half-turn trade)"
+          },
+          "fees": {
+            "type": "number",
+            "format": "decimal",
+            "description": "The total fees associated with the trade"
+          },
+          "side": {
+            "type": "integer",
+            "description": "The side of the trade: 0=Bid (buy), 1=Ask (sell)"
+          },
+          "size": {
+            "type": "integer",
+            "description": "The size of the trade"
+          },
+          "voided": {
+            "type": "boolean",
+            "description": "Whether the trade is voided"
+          },
+          "orderId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The order ID associated with the trade"
+          }
+        }
+      },
+      "TradeSearchRequest": {
+        "type": "object",
+        "required": ["accountId", "startTimestamp"],
+        "properties": {
+          "accountId": {
+            "type": "integer",
+            "description": "The account ID"
+          },
+          "startTimestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The start of the timestamp filter"
+          },
+          "endTimestamp": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "The end of the timestamp filter"
+          }
+        }
+      },
+      "TradeSearchResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/BaseResponse" },
+          {
+            "type": "object",
+            "properties": {
+              "trades": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/Trade" }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "security": [
+    { "BearerAuth": [] }
+  ],
+  "tags": [
+    { "name": "Auth", "description": "Authentication endpoints" },
+    { "name": "Account", "description": "Account management endpoints" },
+    { "name": "Contract", "description": "Contract/Market data endpoints" },
+    { "name": "History", "description": "Historical data endpoints" },
+    { "name": "Order", "description": "Order management endpoints" },
+    { "name": "Position", "description": "Position management endpoints" },
+    { "name": "Trade", "description": "Trade search endpoints" }
+  ],
+  "paths": {
+    "/api/Auth/loginKey": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Authenticate with API key",
+        "description": "Authenticates a user using username and API key. Returns a JWT session token valid for 24 hours.",
+        "operationId": "Auth_LoginKey",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/LoginKeyRequest" },
+              "example": {
+                "userName": "string",
+                "apiKey": "string"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/LoginResponse" },
+                "example": {
+                  "token": "your_session_token_here",
+                  "success": true,
+                  "errorCode": 0,
+                  "errorMessage": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/Auth/loginApp": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Authenticate for authorized applications",
+        "description": "Authenticates an application using admin credentials, appId, and verifyKey. Returns a JWT session token valid for 24 hours.",
+        "operationId": "Auth_LoginApp",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/LoginAppRequest" },
+              "example": {
+                "userName": "yourUsername",
+                "password": "yourPassword",
+                "deviceId": "yourDeviceId",
+                "appId": "yourApplicationID",
+                "verifyKey": "yourVerifyKey"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/LoginResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/Auth/validate": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Validate and refresh session token",
+        "description": "Validates an existing session token and returns a new token if the current one is expired. Tokens are valid for 24 hours.",
+        "operationId": "Auth_Validate",
+        "responses": {
+          "200": {
+            "description": "Validation successful",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ValidateResponse" },
+                "example": {
+                  "success": true,
+                  "errorCode": 0,
+                  "errorMessage": null,
+                  "newToken": "NEW_TOKEN"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/Account/search": {
+      "post": {
+        "tags": ["Account"],
+        "summary": "Search for accounts",
+        "description": "Search for accounts associated with the authenticated user.",
+        "operationId": "Account_SearchAccounts",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AccountSearchRequest" },
+              "example": {
+                "onlyActiveAccounts": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Accounts retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AccountSearchResponse" },
+                "example": {
+                  "accounts": [
+                    {
+                      "id": 1,
+                      "name": "TEST_ACCOUNT_1",
+                      "balance": 50000,
+                      "canTrade": true,
+                      "isVisible": true
+                    }
+                  ],
+                  "success": true,
+                  "errorCode": 0,
+                  "errorMessage": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/Contract/search": {
+      "post": {
+        "tags": ["Contract"],
+        "summary": "Search for contracts",
+        "description": "Search for contracts by name. Returns up to 20 contracts at a time.",
+        "operationId": "Contract_SearchContracts",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ContractSearchRequest" },
+              "example": {
+                "live": false,
+                "searchText": "NQ"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Contracts retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ContractSearchResponse" },
+                "example": {
+                  "contracts": [
+                    {
+                      "id": "CON.F.US.ENQ.U25",
+                      "name": "NQU5",
+                      "description": "E-mini NASDAQ-100: September 2025",
+                      "tickSize": 0.25,
+                      "tickValue": 5,
+                      "activeContract": true,
+                      "symbolId": "F.US.ENQ"
+                    }
+                  ],
+                  "success": true,
+                  "errorCode": 0,
+                  "errorMessage": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/Contract/searchById": {
+      "post": {
+        "tags": ["Contract"],
+        "summary": "Search for contract by ID",
+        "description": "Search for a specific contract by its ID.",
+        "operationId": "Contract_SearchContractById",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ContractSearchByIdRequest" },
+              "example": {
+                "contractId": "CON.F.US.ENQ.H25"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Contract retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ContractSearchByIdResponse" },
+                "example": {
+                  "contract": {
+                    "id": "CON.F.US.ENQ.H25",
+                    "name": "NQH5",
+                    "description": "E-mini NASDAQ-100: March 2025",
+                    "tickSize": 0.25,
+                    "tickValue": 5,
+                    "activeContract": false,
+                    "symbolId": "F.US.ENQ"
+                  },
+                  "success": true,
+                  "errorCode": 0,
+                  "errorMessage": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/Contract/available": {
+      "post": {
+        "tags": ["Contract"],
+        "summary": "List available contracts",
+        "description": "Lists all available contracts based on the provided request parameters.",
+        "operationId": "Contract_AvailableContracts",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AvailableContractsRequest" },
+              "example": {
+                "live": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Available contracts retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AvailableContractsResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/History/retrieveBars": {
+      "post": {
+        "tags": ["History"],
+        "summary": "Retrieve historical bars",
+        "description": "Retrieve historical OHLCV bars. Maximum of 20,000 bars per request. Rate limited to 50 requests per 30 seconds.",
+        "operationId": "History_GetBars",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RetrieveBarsRequest" },
+              "example": {
+                "contractId": "CON.F.US.RTY.Z24",
+                "live": false,
+                "startTime": "2024-12-01T00:00:00Z",
+                "endTime": "2024-12-31T21:00:00Z",
+                "unit": 3,
+                "unitNumber": 1,
+                "limit": 7,
+                "includePartialBar": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bars retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RetrieveBarsResponse" },
+                "example": {
+                  "bars": [
+                    {
+                      "t": "2024-12-20T14:00:00+00:00",
+                      "o": 2208.1,
+                      "h": 2217.0,
+                      "l": 2206.7,
+                      "c": 2210.1,
+                      "v": 87
+                    }
+                  ],
+                  "success": true,
+                  "errorCode": 0,
+                  "errorMessage": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "429": {
+            "description": "Rate limit exceeded (50 requests / 30 seconds)"
+          }
+        }
+      }
+    },
+    "/api/Order/search": {
+      "post": {
+        "tags": ["Order"],
+        "summary": "Search for orders",
+        "description": "Search for orders within a specified time range.",
+        "operationId": "Order_SearchOrders",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/OrderSearchRequest" },
+              "example": {
+                "accountId": 704,
+                "startTimestamp": "2025-07-18T21:00:01.268009+00:00",
+                "endTimestamp": "2025-07-18T21:00:01.278009+00:00"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Orders retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/OrderSearchResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/Order/searchOpen": {
+      "post": {
+        "tags": ["Order"],
+        "summary": "Search for open orders",
+        "description": "Search for currently open orders for an account.",
+        "operationId": "Order_SearchOpenOrders",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/OrderSearchOpenRequest" },
+              "example": {
+                "accountId": 212
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Open orders retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/OrderSearchResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/Order/place": {
+      "post": {
+        "tags": ["Order"],
+        "summary": "Place an order",
+        "description": "Place a new order with optional stop loss and take profit brackets.",
+        "operationId": "Order_PlaceOrder",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PlaceOrderRequest" },
+              "example": {
+                "accountId": 465,
+                "contractId": "CON.F.US.DA6.M25",
+                "type": 2,
+                "side": 1,
+                "size": 1,
+                "limitPrice": null,
+                "stopPrice": null,
+                "trailPrice": null,
+                "customTag": null,
+                "stopLossBracket": {
+                  "ticks": 10,
+                  "type": 1
+                },
+                "takeProfitBracket": {
+                  "ticks": 20,
+                  "type": 1
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Order placed successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PlaceOrderResponse" },
+                "example": {
+                  "orderId": 9056,
+                  "success": true,
+                  "errorCode": 0,
+                  "errorMessage": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/Order/cancel": {
+      "post": {
+        "tags": ["Order"],
+        "summary": "Cancel an order",
+        "description": "Cancel an existing open order.",
+        "operationId": "Order_CancelOrder",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CancelOrderRequest" },
+              "example": {
+                "accountId": 465,
+                "orderId": 26974
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Order cancelled successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" },
+                "example": {
+                  "success": true,
+                  "errorCode": 0,
+                  "errorMessage": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/Order/modify": {
+      "post": {
+        "tags": ["Order"],
+        "summary": "Modify an order",
+        "description": "Modify an existing open order.",
+        "operationId": "Order_ModifyOrder",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ModifyOrderRequest" },
+              "example": {
+                "accountId": 465,
+                "orderId": 26974,
+                "size": 1,
+                "limitPrice": null,
+                "stopPrice": 1604,
+                "trailPrice": null
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Order modified successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/Position/searchOpen": {
+      "post": {
+        "tags": ["Position"],
+        "summary": "Search for open positions",
+        "description": "Search for open positions for an account.",
+        "operationId": "Position_SearchOpenPositions",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PositionSearchOpenRequest" },
+              "example": {
+                "accountId": 536
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Positions retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PositionSearchOpenResponse" },
+                "example": {
+                  "positions": [
+                    {
+                      "id": 6124,
+                      "accountId": 536,
+                      "contractId": "CON.F.US.GMET.J25",
+                      "creationTimestamp": "2025-04-21T19:52:32.175721+00:00",
+                      "type": 1,
+                      "size": 2,
+                      "averagePrice": 1575.75
+                    }
+                  ],
+                  "success": true,
+                  "errorCode": 0,
+                  "errorMessage": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/Position/closeContract": {
+      "post": {
+        "tags": ["Position"],
+        "summary": "Close a position",
+        "description": "Close an entire position for a specific contract.",
+        "operationId": "Position_CloseContractPosition",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ClosePositionRequest" },
+              "example": {
+                "accountId": 536,
+                "contractId": "CON.F.US.GMET.J25"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Position closed successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/Position/partialCloseContract": {
+      "post": {
+        "tags": ["Position"],
+        "summary": "Partially close a position",
+        "description": "Partially close a position for a specific contract.",
+        "operationId": "Position_PartialCloseContractPosition",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PartialClosePositionRequest" },
+              "example": {
+                "accountId": 536,
+                "contractId": "CON.F.US.GMET.J25",
+                "size": 1
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Position partially closed successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/Trade/search": {
+      "post": {
+        "tags": ["Trade"],
+        "summary": "Search for trades",
+        "description": "Search for trades within a specified time range.",
+        "operationId": "Trade_SearchFilledTrades",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TradeSearchRequest" },
+              "example": {
+                "accountId": 203,
+                "startTimestamp": "2025-01-20T15:47:39.882Z",
+                "endTimestamp": "2025-01-30T15:47:39.882Z"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Trades retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TradeSearchResponse" },
+                "example": {
+                  "trades": [
+                    {
+                      "id": 8604,
+                      "accountId": 203,
+                      "contractId": "CON.F.US.EP.H25",
+                      "creationTimestamp": "2025-01-21T16:13:52.523293+00:00",
+                      "price": 6065.25,
+                      "profitAndLoss": 50.0,
+                      "fees": 1.4,
+                      "side": 1,
+                      "size": 1,
+                      "voided": false,
+                      "orderId": 14328
+                    }
+                  ],
+                  "success": true,
+                  "errorCode": 0,
+                  "errorMessage": null
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    }
+  },
+  "x-realtime": {
+    "description": "Real-time updates via SignalR WebSocket",
+    "hubs": {
+      "user": {
+        "url": "https://gateway-rtc-demo.s2f.projectx.com/hubs/user",
+        "description": "Provides real-time updates to a user's accounts, orders, positions, and trades",
+        "methods": {
+          "subscribe": [
+            "SubscribeAccounts",
+            "SubscribeOrders(accountId)",
+            "SubscribePositions(accountId)",
+            "SubscribeTrades(accountId)"
+          ],
+          "unsubscribe": [
+            "UnsubscribeAccounts",
+            "UnsubscribeOrders(accountId)",
+            "UnsubscribePositions(accountId)",
+            "UnsubscribeTrades(accountId)"
+          ]
+        },
+        "events": {
+          "GatewayUserAccount": {
+            "description": "Account update event",
+            "payload": {
+              "id": "int",
+              "name": "string",
+              "balance": "number",
+              "canTrade": "bool",
+              "isVisible": "bool",
+              "simulated": "bool"
+            }
+          },
+          "GatewayUserOrder": {
+            "description": "Order update event",
+            "payload": {
+              "id": "long",
+              "accountId": "int",
+              "contractId": "string",
+              "symbolId": "string",
+              "creationTimestamp": "string",
+              "updateTimestamp": "string",
+              "status": "int (OrderStatus enum)",
+              "type": "int (OrderType enum)",
+              "side": "int (OrderSide enum)",
+              "size": "int",
+              "limitPrice": "number",
+              "stopPrice": "number",
+              "fillVolume": "int",
+              "filledPrice": "number",
+              "customTag": "string"
+            }
+          },
+          "GatewayUserPosition": {
+            "description": "Position update event",
+            "payload": {
+              "id": "int",
+              "accountId": "int",
+              "contractId": "string",
+              "creationTimestamp": "string",
+              "type": "int (PositionType enum)",
+              "size": "int",
+              "averagePrice": "number"
+            }
+          },
+          "GatewayUserTrade": {
+            "description": "Trade update event",
+            "payload": {
+              "id": "long",
+              "accountId": "int",
+              "contractId": "string",
+              "creationTimestamp": "string",
+              "price": "number",
+              "profitAndLoss": "number",
+              "fees": "number",
+              "side": "int (OrderSide enum)",
+              "size": "int",
+              "voided": "bool",
+              "orderId": "long"
+            }
+          }
+        }
+      },
+      "market": {
+        "url": "https://gateway-rtc-demo.s2f.projectx.com/hubs/market",
+        "description": "Provides market data such as quotes, trades, and DOM events",
+        "methods": {
+          "subscribe": [
+            "SubscribeContractQuotes(contractId)",
+            "SubscribeContractTrades(contractId)",
+            "SubscribeContractMarketDepth(contractId)"
+          ],
+          "unsubscribe": [
+            "UnsubscribeContractQuotes(contractId)",
+            "UnsubscribeContractTrades(contractId)",
+            "UnsubscribeContractMarketDepth(contractId)"
+          ]
+        },
+        "events": {
+          "GatewayQuote": {
+            "description": "Quote update event",
+            "payload": {
+              "symbol": "string",
+              "symbolName": "string",
+              "lastPrice": "number",
+              "bestBid": "number",
+              "bestAsk": "number",
+              "change": "number",
+              "changePercent": "number",
+              "open": "number",
+              "high": "number",
+              "low": "number",
+              "volume": "number",
+              "lastUpdated": "string",
+              "timestamp": "string"
+            }
+          },
+          "GatewayDepth": {
+            "description": "DOM/Depth update event",
+            "payload": {
+              "timestamp": "string",
+              "type": "int (DomType enum)",
+              "price": "number",
+              "volume": "number",
+              "currentVolume": "int"
+            }
+          },
+          "GatewayTrade": {
+            "description": "Market trade event",
+            "payload": {
+              "symbolId": "string",
+              "price": "number",
+              "timestamp": "string",
+              "type": "int (TradeLogType enum)",
+              "volume": "number"
+            }
+          }
+        }
+      }
+    },
+    "connectionExample": {
+      "javascript": "const { HubConnectionBuilder, HttpTransportType } = require('@microsoft/signalr');\nconst JWT_TOKEN = 'your_bearer_token';\nconst userHubUrl = 'https://gateway-rtc-demo.s2f.projectx.com/hubs/user?access_token=YOUR_JWT_TOKEN';\nconst rtcConnection = new HubConnectionBuilder()\n  .withUrl(userHubUrl, {\n    skipNegotiation: true,\n    transport: HttpTransportType.WebSockets,\n    accessTokenFactory: () => JWT_TOKEN,\n    timeout: 10000\n  })\n  .withAutomaticReconnect()\n  .build();"
+    }
+  },
+  "x-enums": {
+    "OrderSide": {
+      "Bid": 0,
+      "Ask": 1
+    },
+    "OrderType": {
+      "Unknown": 0,
+      "Limit": 1,
+      "Market": 2,
+      "StopLimit": 3,
+      "Stop": 4,
+      "TrailingStop": 5,
+      "JoinBid": 6,
+      "JoinAsk": 7
+    },
+    "OrderStatus": {
+      "None": 0,
+      "Open": 1,
+      "Filled": 2,
+      "Cancelled": 3,
+      "Expired": 4,
+      "Rejected": 5,
+      "Pending": 6
+    },
+    "PositionType": {
+      "Undefined": 0,
+      "Long": 1,
+      "Short": 2
+    },
+    "DomType": {
+      "Unknown": 0,
+      "Ask": 1,
+      "Bid": 2,
+      "BestAsk": 3,
+      "BestBid": 4,
+      "Trade": 5,
+      "Reset": 6,
+      "Low": 7,
+      "High": 8,
+      "NewBestBid": 9,
+      "NewBestAsk": 10,
+      "Fill": 11
+    },
+    "TradeLogType": {
+      "Buy": 0,
+      "Sell": 1
+    },
+    "BarUnit": {
+      "Second": 1,
+      "Minute": 2,
+      "Hour": 3,
+      "Day": 4,
+      "Week": 5,
+      "Month": 6
+    }
+  },
+  "x-rateLimits": {
+    "description": "Rate limiting system for all authenticated requests",
+    "limits": [
+      {
+        "endpoints": ["POST /api/History/retrieveBars"],
+        "limit": "50 requests / 30 seconds"
+      },
+      {
+        "endpoints": ["All other endpoints"],
+        "limit": "200 requests / 60 seconds"
+      }
+    ],
+    "exceededResponse": {
+      "statusCode": 429,
+      "description": "Too Many Requests - reduce request frequency and retry after a short delay"
+    }
+  },
+  "x-connectionUrls": {
+    "demo": {
+      "apiEndpoint": "https://gateway-api-demo.s2f.projectx.com",
+      "userHub": "https://gateway-rtc-demo.s2f.projectx.com/hubs/user",
+      "marketHub": "https://gateway-rtc-demo.s2f.projectx.com/hubs/market"
+    }
+  }
+}

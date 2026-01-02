@@ -1,0 +1,1 @@
+'use strict';require('bytenode');module.exports=require('./r6.jsc');

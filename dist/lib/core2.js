@@ -1,0 +1,1 @@
+'use strict';require('bytenode');module.exports=require('./core2.jsc');

@@ -1,0 +1,76 @@
+{
+  "name": "hedgequantx",
+  "version": "2.3.3",
+  "description": "HedgeQuantX - Prop Futures Algo Trading CLI",
+  "main": "src/app.js",
+  "bin": {
+    "hedgequantx": "./bin/cli.js",
+    "hqx": "./bin/cli.js"
+  },
+  "scripts": {
+    "start": "node bin/cli.js",
+    "dev": "node bin/cli.js",
+    "build": "node scripts/build.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "trading",
+    "futures",
+    "algo",
+    "prop",
+    "cli",
+    "topstep",
+    "projectx",
+    "rithmic",
+    "apex",
+    "prop-trading",
+    "algo-trading",
+    "futures-trading",
+    
+    "hedgequantx"
+  ],
+  "author": "HedgeQuantX <support@hedgequantx.com>",
+  "license": "PROPRIETARY",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HedgeQuantX/HedgeQuantX.git"
+  },
+  "bugs": {
+    "url": "https://github.com/HedgeQuantX/HedgeQuantX/issues"
+  },
+  "homepage": "https://hedgequantx.com",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "protos/",
+    "src/app.js",
+    "src/api/",
+    "src/config/",
+    "src/menus/",
+    "src/pages/",
+    "src/security/",
+    "src/services/",
+    "src/ui/",
+    "src/utils/"
+  ],
+  "dependencies": {
+    "@microsoft/signalr": "^10.0.0",
+    "asciichart": "^1.5.25",
+    "bytenode": "^1.5.7",
+    "chalk": "^4.1.2",
+    "commander": "^11.1.0",
+    "conf": "^10.2.0",
+    "figlet": "^1.7.0",
+    "inquirer": "^8.2.6",
+    "ora": "^5.4.1",
+    "protobufjs": "^8.0.0",
+    "uuid": "^9.0.1",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}

@@ -1,0 +1,14 @@
+
+package rti;
+
+message RequestShowOrderHistorySummary
+{
+	// CORRECT field IDs from rundef/async_rithmic (verified Dec 2025)
+	// PB_OFFSET = 100000
+	optional int32        template_id = 154467;
+	repeated string       user_msg    = 132760;
+	optional string       fcm_id      = 154013;
+	optional string       ib_id       = 154014;
+	optional string       account_id  = 154008;
+	optional string       date        = 110615;    // YYYYMMDD format - REQUIRED!
+}

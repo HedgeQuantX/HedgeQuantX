@@ -1,0 +1,306 @@
+# HedgeQuantX CLI
+
+<div align="center">
+
+```
+██╗  ██╗███████╗██████╗  ██████╗ ███████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗██╗  ██╗
+██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝╚██╗██╔╝
+███████║█████╗  ██║  ██║██║  ███╗█████╗  ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║    ╚███╔╝ 
+██╔══██║██╔══╝  ██║  ██║██║   ██║██╔══╝  ██║▄▄ ██║██║   ██║██╔══██║██║╚██╗██║   ██║    ██╔██╗ 
+██║  ██║███████╗██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ██╔╝ ██╗
+╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝
+```
+
+### Prop Futures Algo Trading CLI
+
+*Connect to 37+ prop firms and automate your futures trading*
+
+[![npm version](https://img.shields.io/npm/v/@hedgequantx/cli?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/@hedgequantx/cli)
+[![npm downloads](https://img.shields.io/npm/dm/@hedgequantx/cli?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/@hedgequantx/cli)
+[![GitHub stars](https://img.shields.io/github/stars/HedgeQuantX/HQX-CLI?style=for-the-badge&logo=github&logoColor=white&color=181717)](https://github.com/HedgeQuantX/HQX-CLI)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
+
+[![Node.js](https://img.shields.io/badge/Node.js-18+-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey?style=flat-square)](https://github.com/HedgeQuantX/HQX-CLI)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/HedgeQuantX/HQX-CLI/pulls)
+
+[Installation](#-installation) | [Features](#-features) | [Usage](#-usage) | [Algo Trading](#-algo-trading) | [Support](#-support)
+
+</div>
+
+---
+
+## Features
+
+| Feature | Description |
+|---------|-------------|
+| **Multi-Platform** | ProjectX & Rithmic APIs |
+| **37+ Prop Firms** | TopStep, Apex, Bulenox, and more |
+| **Multi-Account** | Connect multiple accounts simultaneously |
+| **Real-Time Stats** | Balance, P&L, positions, orders |
+| **Algo Trading** | One Account & Copy Trading modes |
+| **Algo Trading** | Proprietary HQX Strategy |
+| **Market Hours** | Auto-blocks when market closed |
+| **Local Execution** | Direct API trading, no server needed |
+| **Secure Storage** | AES-256-GCM encrypted sessions |
+| **Auto-Update** | Built-in version checker |
+
+---
+
+## Installation
+
+### NPM (Recommended)
+
+```bash
+npm i -g hedgequantx
+```
+
+### Update
+
+```bash
+npm update -g hedgequantx
+```
+
+### From Source
+
+```bash
+git clone https://github.com/HedgeQuantX/HQX-CLI.git
+cd HQX-CLI
+npm install
+npm link
+```
+
+---
+
+## Usage
+
+```bash
+# Launch CLI
+hqx
+
+# Or full command
+hedgequantx
+
+# Show version
+hqx --version
+```
+
+---
+
+## Dashboard Preview
+
+```
+╔════════════════════════════════════════════════════════════════════════════════════════════════╗
+║ ██╗  ██╗███████╗██████╗  ██████╗ ███████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗██╗  ██╗ ║
+║ ██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝╚██╗██╔╝ ║
+║ ███████║█████╗  ██║  ██║██║  ███╗█████╗  ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║    ╚███╔╝  ║
+║ ██╔══██║██╔══╝  ██║  ██║██║   ██║██╔══╝  ██║▄▄ ██║██║   ██║██╔══██║██║╚██╗██║   ██║    ██╔██╗  ║
+║ ██║  ██║███████╗██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ██╔╝ ██╗ ║
+║ ╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝ ║
+╠════════════════════════════════════════════════════════════════════════════════════════════════╣
+║                               Prop Futures Algo Trading  v1.8.18                               ║
+╠════════════════════════════════════════════════════════════════════════════════════════════════╣
+║                                      Welcome, HQX Trader!                                      ║
+╠════════════════════════════════════════════════════════════════════════════════════════════════╣
+║                               ● TopStep    ● Apex Trader Funding                               ║
+╠════════════════════════════════════════════════════════════════════════════════════════════════╣
+║                 Connections: 2    Accounts: 2    Balance: $449,682    P&L: +$0                 ║
+╠════════════════════════════════════════════════════════════════════════════════════════════════╣
+║  [1] View Accounts                             [2] View Stats                                  ║
+║  [+] Add Prop-Account                          [A] Algo-Trading                                ║
+║  [U] Update HQX                                [X] Disconnect                                  ║
+╚════════════════════════════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Algo Trading
+
+### One Account Mode
+
+Trade on a single account with HQX algo strategy.
+
+```
+╠════════════════════════════════════════════════╤═══════════════════════════════════════════════╣
+║ Account: HQX *****                             │ Symbol: ES Mar26                              ║
+╠════════════════════════════════════════════════╪═══════════════════════════════════════════════╣
+║ Qty: 1                                         │ P&L: +$0.00                                   ║
+╠════════════════════════════════════════════════╪═══════════════════════════════════════════════╣
+║ Target: $200.00                                │ Risk: $100.00                                 ║
+╠════════════════════════════════════════════════╪═══════════════════════════════════════════════╣
+║ Trades: 0  W/L: 0/0                            │ Server: ON                                    ║
+╠════════════════════════════════════════════════╪═══════════════════════════════════════════════╣
+║ Latency: 45ms                                  │ Propfirm: TopStep                             ║
+╚════════════════════════════════════════════════╧═══════════════════════════════════════════════╝
+```
+
+### Copy Trading Mode
+
+Mirror trades from Lead to Follower accounts.
+
+```
+╠════════════════════════════════════════════════╤═══════════════════════════════════════════════╣
+║ Lead: Apex *****                               │ Follower: TopStep *****                       ║
+╠════════════════════════════════════════════════╪═══════════════════════════════════════════════╣
+║ Symbol: NQ Mar26                               │ Symbol: NQ Mar26                              ║
+╠════════════════════════════════════════════════╪═══════════════════════════════════════════════╣
+║ Qty: 1                                         │ Qty: 1                                        ║
+╠════════════════════════════════════════════════╪═══════════════════════════════════════════════╣
+║ Target: $400.00                                │ Risk: $200.00                                 ║
+╚════════════════════════════════════════════════╧═══════════════════════════════════════════════╝
+```
+
+---
+
+## Supported Prop Firms
+
+<details>
+<summary><b>ProjectX (19 firms)</b></summary>
+
+| Firm | Status |
+|------|--------|
+| TopStep | Active |
+| Alpha Futures | Active |
+| TickTickTrader | Active |
+| Bulenox | Active |
+| TradeDay | Active |
+| Blusky | Active |
+| Goat Futures | Active |
+| The Futures Desk | Active |
+| DayTraders | Active |
+| E8 Futures | Active |
+| Blue Guardian Futures | Active |
+| FuturesElite | Active |
+| FXIFY | Active |
+| Hola Prime | Active |
+| Top One Futures | Active |
+| Funding Futures | Active |
+| TX3 Funding | Active |
+| Lucid Trading | Active |
+| Tradeify | Active |
+
+</details>
+
+<details>
+<summary><b>Rithmic (16 firms)</b></summary>
+
+| Firm | Status |
+|------|--------|
+| Apex Trader Funding | Active |
+| TopstepTrader | Active |
+| MES Capital | Active |
+| Bulenox | Active |
+| TradeFundrr | Active |
+| TheTradingPit | Active |
+| FundedFuturesNetwork | Active |
+| PropShopTrader | Active |
+| 4PropTrader | Active |
+| DayTraders.com | Active |
+| 10XFutures | Active |
+| LucidTrading | Active |
+| ThriveTrading | Active |
+| LegendsTrading | Active |
+| Earn2Trade | Active |
+| Tradesea | Active |
+
+</details>
+
+---
+
+## Security
+
+| Feature | Implementation |
+|---------|---------------|
+| Encryption | AES-256-GCM |
+| Key Binding | Machine-bound keys |
+| Input | Validated & sanitized |
+| Rate Limiting | API protection |
+| File Permissions | 0600 (owner only) |
+| Credentials | Never stored in plain text |
+
+---
+
+## Changelog
+
+<details>
+<summary><b>v1.8.x (Current)</b></summary>
+
+- Separate UI for One Account and Copy Trading
+- Market hours validation
+- Arrow keys navigation
+- Contracts from API
+- Native readline input
+- Seamless UI design
+- 40 visible activity logs
+
+</details>
+
+<details>
+<summary><b>v1.7.x</b></summary>
+
+- HQX algo strategy
+- Copy Trading single symbol
+- Spinner indicators
+- Cyan color theme
+
+</details>
+
+<details>
+<summary><b>v1.3.x</b></summary>
+
+- Major refactoring
+- Robust update function
+- Modular services
+
+</details>
+
+---
+
+## Roadmap
+
+- [x] ProjectX integration
+- [x] Rithmic integration
+- [x] 37+ prop firms
+- [x] Multi-account
+- [x] Stats & equity curve
+- [x] Encrypted sessions
+- [x] One Account mode
+- [x] Copy Trading mode
+- [x] HQX Server
+- [x] Market hours check
+- [ ] Real-time streaming
+- [ ] Advanced orders
+- [ ] Mobile app
+
+---
+
+## Support
+
+<div align="center">
+
+[![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/UBKCERctZu)
+[![GitHub Issues](https://img.shields.io/badge/GitHub-Issues-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/HedgeQuantX/HQX-CLI/issues)
+
+</div>
+
+---
+
+## License
+
+Proprietary - HedgeQuantX
+
+---
+
+## Disclaimer
+
+> This software is for educational and informational purposes only. Trading futures involves substantial risk of loss and is not suitable for all investors. Past performance is not indicative of future results.
+
+---
+
+<div align="center">
+
+**Made with passion by HedgeQuantX**
+
+[![GitHub](https://img.shields.io/badge/GitHub-HedgeQuantX-181717?style=flat-square&logo=github)](https://github.com/HedgeQuantX)
+
+</div>

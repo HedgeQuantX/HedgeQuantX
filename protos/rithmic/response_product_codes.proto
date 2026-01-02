@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package rti;
+
+message ResponseProductCodes {
+  int32 template_id = 154467;       // Template ID = 112
+  repeated string rp_code = 132766; // Response code
+  string exchange = 110101;         // Exchange
+  string product_code = 110102;     // Product code (e.g., "MNQ", "ES")
+  string product_name = 110103;     // Product name
+  string user_msg = 132760;         // Echo of user message
+}

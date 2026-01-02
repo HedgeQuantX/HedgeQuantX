@@ -1,0 +1,13 @@
+
+package rti;
+
+message ResponseFrontMonthContract
+	{
+	required int32  template_id     = 154467;  // Template ID = 114
+	repeated string rp_code         = 132766;  // Response code
+	repeated string user_msg        = 132760;  // Echo of user message
+	optional string symbol          = 110100;  // Full contract symbol (e.g., "MNQH5")
+	optional string exchange        = 110101;  // Exchange
+	optional string trading_symbol  = 157095;  // Trading symbol
+	optional string description     = 110114;  // Contract description
+	}
