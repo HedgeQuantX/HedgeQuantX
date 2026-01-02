@@ -205,6 +205,7 @@ const showStats = async (service) => {
     });
     
     // Calculate stats from completed trades only
+    // Include fees in P&L calculations to match TopStep
     if (completedTrades.length > 0) {
       stats.totalTrades = completedTrades.length;
       let consecutiveWins = 0, consecutiveLosses = 0;
@@ -217,7 +218,9 @@ const showStats = async (service) => {
       });
       
       for (const trade of sortedTrades) {
-        const pnl = trade.profitAndLoss || trade.pnl || 0;
+        const grossPnl = trade.profitAndLoss || trade.pnl || 0;
+        const fees = Math.abs(trade.fees || trade.commission || 0);
+        const netPnl = grossPnl - fees; // Net P&L after fees (like TopStep)
         const size = trade.size || trade.quantity || 1;
         const exitSide = trade.side; // 0=BUY exit (was SHORT), 1=SELL exit (was LONG)
         
@@ -228,26 +231,26 @@ const showStats = async (service) => {
         // Exit side 1 = SELL to close = was LONG
         if (exitSide === 1) {
           stats.longTrades++;
-          if (pnl > 0) stats.longWins++;
+          if (netPnl > 0) stats.longWins++;
         } else if (exitSide === 0) {
           stats.shortTrades++;
-          if (pnl > 0) stats.shortWins++;
+          if (netPnl > 0) stats.shortWins++;
         }
         
-        if (pnl > 0) {
+        if (netPnl > 0) {
           stats.winningTrades++;
-          stats.totalWinAmount += pnl;
+          stats.totalWinAmount += netPnl;
           consecutiveWins++;
           consecutiveLosses = 0;
           if (consecutiveWins > stats.maxConsecutiveWins) stats.maxConsecutiveWins = consecutiveWins;
-          if (pnl > stats.bestTrade) stats.bestTrade = pnl;
-        } else if (pnl < 0) {
+          if (netPnl > stats.bestTrade) stats.bestTrade = netPnl;
+        } else if (netPnl < 0) {
           stats.losingTrades++;
-          stats.totalLossAmount += Math.abs(pnl);
+          stats.totalLossAmount += Math.abs(netPnl);
           consecutiveLosses++;
           consecutiveWins = 0;
           if (consecutiveLosses > stats.maxConsecutiveLosses) stats.maxConsecutiveLosses = consecutiveLosses;
-          if (pnl < stats.worstTrade) stats.worstTrade = pnl;
+          if (netPnl < stats.worstTrade) stats.worstTrade = netPnl;
         }
       }
     }
@@ -271,8 +274,12 @@ const showStats = async (service) => {
     const longWinRate = stats.longTrades > 0 ? ((stats.longWins / stats.longTrades) * 100).toFixed(1) : 'N/A';
     const shortWinRate = stats.shortTrades > 0 ? ((stats.shortWins / stats.shortTrades) * 100).toFixed(1) : 'N/A';
     
-    // Quantitative metrics (calculated from completed trades only)
-    const tradePnLs = completedTrades.map(t => t.profitAndLoss || t.pnl || 0);
+    // Quantitative metrics (calculated from completed trades only, with fees)
+    const tradePnLs = completedTrades.map(t => {
+      const grossPnl = t.profitAndLoss || t.pnl || 0;
+      const fees = Math.abs(t.fees || t.commission || 0);
+      return grossPnl - fees; // Net P&L
+    });
     const avgReturn = tradePnLs.length > 0 ? tradePnLs.reduce((a, b) => a + b, 0) / tradePnLs.length : 0;
     
     // Standard deviation
