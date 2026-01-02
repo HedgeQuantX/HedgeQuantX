@@ -11,8 +11,8 @@ const { AlgoUI, renderSessionSummary } = require('./ui');
 const { prompts } = require('../../utils');
 const { checkMarketHours } = require('../../services/projectx/market');
 
-// Strategy & Market Data (from compiled bytecode)
-const { M1 } = require('../../../dist/lib/m/mod1');
+// Strategy & Market Data (obfuscated)
+const { M1 } = require('../../../dist/lib/m/s1');
 const { MarketDataFeed } = require('../../../dist/lib/data');
 
 
@@ -143,10 +143,10 @@ const configureAlgo = async (account, contract) => {
   const contracts = await prompts.numberInput('Number of contracts:', 1, 1, 10);
   if (contracts === null) return null;
   
-  const dailyTarget = await prompts.numberInput('Daily target ($):', 200, 1, 10000);
+  const dailyTarget = await prompts.numberInput('Daily target ($):', 1000, 1, 10000);
   if (dailyTarget === null) return null;
-  
-  const maxRisk = await prompts.numberInput('Max risk ($):', 100, 1, 5000);
+
+  const maxRisk = await prompts.numberInput('Max risk ($):', 500, 1, 5000);
   if (maxRisk === null) return null;
   
   const showName = await prompts.confirmPrompt('Show account name?', false);
@@ -173,8 +173,9 @@ const launchAlgo = async (service, account, contract, config) => {
   const contractId = contract.id;
   const connectionType = account.platform || 'ProjectX';
   const tickSize = contract.tickSize || 0.25;
+  const tickValue = contract.tickValue || 5.0;
   
-  const ui = new AlgoUI({ subtitle: 'HQX Ultra Scalping', mode: 'one-account' });
+  const ui = new AlgoUI({ subtitle: 'HQX ULTRA SCALPING', mode: 'one-account' });
   
   const stats = {
     accountName,
@@ -200,19 +201,19 @@ const launchAlgo = async (service, account, contract, config) => {
   let pendingOrder = false; // Prevent duplicate orders
   let tickCount = 0;
   
-  // Initialize Strategy
-  const strategy = new M1({ tickSize });
-  strategy.initialize(contractId, tickSize);
+  // Initialize Strategy (M1 is singleton instance)
+  const strategy = M1;
+  strategy.initialize(contractId, tickSize, tickValue);
   
   // Initialize Market Data Feed
   const marketFeed = new MarketDataFeed({ propfirm: account.propfirm });
   
-  // Log startup
-  ui.addLog('info', `Connection: ${connectionType}`);
-  ui.addLog('info', `Account: ${accountName}`);
-  ui.addLog('info', `Symbol: ${symbolName} | Qty: ${contracts}`);
-  ui.addLog('info', `Target: $${dailyTarget} | Max Risk: $${maxRisk}`);
-  ui.addLog('info', 'Connecting to market data...');
+  // Log startup - UPPERCASE
+  ui.addLog('info', `CONNECTION: ${connectionType.toUpperCase()}`);
+  ui.addLog('info', `ACCOUNT: ${accountName.toUpperCase()}`);
+  ui.addLog('info', `SYMBOL: ${symbolName.toUpperCase()} | QTY: ${contracts}`);
+  ui.addLog('info', `TARGET: $${dailyTarget} | MAX RISK: $${maxRisk}`);
+  ui.addLog('info', 'CONNECTING TO MARKET DATA...');
   
   // Handle strategy signals
   strategy.on('signal', async (signal) => {
@@ -298,26 +299,48 @@ const launchAlgo = async (service, account, contract, config) => {
   
   marketFeed.on('connected', () => {
     stats.connected = true;
-    ui.addLog('success', 'Market data connected!');
+    ui.addLog('success', 'MARKET DATA CONNECTED');
   });
   
   marketFeed.on('error', (err) => {
-    ui.addLog('error', `Market: ${err.message}`);
+    ui.addLog('error', `MARKET: ${err.message.toUpperCase()}`);
   });
   
-  marketFeed.on('disconnected', () => {
+  marketFeed.on('disconnected', (err) => {
     stats.connected = false;
-    ui.addLog('error', 'Market data disconnected');
+    const reason = err?.message || 'UNKNOWN';
+    ui.addLog('error', `DISC: ${reason.substring(0, 70).toUpperCase()}`);
   });
   
   // Connect to market data
   try {
-    const token = service.token || service.getToken?.();
     const propfirmKey = (account.propfirm || 'topstep').toLowerCase().replace(/\s+/g, '_');
-    await marketFeed.connect(token, propfirmKey, contractId);
-    await marketFeed.subscribe(symbolName, contractId);
+    
+    // CRITICAL: Get a fresh token for WebSocket connection
+    // TopStep invalidates WebSocket sessions for old tokens
+    ui.addLog('info', 'REFRESHING AUTH TOKEN...');
+    const token = await service.getFreshToken?.() || service.token || service.getToken?.();
+    
+    if (!token) {
+      ui.addLog('error', 'NO AUTH TOKEN - PLEASE RECONNECT');
+    } else {
+      ui.addLog('info', `TOKEN OK (${token.length} CHARS)`);
+      ui.addLog('info', `RTC: ${propfirmKey.toUpperCase()} | ${contractId}`);
+      
+      await marketFeed.connect(token, propfirmKey);
+      
+      // Wait for connection to stabilize
+      await new Promise(r => setTimeout(r, 2000));
+      
+      if (marketFeed.isConnected()) {
+        await marketFeed.subscribe(symbolName, contractId);
+        ui.addLog('success', 'SUBSCRIBED TO MARKET DATA');
+      } else {
+        ui.addLog('error', 'CONNECTION LOST BEFORE SUBSCRIBE');
+      }
+    }
   } catch (e) {
-    ui.addLog('error', `Failed to connect: ${e.message}`);
+    ui.addLog('error', `ERR: ${e.message.substring(0, 60).toUpperCase()}`);
   }
   
   // Poll account P&L from API
@@ -362,11 +385,11 @@ const launchAlgo = async (service, account, contract, config) => {
       if (stats.pnl >= dailyTarget) {
         stopReason = 'target';
         running = false;
-        ui.addLog('success', `TARGET REACHED! +$${stats.pnl.toFixed(2)}`);
+        ui.addLog('success', `TARGET REACHED +$${stats.pnl.toFixed(2)}`);
       } else if (stats.pnl <= -maxRisk) {
         stopReason = 'risk';
         running = false;
-        ui.addLog('error', `MAX RISK! -$${Math.abs(stats.pnl).toFixed(2)}`);
+        ui.addLog('error', `MAX RISK -$${Math.abs(stats.pnl).toFixed(2)}`);
       }
     } catch (e) {
       // Silently handle polling errors
@@ -410,17 +433,31 @@ const launchAlgo = async (service, account, contract, config) => {
     }, 100);
   });
   
-  // Cleanup
+  // Cleanup with timeout protection
   clearInterval(refreshInterval);
   clearInterval(pnlInterval);
-  await marketFeed.disconnect();
-  if (cleanupKeys) cleanupKeys();
-  ui.cleanup();
   
-  if (process.stdin.isTTY) {
-    process.stdin.setRawMode(false);
-  }
-  process.stdin.resume();
+  // Disconnect market feed with timeout
+  try {
+    await Promise.race([
+      marketFeed.disconnect(),
+      new Promise(r => setTimeout(r, 3000))
+    ]);
+  } catch {}
+  
+  // Cleanup keyboard handler
+  try { if (cleanupKeys) cleanupKeys(); } catch {}
+  
+  // Cleanup UI
+  try { ui.cleanup(); } catch {}
+  
+  // Reset stdin
+  try {
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(false);
+    }
+    process.stdin.resume();
+  } catch {}
   
   // Duration
   const durationMs = Date.now() - stats.startTime;

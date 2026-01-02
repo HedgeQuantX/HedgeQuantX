@@ -63,8 +63,8 @@ const dashboardMenu = async (service) => {
     // Yellow icons: ✔ for each stat
     const icon = chalk.yellow('✔ ');
     const statsPlain = `✔ Connections: ${statsInfo.connections}    ✔ Accounts: ${statsInfo.accounts}    ✔ Balance: ${balStr}    ✔ P&L: ${pnlDisplay}`;
-    const statsLeftPad = Math.floor((W - statsPlain.length) / 2);
-    const statsRightPad = W - statsPlain.length - statsLeftPad;
+    const statsLeftPad = Math.max(0, Math.floor((W - statsPlain.length) / 2));
+    const statsRightPad = Math.max(0, W - statsPlain.length - statsLeftPad);
     
     console.log(chalk.cyan('║') + ' '.repeat(statsLeftPad) +
       icon + chalk.white(`Connections: ${statsInfo.connections}`) + '    ' +

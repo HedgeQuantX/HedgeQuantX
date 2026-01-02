@@ -15,7 +15,7 @@ const BOX = {
 // Spinner characters
 const SPINNER = ['\u280B', '\u2819', '\u2839', '\u2838', '\u283C', '\u2834', '\u2826', '\u2827', '\u2807', '\u280F'];
 
-// Log type colors - HF grade
+// Log type colors - HF grade BOLD
 const LOG_COLORS = {
   // Executions
   fill_buy: chalk.green.bold,
@@ -23,28 +23,35 @@ const LOG_COLORS = {
   fill_win: chalk.green.bold,
   fill_loss: chalk.red.bold,
   // Status
-  connected: chalk.green,
-  ready: chalk.cyan,
+  connected: chalk.green.bold,
+  ready: chalk.cyan.bold,
   // Errors
   error: chalk.red.bold,
-  reject: chalk.red,
+  reject: chalk.red.bold,
   // Info
   info: chalk.gray,
-  system: chalk.blue
+  system: chalk.blue.bold,
+  // Trading
+  signal: chalk.magenta.bold,
+  trade: chalk.yellow.bold,
+  success: chalk.green.bold
 };
 
-// Log type icons - compact HF style
+// Log type icons - UPPERCASE BOLD HF style
 const LOG_ICONS = {
-  fill_buy: 'BUY  ',
-  fill_sell: 'SELL ',
-  fill_win: 'WIN  ',
-  fill_loss: 'LOSS ',
-  connected: 'CONN ',
-  ready: 'READY',
-  error: 'ERR  ',
-  reject: 'REJ  ',
-  info: 'INFO ',
-  system: 'SYS  '
+  fill_buy: 'BUY   ',
+  fill_sell: 'SELL  ',
+  fill_win: 'WIN   ',
+  fill_loss: 'LOSS  ',
+  connected: 'CONN  ',
+  ready: 'READY ',
+  error: 'ERR   ',
+  reject: 'REJ   ',
+  info: 'INFO  ',
+  system: 'SYS   ',
+  signal: 'SIGNAL',
+  trade: 'TRADE ',
+  success: 'OK    '
 };
 
 /**
@@ -77,11 +84,13 @@ const fitToWidth = (text, width) => {
 };
 
 /**
- * Build a labeled cell for grid
+ * Build a labeled cell for grid - UPPERCASE BOLD style
  */
 const buildCell = (label, value, color, width) => {
-  const text = ` ${label}: ${color(value)}`;
-  const plain = ` ${label}: ${value}`;
+  const upperLabel = label.toUpperCase();
+  const upperValue = String(value).toUpperCase();
+  const text = ` ${chalk.bold(upperLabel)}: ${color.bold(upperValue)}`;
+  const plain = ` ${upperLabel}: ${upperValue}`;
   return { text, plain, padded: text + ' '.repeat(Math.max(0, width - plain.length)) };
 };
 
@@ -129,7 +138,7 @@ class AlgoUI {
     this._line(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
     this._line(chalk.cyan(BOX.V) + chalk.white(center(`Prop Futures Algo Trading  v${version}`, W)) + chalk.cyan(BOX.V));
     this._line(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
-    this._line(chalk.cyan(BOX.V) + chalk.yellow(center(this.config.subtitle || 'HQX Algo Trading', W)) + chalk.cyan(BOX.V));
+    this._line(chalk.cyan(BOX.V) + chalk.yellow.bold(center((this.config.subtitle || 'HQX ALGO TRADING').toUpperCase(), W)) + chalk.cyan(BOX.V));
   }
 
   _drawStats(stats) {
@@ -189,17 +198,17 @@ class AlgoUI {
     
     this._line(chalk.cyan(GM));
     
-    // Row 4: Trades | Latency (API response time)
-    const r4c1t = ` Trades: ${chalk.cyan(stats.trades || 0)}  W/L: ${chalk.green(stats.wins || 0)}/${chalk.red(stats.losses || 0)}`;
-    const r4c1p = ` Trades: ${stats.trades || 0}  W/L: ${stats.wins || 0}/${stats.losses || 0}`;
-    const r4c2 = buildCell('Latency', `${stats.latency || 0}ms`, latencyColor, colR);
+    // Row 4: Trades | Latency (API response time) - UPPERCASE BOLD
+    const r4c1t = ` ${chalk.bold('TRADES')}: ${chalk.cyan.bold(stats.trades || 0)}  ${chalk.bold('W/L')}: ${chalk.green.bold(stats.wins || 0)}/${chalk.red.bold(stats.losses || 0)}`;
+    const r4c1p = ` TRADES: ${stats.trades || 0}  W/L: ${stats.wins || 0}/${stats.losses || 0}`;
+    const r4c2 = buildCell('Latency', `${stats.latency || 0}MS`, latencyColor, colR);
     row(r4c1t + pad(colL - r4c1p.length), r4c2.padded);
     
     this._line(chalk.cyan(GM));
     
     // Row 5: Connection | Propfirm
     const connection = stats.platform || 'ProjectX';
-    const r5c1 = buildCell('Connection', connection, chalk.white, colL);
+    const r5c1 = buildCell('Connection', connection, chalk.cyan, colL);
     const r5c2 = buildCell('Propfirm', stats.propfirm || 'N/A', chalk.cyan, colR);
     row(r5c1.padded, r5c2.padded);
     
@@ -255,10 +264,10 @@ class AlgoUI {
     
     this._line(chalk.cyan(GM));
     
-    // Row 5: P&L | Trades
+    // Row 5: P&L | Trades - UPPERCASE BOLD
     const r5c1 = buildCell('P&L', pnlStr, pnlColor, colL);
-    const r5c2t = ` Trades: ${chalk.cyan(stats.trades || 0)}  W/L: ${chalk.green(stats.wins || 0)}/${chalk.red(stats.losses || 0)}`;
-    const r5c2p = ` Trades: ${stats.trades || 0}  W/L: ${stats.wins || 0}/${stats.losses || 0}`;
+    const r5c2t = ` ${chalk.bold('TRADES')}: ${chalk.cyan.bold(stats.trades || 0)}  ${chalk.bold('W/L')}: ${chalk.green.bold(stats.wins || 0)}/${chalk.red.bold(stats.losses || 0)}`;
+    const r5c2p = ` TRADES: ${stats.trades || 0}  W/L: ${stats.wins || 0}/${stats.losses || 0}`;
     row(r5c1.padded, r5c2t + pad(colR - r5c2p.length));
     
     this._line(chalk.cyan(GB));
@@ -272,7 +281,7 @@ class AlgoUI {
     const spinner = SPINNER[this.spinnerFrame];
     const now = new Date();
     const timeStr = now.toLocaleTimeString('en-US', { hour12: false });
-    const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     
     const leftText = ` EXECUTION LOG ${spinner}`;
     const rightText = `[X] STOP `;
@@ -282,11 +291,11 @@ class AlgoUI {
     const centerPadLeft = Math.floor((centerSpace - dateStr.length) / 2);
     const centerPadRight = centerSpace - dateStr.length - centerPadLeft;
     
-    const left = ` EXECUTION LOG ${chalk.yellow(spinner)}`;
-    const center = ' '.repeat(Math.max(0, centerPadLeft)) + chalk.white(dateStr) + ' '.repeat(Math.max(0, centerPadRight));
-    const right = chalk.yellow('[X] STOP') + ' ';
+    const left = ` ${chalk.bold('EXECUTION LOG')} ${chalk.yellow(spinner)}`;
+    const center = ' '.repeat(Math.max(0, centerPadLeft)) + chalk.white.bold(dateStr.toUpperCase()) + ' '.repeat(Math.max(0, centerPadRight));
+    const right = chalk.yellow.bold('[X] STOP') + ' ';
     
-    this._line(chalk.cyan(BOX.V) + chalk.white.bold(left) + center + right + chalk.cyan(BOX.V));
+    this._line(chalk.cyan(BOX.V) + chalk.white(left) + center + right + chalk.cyan(BOX.V));
     this._line(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
     
     // Logs: newest at top
@@ -389,17 +398,21 @@ const renderSessionSummary = (stats, stopReason) => {
   console.log(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
   console.log(chalk.cyan(BOX.V) + chalk.white(center(`Prop Futures Algo Trading  v${version}`, W)) + chalk.cyan(BOX.V));
   console.log(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
-  console.log(chalk.cyan(BOX.V) + chalk.yellow(center('Session Summary', W)) + chalk.cyan(BOX.V));
+  console.log(chalk.cyan(BOX.V) + chalk.yellow.bold(center('SESSION SUMMARY', W)) + chalk.cyan(BOX.V));
   
   // Grid separators
   const GT = BOX.ML + BOX.H.repeat(colL) + BOX.TM + BOX.H.repeat(colR) + BOX.MR;
   const GM = BOX.ML + BOX.H.repeat(colL) + BOX.MM + BOX.H.repeat(colR) + BOX.MR;
   
   const row = (label1, value1, color1, label2, value2, color2) => {
-    const c1 = ` ${label1}: ${color1(value1)}`;
-    const c2 = ` ${label2}: ${color2(value2)}`;
-    const p1 = ` ${label1}: ${value1}`;
-    const p2 = ` ${label2}: ${value2}`;
+    const upperLabel1 = label1.toUpperCase();
+    const upperLabel2 = label2.toUpperCase();
+    const upperValue1 = String(value1).toUpperCase();
+    const upperValue2 = String(value2).toUpperCase();
+    const c1 = ` ${chalk.bold(upperLabel1)}: ${color1.bold(upperValue1)}`;
+    const c2 = ` ${chalk.bold(upperLabel2)}: ${color2.bold(upperValue2)}`;
+    const p1 = ` ${upperLabel1}: ${upperValue1}`;
+    const p2 = ` ${upperLabel2}: ${upperValue2}`;
     const padded1 = c1 + ' '.repeat(Math.max(0, colL - p1.length));
     const padded2 = c2 + ' '.repeat(Math.max(0, colR - p2.length));
     console.log(chalk.cyan(BOX.V) + padded1 + chalk.cyan(BOX.VS) + padded2 + chalk.cyan(BOX.V));

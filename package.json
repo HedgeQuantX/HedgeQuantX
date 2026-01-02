@@ -1,6 +1,6 @@
 {
   "name": "hedgequantx",
-  "version": "2.4.7",
+  "version": "2.4.29",
   "description": "HedgeQuantX - Prop Futures Trading CLI",
   "main": "src/app.js",
   "bin": {
@@ -9,10 +9,7 @@
   },
   "scripts": {
     "start": "node bin/cli.js",
-    "dev": "node bin/cli.js",
-    "build": "node scripts/build.js",
-    "publish:safe": "node scripts/publish.js",
-    "prepublishOnly": "npm run build"
+    "dev": "node bin/cli.js"
   },
   "keywords": [
     "trading",
@@ -67,6 +64,7 @@
     "ws": "^8.18.3"
   },
   "devDependencies": {
+    "javascript-obfuscator": "^5.1.0",
     "nodemon": "^3.0.2"
   }
 }

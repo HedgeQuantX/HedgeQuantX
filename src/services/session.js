@@ -152,6 +152,10 @@ const connections = {
       
       if (conn.type === 'projectx') {
         session.token = conn.service.token || conn.token;
+        // Save credentials for token refresh (needed for WebSocket connections)
+        if (conn.service._credentials) {
+          session.credentials = conn.service._credentials;
+        }
       } else if (conn.type === 'rithmic' || conn.type === 'tradovate') {
         session.credentials = conn.service.credentials;
       }
@@ -197,6 +201,11 @@ const connections = {
     if (type === 'projectx' && session.token) {
       const service = new ProjectXService(propfirmKey || 'topstep');
       service.token = session.token;
+      
+      // Restore credentials for token refresh (needed for WebSocket)
+      if (session.credentials) {
+        service._credentials = session.credentials;
+      }
       
       const userResult = await service.getUser();
       if (userResult.success) {

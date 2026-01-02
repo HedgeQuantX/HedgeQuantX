@@ -46,6 +46,30 @@ class ProjectXService {
   
   getToken() { return this.token; }
   getPropfirm() { return this.propfirmKey; }
+  
+  /**
+   * Store credentials for token refresh
+   * @param {string} userName - Username
+   * @param {string} password - Password
+   */
+  storeCredentials(userName, password) {
+    this._credentials = { userName, password };
+  }
+  
+  /**
+   * Get a fresh token by re-authenticating
+   * Required for WebSocket connections as TopStep invalidates old sessions
+   * @returns {Promise<string|null>} Fresh token or null if failed
+   */
+  async getFreshToken() {
+    if (this._credentials) {
+      const result = await this.login(this._credentials.userName, this._credentials.password);
+      if (result.success) {
+        return this.token;
+      }
+    }
+    return this.token; // Fallback to existing token
+  }
 
   // ==================== HTTP ====================
 
@@ -101,6 +125,7 @@ class ProjectXService {
       
       if (response.statusCode === 200 && response.data.token) {
         this.token = response.data.token;
+        this.storeCredentials(userName, password); // Store for token refresh
         log.info('Login successful', { user: sanitizeString(userName) });
         return { success: true, token: maskSensitive(this.token) };
       }
