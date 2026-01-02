@@ -7,7 +7,7 @@
 
 const EventEmitter = require('events');
 const { RithmicConnection } = require('./connection');
-const { RITHMIC_ENDPOINTS, RITHMIC_SYSTEMS, getSymbolInfo } = require('./constants');
+const { RITHMIC_ENDPOINTS, RITHMIC_SYSTEMS } = require('./constants');
 const { createOrderHandler, createPnLHandler } = require('./handlers');
 const {
   fetchAccounts,
@@ -422,28 +422,19 @@ class RithmicService extends EventEmitter {
           for (const [baseSymbol, contract] of contracts) {
             const productKey = `${baseSymbol}:${contract.exchange}`;
             const product = productsToCheck.get(productKey);
-            const symbolInfo = getSymbolInfo(baseSymbol);
 
+            // 100% API data - no static symbol info
             results.push({
               symbol: contract.symbol,
               baseSymbol,
-              name: symbolInfo.name || product?.productName || baseSymbol,
+              name: product?.productName || baseSymbol,
               exchange: contract.exchange,
-              category: symbolInfo.category,
-              categoryName: symbolInfo.categoryName,
-              categoryOrder: symbolInfo.categoryOrder,
-              tickSize: symbolInfo.tickSize,
-              tickValue: symbolInfo.tickValue,
+              // All other data comes from API at runtime
             });
           }
 
-          // Sort by category order
-          results.sort((a, b) => {
-            if (a.categoryOrder !== b.categoryOrder) {
-              return a.categoryOrder - b.categoryOrder;
-            }
-            return a.baseSymbol.localeCompare(b.baseSymbol);
-          });
+          // Sort alphabetically by base symbol
+          results.sort((a, b) => a.baseSymbol.localeCompare(b.baseSymbol));
 
           log.debug('Got contracts from API', { count: results.length });
           resolve(results);

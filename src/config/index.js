@@ -17,7 +17,6 @@ const {
   ORDER_STATUS,
   ORDER_TYPE,
   ORDER_SIDE,
-  FUTURES_SYMBOLS,
 } = require('./constants');
 
 const {
@@ -44,7 +43,6 @@ module.exports = {
   ORDER_STATUS,
   ORDER_TYPE,
   ORDER_SIDE,
-  FUTURES_SYMBOLS,
 
   // Settings
   TIMEOUTS,
