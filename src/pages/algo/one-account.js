@@ -200,19 +200,9 @@ const launchAlgo = async (service, account, contract, config) => {
   ui.addLog('info', `Target: $${dailyTarget} | Max Risk: $${maxRisk}`);
   ui.addLog('info', 'Monitoring positions from API...');
   
-  // Measure API latency (real network round-trip)
-  const measureLatency = async () => {
-    try {
-      const start = Date.now();
-      await service.getPositions(account.accountId);
-      stats.latency = Date.now() - start;
-    } catch (e) {
-      stats.latency = 0;
-    }
-  };
-  
-  // Poll data from API - 100% real data
+  // Poll data from API - 100% real data, measure latency during poll
   const pollAPI = async () => {
+    const pollStart = Date.now();
     try {
       pollCount++;
       
@@ -290,16 +280,16 @@ const launchAlgo = async (service, account, contract, config) => {
         ui.addLog('error', `SESSION MAX RISK! -$${Math.abs(stats.pnl).toFixed(2)}`);
       }
       
+      // Update latency (measured during this poll)
+      stats.latency = Date.now() - pollStart;
+      
     } catch (e) {
+      stats.latency = Date.now() - pollStart;
       ui.addLog('error', `API: ${e.message}`);
     }
   };
   
   const refreshInterval = setInterval(() => { if (running) ui.render(stats); }, 250);
-  
-  // Measure API latency every 5 seconds
-  measureLatency(); // Initial measurement
-  const latencyInterval = setInterval(() => { if (running) measureLatency(); }, 5000);
   
   // Poll data from API every 2 seconds
   pollAPI(); // Initial poll
@@ -331,7 +321,6 @@ const launchAlgo = async (service, account, contract, config) => {
   });
   
   clearInterval(refreshInterval);
-  clearInterval(latencyInterval);
   clearInterval(apiInterval);
   if (cleanupKeys) cleanupKeys();
   ui.cleanup();
