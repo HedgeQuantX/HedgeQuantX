@@ -205,27 +205,23 @@ const selectSymbol = async (service) => {
 
     spinner.succeed(`Found ${contracts.length} contracts`);
 
-    // Build options with category headers
+    // Build options from RAW API data - no static mapping
     const options = [];
-    let currentCategory = null;
+    let currentGroup = null;
 
     for (const c of contracts) {
-      if (c.categoryName && c.categoryName !== currentCategory) {
-        currentCategory = c.categoryName;
+      // Use RAW API field: contractGroup
+      if (c.contractGroup && c.contractGroup !== currentGroup) {
+        currentGroup = c.contractGroup;
         options.push({
-          label: chalk.cyan.bold(`── ${currentCategory} ──`),
+          label: chalk.cyan.bold(`── ${currentGroup} ──`),
           value: null,
           disabled: true,
         });
       }
 
-      const symbolDisplay = c.symbol || c.name;
-      const nameDisplay = c.name || c.symbol;
-      const exchangeDisplay = c.exchange ? ` (${c.exchange})` : '';
-      const label = c.categoryName
-        ? `  ${symbolDisplay} - ${nameDisplay}${exchangeDisplay}`
-        : `${nameDisplay}${exchangeDisplay}`;
-
+      // Use RAW API fields: name (symbol), description (full name), exchange
+      const label = `  ${c.name} - ${c.description} (${c.exchange})`;
       options.push({ label, value: c });
     }
 
@@ -241,7 +237,7 @@ const selectSymbol = async (service) => {
 };
 
 /**
- * Get contracts from ProjectX API
+ * Get contracts from ProjectX API - RAW data only
  * @returns {Promise<Array|null>}
  */
 const getContractsFromAPI = async () => {
@@ -251,11 +247,8 @@ const getContractsFromAPI = async () => {
   if (projectxConn && typeof projectxConn.service.getContracts === 'function') {
     const result = await projectxConn.service.getContracts();
     if (result.success && result.contracts?.length > 0) {
-      return result.contracts.map(c => ({
-        ...c,
-        symbol: c.name || c.symbol,
-        name: c.description || c.name || c.symbol,
-      }));
+      // Return RAW API data - no mapping
+      return result.contracts;
     }
   }
 

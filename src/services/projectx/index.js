@@ -552,7 +552,9 @@ class ProjectXService {
   // ==================== CONTRACTS ====================
 
   /**
-   * Get available contracts
+   * Get available contracts from Gateway API
+   * Returns RAW data from API - NO static mapping, NO mock data
+   * 
    * @returns {Promise<{success: boolean, contracts: Array, error?: string}>}
    */
   async getContracts() {
@@ -565,12 +567,19 @@ class ProjectXService {
       );
       
       if (response.statusCode === 200) {
-        const contracts = response.data.contracts || response.data || [];
-        const activeContracts = contracts
-          .filter(c => c.activeContract === true)
-          .sort((a, b) => (a.description || '').localeCompare(b.description || ''));
+        const rawContracts = response.data.contracts || response.data || [];
         
-        return { success: true, contracts: activeContracts };
+        // Return active contracts with RAW API data only
+        const contracts = rawContracts
+          .filter(c => c.activeContract === true)
+          .sort((a, b) => {
+            const grpA = a.contractGroup || '';
+            const grpB = b.contractGroup || '';
+            if (grpA !== grpB) return grpA.localeCompare(grpB);
+            return (a.name || '').localeCompare(b.name || '');
+          });
+        
+        return { success: true, contracts };
       }
       
       return { success: false, contracts: [], error: 'Failed to fetch contracts' };

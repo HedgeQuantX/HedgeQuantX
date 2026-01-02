@@ -88,23 +88,25 @@ const selectSymbol = async (service, account) => {
   
   spinner.succeed(`Found ${contracts.length} contracts`);
   
-  // Build options with category headers
+  // Build options from RAW API response - no static data
   const options = [];
-  let currentCategory = null;
+  let currentGroup = null;
   
   for (const c of contracts) {
-    // Add category header when category changes
-    if (c.categoryName !== currentCategory) {
-      currentCategory = c.categoryName;
-      options.push({ 
-        label: chalk.cyan.bold(`── ${currentCategory} ──`), 
-        value: null, 
-        disabled: true 
-      });
+    // Category header from API field contractGroup
+    if (c.contractGroup !== currentGroup) {
+      currentGroup = c.contractGroup;
+      if (currentGroup) {
+        options.push({ 
+          label: chalk.cyan.bold(`── ${currentGroup} ──`), 
+          value: null, 
+          disabled: true 
+        });
+      }
     }
     
-    // Format: "ESH6 - E-mini S&P 500 (CME)"
-    const label = `  ${c.symbol} - ${c.name} (${c.exchange})`;
+    // Display using RAW API fields only
+    const label = `  ${c.name} - ${c.description} (${c.exchange})`;
     options.push({ label, value: c });
   }
   
@@ -146,10 +148,11 @@ const configureAlgo = async (account, contract) => {
  */
 const launchAlgo = async (service, account, contract, config) => {
   const { contracts, dailyTarget, maxRisk, showName } = config;
-  // Use real Rithmic account ID, not the hash
-  const realAccountId = account.rithmicAccountId || account.name || account.accountId;
+  // Use real account ID from API
+  const realAccountId = account.rithmicAccountId || account.accountName || account.accountId;
   const accountName = showName ? realAccountId : 'HQX *****';
-  const symbolName = contract.name || contract.symbol;
+  // Use RAW API field 'name' for symbol (e.g., "MESH6")
+  const symbolName = contract.name;
   
   const ui = new AlgoUI({ subtitle: 'HQX Algo Trading', mode: 'one-account' });
   
