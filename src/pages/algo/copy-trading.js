@@ -422,6 +422,10 @@ const startCopyTradingOnServer = (hqx, lead, follower, dailyTarget, maxRisk, ui)
     leadAccountId: lead.account.accountId,
     leadContractId: lead.symbol.id || lead.symbol.contractId,
     leadSymbol: lead.symbol.symbol || lead.symbol.name,
+    // Contract specs from API - REQUIRED for P&L calculation
+    leadTickSize: lead.symbol.tickSize,
+    leadTickValue: lead.symbol.tickValue,
+    leadExchange: lead.symbol.exchange,
     leadContracts: lead.contracts,
     leadPropfirm: lead.propfirm,
     leadToken: lead.service.getToken?.() || null,
@@ -429,6 +433,10 @@ const startCopyTradingOnServer = (hqx, lead, follower, dailyTarget, maxRisk, ui)
     followerAccountId: follower.account.accountId,
     followerContractId: follower.symbol.id || follower.symbol.contractId,
     followerSymbol: follower.symbol.symbol || follower.symbol.name,
+    // Contract specs from API - REQUIRED for P&L calculation
+    followerTickSize: follower.symbol.tickSize,
+    followerTickValue: follower.symbol.tickValue,
+    followerExchange: follower.symbol.exchange,
     followerContracts: follower.contracts,
     followerPropfirm: follower.propfirm,
     followerToken: follower.service.getToken?.() || null,

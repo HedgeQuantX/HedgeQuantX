@@ -220,6 +220,10 @@ const launchAlgo = async (service, account, contract, config) => {
       accountId: account.accountId,
       contractId: contract.id || contract.contractId,
       symbol: contract.symbol || contract.name,
+      // Contract specs from API - REQUIRED for P&L calculation
+      tickSize: contract.tickSize,
+      tickValue: contract.tickValue,
+      exchange: contract.exchange,
       contracts, dailyTarget, maxRisk,
       propfirm: account.propfirm || 'topstep',
       propfirmToken: service.getToken?.() || null,
