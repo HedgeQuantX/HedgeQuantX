@@ -336,6 +336,12 @@ const launchAlgo = async (service, account, contract, config) => {
   if (cleanupKeys) cleanupKeys();
   ui.cleanup();
   
+  // Ensure stdin is ready for prompts after algo cleanup
+  if (process.stdin.isTTY) {
+    process.stdin.setRawMode(false);
+  }
+  process.stdin.resume();
+  
   // Calculate duration
   const durationMs = Date.now() - stats.startTime;
   const hours = Math.floor(durationMs / 3600000);
