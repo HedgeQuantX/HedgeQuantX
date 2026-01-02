@@ -97,16 +97,23 @@ def build_line(segments):
 
 
 def gen_logo():
-    """Logo only - HEDGEQUANT in cyan, X in yellow"""
+    """Logo only - HEDGEQUANT in cyan, X in yellow - properly aligned"""
     raw_lines = [
-        [("██╗  ██╗███████╗██████╗  ██████╗ ███████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗", CYAN), ("██╗  ██╗", YELLOW)],
-        [("██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝", CYAN), ("╚██╗██╔╝", YELLOW)],
-        [("███████║█████╗  ██║  ██║██║  ███╗█████╗  ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║   ", CYAN), (" ╚███╔╝ ", YELLOW)],
-        [("██╔══██║██╔══╝  ██║  ██║██║   ██║██╔══╝  ██║▄▄ ██║██║   ██║██╔══██║██║╚██╗██║   ██║   ", CYAN), (" ██╔██╗ ", YELLOW)],
-        [("██║  ██║███████╗██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ", CYAN), ("██╔╝ ██╗", YELLOW)],
-        [("╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ", CYAN), ("╚═╝  ╚═╝", YELLOW)],
+        [("██╗  ██╗███████╗██████╗  ██████╗ ███████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗██╗  ██╗", CYAN)],
+        [("██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝╚██╗██╔╝", CYAN)],
+        [("███████║█████╗  ██║  ██║██║  ███╗█████╗  ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║    ╚███╔╝ ", CYAN)],
+        [("██╔══██║██╔══╝  ██║  ██║██║   ██║██╔══╝  ██║▄▄ ██║██║   ██║██╔══██║██║╚██╗██║   ██║    ██╔██╗ ", CYAN)],
+        [("██║  ██║███████╗██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ██╔╝ ██╗", CYAN)],
+        [("╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝", CYAN)],
     ]
-    lines = [build_line(segs) for segs in raw_lines]
+    # Apply yellow color to the X (last 8 characters of each line)
+    lines = []
+    for segs in raw_lines:
+        text, colors = build_line(segs)
+        # Color last 8 chars yellow (the X)
+        for i in range(len(colors) - 8, len(colors)):
+            colors[i] = YELLOW
+        lines.append((text, colors))
     make_image_fixed_width(lines, "logo.png", 28)
 
 
@@ -129,16 +136,39 @@ def gen_dashboard():
         line = left + "═" * (W - 2) + right
         return (line, [CYAN] * len(line))
     
+    # Logo lines with X in yellow (last 8 chars) - centered in 98-char width
+    logo_lines = [
+        "██╗  ██╗███████╗██████╗  ██████╗ ███████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗██╗  ██╗",
+        "██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝╚██╗██╔╝",
+        "███████║█████╗  ██║  ██║██║  ███╗█████╗  ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║    ╚███╔╝ ",
+        "██╔══██║██╔══╝  ██║  ██║██║   ██║██╔══╝  ██║▄▄ ██║██║   ██║██╔══██║██║╚██╗██║   ██║    ██╔██╗ ",
+        "██║  ██║███████╗██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ██╔╝ ██╗",
+        "╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝",
+    ]
+    
+    def logo_line(logo_text):
+        """Create a logo line with border, centered, X in yellow"""
+        content_w = W - 2
+        logo_len = len(logo_text)
+        left_pad = (content_w - logo_len) // 2
+        right_pad = content_w - logo_len - left_pad
+        
+        full = "║" + " " * left_pad + logo_text + " " * right_pad + "║"
+        colors = [CYAN]  # left border
+        colors.extend([CYAN] * left_pad)  # left padding
+        # Logo: cyan except last 8 chars which are yellow (the X)
+        colors.extend([CYAN] * (logo_len - 8))
+        colors.extend([YELLOW] * 8)
+        colors.extend([CYAN] * right_pad)  # right padding
+        colors.append(CYAN)  # right border
+        return (full, colors)
+    
     lines = [
         full_border("╔", "═", "╗"),
-        pad_line([("║ ", CYAN), ("██╗  ██╗███████╗██████╗  ██████╗ ███████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗", CYAN), ("██╗  ██╗", YELLOW), (" ║", CYAN)]),
-        pad_line([("║ ", CYAN), ("██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝", CYAN), ("╚██╗██╔╝", YELLOW), (" ║", CYAN)]),
-        pad_line([("║ ", CYAN), ("███████║█████╗  ██║  ██║██║  ███╗█████╗  ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║   ", CYAN), (" ╚███╔╝ ", YELLOW), (" ║", CYAN)]),
-        pad_line([("║ ", CYAN), ("██╔══██║██╔══╝  ██║  ██║██║   ██║██╔══╝  ██║▄▄ ██║██║   ██║██╔══██║██║╚██╗██║   ██║   ", CYAN), (" ██╔██╗ ", YELLOW), (" ║", CYAN)]),
-        pad_line([("║ ", CYAN), ("██║  ██║███████╗██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ", CYAN), ("██╔╝ ██╗", YELLOW), (" ║", CYAN)]),
-        pad_line([("║ ", CYAN), ("╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ", CYAN), ("╚═╝  ╚═╝", YELLOW), (" ║", CYAN)]),
-        full_border("╠", "═", "╣"),
     ]
+    for ll in logo_lines:
+        lines.append(logo_line(ll))
+    lines.append(full_border("╠", "═", "╣"))
     
     # Center text helper
     def center_line(text_segments, border="║"):

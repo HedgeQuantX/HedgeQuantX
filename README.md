@@ -110,40 +110,27 @@ Mirror trades from Lead to Follower accounts.
 
 ## Supported Prop Firms
 
-### ProjectX Platform (19 firms)
-
-| Firm | Firm |
-|------|------|
-| TopStep | Alpha Futures |
-| TickTickTrader | Bulenox |
-| TradeDay | Blusky |
-| Goat Futures | The Futures Desk |
-| DayTraders | E8 Futures |
-| Blue Guardian Futures | FuturesElite |
-| FXIFY | Hola Prime |
-| Top One Futures | Funding Futures |
-| TX3 Funding | Lucid Trading |
-| Tradeify | |
-
-### Rithmic Platform (16 firms)
-
-| Firm | Firm |
-|------|------|
-| Apex Trader Funding | TopstepTrader |
-| MES Capital | Bulenox |
-| TradeFundrr | TheTradingPit |
-| FundedFuturesNetwork | PropShopTrader |
-| 4PropTrader | DayTraders.com |
-| 10XFutures | LucidTrading |
-| ThriveTrading | LegendsTrading |
-| Earn2Trade | Tradesea |
-
-### Tradovate Platform (3 firms)
-
-| Firm | Firm |
-|------|------|
-| Apex | TakeProfitTrader |
-| MyFundedFutures | |
+| ProjectX (19) | Rithmic (16) | Tradovate (3) |
+|---------------|--------------|---------------|
+| TopStep | Apex Trader Funding | Apex |
+| TickTickTrader | TopstepTrader | TakeProfitTrader |
+| TradeDay | MES Capital | MyFundedFutures |
+| Goat Futures | Bulenox | |
+| Alpha Futures | TradeFundrr | |
+| Bulenox | TheTradingPit | |
+| Blusky | FundedFuturesNetwork | |
+| The Futures Desk | PropShopTrader | |
+| DayTraders | 4PropTrader | |
+| E8 Futures | DayTraders.com | |
+| Blue Guardian Futures | 10XFutures | |
+| FuturesElite | LucidTrading | |
+| FXIFY | ThriveTrading | |
+| Hola Prime | LegendsTrading | |
+| Top One Futures | Earn2Trade | |
+| Funding Futures | Tradesea | |
+| TX3 Funding | | |
+| Lucid Trading | | |
+| Tradeify | | |
 
 ---
 
