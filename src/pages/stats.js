@@ -187,7 +187,8 @@ const showStats = async (service) => {
     }
 
     // ========== AGGREGATE STATS FROM TRADE HISTORY (API DATA) ==========
-    // Calculate stats from actual trades to ensure consistency with displayed trades
+    // Calculate stats from COMPLETED trades only (those with P&L != 0)
+    // This matches what we display in TRADES HISTORY
     
     let stats = {
       totalTrades: 0, winningTrades: 0, losingTrades: 0,
@@ -197,24 +198,38 @@ const showStats = async (service) => {
       longTrades: 0, shortTrades: 0, longWins: 0, shortWins: 0
     };
     
-    // Calculate stats from trade history (100% API data, consistent with displayed trades)
-    if (allTrades.length > 0) {
-      stats.totalTrades = allTrades.length;
+    // Filter to completed trades only (P&L != 0, not null)
+    const completedTrades = allTrades.filter(t => {
+      const pnl = t.profitAndLoss || t.pnl;
+      return pnl !== null && pnl !== undefined && pnl !== 0;
+    });
+    
+    // Calculate stats from completed trades only
+    if (completedTrades.length > 0) {
+      stats.totalTrades = completedTrades.length;
       let consecutiveWins = 0, consecutiveLosses = 0;
       
-      for (const trade of allTrades) {
-        // P&L comes directly from API response
+      // Sort by time for consecutive win/loss calculation
+      const sortedTrades = [...completedTrades].sort((a, b) => {
+        const timeA = new Date(a.creationTimestamp || a.timestamp || 0).getTime();
+        const timeB = new Date(b.creationTimestamp || b.timestamp || 0).getTime();
+        return timeA - timeB;
+      });
+      
+      for (const trade of sortedTrades) {
         const pnl = trade.profitAndLoss || trade.pnl || 0;
         const size = trade.size || trade.quantity || 1;
-        const side = trade.side;
+        const exitSide = trade.side; // 0=BUY exit (was SHORT), 1=SELL exit (was LONG)
         
         stats.totalVolume += Math.abs(size);
         
-        // Side: 0 = Buy/Long, 1 = Sell/Short (ProjectX API format)
-        if (side === 0) {
+        // Determine original trade direction from exit side
+        // Exit side 0 = BUY to close = was SHORT
+        // Exit side 1 = SELL to close = was LONG
+        if (exitSide === 1) {
           stats.longTrades++;
           if (pnl > 0) stats.longWins++;
-        } else if (side === 1) {
+        } else if (exitSide === 0) {
           stats.shortTrades++;
           if (pnl > 0) stats.shortWins++;
         }
@@ -234,7 +249,6 @@ const showStats = async (service) => {
           if (consecutiveLosses > stats.maxConsecutiveLosses) stats.maxConsecutiveLosses = consecutiveLosses;
           if (pnl < stats.worstTrade) stats.worstTrade = pnl;
         }
-        // pnl === 0 trades are neither win nor loss
       }
     }
 
@@ -257,8 +271,8 @@ const showStats = async (service) => {
     const longWinRate = stats.longTrades > 0 ? ((stats.longWins / stats.longTrades) * 100).toFixed(1) : 'N/A';
     const shortWinRate = stats.shortTrades > 0 ? ((stats.shortWins / stats.shortTrades) * 100).toFixed(1) : 'N/A';
     
-    // Quantitative metrics (calculated from API trade data)
-    const tradePnLs = allTrades.map(t => t.profitAndLoss || t.pnl || 0);
+    // Quantitative metrics (calculated from completed trades only)
+    const tradePnLs = completedTrades.map(t => t.profitAndLoss || t.pnl || 0);
     const avgReturn = tradePnLs.length > 0 ? tradePnLs.reduce((a, b) => a + b, 0) / tradePnLs.length : 0;
     
     // Standard deviation
@@ -430,20 +444,31 @@ const showStats = async (service) => {
     };
     
     if (allTrades.length > 0) {
-      // Calculate column widths to fill the entire row
-      // Fixed columns: Time(10), Symbol(12), Price(12), P&L(12), Side(6) = 52 + separators(4*3=12) + padding(2) = 66
-      // Remaining space goes to Account column
-      const colTime = 10;
-      const colSymbol = 12;
-      const colPrice = 12;
-      const colPnl = 12;
+      // Column widths - total must equal innerWidth
+      // Format: " Time    | Symbol   | Side | P&L      | Fees   | Net      | Account... "
+      const colTime = 9;
+      const colSymbol = 10;
       const colSide = 6;
-      const separators = 15; // 5 separators " | " = 5*3
-      const fixedWidth = colTime + colSymbol + colPrice + colPnl + colSide + separators;
-      const colAccount = Math.max(10, innerWidth - fixedWidth);
+      const colPnl = 10;
+      const colFees = 8;
+      const colNet = 10;
+      // Each column has "| " after it (2 chars), plus leading space (1 char)
+      const fixedCols = colTime + colSymbol + colSide + colPnl + colFees + colNet;
+      const separatorChars = 6 * 2; // 6 "| " separators
+      const leadingSpace = 1;
+      const colAccount = innerWidth - fixedCols - separatorChars - leadingSpace;
       
-      // Header
-      const header = ` ${'Time'.padEnd(colTime)}| ${'Symbol'.padEnd(colSymbol)}| ${'Price'.padEnd(colPrice)}| ${'P&L'.padEnd(colPnl)}| ${'Side'.padEnd(colSide)}| ${'Account'.padEnd(colAccount - 2)}`;
+      // Header - build with exact spacing
+      const headerParts = [
+        ' ' + 'Time'.padEnd(colTime),
+        'Symbol'.padEnd(colSymbol),
+        'Side'.padEnd(colSide),
+        'P&L'.padEnd(colPnl),
+        'Fees'.padEnd(colFees),
+        'Net'.padEnd(colNet),
+        'Account'.padEnd(colAccount)
+      ];
+      const header = headerParts.join('| ');
       console.log(chalk.cyan('\u2551') + chalk.white(header) + chalk.cyan('\u2551'));
       console.log(chalk.cyan('\u255F') + chalk.cyan('\u2500'.repeat(innerWidth)) + chalk.cyan('\u2562'));
       
@@ -464,9 +489,15 @@ const showStats = async (service) => {
         const timestamp = trade.creationTimestamp || trade.timestamp;
         const time = timestamp ? new Date(timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
         const symbol = extractSymbol(trade.contractId || trade.symbol);
-        const price = (trade.price || 0).toFixed(2);
         const pnl = trade.profitAndLoss || trade.pnl || 0;
+        const fees = trade.fees || trade.commission || 0;
+        const netPnl = pnl - Math.abs(fees);
+        
+        // Format values
         const pnlText = pnl >= 0 ? `+$${pnl.toFixed(0)}` : `-$${Math.abs(pnl).toFixed(0)}`;
+        const feesText = fees !== 0 ? `-$${Math.abs(fees).toFixed(2)}` : '$0';
+        const netText = netPnl >= 0 ? `+$${netPnl.toFixed(0)}` : `-$${Math.abs(netPnl).toFixed(0)}`;
+        
         // For completed trades, show the original direction (opposite of exit side)
         const exitSide = trade.side; // 0=BUY exit means was SHORT, 1=SELL exit means was LONG
         const tradeSide = exitSide === 0 ? 'SHORT' : 'LONG';
@@ -475,16 +506,29 @@ const showStats = async (service) => {
         // Build row with exact widths
         const timeStr = time.padEnd(colTime);
         const symbolStr = symbol.padEnd(colSymbol);
-        const priceStr = price.padEnd(colPrice);
-        const pnlStr = pnlText.padEnd(colPnl);
         const sideStr = tradeSide.padEnd(colSide);
-        const accountStr = accountName.padEnd(colAccount - 2);
+        const pnlStr = pnlText.padEnd(colPnl);
+        const feesStr = feesText.padEnd(colFees);
+        const netStr = netText.padEnd(colNet);
+        const accountStr = accountName.padEnd(colAccount);
         
         // Colored versions
         const pnlColored = pnl >= 0 ? chalk.green(pnlStr) : chalk.red(pnlStr);
+        const feesColored = chalk.yellow(feesStr);
+        const netColored = netPnl >= 0 ? chalk.green(netStr) : chalk.red(netStr);
         const sideColored = tradeSide === 'LONG' ? chalk.green(sideStr) : chalk.red(sideStr);
         
-        const row = ` ${timeStr}| ${symbolStr}| ${priceStr}| ${pnlColored}| ${sideColored}| ${accountStr}`;
+        // Build row with same format as header
+        const rowParts = [
+          ' ' + timeStr,
+          symbolStr,
+          sideColored,
+          pnlColored,
+          feesColored,
+          netColored,
+          accountStr
+        ];
+        const row = rowParts.join('| ');
         console.log(chalk.cyan('\u2551') + row + chalk.cyan('\u2551'));
       }
       
