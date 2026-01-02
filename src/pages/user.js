@@ -71,10 +71,10 @@ const showUserInfo = async (service) => {
 
       const username = userInfo.userName || userInfo.username || 'Unknown';
       const connCount = connections.count() || 1;
-      console.log(chalk.cyan('║') + fmtRow('Username:', chalk.cyan(username.toUpperCase()), col1) + chalk.cyan('│') + fmtRow('Connections:', chalk.cyan(String(connCount)), col2) + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('USERNAME:', chalk.cyan(username.toUpperCase()), col1) + chalk.cyan('│') + fmtRow('CONNECTIONS:', chalk.cyan(String(connCount)), col2) + chalk.cyan('║'));
 
       const email = userInfo.email || 'N/A';
-      console.log(chalk.cyan('║') + fmtRow('Email:', chalk.white(email), col1) + chalk.cyan('│') + fmtRow('Accounts:', chalk.cyan(String(accountCount)), col2) + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('EMAIL:', chalk.white(email), col1) + chalk.cyan('│') + fmtRow('ACCOUNTS:', chalk.cyan(String(accountCount)), col2) + chalk.cyan('║'));
 
       const userId = userInfo.userId || userInfo.id || 'N/A';
       const platform = service?.propfirm?.name || 'ProjectX';

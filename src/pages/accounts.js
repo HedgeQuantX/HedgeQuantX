@@ -105,7 +105,7 @@ const showAccounts = async (service) => {
       const balStr2 = bal2 !== null && bal2 !== undefined ? '$' + Number(bal2).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--';
       const balColor1 = bal1 === null || bal1 === undefined ? chalk.gray : (bal1 >= 0 ? chalk.green : chalk.red);
       const balColor2 = bal2 === null || bal2 === undefined ? chalk.gray : (bal2 >= 0 ? chalk.green : chalk.red);
-      console.log(chalk.cyan('║') + fmtRow('Balance:', balColor1(balStr1), col1) + chalk.cyan('│') + (acc2 ? fmtRow('Balance:', balColor2(balStr2), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('BALANCE:', balColor1(balStr1), col1) + chalk.cyan('│') + (acc2 ? fmtRow('BALANCE:', balColor2(balStr2), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
       // P&L
       const pnl1 = acc1.profitAndLoss;
@@ -119,7 +119,7 @@ const showAccounts = async (service) => {
       // Status
       const status1 = ACCOUNT_STATUS[acc1.status] || { text: 'Unknown', color: 'gray' };
       const status2 = acc2 ? (ACCOUNT_STATUS[acc2.status] || { text: 'Unknown', color: 'gray' }) : null;
-      console.log(chalk.cyan('║') + fmtRow('Status:', chalk[status1.color](status1.text), col1) + chalk.cyan('│') + (acc2 ? fmtRow('Status:', chalk[status2.color](status2.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('STATUS:', chalk[status1.color](status1.text), col1) + chalk.cyan('│') + (acc2 ? fmtRow('STATUS:', chalk[status2.color](status2.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
       // Type
       const type1 = ACCOUNT_TYPE[acc1.type] || { text: 'Unknown', color: 'white' };

@@ -183,7 +183,7 @@ class AlgoUI {
     this._line(chalk.cyan(GM));
     
     // Row 2: Qty | P&L
-    const r2c1 = buildCell('Qty', (stats.qty || '1').toString(), chalk.cyan, colL);
+    const r2c1 = buildCell('QTY', (stats.qty || '1').toString(), chalk.cyan, colL);
     const r2c2 = buildCell('P&L', pnlStr, pnlColor, colR);
     row(r2c1.padded, r2c2.padded);
     
@@ -192,8 +192,8 @@ class AlgoUI {
     // Row 3: Target | Risk
     const targetStr = stats.target !== null && stats.target !== undefined ? '$' + stats.target.toFixed(2) : '--';
     const riskStr = stats.risk !== null && stats.risk !== undefined ? '$' + stats.risk.toFixed(2) : '--';
-    const r3c1 = buildCell('Target', targetStr, chalk.green, colL);
-    const r3c2 = buildCell('Risk', riskStr, chalk.red, colR);
+    const r3c1 = buildCell('TARGET', targetStr, chalk.green, colL);
+    const r3c2 = buildCell('RISK', riskStr, chalk.red, colR);
     row(r3c1.padded, r3c2.padded);
     
     this._line(chalk.cyan(GM));
@@ -201,15 +201,15 @@ class AlgoUI {
     // Row 4: Trades | Latency (API response time) - UPPERCASE BOLD
     const r4c1t = ` ${chalk.bold('TRADES')}: ${chalk.cyan.bold(stats.trades || 0)}  ${chalk.bold('W/L')}: ${chalk.green.bold(stats.wins || 0)}/${chalk.red.bold(stats.losses || 0)}`;
     const r4c1p = ` TRADES: ${stats.trades || 0}  W/L: ${stats.wins || 0}/${stats.losses || 0}`;
-    const r4c2 = buildCell('Latency', `${stats.latency || 0}MS`, latencyColor, colR);
+    const r4c2 = buildCell('LATENCY', `${stats.latency || 0}MS`, latencyColor, colR);
     row(r4c1t + pad(colL - r4c1p.length), r4c2.padded);
     
     this._line(chalk.cyan(GM));
     
     // Row 5: Connection | Propfirm
     const connection = stats.platform || 'ProjectX';
-    const r5c1 = buildCell('Connection', connection, chalk.cyan, colL);
-    const r5c2 = buildCell('Propfirm', stats.propfirm || 'N/A', chalk.cyan, colR);
+    const r5c1 = buildCell('CONNECTION', connection, chalk.cyan, colL);
+    const r5c2 = buildCell('PROPFIRM', stats.propfirm || 'N/A', chalk.cyan, colR);
     row(r5c1.padded, r5c2.padded);
     
     this._line(chalk.cyan(GB));
@@ -244,22 +244,22 @@ class AlgoUI {
     
     // Row 2: Symbol (centered, single row)
     const symbol = (stats.symbol || stats.leadSymbol || 'N/A').substring(0, 60);
-    const symbolText = `Symbol: ${symbol}`;
+    const symbolText = `SYMBOL: ${symbol}`;
     const symbolPadded = center(symbolText, W);
     this._line(chalk.cyan(BOX.V) + chalk.yellow(symbolPadded) + chalk.cyan(BOX.V));
     
     this._line(chalk.cyan(GT));
     
     // Row 3: Lead Qty | Follower Qty
-    const r3c1 = buildCell('Qty', (stats.leadQty || '1').toString(), chalk.cyan, colL);
-    const r3c2 = buildCell('Qty', (stats.followerQty || '1').toString(), chalk.cyan, colR);
+    const r3c1 = buildCell('QTY', (stats.leadQty || '1').toString(), chalk.cyan, colL);
+    const r3c2 = buildCell('QTY', (stats.followerQty || '1').toString(), chalk.cyan, colR);
     row(r3c1.padded, r3c2.padded);
     
     this._line(chalk.cyan(GM));
     
     // Row 4: Target | Risk
-    const r4c1 = buildCell('Target', '$' + (stats.target || 0).toFixed(2), chalk.green, colL);
-    const r4c2 = buildCell('Risk', '$' + (stats.risk || 0).toFixed(2), chalk.red, colR);
+    const r4c1 = buildCell('TARGET', '$' + (stats.target || 0).toFixed(2), chalk.green, colL);
+    const r4c2 = buildCell('RISK', '$' + (stats.risk || 0).toFixed(2), chalk.red, colR);
     row(r4c1.padded, r4c2.padded);
     
     this._line(chalk.cyan(GM));
@@ -443,7 +443,7 @@ const renderSessionSummary = (stats, stopReason) => {
   const pnlStr = `${pnl >= 0 ? '+' : ''}$${Math.abs(pnl).toFixed(2)}`;
   const pnlColor = pnl >= 0 ? chalk.green : chalk.red;
   const targetStr = `$${(stats.target || 0).toFixed(2)}`;
-  row('P&L', pnlStr, pnlColor, 'Target', targetStr, chalk.cyan);
+  row('P&L', pnlStr, pnlColor, 'TARGET', targetStr, chalk.cyan);
   
   // Bottom border
   console.log(chalk.cyan(BOX.BOT + BOX.H.repeat(W) + BOX.BR));
