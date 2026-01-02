@@ -189,18 +189,11 @@ class AlgoUI {
     
     this._line(chalk.cyan(GM));
     
-    // Row 4: Trades | Server
+    // Row 4: Trades | Propfirm
     const r4c1t = ` Trades: ${chalk.cyan(stats.trades || 0)}  W/L: ${chalk.green(stats.wins || 0)}/${chalk.red(stats.losses || 0)}`;
     const r4c1p = ` Trades: ${stats.trades || 0}  W/L: ${stats.wins || 0}/${stats.losses || 0}`;
-    const r4c2 = buildCell('Server', stats.connected ? 'ON' : 'OFF', serverColor, colR);
+    const r4c2 = buildCell('Propfirm', stats.propfirm || 'N/A', chalk.cyan, colR);
     row(r4c1t + pad(colL - r4c1p.length), r4c2.padded);
-    
-    this._line(chalk.cyan(GM));
-    
-    // Row 5: Latency | Propfirm
-    const r5c1 = buildCell('Latency', `${stats.latency || 0}ms`, latencyColor, colL);
-    const r5c2 = buildCell('Propfirm', stats.propfirm || 'N/A', chalk.cyan, colR);
-    row(r5c1.padded, r5c2.padded);
     
     this._line(chalk.cyan(GB));
   }
@@ -254,18 +247,11 @@ class AlgoUI {
     
     this._line(chalk.cyan(GM));
     
-    // Row 5: P&L | Server
+    // Row 5: P&L | Trades
     const r5c1 = buildCell('P&L', pnlStr, pnlColor, colL);
-    const r5c2 = buildCell('Server', stats.connected ? 'ON' : 'OFF', serverColor, colR);
-    row(r5c1.padded, r5c2.padded);
-    
-    this._line(chalk.cyan(GM));
-    
-    // Row 6: Trades | Latency
-    const r6c1t = ` Trades: ${chalk.cyan(stats.trades || 0)}  W/L: ${chalk.green(stats.wins || 0)}/${chalk.red(stats.losses || 0)}`;
-    const r6c1p = ` Trades: ${stats.trades || 0}  W/L: ${stats.wins || 0}/${stats.losses || 0}`;
-    const r6c2 = buildCell('Latency', `${stats.latency || 0}ms`, latencyColor, colR);
-    row(r6c1t + pad(colL - r6c1p.length), r6c2.padded);
+    const r5c2t = ` Trades: ${chalk.cyan(stats.trades || 0)}  W/L: ${chalk.green(stats.wins || 0)}/${chalk.red(stats.losses || 0)}`;
+    const r5c2p = ` Trades: ${stats.trades || 0}  W/L: ${stats.wins || 0}/${stats.losses || 0}`;
+    row(r5c1.padded, r5c2t + pad(colR - r5c2p.length));
     
     this._line(chalk.cyan(GB));
   }
@@ -280,11 +266,13 @@ class AlgoUI {
     const timeStr = now.toLocaleTimeString('en-US', { hour12: false });
     const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     
+    const leftText = ` EXECUTION LOG ${spinner}`;
+    const rightText = `${dateStr} ${timeStr}  [X] STOP `;
+    const totalLen = leftText.length + rightText.length;
+    const space = W - totalLen;
+    
     const left = ` EXECUTION LOG ${chalk.yellow(spinner)}`;
     const right = `${chalk.gray(dateStr)} ${chalk.white(timeStr)}  ${chalk.yellow('[X] STOP')} `;
-    const leftPlain = stripAnsi(left);
-    const rightPlain = ` ${dateStr} ${timeStr}  [X] STOP `;
-    const space = W - leftPlain.length - rightPlain.length;
     
     this._line(chalk.cyan(BOX.V) + chalk.white.bold(left) + ' '.repeat(Math.max(0, space)) + right + chalk.cyan(BOX.V));
     this._line(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
