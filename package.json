@@ -1,7 +1,7 @@
 {
   "name": "hedgequantx",
-  "version": "2.3.3",
-  "description": "HedgeQuantX - Prop Futures Algo Trading CLI",
+  "version": "2.3.4",
+  "description": "HedgeQuantX - Prop Futures Trading CLI",
   "main": "src/app.js",
   "bin": {
     "hedgequantx": "./bin/cli.js",
@@ -11,23 +11,19 @@
     "start": "node bin/cli.js",
     "dev": "node bin/cli.js",
     "build": "node scripts/build.js",
+    "publish:safe": "node scripts/publish.js",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
     "trading",
     "futures",
-    "algo",
     "prop",
     "cli",
     "topstep",
     "projectx",
     "rithmic",
     "apex",
-    "prop-trading",
-    "algo-trading",
-    "futures-trading",
-    
-    "hedgequantx"
+    "bulenox"
   ],
   "author": "HedgeQuantX <support@hedgequantx.com>",
   "license": "PROPRIETARY",
@@ -44,7 +40,7 @@
   },
   "files": [
     "bin/",
-    "dist/",
+    "dist/lib/",
     "protos/",
     "src/app.js",
     "src/api/",
