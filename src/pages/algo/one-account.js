@@ -301,16 +301,23 @@ const launchAlgo = async (service, account, contract, config) => {
     tps++;
     const latencyStart = Date.now();
     
+    // Debug: log first tick to see structure
+    if (tickCount === 1) {
+      algoLogger.info(ui, 'FIRST TICK', `price=${tick.price} bid=${tick.bid} ask=${tick.ask} vol=${tick.volume}`);
+    }
+    
     // Feed tick to strategy
-    strategy.processTick({
+    const tickData = {
       contractId: tick.contractId || contractId,
-      price: tick.price,
+      price: tick.price || tick.lastPrice || tick.bid,
       bid: tick.bid,
       ask: tick.ask,
-      volume: tick.volume || 1,
-      side: tick.lastTradeSide || 'unknown',
+      volume: tick.volume || tick.size || 1,
+      side: tick.lastTradeSide || tick.side || 'unknown',
       timestamp: tick.timestamp || Date.now()
-    });
+    };
+    
+    strategy.processTick(tickData);
     
     stats.latency = Date.now() - latencyStart;
     
