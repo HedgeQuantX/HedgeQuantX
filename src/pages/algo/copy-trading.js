@@ -48,11 +48,11 @@ const copyTradingMenu = async () => {
   console.log();
 
   // Fetch all accounts
-  const spinner = ora({ text: 'Fetching accounts...', color: 'yellow' }).start();
+  const spinner = ora({ text: 'FETCHING ACCOUNTS...', color: 'yellow' }).start();
   const allAccounts = await fetchAllAccounts(allConns);
 
   if (allAccounts.length < 2) {
-    spinner.fail('Need at least 2 active accounts');
+    spinner.fail('NEED AT LEAST 2 ACTIVE ACCOUNTS');
     await prompts.waitForEnter();
     return;
   }
@@ -61,14 +61,14 @@ const copyTradingMenu = async () => {
 
   // Step 1: Select Lead Account
   console.log(chalk.cyan('  Step 1: Select LEAD Account'));
-  const leadIdx = await selectAccount('Lead Account:', allAccounts, -1);
+  const leadIdx = await selectAccount('LEAD ACCOUNT:', allAccounts, -1);
   if (leadIdx === null || leadIdx === -1) return;
   const lead = allAccounts[leadIdx];
 
   // Step 2: Select Follower Account
   console.log();
   console.log(chalk.cyan('  Step 2: Select FOLLOWER Account'));
-  const followerIdx = await selectAccount('Follower Account:', allAccounts, leadIdx);
+  const followerIdx = await selectAccount('FOLLOWER ACCOUNT:', allAccounts, leadIdx);
   if (followerIdx === null || followerIdx === -1) return;
   const follower = allAccounts[followerIdx];
 
@@ -82,10 +82,10 @@ const copyTradingMenu = async () => {
   console.log();
   console.log(chalk.cyan('  Step 4: Configure Parameters'));
 
-  const leadContracts = await prompts.numberInput('Lead contracts:', 1, 1, 10);
+  const leadContracts = await prompts.numberInput('LEAD CONTRACTS:', 1, 1, 10);
   if (leadContracts === null) return;
 
-  const followerContracts = await prompts.numberInput('Follower contracts:', leadContracts, 1, 10);
+  const followerContracts = await prompts.numberInput('FOLLOWER CONTRACTS:', leadContracts, 1, 10);
   if (followerContracts === null) return;
 
   const dailyTarget = await prompts.numberInput('Daily target ($):', 400, 1, 10000);
@@ -95,9 +95,9 @@ const copyTradingMenu = async () => {
   if (maxRisk === null) return;
 
   // Step 5: Privacy
-  const showNames = await prompts.selectOption('Account names:', [
-    { label: 'Hide account names', value: false },
-    { label: 'Show account names', value: true },
+  const showNames = await prompts.selectOption('ACCOUNT NAMES:', [
+    { label: 'HIDE ACCOUNT NAMES', value: false },
+    { label: 'SHOW ACCOUNT NAMES', value: true },
   ]);
   if (showNames === null) return;
 
@@ -110,7 +110,7 @@ const copyTradingMenu = async () => {
   console.log(chalk.cyan(`  Target: $${dailyTarget} | Risk: $${maxRisk}`));
   console.log();
 
-  const confirm = await prompts.confirmPrompt('Start Copy Trading?', true);
+  const confirm = await prompts.confirmPrompt('START COPY TRADING?', true);
   if (!confirm) return;
 
   // Launch
@@ -173,7 +173,7 @@ const selectAccount = async (message, accounts, excludeIdx) => {
       };
     });
 
-  options.push({ label: '< Cancel', value: -1 });
+  options.push({ label: '< CANCEL', value: -1 });
   return prompts.selectOption(message, options);
 };
 
@@ -183,7 +183,7 @@ const selectAccount = async (message, accounts, excludeIdx) => {
  * @returns {Promise<Object|null>}
  */
 const selectSymbol = async (service) => {
-  const spinner = ora({ text: 'Loading symbols...', color: 'yellow' }).start();
+  const spinner = ora({ text: 'LOADING SYMBOLS...', color: 'yellow' }).start();
 
   try {
     // Try ProjectX API first for consistency
@@ -198,7 +198,7 @@ const selectSymbol = async (service) => {
     }
 
     if (!contracts || !contracts.length) {
-      spinner.fail('No contracts available');
+      spinner.fail('NO CONTRACTS AVAILABLE');
       await prompts.waitForEnter();
       return null;
     }
@@ -226,9 +226,9 @@ const selectSymbol = async (service) => {
     }
 
     options.push({ label: '', value: null, disabled: true });
-    options.push({ label: chalk.gray('< Cancel'), value: null });
+    options.push({ label: chalk.gray('< CANCEL'), value: null });
 
-    return prompts.selectOption('Trading Symbol:', options);
+    return prompts.selectOption('TRADING SYMBOL:', options);
   } catch (err) {
     spinner.fail(`Error loading contracts: ${err.message}`);
     await prompts.waitForEnter();

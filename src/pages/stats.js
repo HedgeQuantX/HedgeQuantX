@@ -23,7 +23,7 @@ const showStats = async (service) => {
   let spinner;
   
   try {
-    spinner = ora({ text: 'Loading stats...', color: 'yellow' }).start();
+    spinner = ora({ text: 'LOADING STATS...', color: 'yellow' }).start();
     
     // Get all connections
     const allConns = connections.count() > 0 
@@ -31,7 +31,7 @@ const showStats = async (service) => {
       : (service ? [{ service, propfirm: service.propfirm?.name || 'Unknown', type: 'single' }] : []);
     
     if (allConns.length === 0) {
-      spinner.fail('No connections found');
+      spinner.fail('NO CONNECTIONS FOUND');
       await prompts.waitForEnter();
       return;
     }
@@ -73,7 +73,7 @@ const showStats = async (service) => {
     }
     
     if (allAccountsData.length === 0) {
-      spinner.fail('No accounts found');
+      spinner.fail('NO ACCOUNTS FOUND');
       await prompts.waitForEnter();
       return;
     }
@@ -91,7 +91,7 @@ const showStats = async (service) => {
     const activeAccounts = allAccountsData.filter(acc => acc.status === 0);
     
     if (activeAccounts.length === 0) {
-      spinner.fail('No active accounts found');
+      spinner.fail('NO ACTIVE ACCOUNTS FOUND');
       await prompts.waitForEnter();
       return;
     }
@@ -255,7 +255,7 @@ const showStats = async (service) => {
       }
     }
 
-    spinner.succeed('Stats loaded');
+    spinner.succeed('STATS LOADED');
     console.log();
     
     // ========== DISPLAY ==========

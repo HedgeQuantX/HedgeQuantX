@@ -20,14 +20,14 @@ const algoTradingMenu = async (service) => {
   try {
     console.log();
     console.log(chalk.gray(getSeparator()));
-    console.log(chalk.yellow.bold('  Algo-Trading'));
+    console.log(chalk.yellow.bold('  ALGO-TRADING'));
     console.log(chalk.gray(getSeparator()));
     console.log();
 
-    const action = await prompts.selectOption(chalk.yellow('Select Mode:'), [
-      { value: 'one_account', label: 'One Account' },
-      { value: 'copy_trading', label: 'Copy Trading' },
-      { value: 'back', label: '< Back' }
+    const action = await prompts.selectOption(chalk.yellow('SELECT MODE:'), [
+      { value: 'one_account', label: 'ONE ACCOUNT' },
+      { value: 'copy_trading', label: 'COPY TRADING' },
+      { value: 'back', label: '< BACK' }
     ]);
 
     log.debug('Algo mode selected', { action });
@@ -50,7 +50,7 @@ const algoTradingMenu = async (service) => {
     return action;
   } catch (err) {
     log.error('Algo menu error:', err.message);
-    console.log(chalk.red(`  Error: ${err.message}`));
+    console.log(chalk.red(`  ERROR: ${err.message}`));
     await prompts.waitForEnter();
     return 'back';
   }

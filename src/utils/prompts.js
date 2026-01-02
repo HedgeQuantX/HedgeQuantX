@@ -80,10 +80,10 @@ const nativePrompt = (message) => {
 
 /**
  * Wait for Enter key
- * @param {string} [message='Press Enter to continue...'] - Message to display
+ * @param {string} [message='PRESS ENTER TO CONTINUE...'] - Message to display
  * @returns {Promise<void>}
  */
-const waitForEnter = async (message = 'Press Enter to continue...') => {
+const waitForEnter = async (message = 'PRESS ENTER TO CONTINUE...') => {
   await nativePrompt(message);
 };
 

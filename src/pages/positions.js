@@ -19,14 +19,14 @@ const showPositions = async (service) => {
 
   try {
     // Step 1: Get connections
-    spinner = ora({ text: 'Loading connections...', color: 'yellow' }).start();
+    spinner = ora({ text: 'LOADING CONNECTIONS...', color: 'yellow' }).start();
     
     const allConns = connections.count() > 0 
       ? connections.getAll() 
       : (service ? [{ service, propfirm: service.propfirm?.name || 'Unknown', type: 'single' }] : []);
     
     if (allConns.length === 0) {
-      spinner.fail('No connections found');
+      spinner.fail('NO CONNECTIONS FOUND');
       await prompts.waitForEnter();
       return;
     }
@@ -90,7 +90,7 @@ const showPositions = async (service) => {
       }
     }
 
-    spinner = ora({ text: 'Preparing display...', color: 'yellow' }).start();
+    spinner = ora({ text: 'PREPARING DISPLAY...', color: 'yellow' }).start();
     spinner.succeed(`Total: ${allPositions.length} position(s)`);
     console.log();
 

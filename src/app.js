@@ -225,15 +225,15 @@ const run = async () => {
     await bannerClosed();
 
     // Restore session
-    const spinner = ora({ text: 'Restoring session...', color: 'yellow' }).start();
+    const spinner = ora({ text: 'RESTORING SESSION...', color: 'yellow' }).start();
     const restored = await connections.restoreFromStorage();
 
     if (restored) {
-      spinner.succeed('Session restored');
+      spinner.succeed('SESSION RESTORED');
       currentService = connections.getAll()[0].service;
       await refreshStats();
     } else {
-      spinner.info('No active session');
+      spinner.info('NO ACTIVE SESSION');
     }
 
     // Main loop
@@ -246,7 +246,7 @@ const run = async () => {
           const choice = await mainMenu();
 
           if (choice === 'exit') {
-            console.log(chalk.gray('Goodbye!'));
+            console.log(chalk.gray('GOODBYE!'));
             process.exit(0);
           }
 
@@ -304,7 +304,7 @@ const run = async () => {
               connections.disconnectAll();
               currentService = null;
               clearCachedStats();
-              console.log(chalk.yellow('Disconnected'));
+              console.log(chalk.yellow('DISCONNECTED'));
               break;
           }
         }

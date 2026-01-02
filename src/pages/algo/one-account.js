@@ -27,18 +27,18 @@ const oneAccountMenu = async (service) => {
   if (!market.isOpen && !market.message.includes('early')) {
     console.log();
     console.log(chalk.red(`  ${market.message}`));
-    console.log(chalk.gray('  Algo trading is only available when market is open'));
+    console.log(chalk.gray('  ALGO TRADING IS ONLY AVAILABLE WHEN MARKET IS OPEN'));
     console.log();
     await prompts.waitForEnter();
     return;
   }
   
-  const spinner = ora({ text: 'Fetching active accounts...', color: 'yellow' }).start();
+  const spinner = ora({ text: 'FETCHING ACTIVE ACCOUNTS...', color: 'yellow' }).start();
   
   const allAccounts = await connections.getAllAccounts();
   
   if (!allAccounts?.length) {
-    spinner.fail('No accounts found');
+    spinner.fail('NO ACCOUNTS FOUND');
     await prompts.waitForEnter();
     return;
   }
@@ -46,12 +46,12 @@ const oneAccountMenu = async (service) => {
   const activeAccounts = allAccounts.filter(acc => acc.status === 0);
   
   if (!activeAccounts.length) {
-    spinner.fail('No active accounts');
+    spinner.fail('NO ACTIVE ACCOUNTS');
     await prompts.waitForEnter();
     return;
   }
   
-  spinner.succeed(`Found ${activeAccounts.length} active account(s)`);
+  spinner.succeed(`FOUND ${activeAccounts.length} ACTIVE ACCOUNT(S)`);
   
   // Select account - display RAW API fields
   const options = activeAccounts.map(acc => {
@@ -65,9 +65,9 @@ const oneAccountMenu = async (service) => {
       value: acc
     };
   });
-  options.push({ label: '< Back', value: 'back' });
+  options.push({ label: '< BACK', value: 'back' });
   
-  const selectedAccount = await prompts.selectOption('Select Account:', options);
+  const selectedAccount = await prompts.selectOption('SELECT ACCOUNT:', options);
   if (!selectedAccount || selectedAccount === 'back') return;
   
   // Use the service attached to the account (from getAllAccounts), fallback to getServiceForAccount
@@ -88,11 +88,11 @@ const oneAccountMenu = async (service) => {
  * Symbol selection - sorted with popular indices first
  */
 const selectSymbol = async (service, account) => {
-  const spinner = ora({ text: 'Loading symbols...', color: 'yellow' }).start();
+  const spinner = ora({ text: 'LOADING SYMBOLS...', color: 'yellow' }).start();
   
   const contractsResult = await service.getContracts();
   if (!contractsResult.success || !contractsResult.contracts?.length) {
-    spinner.fail('Failed to load contracts');
+    spinner.fail('FAILED TO LOAD CONTRACTS');
     return null;
   }
   
@@ -119,7 +119,7 @@ const selectSymbol = async (service, account) => {
     return nameA.localeCompare(nameB);
   });
   
-  spinner.succeed(`Found ${contracts.length} contracts`);
+  spinner.succeed(`FOUND ${contracts.length} CONTRACTS`);
   
   // Display sorted contracts from API
   const options = contracts.map(c => ({
@@ -127,9 +127,9 @@ const selectSymbol = async (service, account) => {
     value: c
   }));
   
-  options.push({ label: chalk.gray('< Back'), value: 'back' });
+  options.push({ label: chalk.gray('< BACK'), value: 'back' });
   
-  const contract = await prompts.selectOption(chalk.yellow('Select Symbol:'), options);
+  const contract = await prompts.selectOption(chalk.yellow('SELECT SYMBOL:'), options);
   return contract === 'back' || contract === null ? null : contract;
 };
 
@@ -138,28 +138,28 @@ const selectSymbol = async (service, account) => {
  */
 const configureAlgo = async (account, contract) => {
   console.log();
-  console.log(chalk.cyan('  Configure Algo Parameters'));
+  console.log(chalk.cyan('  CONFIGURE ALGO PARAMETERS'));
   console.log();
   
-  const contracts = await prompts.numberInput('Number of contracts:', 1, 1, 10);
+  const contracts = await prompts.numberInput('NUMBER OF CONTRACTS:', 1, 1, 10);
   if (contracts === null) return null;
   
-  const dailyTarget = await prompts.numberInput('Daily target ($):', 1000, 1, 10000);
+  const dailyTarget = await prompts.numberInput('DAILY TARGET ($):', 1000, 1, 10000);
   if (dailyTarget === null) return null;
 
-  const maxRisk = await prompts.numberInput('Max risk ($):', 500, 1, 5000);
+  const maxRisk = await prompts.numberInput('MAX RISK ($):', 500, 1, 5000);
   if (maxRisk === null) return null;
   
-  const showName = await prompts.confirmPrompt('Show account name?', false);
+  const showName = await prompts.confirmPrompt('SHOW ACCOUNT NAME?', false);
   if (showName === null) return null;
   
-  const confirm = await prompts.confirmPrompt('Start algo trading?', true);
+  const confirm = await prompts.confirmPrompt('START ALGO TRADING?', true);
   if (!confirm) return null;
   
   // Show spinner while initializing
-  const initSpinner = ora({ text: 'Initializing algo trading...', color: 'yellow' }).start();
+  const initSpinner = ora({ text: 'INITIALIZING ALGO TRADING...', color: 'yellow' }).start();
   await new Promise(r => setTimeout(r, 500));
-  initSpinner.succeed('Launching algo...');
+  initSpinner.succeed('LAUNCHING ALGO...');
   
   return { contracts, dailyTarget, maxRisk, showName };
 };
@@ -546,7 +546,7 @@ const launchAlgo = async (service, account, contract, config) => {
   // Summary
   renderSessionSummary(stats, stopReason);
   
-  console.log('\n  Returning to menu in 3 seconds...');
+  console.log('\n  RETURNING TO MENU IN 3 SECONDS...');
   await new Promise(resolve => setTimeout(resolve, 3000));
 };
 

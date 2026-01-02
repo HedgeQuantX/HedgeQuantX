@@ -22,12 +22,12 @@ const loginPrompt = async (propfirmName) => {
   console.log(chalk.cyan(`Connecting to ${propfirmName}...`));
   console.log();
 
-  const username = await prompts.textInput('Username:', '', (input) => {
+  const username = await prompts.textInput('USERNAME:', '', (input) => {
     try { validateUsername(input); return undefined; } catch (e) { return e.message; }
   });
   if (!username) return null;
   
-  const pwd = await prompts.passwordInput('Password:', (input) => {
+  const pwd = await prompts.passwordInput('PASSWORD:', (input) => {
     try { validatePassword(input); return undefined; } catch (e) { return e.message; }
   });
   if (!pwd) return null;
@@ -68,10 +68,10 @@ const projectXMenu = async () => {
   }
   
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
-  console.log(chalk.cyan('║') + '  ' + chalk.red('[X] Back') + ' '.repeat(W - 10) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + '  ' + chalk.red('[X] BACK') + ' '.repeat(W - 10) + chalk.cyan('║'));
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
 
-  const input = await prompts.textInput(chalk.cyan('Select number (or X):'));
+  const input = await prompts.textInput(chalk.cyan('SELECT NUMBER (OR X):'));
   if (!input || input.toLowerCase() === 'x') return null;
   
   const action = parseInt(input);
@@ -81,7 +81,7 @@ const projectXMenu = async () => {
   const credentials = await loginPrompt(selectedPropfirm.name);
   if (!credentials) return null;
 
-  const spinner = ora({ text: 'Authenticating...', color: 'yellow' }).start();
+  const spinner = ora({ text: 'AUTHENTICATING...', color: 'yellow' }).start();
 
   try {
     const service = new ProjectXService(selectedPropfirm.key);
@@ -93,7 +93,7 @@ const projectXMenu = async () => {
       spinner.succeed(`Connected to ${service.propfirm.name}`);
       return service;
     } else {
-      spinner.fail(result.error || 'Authentication failed');
+      spinner.fail(result.error || 'AUTHENTICATION FAILED');
       return null;
     }
   } catch (error) {
@@ -139,10 +139,10 @@ const rithmicMenu = async () => {
   }
   
   console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
-  console.log(chalk.cyan('║') + '  ' + chalk.red('[X] Back') + ' '.repeat(innerWidth - 10) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + '  ' + chalk.red('[X] BACK') + ' '.repeat(innerWidth - 10) + chalk.cyan('║'));
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
 
-  const input = await prompts.textInput(chalk.cyan('Select number (or X):'));
+  const input = await prompts.textInput(chalk.cyan('SELECT NUMBER (OR X):'));
   if (!input || input.toLowerCase() === 'x') return null;
   
   const action = parseInt(input);
@@ -152,7 +152,7 @@ const rithmicMenu = async () => {
   const credentials = await loginPrompt(selectedPropfirm.name);
   if (!credentials) return null;
 
-  const spinner = ora({ text: 'Connecting to Rithmic...', color: 'yellow' }).start();
+  const spinner = ora({ text: 'CONNECTING TO RITHMIC...', color: 'yellow' }).start();
 
   try {
     const service = new RithmicService(selectedPropfirm.key);
@@ -166,7 +166,7 @@ const rithmicMenu = async () => {
       await new Promise(r => setTimeout(r, 1500));
       return service;
     } else {
-      spinner.fail(result.error || 'Authentication failed');
+      spinner.fail(result.error || 'AUTHENTICATION FAILED');
       await new Promise(r => setTimeout(r, 2000));
       return null;
     }
@@ -200,10 +200,10 @@ const tradovateMenu = async () => {
   }
   
   console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
-  console.log(chalk.cyan('║') + '  ' + chalk.red('[X] Back') + ' '.repeat(innerWidth - 10) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + '  ' + chalk.red('[X] BACK') + ' '.repeat(innerWidth - 10) + chalk.cyan('║'));
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
 
-  const input = await prompts.textInput(chalk.cyan('Select number (or X):'));
+  const input = await prompts.textInput(chalk.cyan('SELECT NUMBER (OR X):'));
   if (!input || input.toLowerCase() === 'x') return null;
   
   const action = parseInt(input);
@@ -213,7 +213,7 @@ const tradovateMenu = async () => {
   const credentials = await loginPrompt(selectedPropfirm.name);
   if (!credentials) return null;
 
-  const spinner = ora({ text: 'Connecting to Tradovate...', color: 'yellow' }).start();
+  const spinner = ora({ text: 'CONNECTING TO TRADOVATE...', color: 'yellow' }).start();
 
   try {
     const service = new TradovateService(selectedPropfirm.key);
@@ -226,7 +226,7 @@ const tradovateMenu = async () => {
       spinner.succeed(`Connected to ${service.propfirm.name}`);
       return service;
     } else {
-      spinner.fail(result.error || 'Authentication failed');
+      spinner.fail(result.error || 'AUTHENTICATION FAILED');
       return null;
     }
   } catch (error) {
@@ -257,11 +257,11 @@ const addPropAccountMenu = async () => {
   };
   
   menuRow(chalk.cyan('[1] ProjectX'), chalk.cyan('[2] Rithmic'));
-  menuRow(chalk.cyan('[3] Tradovate'), chalk.red('[X] Back'));
+  menuRow(chalk.cyan('[3] Tradovate'), chalk.red('[X] BACK'));
   
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
 
-  const input = await prompts.textInput(chalk.cyan('Select (1/2/3/X):'));
+  const input = await prompts.textInput(chalk.cyan('SELECT (1/2/3/X):'));
   if (!input || input.toLowerCase() === 'x') return null;
   
   const num = parseInt(input);

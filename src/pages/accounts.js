@@ -29,12 +29,12 @@ const showAccounts = async (service) => {
 
   try {
     // Single spinner for loading (appears below the dashboard header)
-    spinner = ora({ text: 'Loading accounts...', color: 'yellow' }).start();
+    spinner = ora({ text: 'LOADING ACCOUNTS...', color: 'yellow' }).start();
     
     const allConns = connections.count() > 0 ? connections.getAll() : (service ? [{ service, propfirm: service.propfirm?.name || 'Unknown', type: 'single' }] : []);
     
     if (allConns.length === 0) {
-      spinner.fail('No connections found');
+      spinner.fail('NO CONNECTIONS FOUND');
       await prompts.waitForEnter();
       return;
     }
@@ -60,7 +60,7 @@ const showAccounts = async (service) => {
     }
 
     if (allAccounts.length === 0) {
-      spinner.fail('No accounts found');
+      spinner.fail('NO ACCOUNTS FOUND');
       await prompts.waitForEnter();
       return;
     }
@@ -78,7 +78,7 @@ const showAccounts = async (service) => {
       } catch (e) {}
     }
     
-    spinner.succeed('Accounts loaded');
+    spinner.succeed('ACCOUNTS LOADED');
     console.log();
 
     // Display accounts

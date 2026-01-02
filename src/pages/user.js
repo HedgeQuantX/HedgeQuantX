@@ -26,7 +26,7 @@ const showUserInfo = async (service) => {
 
   try {
     // Step 1: Get user info
-    spinner = ora({ text: 'Loading user info...', color: 'yellow' }).start();
+    spinner = ora({ text: 'LOADING USER INFO...', color: 'yellow' }).start();
     
     let userInfo = null;
     
@@ -39,10 +39,10 @@ const showUserInfo = async (service) => {
       } catch (e) {}
     }
     
-    spinner.succeed('User info loaded');
+    spinner.succeed('USER INFO LOADED');
 
     // Step 2: Get account count
-    spinner = ora({ text: 'Counting accounts...', color: 'yellow' }).start();
+    spinner = ora({ text: 'COUNTING ACCOUNTS...', color: 'yellow' }).start();
     
     let accountCount = 0;
     
