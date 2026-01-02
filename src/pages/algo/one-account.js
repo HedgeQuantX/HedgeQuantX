@@ -191,6 +191,7 @@ const launchAlgo = async (service, account, contract, config) => {
   let stopReason = null;
   let startingPnL = null; // P&L at algo start (from API)
   let lastPositionPnL = 0;
+  let pollCount = 0;
   
   // Log startup info from API
   ui.addLog('info', `Connection: ${connectionType}`);
@@ -213,6 +214,8 @@ const launchAlgo = async (service, account, contract, config) => {
   // Poll data from API - 100% real data
   const pollAPI = async () => {
     try {
+      pollCount++;
+      
       // Get account P&L from API
       const accountResult = await service.getTradingAccounts();
       if (accountResult.success && accountResult.accounts) {
@@ -268,7 +271,10 @@ const launchAlgo = async (service, account, contract, config) => {
             ui.addLog('info', `${side} ${qty}x @ P&L: $${positionPnL.toFixed(2)}`);
           }
         } else {
-          // No position for this symbol
+          // No position for this symbol - log status every 15 polls (~30 sec)
+          if (pollCount % 15 === 0) {
+            ui.addLog('info', `Waiting for ${symbolName} position... (Session P&L: $${stats.pnl.toFixed(2)})`);
+          }
           lastPositionPnL = 0;
         }
       }
