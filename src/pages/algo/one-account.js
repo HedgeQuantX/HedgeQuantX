@@ -14,6 +14,7 @@ const { checkMarketHours } = require('../../services/projectx/market');
 // Strategy & Market Data (obfuscated)
 const { M1 } = require('../../../dist/lib/m/s1');
 const { MarketDataFeed } = require('../../../dist/lib/data');
+const { algoLogger } = require('./logger');
 
 
 
@@ -155,6 +156,11 @@ const configureAlgo = async (account, contract) => {
   const confirm = await prompts.confirmPrompt('Start algo trading?', true);
   if (!confirm) return null;
   
+  // Show spinner while initializing
+  const initSpinner = ora({ text: 'Initializing algo trading...', color: 'yellow' }).start();
+  await new Promise(r => setTimeout(r, 500));
+  initSpinner.succeed('Launching algo...');
+  
   return { contracts, dailyTarget, maxRisk, showName };
 };
 
@@ -208,12 +214,14 @@ const launchAlgo = async (service, account, contract, config) => {
   // Initialize Market Data Feed
   const marketFeed = new MarketDataFeed({ propfirm: account.propfirm });
   
-  // Log startup - UPPERCASE
-  ui.addLog('info', `CONNECTION: ${connectionType.toUpperCase()}`);
-  ui.addLog('info', `ACCOUNT: ${accountName.toUpperCase()}`);
-  ui.addLog('info', `SYMBOL: ${symbolName.toUpperCase()} | QTY: ${contracts}`);
-  ui.addLog('info', `TARGET: $${dailyTarget} | MAX RISK: $${maxRisk}`);
-  ui.addLog('info', 'CONNECTING TO MARKET DATA...');
+  // Smart startup logs (same as HQX-TG)
+  const market = checkMarketHours();
+  const sessionName = market.session || 'AMERICAN';
+  const etTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' });
+  
+  algoLogger.connectingToEngine(ui, account.accountId);
+  algoLogger.engineStarting(ui, connectionType, dailyTarget, maxRisk);
+  algoLogger.marketOpen(ui, sessionName.toUpperCase(), etTime);
   
   // Handle strategy signals
   strategy.on('signal', async (signal) => {
@@ -221,7 +229,12 @@ const launchAlgo = async (service, account, contract, config) => {
     
     const { side, direction, entry, stopLoss, takeProfit, confidence } = signal;
     
-    ui.addLog('signal', `${direction.toUpperCase()} signal @ ${entry.toFixed(2)} (${(confidence * 100).toFixed(0)}%)`);
+    // Calculate position size with kelly
+    const kelly = Math.min(0.25, confidence);
+    const riskAmount = Math.round(maxRisk * kelly);
+    const riskPct = Math.round((riskAmount / maxRisk) * 100);
+    
+    algoLogger.positionSized(ui, contracts, kelly, riskAmount, riskPct);
     
     // Place order via API
     pendingOrder = true;
@@ -238,7 +251,13 @@ const launchAlgo = async (service, account, contract, config) => {
       if (orderResult.success) {
         currentPosition = direction === 'long' ? contracts : -contracts;
         stats.trades++;
-        ui.addLog('trade', `OPENED ${direction.toUpperCase()} ${contracts}x @ market`);
+        const sideStr = direction === 'long' ? 'BUY' : 'SELL';
+        const positionSide = direction === 'long' ? 'LONG' : 'SHORT';
+        
+        algoLogger.orderSubmitted(ui, symbolName, sideStr, contracts, entry);
+        algoLogger.orderFilled(ui, symbolName, sideStr, contracts, entry);
+        algoLogger.positionOpened(ui, symbolName, positionSide, contracts, entry);
+        algoLogger.entryConfirmed(ui, sideStr, contracts, symbolName, entry);
         
         // Place bracket orders (SL/TP)
         if (stopLoss && takeProfit) {
@@ -262,20 +281,24 @@ const launchAlgo = async (service, account, contract, config) => {
             limitPrice: takeProfit
           });
           
-          ui.addLog('info', `SL: ${stopLoss.toFixed(2)} | TP: ${takeProfit.toFixed(2)}`);
+          algoLogger.stopsSet(ui, stopLoss, takeProfit);
         }
       } else {
-        ui.addLog('error', `Order failed: ${orderResult.error}`);
+        algoLogger.orderRejected(ui, symbolName, orderResult.error || 'Unknown error');
       }
     } catch (e) {
-      ui.addLog('error', `Order error: ${e.message}`);
+      algoLogger.error(ui, 'ORDER ERROR', e.message);
     }
     pendingOrder = false;
   });
   
   // Handle market data ticks
+  let lastHeartbeat = Date.now();
+  let tps = 0;
+  
   marketFeed.on('tick', (tick) => {
     tickCount++;
+    tps++;
     const latencyStart = Date.now();
     
     // Feed tick to strategy
@@ -291,25 +314,27 @@ const launchAlgo = async (service, account, contract, config) => {
     
     stats.latency = Date.now() - latencyStart;
     
-    // Log every 100th tick to show activity
-    if (tickCount % 100 === 0) {
-      ui.addLog('info', `Tick #${tickCount} @ ${tick.price?.toFixed(2) || 'N/A'}`);
+    // Heartbeat every 30 seconds (smart log instead of tick count)
+    if (Date.now() - lastHeartbeat > 30000) {
+      algoLogger.heartbeat(ui, tps, stats.latency);
+      lastHeartbeat = Date.now();
+      tps = 0;
     }
   });
   
   marketFeed.on('connected', () => {
     stats.connected = true;
-    ui.addLog('success', 'MARKET DATA CONNECTED');
+    algoLogger.dataConnected(ui, 'RTC');
+    algoLogger.algoOperational(ui, connectionType);
   });
   
   marketFeed.on('error', (err) => {
-    ui.addLog('error', `MARKET: ${err.message.toUpperCase()}`);
+    algoLogger.error(ui, 'MARKET ERROR', err.message);
   });
   
   marketFeed.on('disconnected', (err) => {
     stats.connected = false;
-    const reason = err?.message || 'UNKNOWN';
-    ui.addLog('error', `DISC: ${reason.substring(0, 70).toUpperCase()}`);
+    algoLogger.dataDisconnected(ui, 'WEBSOCKET', err?.message);
   });
   
   // Connect to market data
@@ -318,14 +343,14 @@ const launchAlgo = async (service, account, contract, config) => {
     
     // CRITICAL: Get a fresh token for WebSocket connection
     // TopStep invalidates WebSocket sessions for old tokens
-    ui.addLog('info', 'REFRESHING AUTH TOKEN...');
+    algoLogger.info(ui, 'REFRESHING AUTH TOKEN...');
     const token = await service.getFreshToken?.() || service.token || service.getToken?.();
     
     if (!token) {
-      ui.addLog('error', 'NO AUTH TOKEN - PLEASE RECONNECT');
+      algoLogger.error(ui, 'NO AUTH TOKEN', 'Please reconnect');
     } else {
-      ui.addLog('info', `TOKEN OK (${token.length} CHARS)`);
-      ui.addLog('info', `RTC: ${propfirmKey.toUpperCase()} | ${contractId}`);
+      algoLogger.info(ui, 'TOKEN OK', `${token.length} chars`);
+      algoLogger.info(ui, 'CONNECTING', `${propfirmKey.toUpperCase()} | ${contractId}`);
       
       await marketFeed.connect(token, propfirmKey);
       
@@ -334,13 +359,13 @@ const launchAlgo = async (service, account, contract, config) => {
       
       if (marketFeed.isConnected()) {
         await marketFeed.subscribe(symbolName, contractId);
-        ui.addLog('success', 'SUBSCRIBED TO MARKET DATA');
+        algoLogger.info(ui, 'SUBSCRIBED', `${symbolName} real-time feed active`);
       } else {
-        ui.addLog('error', 'CONNECTION LOST BEFORE SUBSCRIBE');
+        algoLogger.error(ui, 'CONNECTION LOST', 'Before subscribe');
       }
     }
   } catch (e) {
-    ui.addLog('error', `ERR: ${e.message.substring(0, 60).toUpperCase()}`);
+    algoLogger.error(ui, 'CONNECTION ERROR', e.message.substring(0, 50));
   }
   
   // Poll account P&L from API
@@ -385,11 +410,11 @@ const launchAlgo = async (service, account, contract, config) => {
       if (stats.pnl >= dailyTarget) {
         stopReason = 'target';
         running = false;
-        ui.addLog('success', `TARGET REACHED +$${stats.pnl.toFixed(2)}`);
+        algoLogger.targetHit(ui, symbolName, 0, stats.pnl);
       } else if (stats.pnl <= -maxRisk) {
         stopReason = 'risk';
         running = false;
-        ui.addLog('error', `MAX RISK -$${Math.abs(stats.pnl).toFixed(2)}`);
+        algoLogger.dailyLimitWarning(ui, stats.pnl, -maxRisk);
       }
     } catch (e) {
       // Silently handle polling errors

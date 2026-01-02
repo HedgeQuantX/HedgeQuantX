@@ -11,6 +11,7 @@ const { connections } = require('../../services');
 const { AlgoUI, renderSessionSummary } = require('./ui');
 const { logger, prompts } = require('../../utils');
 const { checkMarketHours } = require('../../services/projectx/market');
+const { algoLogger } = require('./logger');
 
 const log = logger.scope('CopyTrading');
 
@@ -299,10 +300,17 @@ const launchCopyTrading = async (config) => {
     }
   };
 
-  // Local copy trading - no external server needed
-  ui.addLog('info', `Starting copy trading on ${stats.platform}...`);
-  ui.addLog('info', `Lead: ${stats.leadName} -> Follower: ${stats.followerName}`);
-  ui.addLog('info', `Symbol: ${stats.symbol} | Target: $${dailyTarget} | Risk: $${maxRisk}`);
+  // Smart startup logs (same as HQX-TG)
+  const market = checkMarketHours();
+  const sessionName = market.session || 'AMERICAN';
+  const etTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' });
+  
+  algoLogger.connectingToEngine(ui, lead.account.accountId);
+  algoLogger.engineStarting(ui, stats.platform, dailyTarget, maxRisk);
+  algoLogger.marketOpen(ui, sessionName.toUpperCase(), etTime);
+  algoLogger.info(ui, 'COPY MODE', `Lead: ${lead.propfirm} -> Follower: ${follower.propfirm}`);
+  algoLogger.dataConnected(ui, 'API');
+  algoLogger.algoOperational(ui, stats.platform);
   stats.connected = true;
   
   // Track lead positions and copy to follower
@@ -321,7 +329,12 @@ const launchCopyTrading = async (config) => {
         const existing = lastLeadPositions.find(p => p.contractId === pos.contractId);
         if (!existing && pos.quantity !== 0) {
           // New position opened - copy to follower
-          ui.addLog('trade', `Lead opened: ${pos.quantity > 0 ? 'LONG' : 'SHORT'} ${Math.abs(pos.quantity)}x ${pos.symbol || pos.contractId}`);
+          const side = pos.quantity > 0 ? 'LONG' : 'SHORT';
+          const symbol = pos.symbol || pos.contractId;
+          const size = Math.abs(pos.quantity);
+          const entry = pos.averagePrice || 0;
+          algoLogger.positionOpened(ui, symbol, side, size, entry);
+          algoLogger.info(ui, 'COPYING TO FOLLOWER', `${side} ${size}x ${symbol}`);
           // TODO: Place order on follower account
         }
       }
@@ -330,7 +343,13 @@ const launchCopyTrading = async (config) => {
       for (const oldPos of lastLeadPositions) {
         const stillOpen = currentPositions.find(p => p.contractId === oldPos.contractId);
         if (!stillOpen || stillOpen.quantity === 0) {
-          ui.addLog('info', `Lead closed: ${oldPos.symbol || oldPos.contractId}`);
+          const side = oldPos.quantity > 0 ? 'LONG' : 'SHORT';
+          const symbol = oldPos.symbol || oldPos.contractId;
+          const size = Math.abs(oldPos.quantity);
+          const exit = stillOpen?.averagePrice || oldPos.averagePrice || 0;
+          const pnl = oldPos.profitAndLoss || 0;
+          algoLogger.positionClosed(ui, symbol, side, size, exit, pnl);
+          algoLogger.info(ui, 'CLOSING ON FOLLOWER', symbol);
           // TODO: Close position on follower account
         }
       }
@@ -353,11 +372,13 @@ const launchCopyTrading = async (config) => {
       if (stats.pnl >= dailyTarget) {
         stopReason = 'target';
         running = false;
-        ui.addLog('success', `TARGET REACHED! +$${stats.pnl.toFixed(2)}`);
+        algoLogger.targetHit(ui, lead.symbol.name, 0, stats.pnl);
+        algoLogger.info(ui, 'DAILY TARGET REACHED', `+$${stats.pnl.toFixed(2)} - Stopping algo`);
       } else if (stats.pnl <= -maxRisk) {
         stopReason = 'risk';
         running = false;
-        ui.addLog('error', `MAX RISK HIT! -$${Math.abs(stats.pnl).toFixed(2)}`);
+        algoLogger.dailyLimitWarning(ui, stats.pnl, -maxRisk);
+        algoLogger.error(ui, 'MAX RISK HIT', `-$${Math.abs(stats.pnl).toFixed(2)} - Stopping algo`);
       }
     } catch (e) {
       // Silent fail - will retry
