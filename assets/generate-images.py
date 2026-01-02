@@ -216,13 +216,14 @@ def gen_dashboard():
 def gen_algo():
     """Algo trading with correct separators: ╤ ╧ ╪ │"""
     W = 98  # Total width including borders
-    COL_W = (W - 3) // 2  # Column width (minus 2 borders and 1 separator)
+    # Left column = 48 chars, separator = 1, right column = 47 chars (total inner = 96)
+    LEFT_W = 48
+    RIGHT_W = 47
     
     def full_border(left, right, mid=None):
         """Create full-width border line with optional middle separator"""
         if mid:
-            half = (W - 3) // 2
-            line = left + "═" * half + mid + "═" * (W - 3 - half) + right
+            line = left + "═" * LEFT_W + mid + "═" * RIGHT_W + right
         else:
             line = left + "═" * (W - 2) + right
         return (line, [CYAN] * len(line))
@@ -240,50 +241,81 @@ def gen_algo():
         return (full, full_colors)
     
     def two_col_line(left_segments, right_segments):
-        """Create a two-column line with │ separator"""
+        """Create a two-column line with │ separator - perfectly aligned"""
         left_text, left_colors = build_line(left_segments)
         right_text, right_colors = build_line(right_segments)
         
-        # Pad each column
-        left_padded = left_text + " " * (COL_W - len(left_text))
-        right_padded = right_text + " " * (COL_W - len(right_text))
+        # Pad each column to exact width
+        left_padded = left_text + " " * (LEFT_W - len(left_text))
+        right_padded = right_text + " " * (RIGHT_W - len(right_text))
         
         full = "║" + left_padded + "│" + right_padded + "║"
         full_colors = ([CYAN] + 
-                      left_colors + [CYAN] * (COL_W - len(left_text)) + 
-                      [CYAN] +  # separator
-                      right_colors + [CYAN] * (COL_W - len(right_text)) + 
+                      left_colors + [CYAN] * (LEFT_W - len(left_text)) + 
+                      [CYAN] +  # separator │
+                      right_colors + [CYAN] * (RIGHT_W - len(right_text)) + 
                       [CYAN])
         return (full, full_colors)
     
     def log_line(tag, tag_color, message):
         """Create a log line"""
-        text = "║ " + tag + " " + message
-        padding = W - len(text) - 1
-        text += " " * padding + "║"
+        content = " " + tag + " " + message
+        padding = W - 2 - len(content)
+        full = "║" + content + " " * padding + "║"
         
-        colors = [CYAN, CYAN]  # ║ and space
+        colors = [CYAN]  # ║
+        colors.append(CYAN)  # space
         colors.extend([tag_color] * len(tag))
         colors.append(WHITE)  # space after tag
         colors.extend([WHITE] * len(message))
         colors.extend([CYAN] * padding)
         colors.append(CYAN)  # final ║
-        return (text, colors)
+        return (full, colors)
+    
+    # Log line with timestamp format matching ui.js
+    def smart_log(timestamp, tag, tag_color, message):
+        """Create a smart log line: TIMESTAMP TAG MESSAGE"""
+        content = " " + timestamp + " " + tag + " " + message
+        padding = W - 2 - len(content)
+        full = "║" + content + " " * padding + "║"
+        
+        colors = [CYAN]  # ║
+        colors.append(WHITE)  # space
+        colors.extend([WHITE] * len(timestamp))  # timestamp in white
+        colors.append(WHITE)  # space
+        colors.extend([tag_color] * len(tag))  # tag color
+        colors.append(WHITE)  # space
+        colors.extend([WHITE] * len(message))  # message
+        colors.extend([CYAN] * padding)
+        colors.append(CYAN)  # final ║
+        return (full, colors)
     
     lines = [
         full_border("╔", "╗"),
-        center_line([("HQX ALGO TRADING", YELLOW)]),
+        center_line([("One Account Mode", YELLOW)]),
         full_border("╠", "╣", "╤"),
-        two_col_line([(" Account: ", WHITE), ("HQX *****", CYAN)], [(" Symbol: ", WHITE), ("ES Mar26", YELLOW)]),
+        two_col_line([(" Account: ", WHITE), ("HQX *****", CYAN)], [(" Symbol: ", WHITE), ("MNQ Mar25", YELLOW)]),
         full_border("╠", "╣", "╪"),
-        two_col_line([(" Qty: ", WHITE), ("1", GREEN)], [(" P&L: ", WHITE), ("+$125.00", GREEN)]),
+        two_col_line([(" Qty: ", WHITE), ("1", GREEN)], [(" P&L: ", WHITE), ("+$42.50", GREEN)]),
         two_col_line([(" Target: ", WHITE), ("$200.00", GREEN)], [(" Risk: ", WHITE), ("$100.00", RED)]),
-        two_col_line([(" Trades: ", WHITE), ("3", WHITE), ("  W/L: ", WHITE), ("2", GREEN), ("/", WHITE), ("1", RED)], [(" Latency: ", WHITE), ("45ms", GREEN)]),
+        two_col_line([(" Trades: ", WHITE), ("3", WHITE), ("  W/L: ", WHITE), ("2", GREEN), ("/", WHITE), ("1", RED)], [(" Server: ", WHITE), ("ON", GREEN)]),
+        full_border("╠", "╣", "╪"),
+        two_col_line([(" Latency: ", WHITE), ("45ms", GREEN)], [(" Propfirm: ", WHITE), ("Apex", CYAN)]),
         full_border("╠", "╣", "╧"),
-        log_line("BUY ", GREEN, "12:34:56  Filled +1 ES @ 5125.50"),
-        log_line("SELL", RED, "12:35:12  Filled -1 ES @ 5126.25"),
-        log_line("WIN ", GREEN, "12:35:12  Position closed +$75.00"),
-        log_line("INFO", WHITE, "12:35:15  Waiting for next signal..."),
+        smart_log("09:31:02", "SYS  ", CYAN, "HQX Algo Engine v2.3.4 initialized"),
+        smart_log("09:31:03", "CONN ", GREEN, "Connected to Rithmic"),
+        smart_log("09:31:03", "READY", CYAN, "Listening MNQ Mar25 | Target $200 | Risk $100"),
+        smart_log("09:32:15", "SYS  ", CYAN, "Signal detected: LONG setup forming"),
+        smart_log("09:32:16", "BUY  ", GREEN, "+1 MNQ @ 21,845.25 | SL: 21,837.25 | TP: 21,869.25"),
+        smart_log("09:33:42", "SYS  ", CYAN, "TP1 hit - moving SL to breakeven"),
+        smart_log("09:34:18", "SELL ", RED, "-1 MNQ @ 21,862.50 | P&L: +$34.50"),
+        smart_log("09:34:18", "WIN  ", GREEN, "Trade #1 closed +$34.50 | Session: +$34.50"),
+        smart_log("09:35:05", "SYS  ", CYAN, "Signal detected: SHORT setup forming"),
+        smart_log("09:35:06", "SELL ", RED, "-1 MNQ @ 21,858.00 | SL: 21,866.00 | TP: 21,834.00"),
+        smart_log("09:35:52", "SYS  ", CYAN, "Price action weak - tightening SL"),
+        smart_log("09:36:15", "BUY  ", GREEN, "+1 MNQ @ 21,854.00 | P&L: +$8.00"),
+        smart_log("09:36:15", "WIN  ", GREEN, "Trade #2 closed +$8.00 | Session: +$42.50"),
+        smart_log("09:36:30", "INFO ", WHITE, "Scanning for next setup..."),
         full_border("╠", "╣"),
         center_line([("Press ", WHITE), ("[X]", RED), (" to stop trading", WHITE)]),
         full_border("╚", "╝"),
@@ -295,12 +327,12 @@ def gen_algo():
 def gen_copy():
     """Copy trading with correct separators"""
     W = 98
-    COL_W = (W - 3) // 2
+    LEFT_W = 48
+    RIGHT_W = 47
     
     def full_border(left, right, mid=None):
         if mid:
-            half = (W - 3) // 2
-            line = left + "═" * half + mid + "═" * (W - 3 - half) + right
+            line = left + "═" * LEFT_W + mid + "═" * RIGHT_W + right
         else:
             line = left + "═" * (W - 2) + right
         return (line, [CYAN] * len(line))
@@ -320,44 +352,65 @@ def gen_copy():
         left_text, left_colors = build_line(left_segments)
         right_text, right_colors = build_line(right_segments)
         
-        left_padded = left_text + " " * (COL_W - len(left_text))
-        right_padded = right_text + " " * (COL_W - len(right_text))
+        left_padded = left_text + " " * (LEFT_W - len(left_text))
+        right_padded = right_text + " " * (RIGHT_W - len(right_text))
         
         full = "║" + left_padded + "│" + right_padded + "║"
         full_colors = ([CYAN] + 
-                      left_colors + [CYAN] * (COL_W - len(left_text)) + 
+                      left_colors + [CYAN] * (LEFT_W - len(left_text)) + 
                       [CYAN] +
-                      right_colors + [CYAN] * (COL_W - len(right_text)) + 
+                      right_colors + [CYAN] * (RIGHT_W - len(right_text)) + 
                       [CYAN])
         return (full, full_colors)
     
-    def log_line(tag, tag_color, message):
-        text = "║ " + tag + " " + message
-        padding = W - len(text) - 1
-        text += " " * padding + "║"
+    def smart_log(timestamp, tag, tag_color, message):
+        """Create a smart log line: TIMESTAMP TAG MESSAGE"""
+        content = " " + timestamp + " " + tag + " " + message
+        padding = W - 2 - len(content)
+        full = "║" + content + " " * padding + "║"
         
-        colors = [CYAN, CYAN]
+        colors = [CYAN]  # ║
+        colors.append(WHITE)  # space
+        colors.extend([WHITE] * len(timestamp))
+        colors.append(WHITE)  # space
         colors.extend([tag_color] * len(tag))
-        colors.append(WHITE)
+        colors.append(WHITE)  # space
         colors.extend([WHITE] * len(message))
         colors.extend([CYAN] * padding)
         colors.append(CYAN)
-        return (text, colors)
+        return (full, colors)
     
     lines = [
         full_border("╔", "╗"),
-        center_line([("COPY TRADING", YELLOW)]),
+        center_line([("Copy Trading Mode", YELLOW)]),
         full_border("╠", "╣", "╤"),
-        two_col_line([(" LEAD: ", WHITE), ("Apex *****", MAGENTA)], [(" FOLLOWER: ", WHITE), ("TopStep *****", MAGENTA)]),
-        full_border("╠", "╣", "╪"),
-        two_col_line([(" Symbol: ", WHITE), ("NQ Mar26", YELLOW)], [(" Symbol: ", WHITE), ("NQ Mar26", YELLOW)]),
+        two_col_line([(" Lead: ", WHITE), ("Apex *****", MAGENTA)], [(" Follower: ", WHITE), ("TopStep *****", MAGENTA)]),
+        full_border("╠", "╣"),
+        center_line([("Symbol: ", WHITE), ("MNQ Mar25", YELLOW)]),
+        full_border("╠", "╣", "╤"),
         two_col_line([(" Qty: ", WHITE), ("1", GREEN)], [(" Qty: ", WHITE), ("1", GREEN)]),
-        two_col_line([(" P&L: ", WHITE), ("+$180.00", GREEN)], [(" P&L: ", WHITE), ("+$175.00", GREEN)]),
         full_border("╠", "╣", "╪"),
         two_col_line([(" Target: ", WHITE), ("$400.00", GREEN)], [(" Risk: ", WHITE), ("$200.00", RED)]),
+        full_border("╠", "╣", "╪"),
+        two_col_line([(" P&L: ", WHITE), ("+$62.50", GREEN)], [(" Server: ", WHITE), ("ON", GREEN)]),
+        full_border("╠", "╣", "╪"),
+        two_col_line([(" Trades: ", WHITE), ("2", WHITE), ("  W/L: ", WHITE), ("2", GREEN), ("/", WHITE), ("0", RED)], [(" Latency: ", WHITE), ("38ms", GREEN)]),
         full_border("╠", "╣", "╧"),
-        log_line("BUY ", GREEN, "12:34:56  Lead opened +1 NQ @ 18250.25"),
-        log_line("BUY ", GREEN, "12:34:56  Follower copied +1 NQ @ 18250.50"),
+        smart_log("09:31:02", "SYS  ", CYAN, "Copy Trading Engine initialized"),
+        smart_log("09:31:03", "CONN ", GREEN, "Lead connected: Apex"),
+        smart_log("09:31:03", "CONN ", GREEN, "Follower connected: TopStep"),
+        smart_log("09:31:04", "READY", CYAN, "Watching MNQ Mar25 | Target $400 | Risk $200"),
+        smart_log("09:32:15", "BUY  ", GREEN, "Lead: +1 MNQ @ 21,845.25"),
+        smart_log("09:32:15", "BUY  ", GREEN, "Follower: Copied +1 MNQ @ 21,845.50 (0.25 slip)"),
+        smart_log("09:33:42", "SELL ", RED, "Lead: -1 MNQ @ 21,860.50"),
+        smart_log("09:33:42", "SELL ", RED, "Follower: Copied -1 MNQ @ 21,860.25 (0.25 slip)"),
+        smart_log("09:33:42", "WIN  ", GREEN, "Trade #1 | Lead: +$30.50 | Follower: +$29.50"),
+        smart_log("09:34:55", "BUY  ", GREEN, "Lead: +1 MNQ @ 21,855.00"),
+        smart_log("09:34:55", "BUY  ", GREEN, "Follower: Copied +1 MNQ @ 21,855.00 (no slip)"),
+        smart_log("09:35:38", "SELL ", RED, "Lead: -1 MNQ @ 21,871.50"),
+        smart_log("09:35:38", "SELL ", RED, "Follower: Copied -1 MNQ @ 21,871.25 (0.25 slip)"),
+        smart_log("09:35:38", "WIN  ", GREEN, "Trade #2 | Lead: +$33.00 | Follower: +$32.50"),
+        smart_log("09:35:50", "INFO ", WHITE, "Session P&L: +$63.50 / +$62.00 | Waiting..."),
         full_border("╠", "╣"),
         center_line([("Press ", WHITE), ("[X]", RED), (" to stop trading", WHITE)]),
         full_border("╚", "╝"),
