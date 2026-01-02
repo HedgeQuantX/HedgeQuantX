@@ -3,6 +3,7 @@
 Generate HIGH QUALITY PNG images for HQX-CLI README
 Exact CLI colors and box characters
 Uses 2x supersampling for crisp text rendering
+Fixed-width character rendering for perfect alignment
 """
 
 from PIL import Image, ImageDraw, ImageFont
@@ -16,9 +17,6 @@ GREEN = (0, 255, 0)          # chalk.green
 WHITE = (255, 255, 255)      # chalk.white
 RED = (255, 0, 0)            # chalk.red
 MAGENTA = (255, 0, 255)      # chalk.magenta
-
-# Box drawing characters (from ui.js)
-# ╔ ╗ ╚ ╝ ║ ═ ╠ ╣ ╤ ╧ ╪ │
 
 # Quality settings
 SCALE = 2  # Supersampling factor for crisp rendering
@@ -34,37 +32,40 @@ def get_font(size):
             return ImageFont.truetype(p, size)
     return ImageFont.load_default()
 
-def make_image(lines, filename, font_size=None):
-    """Create HIGH QUALITY PNG from colored text lines using supersampling"""
+def make_image_fixed_width(lines, filename, font_size=None):
+    """
+    Create HIGH QUALITY PNG using fixed-width character rendering.
+    Each line is a string, with a parallel color_map list indicating color per character.
+    """
     if font_size is None:
         font_size = BASE_FONT_SIZE
     
     # Render at 2x size for supersampling
     render_size = font_size * SCALE
     font = get_font(render_size)
+    
+    # Get fixed character width (monospace)
+    char_width = font.getbbox("W")[2]
     lh = int(render_size * 1.3)  # Line height
     px, py = 40 * SCALE, 30 * SCALE  # Padding
     
     # Calculate dimensions
-    max_w = 0
-    for segs in lines:
-        w = sum(font.getbbox(t)[2] for t, c in segs)
-        max_w = max(max_w, w)
-    
-    W = max_w + px * 2
+    max_chars = max(len(line) for line, _ in lines)
+    W = max_chars * char_width + px * 2
     H = len(lines) * lh + py * 2
     
     # Create high-res image
     img = Image.new('RGB', (W, H), BG)
     draw = ImageDraw.Draw(img)
     
-    # Draw text
+    # Draw text character by character
     y = py
-    for segs in lines:
+    for line_text, color_map in lines:
         x = px
-        for txt, col in segs:
-            draw.text((x, y), txt, font=font, fill=col)
-            x += font.getbbox(txt)[2]
+        for i, char in enumerate(line_text):
+            color = color_map[i] if i < len(color_map) else WHITE
+            draw.text((x, y), char, font=font, fill=color)
+            x += char_width
         y += lh
     
     # Downsample for antialiasing (high quality resize)
@@ -77,9 +78,27 @@ def make_image(lines, filename, font_size=None):
     print(f"✓ {filename} ({final_w}x{final_h})")
 
 
+def colorize(text, color):
+    """Return list of colors for each character in text"""
+    return [color] * len(text)
+
+
+def build_line(segments):
+    """
+    Build a line from segments: [(text, color), ...]
+    Returns (full_text, color_map)
+    """
+    full_text = ""
+    color_map = []
+    for text, color in segments:
+        full_text += text
+        color_map.extend([color] * len(text))
+    return (full_text, color_map)
+
+
 def gen_logo():
     """Logo only - HEDGEQUANT in cyan, X in yellow"""
-    lines = [
+    raw_lines = [
         [("██╗  ██╗███████╗██████╗  ██████╗ ███████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗", CYAN), ("██╗  ██╗", YELLOW)],
         [("██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝", CYAN), ("╚██╗██╔╝", YELLOW)],
         [("███████║█████╗  ██║  ██║██║  ███╗█████╗  ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║   ", CYAN), (" ╚███╔╝ ", YELLOW)],
@@ -87,98 +106,234 @@ def gen_logo():
         [("██║  ██║███████╗██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ", CYAN), ("██╔╝ ██╗", YELLOW)],
         [("╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ", CYAN), ("╚═╝  ╚═╝", YELLOW)],
     ]
-    make_image(lines, "logo.png", 28)
+    lines = [build_line(segs) for segs in raw_lines]
+    make_image_fixed_width(lines, "logo.png", 28)
 
 
 def gen_dashboard():
-    """Dashboard with correct box characters"""
-    # Width = 96 inner + 2 borders = 98 total
-    W = 96
-    H = "═" * W
+    """Dashboard with correct box characters - fixed width 98 chars"""
+    W = 98  # Total width including borders
+    
+    def pad_line(segments, total_width=W):
+        """Build line and pad to exact width"""
+        text, colors = build_line(segments)
+        if len(text) < total_width:
+            padding = total_width - len(text)
+            # Insert padding before last segment (assumed to be border)
+            text = text[:-1] + " " * padding + text[-1]
+            colors = colors[:-1] + [CYAN] * padding + [colors[-1]]
+        return (text, colors)
+    
+    def full_border(left, mid, right):
+        """Create full-width border line"""
+        line = left + "═" * (W - 2) + right
+        return (line, [CYAN] * len(line))
     
     lines = [
-        [("╔" + H + "╗", CYAN)],
-        [("║ ", CYAN), ("██╗  ██╗███████╗██████╗  ██████╗ ███████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗", CYAN), ("██╗  ██╗", YELLOW), (" ║", CYAN)],
-        [("║ ", CYAN), ("██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝", CYAN), ("╚██╗██╔╝", YELLOW), (" ║", CYAN)],
-        [("║ ", CYAN), ("███████║█████╗  ██║  ██║██║  ███╗█████╗  ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║   ", CYAN), (" ╚███╔╝ ", YELLOW), (" ║", CYAN)],
-        [("║ ", CYAN), ("██╔══██║██╔══╝  ██║  ██║██║   ██║██╔══╝  ██║▄▄ ██║██║   ██║██╔══██║██║╚██╗██║   ██║   ", CYAN), (" ██╔██╗ ", YELLOW), (" ║", CYAN)],
-        [("║ ", CYAN), ("██║  ██║███████╗██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ", CYAN), ("██╔╝ ██╗", YELLOW), (" ║", CYAN)],
-        [("║ ", CYAN), ("╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ", CYAN), ("╚═╝  ╚═╝", YELLOW), (" ║", CYAN)],
-        [("╠" + H + "╣", CYAN)],
-        [("║                               ", CYAN), ("Prop Futures Algo Trading  v2.3.4", WHITE), ("                               ║", CYAN)],
-        [("╠" + H + "╣", CYAN)],
-        [("║                                      ", CYAN), ("Welcome, HQX Trader!", YELLOW), ("                                      ║", CYAN)],
-        [("╠" + H + "╣", CYAN)],
-        [("║                               ", CYAN), ("● ", GREEN), ("TopStep", WHITE), ("    ", CYAN), ("● ", GREEN), ("Apex Trader Funding", WHITE), ("                               ║", CYAN)],
-        [("╠" + H + "╣", CYAN)],
-        [("║        ", CYAN), ("✔ ", YELLOW), ("Connections: ", WHITE), ("2", GREEN), ("    ", CYAN), ("✔ ", YELLOW), ("Accounts: ", WHITE), ("2", GREEN), ("    ", CYAN), ("✔ ", YELLOW), ("Balance: ", WHITE), ("$449,682", GREEN), ("    ", CYAN), ("✔ ", YELLOW), ("P&L: ", WHITE), ("+$1,250", GREEN), ("         ║", CYAN)],
-        [("╠" + H + "╣", CYAN)],
-        [("║  ", CYAN), ("[1] View Accounts", CYAN), ("                             ", CYAN), ("[2] View Stats", CYAN), ("                                  ║", CYAN)],
-        [("║  ", CYAN), ("[+] Add Prop-Account", CYAN), ("                          ", CYAN), ("[A] Algo-Trading", MAGENTA), ("                                ║", CYAN)],
-        [("║  ", CYAN), ("[U] Update HQX", YELLOW), ("                                ", CYAN), ("[X] Disconnect", RED), ("                                  ║", CYAN)],
-        [("╚" + H + "╝", CYAN)],
+        full_border("╔", "═", "╗"),
+        pad_line([("║ ", CYAN), ("██╗  ██╗███████╗██████╗  ██████╗ ███████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗", CYAN), ("██╗  ██╗", YELLOW), (" ║", CYAN)]),
+        pad_line([("║ ", CYAN), ("██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝", CYAN), ("╚██╗██╔╝", YELLOW), (" ║", CYAN)]),
+        pad_line([("║ ", CYAN), ("███████║█████╗  ██║  ██║██║  ███╗█████╗  ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║   ", CYAN), (" ╚███╔╝ ", YELLOW), (" ║", CYAN)]),
+        pad_line([("║ ", CYAN), ("██╔══██║██╔══╝  ██║  ██║██║   ██║██╔══╝  ██║▄▄ ██║██║   ██║██╔══██║██║╚██╗██║   ██║   ", CYAN), (" ██╔██╗ ", YELLOW), (" ║", CYAN)]),
+        pad_line([("║ ", CYAN), ("██║  ██║███████╗██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ", CYAN), ("██╔╝ ██╗", YELLOW), (" ║", CYAN)]),
+        pad_line([("║ ", CYAN), ("╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ", CYAN), ("╚═╝  ╚═╝", YELLOW), (" ║", CYAN)]),
+        full_border("╠", "═", "╣"),
     ]
-    make_image(lines, "dashboard.png")
+    
+    # Center text helper
+    def center_line(text_segments, border="║"):
+        """Center text within borders"""
+        text, colors = build_line(text_segments)
+        content_width = W - 2  # minus borders
+        text_len = len(text)
+        left_pad = (content_width - text_len) // 2
+        right_pad = content_width - text_len - left_pad
+        
+        full = border + " " * left_pad + text + " " * right_pad + border
+        full_colors = [CYAN] + [CYAN] * left_pad + colors + [CYAN] * right_pad + [CYAN]
+        return (full, full_colors)
+    
+    lines.append(center_line([("Prop Futures Algo Trading  v2.3.4", WHITE)]))
+    lines.append(full_border("╠", "═", "╣"))
+    lines.append(center_line([("Welcome, HQX Trader!", YELLOW)]))
+    lines.append(full_border("╠", "═", "╣"))
+    lines.append(center_line([("● ", GREEN), ("TopStep", WHITE), ("      ", CYAN), ("● ", GREEN), ("Apex Trader Funding", WHITE)]))
+    lines.append(full_border("╠", "═", "╣"))
+    lines.append(center_line([("✔ ", YELLOW), ("Connections: ", WHITE), ("2", GREEN), ("    ", CYAN), ("✔ ", YELLOW), ("Accounts: ", WHITE), ("2", GREEN), ("    ", CYAN), ("✔ ", YELLOW), ("Balance: ", WHITE), ("$449,682", GREEN), ("    ", CYAN), ("✔ ", YELLOW), ("P&L: ", WHITE), ("+$1,250", GREEN)]))
+    lines.append(full_border("╠", "═", "╣"))
+    
+    # Menu items - left aligned with padding
+    def menu_line(left_item, right_item):
+        left_text, left_colors = build_line(left_item)
+        right_text, right_colors = build_line(right_item)
+        
+        col_width = (W - 2) // 2
+        left_padded = left_text + " " * (col_width - len(left_text))
+        right_padded = right_text + " " * (col_width - len(right_text))
+        
+        full = "║" + left_padded + right_padded + "║"
+        full_colors = [CYAN] + left_colors + [CYAN] * (col_width - len(left_text)) + right_colors + [CYAN] * (col_width - len(right_text)) + [CYAN]
+        return (full, full_colors)
+    
+    lines.append(menu_line([("  [1] View Accounts", CYAN)], [("[2] View Stats", CYAN)]))
+    lines.append(menu_line([("  [+] Add Prop-Account", CYAN)], [("[A] Algo-Trading", MAGENTA)]))
+    lines.append(menu_line([("  [U] Update HQX", YELLOW)], [("[X] Disconnect", RED)]))
+    lines.append(full_border("╚", "═", "╝"))
+    
+    make_image_fixed_width(lines, "dashboard.png")
 
 
 def gen_algo():
     """Algo trading with correct separators: ╤ ╧ ╪ │"""
-    W = 96
-    H = "═" * W
-    # Two columns: left=47, separator=1, right=48
-    L = "═" * 47
-    R = "═" * 48
+    W = 98  # Total width including borders
+    COL_W = (W - 3) // 2  # Column width (minus 2 borders and 1 separator)
+    
+    def full_border(left, right, mid=None):
+        """Create full-width border line with optional middle separator"""
+        if mid:
+            half = (W - 3) // 2
+            line = left + "═" * half + mid + "═" * (W - 3 - half) + right
+        else:
+            line = left + "═" * (W - 2) + right
+        return (line, [CYAN] * len(line))
+    
+    def center_line(text_segments):
+        """Center text within borders"""
+        text, colors = build_line(text_segments)
+        content_width = W - 2
+        text_len = len(text)
+        left_pad = (content_width - text_len) // 2
+        right_pad = content_width - text_len - left_pad
+        
+        full = "║" + " " * left_pad + text + " " * right_pad + "║"
+        full_colors = [CYAN] + [CYAN] * left_pad + colors + [CYAN] * right_pad + [CYAN]
+        return (full, full_colors)
+    
+    def two_col_line(left_segments, right_segments):
+        """Create a two-column line with │ separator"""
+        left_text, left_colors = build_line(left_segments)
+        right_text, right_colors = build_line(right_segments)
+        
+        # Pad each column
+        left_padded = left_text + " " * (COL_W - len(left_text))
+        right_padded = right_text + " " * (COL_W - len(right_text))
+        
+        full = "║" + left_padded + "│" + right_padded + "║"
+        full_colors = ([CYAN] + 
+                      left_colors + [CYAN] * (COL_W - len(left_text)) + 
+                      [CYAN] +  # separator
+                      right_colors + [CYAN] * (COL_W - len(right_text)) + 
+                      [CYAN])
+        return (full, full_colors)
+    
+    def log_line(tag, tag_color, message):
+        """Create a log line"""
+        text = "║ " + tag + " " + message
+        padding = W - len(text) - 1
+        text += " " * padding + "║"
+        
+        colors = [CYAN, CYAN]  # ║ and space
+        colors.extend([tag_color] * len(tag))
+        colors.append(WHITE)  # space after tag
+        colors.extend([WHITE] * len(message))
+        colors.extend([CYAN] * padding)
+        colors.append(CYAN)  # final ║
+        return (text, colors)
     
     lines = [
-        [("╔" + H + "╗", CYAN)],
-        [("║                                        ", CYAN), ("HQX ALGO TRADING", YELLOW), ("                                        ║", CYAN)],
-        # ╤ = top T with single down
-        [("╠" + L + "╤" + R + "╣", CYAN)],
-        [("║ ", CYAN), ("Account: ", WHITE), ("HQX *****", CYAN), ("                              ", CYAN), ("│", CYAN), (" Symbol: ", WHITE), ("ES Mar26", YELLOW), ("                               ║", CYAN)],
-        # ╪ = cross with single vertical
-        [("╠" + L + "╪" + R + "╣", CYAN)],
-        [("║ ", CYAN), ("Qty: ", WHITE), ("1", GREEN), ("                                        ", CYAN), ("│", CYAN), (" P&L: ", WHITE), ("+$125.00", GREEN), ("                                ║", CYAN)],
-        [("║ ", CYAN), ("Target: ", WHITE), ("$200.00", GREEN), ("                                ", CYAN), ("│", CYAN), (" Risk: ", WHITE), ("$100.00", RED), ("                                 ║", CYAN)],
-        [("║ ", CYAN), ("Trades: ", WHITE), ("3", WHITE), ("  W/L: ", WHITE), ("2", GREEN), ("/", WHITE), ("1", RED), ("                          ", CYAN), ("│", CYAN), (" Latency: ", WHITE), ("45ms", GREEN), ("                               ║", CYAN)],
-        # ╧ = bottom T with single up
-        [("╠" + L + "╧" + R + "╣", CYAN)],
-        [("║ ", CYAN), ("BUY  ", GREEN), (" 12:34:56  Filled +1 ES @ 5125.50                                                ", WHITE), ("║", CYAN)],
-        [("║ ", CYAN), ("SELL ", RED), (" 12:35:12  Filled -1 ES @ 5126.25                                                ", WHITE), ("║", CYAN)],
-        [("║ ", CYAN), ("WIN  ", GREEN), (" 12:35:12  Position closed +$75.00                                               ", WHITE), ("║", CYAN)],
-        [("║ ", CYAN), ("INFO ", WHITE), (" 12:35:15  Waiting for next signal...                                            ", WHITE), ("║", CYAN)],
-        [("╠" + H + "╣", CYAN)],
-        [("║                                    ", CYAN), ("Press ", WHITE), ("[X]", RED), (" to stop trading", WHITE), ("                                   ║", CYAN)],
-        [("╚" + H + "╝", CYAN)],
+        full_border("╔", "╗"),
+        center_line([("HQX ALGO TRADING", YELLOW)]),
+        full_border("╠", "╣", "╤"),
+        two_col_line([(" Account: ", WHITE), ("HQX *****", CYAN)], [(" Symbol: ", WHITE), ("ES Mar26", YELLOW)]),
+        full_border("╠", "╣", "╪"),
+        two_col_line([(" Qty: ", WHITE), ("1", GREEN)], [(" P&L: ", WHITE), ("+$125.00", GREEN)]),
+        two_col_line([(" Target: ", WHITE), ("$200.00", GREEN)], [(" Risk: ", WHITE), ("$100.00", RED)]),
+        two_col_line([(" Trades: ", WHITE), ("3", WHITE), ("  W/L: ", WHITE), ("2", GREEN), ("/", WHITE), ("1", RED)], [(" Latency: ", WHITE), ("45ms", GREEN)]),
+        full_border("╠", "╣", "╧"),
+        log_line("BUY ", GREEN, "12:34:56  Filled +1 ES @ 5125.50"),
+        log_line("SELL", RED, "12:35:12  Filled -1 ES @ 5126.25"),
+        log_line("WIN ", GREEN, "12:35:12  Position closed +$75.00"),
+        log_line("INFO", WHITE, "12:35:15  Waiting for next signal..."),
+        full_border("╠", "╣"),
+        center_line([("Press ", WHITE), ("[X]", RED), (" to stop trading", WHITE)]),
+        full_border("╚", "╝"),
     ]
-    make_image(lines, "algo-trading.png")
+    
+    make_image_fixed_width(lines, "algo-trading.png")
 
 
 def gen_copy():
     """Copy trading with correct separators"""
-    W = 96
-    H = "═" * W
-    L = "═" * 47
-    R = "═" * 48
+    W = 98
+    COL_W = (W - 3) // 2
+    
+    def full_border(left, right, mid=None):
+        if mid:
+            half = (W - 3) // 2
+            line = left + "═" * half + mid + "═" * (W - 3 - half) + right
+        else:
+            line = left + "═" * (W - 2) + right
+        return (line, [CYAN] * len(line))
+    
+    def center_line(text_segments):
+        text, colors = build_line(text_segments)
+        content_width = W - 2
+        text_len = len(text)
+        left_pad = (content_width - text_len) // 2
+        right_pad = content_width - text_len - left_pad
+        
+        full = "║" + " " * left_pad + text + " " * right_pad + "║"
+        full_colors = [CYAN] + [CYAN] * left_pad + colors + [CYAN] * right_pad + [CYAN]
+        return (full, full_colors)
+    
+    def two_col_line(left_segments, right_segments):
+        left_text, left_colors = build_line(left_segments)
+        right_text, right_colors = build_line(right_segments)
+        
+        left_padded = left_text + " " * (COL_W - len(left_text))
+        right_padded = right_text + " " * (COL_W - len(right_text))
+        
+        full = "║" + left_padded + "│" + right_padded + "║"
+        full_colors = ([CYAN] + 
+                      left_colors + [CYAN] * (COL_W - len(left_text)) + 
+                      [CYAN] +
+                      right_colors + [CYAN] * (COL_W - len(right_text)) + 
+                      [CYAN])
+        return (full, full_colors)
+    
+    def log_line(tag, tag_color, message):
+        text = "║ " + tag + " " + message
+        padding = W - len(text) - 1
+        text += " " * padding + "║"
+        
+        colors = [CYAN, CYAN]
+        colors.extend([tag_color] * len(tag))
+        colors.append(WHITE)
+        colors.extend([WHITE] * len(message))
+        colors.extend([CYAN] * padding)
+        colors.append(CYAN)
+        return (text, colors)
     
     lines = [
-        [("╔" + H + "╗", CYAN)],
-        [("║                                          ", CYAN), ("COPY TRADING", YELLOW), ("                                          ║", CYAN)],
-        [("╠" + L + "╤" + R + "╣", CYAN)],
-        [("║ ", CYAN), ("LEAD: ", WHITE), ("Apex *****", MAGENTA), ("                             ", CYAN), ("│", CYAN), (" FOLLOWER: ", WHITE), ("TopStep *****", MAGENTA), ("                       ║", CYAN)],
-        [("╠" + L + "╪" + R + "╣", CYAN)],
-        [("║ ", CYAN), ("Symbol: ", WHITE), ("NQ Mar26", YELLOW), ("                              ", CYAN), ("│", CYAN), (" Symbol: ", WHITE), ("NQ Mar26", YELLOW), ("                               ║", CYAN)],
-        [("║ ", CYAN), ("Qty: ", WHITE), ("1", GREEN), ("                                        ", CYAN), ("│", CYAN), (" Qty: ", WHITE), ("1", GREEN), ("                                         ║", CYAN)],
-        [("║ ", CYAN), ("P&L: ", WHITE), ("+$180.00", GREEN), ("                                 ", CYAN), ("│", CYAN), (" P&L: ", WHITE), ("+$175.00", GREEN), ("                                 ║", CYAN)],
-        [("╠" + L + "╪" + R + "╣", CYAN)],
-        [("║ ", CYAN), ("Target: ", WHITE), ("$400.00", GREEN), ("                                ", CYAN), ("│", CYAN), (" Risk: ", WHITE), ("$200.00", RED), ("                                  ║", CYAN)],
-        [("╠" + L + "╧" + R + "╣", CYAN)],
-        [("║ ", CYAN), ("BUY  ", GREEN), (" 12:34:56  Lead opened +1 NQ @ 18250.25                                          ", WHITE), ("║", CYAN)],
-        [("║ ", CYAN), ("BUY  ", GREEN), (" 12:34:56  Follower copied +1 NQ @ 18250.50                                      ", WHITE), ("║", CYAN)],
-        [("╠" + H + "╣", CYAN)],
-        [("║                                    ", CYAN), ("Press ", WHITE), ("[X]", RED), (" to stop trading", WHITE), ("                                   ║", CYAN)],
-        [("╚" + H + "╝", CYAN)],
+        full_border("╔", "╗"),
+        center_line([("COPY TRADING", YELLOW)]),
+        full_border("╠", "╣", "╤"),
+        two_col_line([(" LEAD: ", WHITE), ("Apex *****", MAGENTA)], [(" FOLLOWER: ", WHITE), ("TopStep *****", MAGENTA)]),
+        full_border("╠", "╣", "╪"),
+        two_col_line([(" Symbol: ", WHITE), ("NQ Mar26", YELLOW)], [(" Symbol: ", WHITE), ("NQ Mar26", YELLOW)]),
+        two_col_line([(" Qty: ", WHITE), ("1", GREEN)], [(" Qty: ", WHITE), ("1", GREEN)]),
+        two_col_line([(" P&L: ", WHITE), ("+$180.00", GREEN)], [(" P&L: ", WHITE), ("+$175.00", GREEN)]),
+        full_border("╠", "╣", "╪"),
+        two_col_line([(" Target: ", WHITE), ("$400.00", GREEN)], [(" Risk: ", WHITE), ("$200.00", RED)]),
+        full_border("╠", "╣", "╧"),
+        log_line("BUY ", GREEN, "12:34:56  Lead opened +1 NQ @ 18250.25"),
+        log_line("BUY ", GREEN, "12:34:56  Follower copied +1 NQ @ 18250.50"),
+        full_border("╠", "╣"),
+        center_line([("Press ", WHITE), ("[X]", RED), (" to stop trading", WHITE)]),
+        full_border("╚", "╝"),
     ]
-    make_image(lines, "copy-trading.png")
+    
+    make_image_fixed_width(lines, "copy-trading.png")
 
 
 if __name__ == '__main__':
@@ -186,4 +341,4 @@ if __name__ == '__main__':
     gen_dashboard()
     gen_algo()
     gen_copy()
-    print("\n✓ All images regenerated with correct box characters!")
+    print("\n✓ All images regenerated with perfect alignment!")
