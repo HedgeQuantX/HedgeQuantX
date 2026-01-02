@@ -313,7 +313,8 @@ const launchAlgo = async (service, account, contract, config) => {
   // Connect to market data
   try {
     const token = service.token || service.getToken?.();
-    await marketFeed.connect(token, account.propfirm, contractId);
+    const propfirmKey = (account.propfirm || 'topstep').toLowerCase().replace(/\s+/g, '_');
+    await marketFeed.connect(token, propfirmKey, contractId);
     await marketFeed.subscribe(symbolName, contractId);
   } catch (e) {
     ui.addLog('error', `Failed to connect: ${e.message}`);
