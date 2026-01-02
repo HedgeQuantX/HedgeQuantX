@@ -291,13 +291,18 @@ const showStats = async (service) => {
     draw2ColSeparator(boxWidth);
     draw2ColHeader('P&L METRICS', 'RISK METRICS', boxWidth);
     
-    const pfColor = parseFloat(profitFactor) >= 1.5 ? chalk.green(profitFactor) : parseFloat(profitFactor) >= 1 ? chalk.yellow(profitFactor) : chalk.red(profitFactor);
+    // Profit Factor coloring - ∞ is best (green)
+    const pfNum = profitFactor === '∞' ? Infinity : parseFloat(profitFactor);
+    const pfColor = pfNum === Infinity ? chalk.green(profitFactor) : pfNum >= 1.5 ? chalk.green(profitFactor) : pfNum >= 1 ? chalk.yellow(profitFactor) : chalk.red(profitFactor);
     
-    console.log(chalk.cyan('\u2551') + fmtRow('Net P&L:', netPnL >= 0 ? chalk.green('$' + netPnL.toFixed(2)) : chalk.red('$' + netPnL.toFixed(2)), col1) + chalk.cyan('\u2502') + fmtRow('Profit Factor:', pfColor, col2) + chalk.cyan('\u2551'));
+    // Worst trade display - show as negative if it's a loss
+    const worstTradeStr = stats.worstTrade < 0 ? '-$' + Math.abs(stats.worstTrade).toFixed(2) : '$' + stats.worstTrade.toFixed(2);
+    
+    console.log(chalk.cyan('\u2551') + fmtRow('Net P&L:', netPnL >= 0 ? chalk.green('$' + netPnL.toFixed(2)) : chalk.red('-$' + Math.abs(netPnL).toFixed(2)), col1) + chalk.cyan('\u2502') + fmtRow('Profit Factor:', pfColor, col2) + chalk.cyan('\u2551'));
     console.log(chalk.cyan('\u2551') + fmtRow('Gross Profit:', chalk.green('$' + stats.totalWinAmount.toFixed(2)), col1) + chalk.cyan('\u2502') + fmtRow('Max Consec. Wins:', chalk.green(String(stats.maxConsecutiveWins)), col2) + chalk.cyan('\u2551'));
-    console.log(chalk.cyan('\u2551') + fmtRow('Gross Loss:', chalk.red('-$' + stats.totalLossAmount.toFixed(2)), col1) + chalk.cyan('\u2502') + fmtRow('Max Consec. Loss:', chalk.red(String(stats.maxConsecutiveLosses)), col2) + chalk.cyan('\u2551'));
+    console.log(chalk.cyan('\u2551') + fmtRow('Gross Loss:', chalk.red('-$' + stats.totalLossAmount.toFixed(2)), col1) + chalk.cyan('\u2502') + fmtRow('Max Consec. Loss:', stats.maxConsecutiveLosses > 0 ? chalk.red(String(stats.maxConsecutiveLosses)) : chalk.green('0'), col2) + chalk.cyan('\u2551'));
     console.log(chalk.cyan('\u2551') + fmtRow('Avg Win:', chalk.green('$' + avgWin), col1) + chalk.cyan('\u2502') + fmtRow('Best Trade:', chalk.green('$' + stats.bestTrade.toFixed(2)), col2) + chalk.cyan('\u2551'));
-    console.log(chalk.cyan('\u2551') + fmtRow('Avg Loss:', chalk.red('-$' + avgLoss), col1) + chalk.cyan('\u2502') + fmtRow('Worst Trade:', chalk.red('$' + stats.worstTrade.toFixed(2)), col2) + chalk.cyan('\u2551'));
+    console.log(chalk.cyan('\u2551') + fmtRow('Avg Loss:', stats.losingTrades > 0 ? chalk.red('-$' + avgLoss) : chalk.green('$0.00'), col1) + chalk.cyan('\u2502') + fmtRow('Worst Trade:', stats.worstTrade < 0 ? chalk.red(worstTradeStr) : chalk.green(worstTradeStr), col2) + chalk.cyan('\u2551'));
     
     // Quantitative Metrics
     draw2ColSeparator(boxWidth);
@@ -358,78 +363,63 @@ const showStats = async (service) => {
     
     drawBoxFooter(boxWidth);
     
-    // Trades History
+    // Trades History - Simplified table
     console.log();
     drawBoxHeader('TRADES HISTORY', boxWidth);
     
     const innerWidth = boxWidth - 2;
     
+    // Helper to extract symbol from contractId (e.g., "CON.F.US.EP.H25" -> "ES H25")
+    const extractSymbol = (contractId) => {
+      if (!contractId) return 'N/A';
+      // Format: CON.F.US.{SYMBOL}.{MONTH} -> extract symbol and month
+      const parts = contractId.split('.');
+      if (parts.length >= 5) {
+        const sym = parts[3]; // EP, ENQ, etc.
+        const month = parts[4]; // H25, M25, etc.
+        // Map common symbols
+        const symbolMap = { 'EP': 'ES', 'ENQ': 'NQ', 'MES': 'MES', 'MNQ': 'MNQ', 'YM': 'YM', 'NKD': 'NKD', 'RTY': 'RTY' };
+        return (symbolMap[sym] || sym) + ' ' + month;
+      }
+      return contractId.substring(0, 10);
+    };
+    
     if (allTrades.length > 0) {
-      const colTime = 12;
-      const colSymbol = 10;
-      const colEntry = 10;
-      const colExit = 10;
-      const colEntryP = 10;
-      const colExitP = 10;
-      const colPnL = 10;
-      const colDir = 6;
-      const colID = innerWidth - colTime - colSymbol - colEntry - colExit - colEntryP - colExitP - colPnL - colDir - 9;
-      
-      const header = 
-        chalk.white(' Time'.padEnd(colTime)) + chalk.gray('|') +
-        chalk.white('Symbol'.padEnd(colSymbol)) + chalk.gray('|') +
-        chalk.white('Entry'.padEnd(colEntry)) + chalk.gray('|') +
-        chalk.white('Exit'.padEnd(colExit)) + chalk.gray('|') +
-        chalk.white('Entry $'.padEnd(colEntryP)) + chalk.gray('|') +
-        chalk.white('Exit $'.padEnd(colExitP)) + chalk.gray('|') +
-        chalk.white('P&L'.padEnd(colPnL)) + chalk.gray('|') +
-        chalk.white('Dir'.padEnd(colDir)) + chalk.gray('|') +
-        chalk.white('ID'.padEnd(colID));
-      
-      console.log(chalk.cyan('\u2551') + header + chalk.cyan('\u2551'));
+      // Simple format: Time | Symbol | Price | P&L | Side
+      const header = ' Time      | Symbol    | Price      | P&L        | Side  ';
+      console.log(chalk.cyan('\u2551') + chalk.white(header.padEnd(innerWidth)) + chalk.cyan('\u2551'));
       console.log(chalk.cyan('\u2551') + chalk.gray('\u2500'.repeat(innerWidth)) + chalk.cyan('\u2551'));
       
       const recentTrades = allTrades.slice(-10).reverse();
       
       for (const trade of recentTrades) {
-        // Use API fields directly: creationTimestamp, contractId, price, profitAndLoss, side
-        const timestamp = trade.creationTimestamp || trade.timestamp || trade.exitTime;
-        const time = timestamp ? new Date(timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--';
-        const symbol = (trade.contractId || trade.contractName || trade.symbol || 'N/A').substring(0, colSymbol - 1);
-        const entryTime = trade.entryTime ? new Date(trade.entryTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : time;
-        const exitTime = trade.exitTime ? new Date(trade.exitTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : time;
-        const price = trade.price || trade.entryPrice || trade.exitPrice || 0;
-        const entryPrice = trade.entryPrice ? trade.entryPrice.toFixed(2) : (price ? price.toFixed(2) : 'N/A');
-        const exitPrice = trade.exitPrice ? trade.exitPrice.toFixed(2) : (price ? price.toFixed(2) : 'N/A');
+        const timestamp = trade.creationTimestamp || trade.timestamp;
+        const time = timestamp ? new Date(timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
+        const symbol = extractSymbol(trade.contractId || trade.symbol);
+        const price = (trade.price || 0).toFixed(2);
         const pnl = trade.profitAndLoss || trade.pnl || 0;
-        const pnlStr = pnl >= 0 ? chalk.green('+$' + pnl.toFixed(0)) : chalk.red('-$' + Math.abs(pnl).toFixed(0));
-        const direction = trade.side === 0 ? chalk.green('LONG') : trade.side === 1 ? chalk.red('SHORT') : chalk.gray('N/A');
-        const tradeId = String(trade.id || trade.tradeId || 'N/A').substring(0, colID - 1);
+        const pnlText = pnl >= 0 ? `+$${pnl.toFixed(0)}` : `-$${Math.abs(pnl).toFixed(0)}`;
+        const pnlColored = pnl >= 0 ? chalk.green(pnlText.padEnd(10)) : chalk.red(pnlText.padEnd(10));
+        const side = trade.side === 0 ? 'BUY' : trade.side === 1 ? 'SELL' : 'N/A';
+        const sideColored = trade.side === 0 ? chalk.green(side.padEnd(6)) : chalk.red(side.padEnd(6));
         
-        const row = 
-          (' ' + time).padEnd(colTime) + chalk.gray('|') +
-          symbol.padEnd(colSymbol) + chalk.gray('|') +
-          entryTime.padEnd(colEntry) + chalk.gray('|') +
-          exitTime.padEnd(colExit) + chalk.gray('|') +
-          entryPrice.padEnd(colEntryP) + chalk.gray('|') +
-          exitPrice.padEnd(colExitP) + chalk.gray('|') +
-          pnlStr.padEnd(colPnL + 10) + chalk.gray('|') +
-          direction.padEnd(colDir + 10) + chalk.gray('|') +
-          tradeId.padEnd(colID);
+        const row = ` ${time.padEnd(9)} | ${symbol.padEnd(9)} | ${price.padEnd(10)} | ${pnlText.padEnd(10)} | ${side.padEnd(6)}`;
+        const coloredRow = ` ${time.padEnd(9)} | ${symbol.padEnd(9)} | ${price.padEnd(10)} | ${pnlColored} | ${sideColored}`;
         
-        const visLen = row.replace(/\x1b\[[0-9;]*m/g, '').length;
-        const padding = innerWidth - visLen;
+        // Calculate visible length without ANSI codes
+        const visLen = row.length;
+        const padding = Math.max(0, innerWidth - visLen);
         
-        console.log(chalk.cyan('\u2551') + row + ' '.repeat(Math.max(0, padding)) + chalk.cyan('\u2551'));
+        console.log(chalk.cyan('\u2551') + coloredRow + ' '.repeat(padding) + chalk.cyan('\u2551'));
       }
       
       if (allTrades.length > 10) {
         const moreMsg = `  ... and ${allTrades.length - 10} more trades`;
-        console.log(chalk.cyan('\u2551') + chalk.gray(moreMsg) + ' '.repeat(innerWidth - moreMsg.length) + chalk.cyan('\u2551'));
+        console.log(chalk.cyan('\u2551') + chalk.gray(moreMsg.padEnd(innerWidth)) + chalk.cyan('\u2551'));
       }
     } else {
       const msg = '  No trade history available';
-      console.log(chalk.cyan('\u2551') + chalk.gray(msg) + ' '.repeat(innerWidth - msg.length) + chalk.cyan('\u2551'));
+      console.log(chalk.cyan('\u2551') + chalk.gray(msg.padEnd(innerWidth)) + chalk.cyan('\u2551'));
     }
     
     drawBoxFooter(boxWidth);
