@@ -47,12 +47,18 @@ const oneAccountMenu = async (service) => {
   
   spinner.succeed(`Found ${activeAccounts.length} active account(s)`);
   
-  // Select account
-  // Display name priority: accountName (ProjectX) > rithmicAccountId (Rithmic) > name > accountId
-  const options = activeAccounts.map(acc => ({
-    label: `${acc.accountName || acc.rithmicAccountId || acc.name || acc.accountId} (${acc.propfirm || 'Unknown'})${acc.balance !== null ? ` - $${acc.balance.toLocaleString()}` : ''}`,
-    value: acc
-  }));
+  // Select account - display RAW API fields
+  const options = activeAccounts.map(acc => {
+    // Use what API returns: accountName for ProjectX, rithmicAccountId for Rithmic
+    const name = acc.accountName || acc.rithmicAccountId || acc.accountId;
+    const balance = acc.balance !== null && acc.balance !== undefined 
+      ? ` - $${acc.balance.toLocaleString()}` 
+      : '';
+    return {
+      label: `${name} (${acc.propfirm || acc.platform || 'Unknown'})${balance}`,
+      value: acc
+    };
+  });
   options.push({ label: '< Back', value: 'back' });
   
   const selectedAccount = await prompts.selectOption('Select Account:', options);
@@ -73,7 +79,7 @@ const oneAccountMenu = async (service) => {
 };
 
 /**
- * Symbol selection - grouped by category with indices first
+ * Symbol selection - RAW API data only
  */
 const selectSymbol = async (service, account) => {
   const spinner = ora({ text: 'Loading symbols...', color: 'yellow' }).start();
@@ -84,34 +90,15 @@ const selectSymbol = async (service, account) => {
     return null;
   }
   
-  // Contracts are already sorted by category from getContracts()
   const contracts = contractsResult.contracts;
-  
   spinner.succeed(`Found ${contracts.length} contracts`);
   
-  // Build options from RAW API response - no static data
-  const options = [];
-  let currentGroup = null;
+  // Display EXACTLY what API returns - no modifications
+  const options = contracts.map(c => ({
+    label: `${c.name} - ${c.description}`,
+    value: c
+  }));
   
-  for (const c of contracts) {
-    // Category header from API field contractGroup
-    if (c.contractGroup !== currentGroup) {
-      currentGroup = c.contractGroup;
-      if (currentGroup) {
-        options.push({ 
-          label: chalk.cyan.bold(`── ${currentGroup} ──`), 
-          value: null, 
-          disabled: true 
-        });
-      }
-    }
-    
-    // Display using RAW API fields only
-    const label = `  ${c.name} - ${c.description} (${c.exchange})`;
-    options.push({ label, value: c });
-  }
-  
-  options.push({ label: '', value: null, disabled: true }); // Spacer
   options.push({ label: chalk.gray('< Back'), value: 'back' });
   
   const contract = await prompts.selectOption(chalk.yellow('Select Symbol:'), options);
