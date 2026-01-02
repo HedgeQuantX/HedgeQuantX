@@ -1,5 +1,5 @@
 /**
- * One Account Mode
+ * One Account Mode - HQX Ultra Scalping
  */
 
 const chalk = require('chalk');
@@ -10,6 +10,10 @@ const { connections } = require('../../services');
 const { AlgoUI, renderSessionSummary } = require('./ui');
 const { prompts } = require('../../utils');
 const { checkMarketHours } = require('../../services/projectx/market');
+
+// Strategy & Market Data (compiled bytecode)
+const { M1 } = require('../../lib/m/s1');
+const { MarketDataFeed } = require('../../lib/data');
 
 
 
@@ -155,8 +159,8 @@ const configureAlgo = async (account, contract) => {
 };
 
 /**
- * Launch algo trading
- * 100% API data - no simulation, no mock data, no local calculations
+ * Launch algo trading - HQX Ultra Scalping Strategy
+ * Real-time market data + Strategy signals + Auto order execution
  */
 const launchAlgo = async (service, account, contract, config) => {
   const { contracts, dailyTarget, maxRisk, showName } = config;
@@ -166,9 +170,11 @@ const launchAlgo = async (service, account, contract, config) => {
     ? (account.accountName || account.rithmicAccountId || account.accountId) 
     : 'HQX *****';
   const symbolName = contract.name;
+  const contractId = contract.id;
   const connectionType = account.platform || 'ProjectX';
+  const tickSize = contract.tickSize || 0.25;
   
-  const ui = new AlgoUI({ subtitle: 'HQX Algo Trading', mode: 'one-account' });
+  const ui = new AlgoUI({ subtitle: 'HQX Ultra Scalping', mode: 'one-account' });
   
   const stats = {
     accountName,
@@ -183,118 +189,195 @@ const launchAlgo = async (service, account, contract, config) => {
     wins: 0,
     losses: 0,
     latency: 0,
-    connected: true,
+    connected: false,
     startTime: Date.now()
   };
   
   let running = true;
   let stopReason = null;
-  let startingPnL = null; // P&L at algo start (from API)
-  let lastPositionPnL = 0;
-  let pollCount = 0;
+  let startingPnL = null;
+  let currentPosition = 0; // Current position qty (+ long, - short)
+  let pendingOrder = false; // Prevent duplicate orders
+  let tickCount = 0;
   
-  // Log startup info from API
+  // Initialize Strategy
+  const strategy = new M1({ tickSize });
+  strategy.initialize(contractId, tickSize);
+  
+  // Initialize Market Data Feed
+  const marketFeed = new MarketDataFeed({ propfirm: account.propfirm });
+  
+  // Log startup
   ui.addLog('info', `Connection: ${connectionType}`);
   ui.addLog('info', `Account: ${accountName}`);
   ui.addLog('info', `Symbol: ${symbolName} | Qty: ${contracts}`);
   ui.addLog('info', `Target: $${dailyTarget} | Max Risk: $${maxRisk}`);
-  ui.addLog('info', 'Monitoring positions from API...');
+  ui.addLog('info', 'Connecting to market data...');
   
-  // Poll data from API - 100% real data, measure latency during poll
-  const pollAPI = async () => {
-    const pollStart = Date.now();
+  // Handle strategy signals
+  strategy.on('signal', async (signal) => {
+    if (!running || pendingOrder || currentPosition !== 0) return;
+    
+    const { side, direction, entry, stopLoss, takeProfit, confidence } = signal;
+    
+    ui.addLog('signal', `${direction.toUpperCase()} signal @ ${entry.toFixed(2)} (${(confidence * 100).toFixed(0)}%)`);
+    
+    // Place order via API
+    pendingOrder = true;
     try {
-      pollCount++;
+      const orderSide = direction === 'long' ? 0 : 1; // 0=Buy, 1=Sell
+      const orderResult = await service.placeOrder({
+        accountId: account.accountId,
+        contractId: contractId,
+        type: 2, // Market order
+        side: orderSide,
+        size: contracts
+      });
       
-      // Get account P&L from API
+      if (orderResult.success) {
+        currentPosition = direction === 'long' ? contracts : -contracts;
+        stats.trades++;
+        ui.addLog('trade', `OPENED ${direction.toUpperCase()} ${contracts}x @ market`);
+        
+        // Place bracket orders (SL/TP)
+        if (stopLoss && takeProfit) {
+          // Stop Loss
+          await service.placeOrder({
+            accountId: account.accountId,
+            contractId: contractId,
+            type: 4, // Stop order
+            side: direction === 'long' ? 1 : 0, // Opposite side
+            size: contracts,
+            stopPrice: stopLoss
+          });
+          
+          // Take Profit
+          await service.placeOrder({
+            accountId: account.accountId,
+            contractId: contractId,
+            type: 1, // Limit order
+            side: direction === 'long' ? 1 : 0,
+            size: contracts,
+            limitPrice: takeProfit
+          });
+          
+          ui.addLog('info', `SL: ${stopLoss.toFixed(2)} | TP: ${takeProfit.toFixed(2)}`);
+        }
+      } else {
+        ui.addLog('error', `Order failed: ${orderResult.error}`);
+      }
+    } catch (e) {
+      ui.addLog('error', `Order error: ${e.message}`);
+    }
+    pendingOrder = false;
+  });
+  
+  // Handle market data ticks
+  marketFeed.on('tick', (tick) => {
+    tickCount++;
+    const latencyStart = Date.now();
+    
+    // Feed tick to strategy
+    strategy.processTick({
+      contractId: tick.contractId || contractId,
+      price: tick.price,
+      bid: tick.bid,
+      ask: tick.ask,
+      volume: tick.volume || 1,
+      side: tick.lastTradeSide || 'unknown',
+      timestamp: tick.timestamp || Date.now()
+    });
+    
+    stats.latency = Date.now() - latencyStart;
+    
+    // Log every 100th tick to show activity
+    if (tickCount % 100 === 0) {
+      ui.addLog('info', `Tick #${tickCount} @ ${tick.price?.toFixed(2) || 'N/A'}`);
+    }
+  });
+  
+  marketFeed.on('connected', () => {
+    stats.connected = true;
+    ui.addLog('success', 'Market data connected!');
+  });
+  
+  marketFeed.on('error', (err) => {
+    ui.addLog('error', `Market: ${err.message}`);
+  });
+  
+  marketFeed.on('disconnected', () => {
+    stats.connected = false;
+    ui.addLog('error', 'Market data disconnected');
+  });
+  
+  // Connect to market data
+  try {
+    const token = service.token || service.getToken?.();
+    await marketFeed.connect(token, account.propfirm, contractId);
+    await marketFeed.subscribe(symbolName, contractId);
+  } catch (e) {
+    ui.addLog('error', `Failed to connect: ${e.message}`);
+  }
+  
+  // Poll account P&L from API
+  const pollPnL = async () => {
+    try {
       const accountResult = await service.getTradingAccounts();
       if (accountResult.success && accountResult.accounts) {
         const acc = accountResult.accounts.find(a => a.accountId === account.accountId);
         if (acc && acc.profitAndLoss !== undefined) {
-          const accountPnL = acc.profitAndLoss;
+          if (startingPnL === null) startingPnL = acc.profitAndLoss;
+          stats.pnl = acc.profitAndLoss - startingPnL;
           
-          // Set starting P&L on first poll (silent - don't expose account P&L)
-          if (startingPnL === null) {
-            startingPnL = accountPnL;
+          // Record trade result in strategy
+          if (stats.pnl !== 0) {
+            strategy.recordTradeResult(stats.pnl);
           }
-          
-          // Session P&L = current - starting (both from API)
-          const sessionPnL = accountPnL - startingPnL;
-          stats.pnl = sessionPnL;
         }
       }
       
-      // Get positions from API
+      // Check positions
       const posResult = await service.getPositions(account.accountId);
-      
       if (posResult.success && posResult.positions) {
-        // Find position for selected contract
-        const position = posResult.positions.find(p => {
-          const posSymbol = p.contractId || p.symbol || '';
-          return posSymbol.includes(contract.name) || posSymbol.includes(contract.id);
+        const pos = posResult.positions.find(p => {
+          const sym = p.contractId || p.symbol || '';
+          return sym.includes(contract.name) || sym.includes(contractId);
         });
         
-        if (position) {
-          const positionPnL = position.profitAndLoss || 0;
+        if (pos && pos.quantity !== 0) {
+          currentPosition = pos.quantity;
+          const side = pos.quantity > 0 ? 'LONG' : 'SHORT';
+          const pnl = pos.profitAndLoss || 0;
           
-          // Detect trade completion (position P&L changed significantly)
-          if (lastPositionPnL !== 0 && Math.abs(positionPnL - lastPositionPnL) > 0.01) {
-            const tradePnL = positionPnL - lastPositionPnL;
-            stats.trades++;
-            
-            if (tradePnL > 0) {
-              stats.wins++;
-              ui.addLog('trade', `+$${tradePnL.toFixed(2)}`);
-            } else {
-              stats.losses++;
-              ui.addLog('loss', `-$${Math.abs(tradePnL).toFixed(2)}`);
-            }
-          }
-          
-          lastPositionPnL = positionPnL;
-          
-          // Log position info from API
-          if (position.quantity && position.quantity !== 0) {
-            const side = position.quantity > 0 ? 'LONG' : 'SHORT';
-            const qty = Math.abs(position.quantity);
-            ui.addLog('info', `${side} ${qty}x @ P&L: $${positionPnL.toFixed(2)}`);
-          }
+          // Check if position closed (win/loss)
+          if (pnl > 0) stats.wins = Math.max(stats.wins, 1);
+          else if (pnl < 0) stats.losses = Math.max(stats.losses, 1);
         } else {
-          // No position for this symbol - log status every 15 polls (~30 sec)
-          if (pollCount % 15 === 0) {
-            ui.addLog('info', `Waiting for ${symbolName} position... (Session P&L: $${stats.pnl.toFixed(2)})`);
-          }
-          lastPositionPnL = 0;
+          currentPosition = 0;
         }
       }
       
-      // Check target/risk limits (using SESSION P&L, not account total)
+      // Check target/risk
       if (stats.pnl >= dailyTarget) {
         stopReason = 'target';
         running = false;
-        ui.addLog('success', `SESSION TARGET! +$${stats.pnl.toFixed(2)}`);
+        ui.addLog('success', `TARGET REACHED! +$${stats.pnl.toFixed(2)}`);
       } else if (stats.pnl <= -maxRisk) {
         stopReason = 'risk';
         running = false;
-        ui.addLog('error', `SESSION MAX RISK! -$${Math.abs(stats.pnl).toFixed(2)}`);
+        ui.addLog('error', `MAX RISK! -$${Math.abs(stats.pnl).toFixed(2)}`);
       }
-      
-      // Update latency (measured during this poll)
-      stats.latency = Date.now() - pollStart;
-      
     } catch (e) {
-      stats.latency = Date.now() - pollStart;
-      ui.addLog('error', `API: ${e.message}`);
+      // Silently handle polling errors
     }
   };
   
+  // Start polling and UI refresh
   const refreshInterval = setInterval(() => { if (running) ui.render(stats); }, 250);
+  const pnlInterval = setInterval(() => { if (running) pollPnL(); }, 2000);
+  pollPnL(); // Initial poll
   
-  // Poll data from API every 2 seconds
-  pollAPI(); // Initial poll
-  const apiInterval = setInterval(() => { if (running) pollAPI(); }, 2000);
-  
-  // Keyboard
+  // Keyboard handler
   const setupKeyHandler = () => {
     if (!process.stdin.isTTY) return;
     readline.emitKeypressEvents(process.stdin);
@@ -303,7 +386,8 @@ const launchAlgo = async (service, account, contract, config) => {
     
     const onKey = (str, key) => {
       if (key && (key.name === 'x' || key.name === 'X' || (key.ctrl && key.name === 'c'))) {
-        running = false; stopReason = 'manual';
+        running = false;
+        stopReason = 'manual';
       }
     };
     process.stdin.on('keypress', onKey);
@@ -315,22 +399,29 @@ const launchAlgo = async (service, account, contract, config) => {
   
   const cleanupKeys = setupKeyHandler();
   
+  // Wait for stop
   await new Promise(resolve => {
-    const check = setInterval(() => { if (!running) { clearInterval(check); resolve(); } }, 100);
+    const check = setInterval(() => {
+      if (!running) {
+        clearInterval(check);
+        resolve();
+      }
+    }, 100);
   });
   
+  // Cleanup
   clearInterval(refreshInterval);
-  clearInterval(apiInterval);
+  clearInterval(pnlInterval);
+  await marketFeed.disconnect();
   if (cleanupKeys) cleanupKeys();
   ui.cleanup();
   
-  // Ensure stdin is ready for prompts after algo cleanup
   if (process.stdin.isTTY) {
     process.stdin.setRawMode(false);
   }
   process.stdin.resume();
   
-  // Calculate duration
+  // Duration
   const durationMs = Date.now() - stats.startTime;
   const hours = Math.floor(durationMs / 3600000);
   const minutes = Math.floor((durationMs % 3600000) / 60000);
@@ -344,7 +435,6 @@ const launchAlgo = async (service, account, contract, config) => {
   // Summary
   renderSessionSummary(stats, stopReason);
   
-  // Wait 3 seconds then return to menu (avoid stdin issues after raw mode)
   console.log('\n  Returning to menu in 3 seconds...');
   await new Promise(resolve => setTimeout(resolve, 3000));
 };
