@@ -189,11 +189,19 @@ class AlgoUI {
     
     this._line(chalk.cyan(GM));
     
-    // Row 4: Trades | Propfirm
+    // Row 4: Trades | Latency (API response time)
     const r4c1t = ` Trades: ${chalk.cyan(stats.trades || 0)}  W/L: ${chalk.green(stats.wins || 0)}/${chalk.red(stats.losses || 0)}`;
     const r4c1p = ` Trades: ${stats.trades || 0}  W/L: ${stats.wins || 0}/${stats.losses || 0}`;
-    const r4c2 = buildCell('Propfirm', stats.propfirm || 'N/A', chalk.cyan, colR);
+    const r4c2 = buildCell('Latency', `${stats.latency || 0}ms`, latencyColor, colR);
     row(r4c1t + pad(colL - r4c1p.length), r4c2.padded);
+    
+    this._line(chalk.cyan(GM));
+    
+    // Row 5: Platform | Propfirm
+    const platform = stats.platform || 'ProjectX';
+    const r5c1 = buildCell('Platform', platform, chalk.white, colL);
+    const r5c2 = buildCell('Propfirm', stats.propfirm || 'N/A', chalk.cyan, colR);
+    row(r5c1.padded, r5c2.padded);
     
     this._line(chalk.cyan(GB));
   }

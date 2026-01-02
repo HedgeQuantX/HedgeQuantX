@@ -7,7 +7,6 @@ const ora = require('ora');
 const readline = require('readline');
 
 const { connections } = require('../../services');
-const { HQXServerService } = require('../../services/hqx-server');
 const { AlgoUI, renderSessionSummary } = require('./ui');
 const { prompts } = require('../../utils');
 const { checkMarketHours } = require('../../services/projectx/market');
@@ -148,74 +147,85 @@ const launchAlgo = async (service, account, contract, config) => {
     accountName, symbol: symbolName, contracts,
     target: dailyTarget, risk: maxRisk,
     propfirm: account.propfirm || 'Unknown',
+    platform: account.platform || 'ProjectX',
     pnl: 0, trades: 0, wins: 0, losses: 0,
     latency: 0, connected: false,
     startTime: Date.now()  // Track start time for duration
   };
   
+  // Measure API latency (CLI <-> API)
+  const measureLatency = async () => {
+    try {
+      const start = Date.now();
+      await service.getPositions(account.accountId);
+      stats.latency = Date.now() - start;
+    } catch (e) {
+      stats.latency = 0;
+    }
+  };
+  
   let running = true;
   let stopReason = null;
   
-  const hqx = new HQXServerService();
-  const spinner = ora({ text: 'Connecting to HQX Server...', color: 'yellow' }).start();
+  // Local algo - no external server needed
+  ui.addLog('info', `Starting algo on ${stats.platform}...`);
+  ui.addLog('info', `Symbol: ${symbolName} | Qty: ${contracts}`);
+  ui.addLog('info', `Target: $${dailyTarget} | Risk: $${maxRisk}`);
+  stats.connected = true;
   
-  try {
-    const auth = await hqx.authenticate(account.accountId.toString(), account.propfirm || 'topstep');
-    if (!auth.success) throw new Error(auth.error || 'Auth failed');
-    
-    spinner.text = 'Connecting WebSocket...';
-    const conn = await hqx.connect();
-    if (!conn.success) throw new Error('WebSocket failed');
-    
-    spinner.succeed('Connected to HQX Server');
-    stats.connected = true;
-  } catch (err) {
-    spinner.warn('HQX Server unavailable - offline mode');
-  }
-  
-  // Event handlers
-  hqx.on('latency', (d) => { stats.latency = d.latency || 0; });
-  hqx.on('log', (d) => {
-    let msg = d.message;
-    if (!showName && account.accountName) msg = msg.replace(new RegExp(account.accountName, 'gi'), 'HQX *****');
-    ui.addLog(d.type || 'info', msg);
-  });
-  
-  // REAL P&L direct from Rithmic - no calculation
-  hqx.on('stats', (d) => {
-    if (d.realTimePnL) {
-      stats.pnl = d.realTimePnL.totalPnL;
+  // Poll P&L from API every 2 seconds
+  const pollPnL = async () => {
+    try {
+      // Get positions to check P&L
+      const posResult = await service.getPositions(account.accountId);
+      if (posResult.success && posResult.positions) {
+        // Find position for our symbol
+        const pos = posResult.positions.find(p => 
+          (p.contractId || p.symbol || '').includes(contract.name || contract.symbol)
+        );
+        if (pos && pos.profitAndLoss !== undefined) {
+          const prevPnL = stats.pnl;
+          stats.pnl = pos.profitAndLoss;
+          
+          // Detect trade completion
+          if (Math.abs(stats.pnl - prevPnL) > 0.01 && prevPnL !== 0) {
+            const tradePnL = stats.pnl - prevPnL;
+            stats.trades++;
+            if (tradePnL >= 0) {
+              stats.wins++;
+              ui.addLog('trade', `Trade closed: +$${tradePnL.toFixed(2)}`);
+            } else {
+              stats.losses++;
+              ui.addLog('loss', `Trade closed: -$${Math.abs(tradePnL).toFixed(2)}`);
+            }
+          }
+        }
+      }
+      
+      // Check target/risk limits
+      if (stats.pnl >= dailyTarget) {
+        stopReason = 'target';
+        running = false;
+        ui.addLog('success', `TARGET REACHED! +$${stats.pnl.toFixed(2)}`);
+      } else if (stats.pnl <= -maxRisk) {
+        stopReason = 'risk';
+        running = false;
+        ui.addLog('error', `MAX RISK HIT! -$${Math.abs(stats.pnl).toFixed(2)}`);
+      }
+    } catch (e) {
+      // Silent fail - will retry
     }
-    stats.trades = d.trades;
-    stats.wins = d.wins;
-    stats.losses = d.losses;
-  });
-  
-  hqx.on('error', (d) => { ui.addLog('error', d.message || 'Error'); });
-  hqx.on('disconnected', () => { stats.connected = false; ui.addLog('warning', 'Disconnected'); });
-  
-  // Start on server
-  if (stats.connected) {
-    ui.addLog('info', 'Starting algo...');
-    
-    // Get Rithmic credentials from the account's service
-    let rithmicCreds = null;
-    if (service && service.getRithmicCredentials) {
-      rithmicCreds = service.getRithmicCredentials();
-    }
-    
-    hqx.startAlgo({
-      accountId: account.accountId,
-      contractId: contract.id || contract.contractId,
-      symbol: contract.symbol || contract.name,
-      contracts, dailyTarget, maxRisk,
-      propfirm: account.propfirm || 'topstep',
-      propfirmToken: service.getToken?.() || null,
-      rithmicCredentials: rithmicCreds
-    });
-  }
+  };
   
   const refreshInterval = setInterval(() => { if (running) ui.render(stats); }, 250);
+  
+  // Measure API latency every 5 seconds
+  measureLatency(); // Initial measurement
+  const latencyInterval = setInterval(() => { if (running) measureLatency(); }, 5000);
+  
+  // Poll P&L from API every 2 seconds
+  pollPnL(); // Initial poll
+  const pnlInterval = setInterval(() => { if (running) pollPnL(); }, 2000);
   
   // Keyboard
   const setupKeyHandler = () => {
@@ -243,8 +253,9 @@ const launchAlgo = async (service, account, contract, config) => {
   });
   
   clearInterval(refreshInterval);
+  clearInterval(latencyInterval);
+  clearInterval(pnlInterval);
   if (cleanupKeys) cleanupKeys();
-  if (stats.connected) { hqx.stopAlgo(); hqx.disconnect(); }
   ui.cleanup();
   
   // Calculate duration

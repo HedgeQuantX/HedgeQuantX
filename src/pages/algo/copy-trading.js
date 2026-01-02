@@ -8,7 +8,6 @@ const ora = require('ora');
 const readline = require('readline');
 
 const { connections } = require('../../services');
-const { HQXServerService } = require('../../services/hqx-server');
 const { AlgoUI, renderSessionSummary } = require('./ui');
 const { logger, prompts } = require('../../utils');
 const { checkMarketHours } = require('../../services/projectx/market');
@@ -283,48 +282,100 @@ const launchCopyTrading = async (config) => {
     losses: 0,
     latency: 0,
     connected: false,
+    platform: lead.account.platform || 'ProjectX',
   };
 
   let running = true;
   let stopReason = null;
+  
+  // Measure API latency (CLI <-> API)
+  const measureLatency = async () => {
+    try {
+      const start = Date.now();
+      await lead.service.getPositions(lead.account.accountId);
+      stats.latency = Date.now() - start;
+    } catch (e) {
+      stats.latency = 0;
+    }
+  };
 
-  // Connect to HQX Server
-  const hqx = new HQXServerService();
-  const spinner = ora({ text: 'Connecting to HQX Server...', color: 'yellow' }).start();
-
-  try {
-    const auth = await hqx.authenticate(
-      lead.account.accountId.toString(),
-      lead.propfirm || 'topstep'
-    );
-    if (!auth.success) throw new Error(auth.error);
-
-    const conn = await hqx.connect();
-    if (!conn.success) throw new Error('WebSocket failed');
-
-    spinner.succeed('Connected');
-    stats.connected = true;
-  } catch (err) {
-    spinner.warn('HQX Server unavailable');
-    log.warn('HQX connection failed', { error: err.message });
-  }
-
-  // Event handlers
-  setupEventHandlers(hqx, ui, stats, lead, follower, showNames, () => {
-    running = false;
-  }, (reason) => {
-    stopReason = reason;
-  }, dailyTarget, maxRisk);
-
-  // Start algo on server
-  if (stats.connected) {
-    startCopyTradingOnServer(hqx, lead, follower, dailyTarget, maxRisk, ui);
-  }
+  // Local copy trading - no external server needed
+  ui.addLog('info', `Starting copy trading on ${stats.platform}...`);
+  ui.addLog('info', `Lead: ${stats.leadName} -> Follower: ${stats.followerName}`);
+  ui.addLog('info', `Symbol: ${stats.symbol} | Target: $${dailyTarget} | Risk: $${maxRisk}`);
+  stats.connected = true;
+  
+  // Track lead positions and copy to follower
+  let lastLeadPositions = [];
+  
+  const pollAndCopy = async () => {
+    try {
+      // Get lead positions
+      const leadResult = await lead.service.getPositions(lead.account.accountId);
+      if (!leadResult.success) return;
+      
+      const currentPositions = leadResult.positions || [];
+      
+      // Detect new positions on lead
+      for (const pos of currentPositions) {
+        const existing = lastLeadPositions.find(p => p.contractId === pos.contractId);
+        if (!existing && pos.quantity !== 0) {
+          // New position opened - copy to follower
+          ui.addLog('trade', `Lead opened: ${pos.quantity > 0 ? 'LONG' : 'SHORT'} ${Math.abs(pos.quantity)}x ${pos.symbol || pos.contractId}`);
+          // TODO: Place order on follower account
+        }
+      }
+      
+      // Detect closed positions
+      for (const oldPos of lastLeadPositions) {
+        const stillOpen = currentPositions.find(p => p.contractId === oldPos.contractId);
+        if (!stillOpen || stillOpen.quantity === 0) {
+          ui.addLog('info', `Lead closed: ${oldPos.symbol || oldPos.contractId}`);
+          // TODO: Close position on follower account
+        }
+      }
+      
+      lastLeadPositions = currentPositions;
+      
+      // Update P&L from lead
+      const leadPnL = currentPositions.reduce((sum, p) => sum + (p.profitAndLoss || 0), 0);
+      if (leadPnL !== stats.pnl) {
+        const diff = leadPnL - stats.pnl;
+        if (Math.abs(diff) > 0.01 && stats.pnl !== 0) {
+          stats.trades++;
+          if (diff >= 0) stats.wins++;
+          else stats.losses++;
+        }
+        stats.pnl = leadPnL;
+      }
+      
+      // Check target/risk limits
+      if (stats.pnl >= dailyTarget) {
+        stopReason = 'target';
+        running = false;
+        ui.addLog('success', `TARGET REACHED! +$${stats.pnl.toFixed(2)}`);
+      } else if (stats.pnl <= -maxRisk) {
+        stopReason = 'risk';
+        running = false;
+        ui.addLog('error', `MAX RISK HIT! -$${Math.abs(stats.pnl).toFixed(2)}`);
+      }
+    } catch (e) {
+      // Silent fail - will retry
+    }
+  };
 
   // UI refresh loop
   const refreshInterval = setInterval(() => {
     if (running) ui.render(stats);
   }, 250);
+  
+  // Measure API latency every 5 seconds
+  measureLatency(); // Initial measurement
+  const latencyInterval = setInterval(() => { if (running) measureLatency(); }, 5000);
+  
+  // Poll and copy every 2 seconds
+  pollAndCopy(); // Initial poll
+  const copyInterval = setInterval(() => { if (running) pollAndCopy(); }, 2000);
 
   // Keyboard handling
   const cleanupKeys = setupKeyboardHandler(() => {
@@ -344,98 +395,14 @@ const launchCopyTrading = async (config) => {
 
   // Cleanup
   clearInterval(refreshInterval);
+  clearInterval(latencyInterval);
+  clearInterval(copyInterval);
   if (cleanupKeys) cleanupKeys();
-  if (stats.connected) {
-    hqx.stopAlgo();
-    hqx.disconnect();
-  }
   ui.cleanup();
 
   // Show summary
   renderSessionSummary(stats, stopReason);
   await prompts.waitForEnter();
-};
-
-/**
- * Setup HQX event handlers
- */
-const setupEventHandlers = (hqx, ui, stats, lead, follower, showNames, stop, setReason, dailyTarget, maxRisk) => {
-  hqx.on('latency', (d) => {
-    stats.latency = d.latency || 0;
-  });
-
-  hqx.on('log', (d) => {
-    let msg = d.message;
-    if (!showNames) {
-      if (lead.account.accountName) {
-        msg = msg.replace(new RegExp(lead.account.accountName, 'gi'), 'Lead *****');
-      }
-      if (follower.account.accountName) {
-        msg = msg.replace(new RegExp(follower.account.accountName, 'gi'), 'Follower *****');
-      }
-    }
-    ui.addLog(d.type || 'info', msg);
-  });
-
-  hqx.on('trade', (d) => {
-    stats.trades++;
-    stats.pnl += d.pnl || 0;
-    d.pnl >= 0 ? stats.wins++ : stats.losses++;
-    ui.addLog(d.pnl >= 0 ? 'trade' : 'loss', `${d.pnl >= 0 ? '+' : ''}$${d.pnl.toFixed(2)}`);
-
-    if (stats.pnl >= dailyTarget) {
-      setReason('target');
-      stop();
-      ui.addLog('success', `TARGET! +$${stats.pnl.toFixed(2)}`);
-      hqx.stopAlgo();
-    } else if (stats.pnl <= -maxRisk) {
-      setReason('risk');
-      stop();
-      ui.addLog('error', `MAX RISK! -$${Math.abs(stats.pnl).toFixed(2)}`);
-      hqx.stopAlgo();
-    }
-  });
-
-  hqx.on('copy', (d) => {
-    ui.addLog('trade', `COPIED: ${d.side} ${d.quantity}x`);
-  });
-
-  hqx.on('error', (d) => {
-    ui.addLog('error', d.message);
-  });
-
-  hqx.on('disconnected', () => {
-    stats.connected = false;
-  });
-};
-
-/**
- * Start copy trading on HQX server
- */
-const startCopyTradingOnServer = (hqx, lead, follower, dailyTarget, maxRisk, ui) => {
-  ui.addLog('info', 'Starting Copy Trading...');
-
-  const leadCreds = lead.service.getRithmicCredentials?.() || null;
-  const followerCreds = follower.service.getRithmicCredentials?.() || null;
-
-  hqx.startCopyTrading({
-    leadAccountId: lead.account.accountId,
-    leadContractId: lead.symbol.id || lead.symbol.contractId,
-    leadSymbol: lead.symbol.symbol || lead.symbol.name,
-    leadContracts: lead.contracts,
-    leadPropfirm: lead.propfirm,
-    leadToken: lead.service.getToken?.() || null,
-    leadRithmicCredentials: leadCreds,
-    followerAccountId: follower.account.accountId,
-    followerContractId: follower.symbol.id || follower.symbol.contractId,
-    followerSymbol: follower.symbol.symbol || follower.symbol.name,
-    followerContracts: follower.contracts,
-    followerPropfirm: follower.propfirm,
-    followerToken: follower.service.getToken?.() || null,
-    followerRithmicCredentials: followerCreds,
-    dailyTarget,
-    maxRisk,
-  });
 };
 
 /**
