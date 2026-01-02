@@ -8,16 +8,23 @@
 
 *Connect to 37+ prop firms and automate your futures trading*
 
+[![Website](https://img.shields.io/badge/Website-hedgequantx.com-00D4AA?style=for-the-badge&logo=google-chrome&logoColor=white)](https://hedgequantx.com)
 [![npm version](https://img.shields.io/npm/v/hedgequantx?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/hedgequantx)
 [![npm downloads](https://img.shields.io/npm/dm/hedgequantx?style=for-the-badge&logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/hedgequantx)
 [![GitHub stars](https://img.shields.io/github/stars/HedgeQuantX/HQX-CLI?style=for-the-badge&logo=github&logoColor=white&color=181717)](https://github.com/HedgeQuantX/HQX-CLI)
-[![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-22C55E?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
 
-[![Node.js](https://img.shields.io/badge/Node.js-18+-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
-[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey?style=flat-square)](https://github.com/HedgeQuantX/HQX-CLI)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/HedgeQuantX/HQX-CLI/pulls)
+[![Node.js](https://img.shields.io/badge/Node.js-18+-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Platform](https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-0078D4?style=for-the-badge&logo=windows-terminal&logoColor=white)](https://github.com/HedgeQuantX/HQX-CLI)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Us-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/UBKCERctZu)
+[![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-FF6B6B?style=for-the-badge&logo=git&logoColor=white)](https://github.com/HedgeQuantX/HQX-CLI/pulls)
 
-[Installation](#-installation) | [Features](#-features) | [Usage](#-usage) | [Algo Trading](#-algo-trading) | [Support](#-support)
+[![Futures](https://img.shields.io/badge/Futures-Trading-F7931A?style=flat-square&logo=bitcoin&logoColor=white)](https://hedgequantx.com)
+[![Algo](https://img.shields.io/badge/Algo-Trading-00D4AA?style=flat-square&logo=probot&logoColor=white)](https://hedgequantx.com)
+[![Prop Firms](https://img.shields.io/badge/37+-Prop%20Firms-8B5CF6?style=flat-square&logo=building&logoColor=white)](https://hedgequantx.com)
+[![Secure](https://img.shields.io/badge/AES--256-Encrypted-EF4444?style=flat-square&logo=shield&logoColor=white)](https://hedgequantx.com)
+
+[Website](https://hedgequantx.com) | [Installation](#installation) | [Features](#features) | [Algo Trading](#algo-trading) | [Discord](https://discord.gg/UBKCERctZu)
 
 </div>
 
