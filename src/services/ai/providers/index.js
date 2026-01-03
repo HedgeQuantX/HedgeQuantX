@@ -1,6 +1,9 @@
 /**
  * AI Providers Configuration
  * Each provider has connection options (API Key, Plans, etc.)
+ * 
+ * IMPORTANT: models arrays are empty - models MUST be fetched from real APIs
+ * No hardcoded model lists allowed (see RULES.md)
  */
 
 const PROVIDERS = {
@@ -66,8 +69,8 @@ const PROVIDERS = {
     name: 'OPENAI (GPT-4)',
     description: 'Direct connection to GPT-4',
     category: 'direct',
-    models: ['gpt-4o', 'gpt-4-turbo', 'gpt-4o-mini', 'gpt-3.5-turbo'],
-    defaultModel: 'gpt-4o',
+    models: [], // Fetched from API at runtime
+    defaultModel: null, // Will use first model from API
     options: [
       {
         id: 'api_key',
@@ -110,8 +113,8 @@ const PROVIDERS = {
     name: 'DEEPSEEK',
     description: 'Very cheap & capable',
     category: 'direct',
-    models: ['deepseek-chat', 'deepseek-coder'],
-    defaultModel: 'deepseek-chat',
+    models: [], // Fetched from API at runtime
+    defaultModel: null, // Will use first model from API
     options: [
       {
         id: 'api_key',
@@ -132,8 +135,8 @@ const PROVIDERS = {
     name: 'GROQ',
     description: 'Ultra fast inference',
     category: 'direct',
-    models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
-    defaultModel: 'llama-3.3-70b-versatile',
+    models: [], // Fetched from API at runtime
+    defaultModel: null, // Will use first model from API
     options: [
       {
         id: 'api_key',
@@ -155,8 +158,8 @@ const PROVIDERS = {
     name: 'GROK (XAI)',
     description: 'Elon Musk\'s Grok AI',
     category: 'direct',
-    models: ['grok-beta', 'grok-2'],
-    defaultModel: 'grok-beta',
+    models: [], // Fetched from API at runtime
+    defaultModel: null, // Will use first model from API
     options: [
       {
         id: 'api_key',
@@ -177,8 +180,8 @@ const PROVIDERS = {
     name: 'MISTRAL',
     description: 'European AI leader',
     category: 'direct',
-    models: ['mistral-large-latest', 'mistral-medium', 'mistral-small'],
-    defaultModel: 'mistral-large-latest',
+    models: [], // Fetched from API at runtime
+    defaultModel: null, // Will use first model from API
     options: [
       {
         id: 'api_key',
@@ -199,8 +202,8 @@ const PROVIDERS = {
     name: 'PERPLEXITY',
     description: 'Real-time web search AI',
     category: 'direct',
-    models: ['llama-3.1-sonar-large-128k-online', 'llama-3.1-sonar-small-128k-online', 'llama-3.1-sonar-huge-128k-online'],
-    defaultModel: 'llama-3.1-sonar-large-128k-online',
+    models: [], // Fetched from API at runtime
+    defaultModel: null, // Will use first model from API
     options: [
       {
         id: 'api_key',
@@ -222,8 +225,8 @@ const PROVIDERS = {
     name: 'TOGETHER AI',
     description: 'Open source models, fast & cheap',
     category: 'direct',
-    models: ['meta-llama/Llama-3.3-70B-Instruct-Turbo', 'mistralai/Mixtral-8x22B-Instruct-v0.1', 'Qwen/Qwen2.5-72B-Instruct-Turbo'],
-    defaultModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+    models: [], // Fetched from API at runtime
+    defaultModel: null, // Will use first model from API
     options: [
       {
         id: 'api_key',
@@ -246,8 +249,8 @@ const PROVIDERS = {
     name: 'QWEN (ALIBABA)',
     description: 'Alibaba\'s top AI model',
     category: 'direct',
-    models: ['qwen-turbo', 'qwen-plus', 'qwen-max'],
-    defaultModel: 'qwen-plus',
+    models: [], // Fetched from API at runtime
+    defaultModel: null, // Will use first model from API
     options: [
       {
         id: 'api_key',
@@ -269,8 +272,8 @@ const PROVIDERS = {
     name: 'MOONSHOT (KIMI)',
     description: '200K context window',
     category: 'direct',
-    models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'],
-    defaultModel: 'moonshot-v1-32k',
+    models: [], // Fetched from API at runtime
+    defaultModel: null, // Will use first model from API
     options: [
       {
         id: 'api_key',
@@ -292,8 +295,8 @@ const PROVIDERS = {
     name: '01.AI (YI)',
     description: 'Yi models by Kai-Fu Lee',
     category: 'direct',
-    models: ['yi-large', 'yi-medium', 'yi-spark'],
-    defaultModel: 'yi-large',
+    models: [], // Fetched from API at runtime
+    defaultModel: null, // Will use first model from API
     options: [
       {
         id: 'api_key',
@@ -315,8 +318,8 @@ const PROVIDERS = {
     name: 'ZHIPU AI (GLM)',
     description: 'ChatGLM models',
     category: 'direct',
-    models: ['glm-4-plus', 'glm-4', 'glm-4-flash'],
-    defaultModel: 'glm-4',
+    models: [], // Fetched from API at runtime
+    defaultModel: null, // Will use first model from API
     options: [
       {
         id: 'api_key',
@@ -338,15 +341,15 @@ const PROVIDERS = {
     name: 'BAICHUAN',
     description: 'Multilingual AI model',
     category: 'direct',
-    models: ['Baichuan4', 'Baichuan3-Turbo', 'Baichuan2-Turbo'],
-    defaultModel: 'Baichuan4',
+    models: [], // Fetched from API at runtime
+    defaultModel: null, // Will use first model from API
     options: [
       {
         id: 'api_key',
         label: 'API KEY',
         description: [
           'Get key at platform.baichuan-ai.com',
-          'Best for Chinese content',
+          'Strong multilingual support',
           'Competitive pricing'
         ],
         fields: ['apiKey'],
@@ -362,8 +365,8 @@ const PROVIDERS = {
     name: 'OLLAMA (LOCAL - FREE)',
     description: '100% free, runs locally',
     category: 'local',
-    models: ['llama3', 'llama3.1', 'mistral', 'codellama', 'phi3', 'gemma2'],
-    defaultModel: 'llama3.1',
+    models: [], // Fetched from local API at runtime
+    defaultModel: null, // Will use first model from API
     options: [
       {
         id: 'local',
@@ -385,8 +388,8 @@ const PROVIDERS = {
     name: 'LM STUDIO (LOCAL - FREE)',
     description: 'Local with GUI',
     category: 'local',
-    models: [],
-    defaultModel: '',
+    models: [], // Fetched from local API at runtime
+    defaultModel: null, // Will use first model from API
     options: [
       {
         id: 'local',
@@ -409,8 +412,8 @@ const PROVIDERS = {
     name: 'CUSTOM ENDPOINT',
     description: 'Any OpenAI-compatible API',
     category: 'custom',
-    models: [],
-    defaultModel: '',
+    models: [], // User must specify model
+    defaultModel: null,
     options: [
       {
         id: 'custom',
