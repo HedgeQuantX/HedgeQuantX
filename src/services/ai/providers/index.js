@@ -43,8 +43,16 @@ const PROVIDERS = {
     name: 'CLAUDE (ANTHROPIC)',
     description: 'Direct connection to Claude',
     category: 'direct',
-    models: ['claude-sonnet-4-5-20250929', 'claude-3-opus-20240229', 'claude-3-haiku-20240307'],
-    defaultModel: 'claude-sonnet-4-5-20250929',
+    models: [
+      'claude-opus-4-20250514',           // Claude Opus 4 (latest flagship)
+      'claude-sonnet-4-20250514',         // Claude Sonnet 4
+      'claude-sonnet-4-5-20250929',       // Claude Sonnet 4.5 (extended thinking)
+      'claude-3-5-sonnet-20241022',       // Claude 3.5 Sonnet v2
+      'claude-3-5-haiku-20241022',        // Claude 3.5 Haiku
+      'claude-3-opus-20240229',           // Claude 3 Opus
+      'claude-3-haiku-20240307'           // Claude 3 Haiku
+    ],
+    defaultModel: 'claude-sonnet-4-20250514',
     options: [
       {
         id: 'api_key',
