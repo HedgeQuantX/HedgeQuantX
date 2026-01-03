@@ -336,7 +336,7 @@ const PROVIDERS = {
   baichuan: {
     id: 'baichuan',
     name: 'BAICHUAN',
-    description: 'Chinese language specialist',
+    description: 'Multilingual AI model',
     category: 'direct',
     models: ['Baichuan4', 'Baichuan3-Turbo', 'Baichuan2-Turbo'],
     defaultModel: 'Baichuan4',

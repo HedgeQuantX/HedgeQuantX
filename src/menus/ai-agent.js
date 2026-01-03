@@ -38,7 +38,7 @@ const aiAgentMenu = async () => {
   const agentCount = agents.length;
   
   if (agentCount === 0) {
-    console.log(makeLine(chalk.gray('STATUS: NO AGENTS CONNECTED'), 'left'));
+    console.log(makeLine(chalk.white('STATUS: NO AGENTS CONNECTED'), 'left'));
   } else {
     console.log(makeLine(chalk.green(`STATUS: ${agentCount} AGENT${agentCount > 1 ? 'S' : ''} CONNECTED`), 'left'));
     console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
@@ -48,16 +48,26 @@ const aiAgentMenu = async () => {
       const agent = agents[i];
       // Show ACTIVE marker (if single agent, it's always active)
       const isActive = agent.isActive || agents.length === 1;
-      const activeMarker = isActive ? chalk.green(' [ACTIVE]') : '';
+      const activeMarker = isActive ? ' [ACTIVE]' : '';
       const providerColor = agent.providerId === 'anthropic' ? chalk.magenta :
                            agent.providerId === 'openai' ? chalk.green :
                            agent.providerId === 'openrouter' ? chalk.yellow : chalk.cyan;
       
+      // Calculate max lengths to fit in box
+      const prefix = `[${i + 1}] `;
+      const suffix = ` - ${agent.model || 'N/A'}`;
+      const maxNameLen = W - prefix.length - activeMarker.length - suffix.length - 2;
+      
+      // Truncate agent name if too long
+      const displayName = agent.name.length > maxNameLen 
+        ? agent.name.substring(0, maxNameLen - 3) + '...'
+        : agent.name;
+      
       console.log(makeLine(
-        chalk.white(`[${i + 1}] `) + 
-        providerColor(agent.name) + 
-        activeMarker + 
-        chalk.gray(` - ${agent.model}`)
+        chalk.white(prefix) + 
+        providerColor(displayName) + 
+        chalk.green(activeMarker) + 
+        chalk.white(suffix)
       ));
     }
   }
@@ -95,13 +105,13 @@ const aiAgentMenu = async () => {
     if (agentCount > 1) {
       menuRow2(menuItem('+', 'ADD AGENT', chalk.green), menuItem('S', 'SET ACTIVE', chalk.cyan));
       menuRow2(menuItem('M', 'CHANGE MODEL', chalk.yellow), menuItem('R', 'REMOVE AGENT', chalk.red));
-      menuRow2(menuItem('X', 'REMOVE ALL', chalk.red), menuItem('<', 'BACK', chalk.gray));
+      menuRow2(menuItem('X', 'REMOVE ALL', chalk.red), menuItem('<', 'BACK', chalk.white));
     } else {
       menuRow2(menuItem('+', 'ADD AGENT', chalk.green), menuItem('M', 'CHANGE MODEL', chalk.yellow));
-      menuRow2(menuItem('R', 'REMOVE AGENT', chalk.red), menuItem('<', 'BACK', chalk.gray));
+      menuRow2(menuItem('R', 'REMOVE AGENT', chalk.red), menuItem('<', 'BACK', chalk.white));
     }
   } else {
-    menuRow2(menuItem('+', 'ADD AGENT', chalk.green), menuItem('<', 'BACK', chalk.gray));
+    menuRow2(menuItem('+', 'ADD AGENT', chalk.green), menuItem('<', 'BACK', chalk.white));
   }
   
   drawBoxFooter(boxWidth);
@@ -170,9 +180,9 @@ const showAgentDetails = async (agent) => {
                        agent.providerId === 'openrouter' ? chalk.yellow : chalk.cyan;
   
   console.log(makeLine(chalk.white('NAME: ') + providerColor(agent.name)));
-  console.log(makeLine(chalk.white('PROVIDER: ') + chalk.gray(agent.provider?.name || agent.providerId)));
-  console.log(makeLine(chalk.white('MODEL: ') + chalk.gray(agent.model)));
-  console.log(makeLine(chalk.white('STATUS: ') + (agent.isActive ? chalk.green('ACTIVE') : chalk.gray('STANDBY'))));
+  console.log(makeLine(chalk.white('PROVIDER: ') + chalk.white(agent.provider?.name || agent.providerId)));
+  console.log(makeLine(chalk.white('MODEL: ') + chalk.white(agent.model)));
+  console.log(makeLine(chalk.white('STATUS: ') + (agent.isActive ? chalk.green('ACTIVE') : chalk.white('STANDBY'))));
   
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
@@ -181,7 +191,7 @@ const showAgentDetails = async (agent) => {
   }
   console.log(makeLine(chalk.yellow('[M] CHANGE MODEL')));
   console.log(makeLine(chalk.red('[R] REMOVE')));
-  console.log(makeLine(chalk.gray('[<] BACK')));
+  console.log(makeLine(chalk.white('[<] BACK')));
   
   drawBoxFooter(boxWidth);
   
@@ -241,7 +251,7 @@ const selectActiveAgent = async () => {
   }
   
   console.log(makeLine(''));
-  console.log(makeLine(chalk.gray('[<] BACK')));
+  console.log(makeLine(chalk.white('[<] BACK')));
   
   drawBoxFooter(boxWidth);
   
@@ -288,12 +298,12 @@ const selectAgentForModelChange = async () => {
   for (let i = 0; i < agents.length; i++) {
     const agent = agents[i];
     console.log(makeLine(
-      chalk.white(`[${i + 1}] `) + chalk.cyan(agent.name) + chalk.gray(` - ${agent.model}`)
+      chalk.white(`[${i + 1}] `) + chalk.cyan(agent.name) + chalk.white(` - ${agent.model}`)
     ));
   }
   
   console.log(makeLine(''));
-  console.log(makeLine(chalk.gray('[<] BACK')));
+  console.log(makeLine(chalk.white('[<] BACK')));
   
   drawBoxFooter(boxWidth);
   
@@ -345,7 +355,7 @@ const selectAgentToRemove = async () => {
   }
   
   console.log(makeLine(''));
-  console.log(makeLine(chalk.gray('[<] BACK')));
+  console.log(makeLine(chalk.white('[<] BACK')));
   
   drawBoxFooter(boxWidth);
   
@@ -400,20 +410,20 @@ const selectCategory = async () => {
     chalk.cyan('[2] DIRECT PROVIDERS')
   ));
   console.log(make2ColRow(
-    chalk.gray('    1 API = 100+ models'),
-    chalk.gray('    Connect to each provider')
+    chalk.white('    1 API = 100+ models'),
+    chalk.white('    Connect to each provider')
   ));
   console.log(makeLine(''));
   console.log(make2ColRow(
     chalk.yellow('[3] LOCAL (FREE)'),
-    chalk.gray('[4] CUSTOM')
+    chalk.white('[4] CUSTOM')
   ));
   console.log(make2ColRow(
-    chalk.gray('    Run on your machine'),
-    chalk.gray('    Self-hosted solutions')
+    chalk.white('    Run on your machine'),
+    chalk.white('    Self-hosted solutions')
   ));
   console.log(makeLine(''));
-  console.log(makeLine(chalk.gray('[<] BACK')));
+  console.log(makeLine(chalk.white('[<] BACK')));
   
   drawBoxFooter(boxWidth);
   
@@ -464,7 +474,7 @@ const selectProvider = async (categoryId) => {
   const providers = getProvidersByCategory(categoryId);
   
   if (providers.length === 0) {
-    console.log(makeLine(chalk.gray('NO PROVIDERS IN THIS CATEGORY')));
+    console.log(makeLine(chalk.white('NO PROVIDERS IN THIS CATEGORY')));
     drawBoxFooter(boxWidth);
     await prompts.waitForEnter();
     return await selectCategory();
@@ -489,14 +499,14 @@ const selectProvider = async (categoryId) => {
     const rightDesc = right ? '    ' + right.description : '';
     
     console.log(make2ColRow(
-      chalk.gray(leftDesc.length > col1Width - 3 ? leftDesc.substring(0, col1Width - 6) + '...' : leftDesc),
-      chalk.gray(rightDesc.length > col1Width - 3 ? rightDesc.substring(0, col1Width - 6) + '...' : rightDesc)
+      chalk.white(leftDesc.length > col1Width - 3 ? leftDesc.substring(0, col1Width - 6) + '...' : leftDesc),
+      chalk.white(rightDesc.length > col1Width - 3 ? rightDesc.substring(0, col1Width - 6) + '...' : rightDesc)
     ));
     
     console.log(makeLine(''));
   }
   
-  console.log(makeLine(chalk.gray('[<] BACK')));
+  console.log(makeLine(chalk.white('[<] BACK')));
   
   drawBoxFooter(boxWidth);
   
@@ -565,8 +575,8 @@ const selectProviderOption = async (provider) => {
     const leftDesc1 = left.description[0] ? '    ' + left.description[0] : '';
     const rightDesc1 = right?.description[0] ? '    ' + right.description[0] : '';
     console.log(make2ColRow(
-      chalk.gray(leftDesc1.length > col1Width - 2 ? leftDesc1.substring(0, col1Width - 5) + '...' : leftDesc1),
-      chalk.gray(rightDesc1.length > col1Width - 2 ? rightDesc1.substring(0, col1Width - 5) + '...' : rightDesc1)
+      chalk.white(leftDesc1.length > col1Width - 2 ? leftDesc1.substring(0, col1Width - 5) + '...' : leftDesc1),
+      chalk.white(rightDesc1.length > col1Width - 2 ? rightDesc1.substring(0, col1Width - 5) + '...' : rightDesc1)
     ));
     
     // Second description line if exists
@@ -574,15 +584,15 @@ const selectProviderOption = async (provider) => {
     const rightDesc2 = right?.description[1] ? '    ' + right.description[1] : '';
     if (leftDesc2 || rightDesc2) {
       console.log(make2ColRow(
-        chalk.gray(leftDesc2.length > col1Width - 2 ? leftDesc2.substring(0, col1Width - 5) + '...' : leftDesc2),
-        chalk.gray(rightDesc2.length > col1Width - 2 ? rightDesc2.substring(0, col1Width - 5) + '...' : rightDesc2)
+        chalk.white(leftDesc2.length > col1Width - 2 ? leftDesc2.substring(0, col1Width - 5) + '...' : leftDesc2),
+        chalk.white(rightDesc2.length > col1Width - 2 ? rightDesc2.substring(0, col1Width - 5) + '...' : rightDesc2)
       ));
     }
     
     console.log(makeLine(''));
   }
   
-  console.log(makeLine(chalk.gray('[<] BACK')));
+  console.log(makeLine(chalk.white('[<] BACK')));
   
   drawBoxFooter(boxWidth);
   
@@ -614,7 +624,7 @@ const openBrowser = (url) => {
   else cmd = `xdg-open "${url}"`;
   
   exec(cmd, (err) => {
-    if (err) console.log(chalk.gray('  Could not open browser automatically'));
+    if (err) console.log(chalk.white('  Could not open browser automatically'));
   });
 };
 
@@ -697,7 +707,7 @@ const setupOAuthConnection = async (provider) => {
   console.log(makeLine(chalk.white('3. COPY THE AUTHORIZATION CODE')));
   console.log(makeLine(chalk.white('4. PASTE IT HERE')));
   console.log(makeLine(''));
-  console.log(makeLine(chalk.gray('OPENING BROWSER IN 3 SECONDS...')));
+  console.log(makeLine(chalk.white('OPENING BROWSER IN 3 SECONDS...')));
   
   drawBoxFooter(boxWidth);
   
@@ -718,9 +728,9 @@ const setupOAuthConnection = async (provider) => {
   console.log(makeLine(chalk.white('AFTER LOGGING IN, YOU WILL SEE A CODE')));
   console.log(makeLine(chalk.white('COPY THE ENTIRE CODE AND PASTE IT BELOW')));
   console.log(makeLine(''));
-  console.log(makeLine(chalk.gray('THE CODE LOOKS LIKE: abc123...#xyz789...')));
+  console.log(makeLine(chalk.white('THE CODE LOOKS LIKE: abc123...#xyz789...')));
   console.log(makeLine(''));
-  console.log(makeLine(chalk.gray('TYPE < TO CANCEL')));
+  console.log(makeLine(chalk.white('TYPE < TO CANCEL')));
   
   drawBoxFooter(boxWidth);
   console.log();
@@ -766,8 +776,8 @@ const setupOAuthConnection = async (provider) => {
   
   if (!models || models.length === 0) {
     spinner.fail('COULD NOT FETCH MODELS FROM API');
-    console.log(chalk.gray('  OAuth authentication may not support model listing.'));
-    console.log(chalk.gray('  Please use API KEY authentication instead.'));
+    console.log(chalk.white('  OAuth authentication may not support model listing.'));
+    console.log(chalk.white('  Please use API KEY authentication instead.'));
     await prompts.waitForEnter();
     return await selectProviderOption(provider);
   }
@@ -785,8 +795,8 @@ const setupOAuthConnection = async (provider) => {
     await aiService.addAgent('anthropic', 'oauth_max', credentials, selectedModel, 'Claude Pro/Max');
     
     console.log(chalk.green('\n  CONNECTED TO CLAUDE PRO/MAX'));
-    console.log(chalk.gray(`  MODEL: ${selectedModel}`));
-    console.log(chalk.gray('  UNLIMITED USAGE WITH YOUR SUBSCRIPTION'));
+    console.log(chalk.white(`  MODEL: ${selectedModel}`));
+    console.log(chalk.white('  UNLIMITED USAGE WITH YOUR SUBSCRIPTION'));
   } catch (error) {
     console.log(chalk.red(`\n  FAILED TO SAVE: ${error.message}`));
   }
@@ -838,17 +848,17 @@ const setupConnection = async (provider, option) => {
     if (option.url && (field === 'apiKey' || field === 'sessionKey' || field === 'accessToken')) {
       console.log(makeLine(chalk.cyan('LINK: ') + chalk.green(option.url)));
       console.log(makeLine(''));
-      console.log(makeLine(chalk.gray('OPENING BROWSER...')));
+      console.log(makeLine(chalk.white('OPENING BROWSER...')));
       openBrowser(option.url);
     }
     
     // Show default for endpoint
     if (field === 'endpoint' && option.defaultEndpoint) {
-      console.log(makeLine(chalk.gray(`DEFAULT: ${option.defaultEndpoint}`)));
+      console.log(makeLine(chalk.white(`DEFAULT: ${option.defaultEndpoint}`)));
     }
     
     console.log(makeLine(''));
-    console.log(makeLine(chalk.gray('TYPE < TO GO BACK')));
+    console.log(makeLine(chalk.white('TYPE < TO GO BACK')));
     
     drawBoxFooter(boxWidth);
     console.log();
@@ -858,33 +868,33 @@ const setupConnection = async (provider, option) => {
     switch (field) {
       case 'apiKey':
         value = await prompts.textInput(chalk.cyan('PASTE API KEY:'));
-        if (!value || value === '<') return await selectProviderOption(provider);
+        if (!value || value.trim() === '<' || value.trim() === '') return await selectProviderOption(provider);
         credentials.apiKey = value.trim();
         break;
         
       case 'sessionKey':
         value = await prompts.textInput(chalk.cyan('PASTE SESSION KEY:'));
-        if (!value || value === '<') return await selectProviderOption(provider);
+        if (!value || value.trim() === '<' || value.trim() === '') return await selectProviderOption(provider);
         credentials.sessionKey = value.trim();
         break;
         
       case 'accessToken':
         value = await prompts.textInput(chalk.cyan('PASTE ACCESS TOKEN:'));
-        if (!value || value === '<') return await selectProviderOption(provider);
+        if (!value || value.trim() === '<' || value.trim() === '') return await selectProviderOption(provider);
         credentials.accessToken = value.trim();
         break;
         
       case 'endpoint':
         const defaultEndpoint = option.defaultEndpoint || '';
         value = await prompts.textInput(chalk.cyan(`ENDPOINT [${defaultEndpoint || 'required'}]:`));
-        if (value === '<') return await selectProviderOption(provider);
+        if (value && value.trim() === '<') return await selectProviderOption(provider);
         credentials.endpoint = (value || defaultEndpoint).trim();
         if (!credentials.endpoint) return await selectProviderOption(provider);
         break;
         
       case 'model':
         value = await prompts.textInput(chalk.cyan('MODEL NAME:'));
-        if (!value || value === '<') return await selectProviderOption(provider);
+        if (!value || value.trim() === '<' || value.trim() === '') return await selectProviderOption(provider);
         credentials.model = value.trim();
         break;
     }
@@ -910,10 +920,10 @@ const setupConnection = async (provider, option) => {
     
     // Show available models for local providers
     if (validation.models && validation.models.length > 0) {
-      console.log(chalk.gray(`  AVAILABLE MODELS: ${validation.models.slice(0, 5).join(', ')}`));
+      console.log(chalk.white(`  AVAILABLE MODELS: ${validation.models.slice(0, 5).join(', ')}`));
     }
     
-    console.log(chalk.gray(`  USING MODEL: ${model}`));
+    console.log(chalk.white(`  USING MODEL: ${model}`));
   } catch (error) {
     spinner.fail(`FAILED TO SAVE: ${error.message}`);
   }
@@ -946,7 +956,7 @@ const selectModelFromList = async (models, providerName) => {
   
   if (!models || models.length === 0) {
     console.log(makeLine(chalk.red('NO MODELS AVAILABLE')));
-    console.log(makeLine(chalk.gray('[<] BACK')));
+    console.log(makeLine(chalk.white('[<] BACK')));
     drawBoxFooter(boxWidth);
     await prompts.waitForEnter();
     return null;
@@ -955,14 +965,44 @@ const selectModelFromList = async (models, providerName) => {
   // Sort models (newest first)
   const sortedModels = [...models].sort((a, b) => b.localeCompare(a));
   
-  // Display models from API
-  sortedModels.forEach((model, index) => {
-    const displayModel = model.length > W - 10 ? model.substring(0, W - 13) + '...' : model;
-    console.log(makeLine(chalk.cyan(`[${index + 1}] ${displayModel}`)));
-  });
+  // Display models in 2 columns
+  const rows = Math.ceil(sortedModels.length / 2);
+  const colWidth = Math.floor((W - 4) / 2);
+  
+  for (let i = 0; i < rows; i++) {
+    const leftIndex = i;
+    const rightIndex = i + rows;
+    
+    // Left column
+    const leftModel = sortedModels[leftIndex];
+    const leftNum = chalk.cyan(`[${leftIndex + 1}]`);
+    const leftName = leftModel.length > colWidth - 6 
+      ? leftModel.substring(0, colWidth - 9) + '...' 
+      : leftModel;
+    const leftText = `${leftNum} ${chalk.yellow(leftName)}`;
+    const leftPlain = `[${leftIndex + 1}] ${leftName}`;
+    
+    // Right column (if exists)
+    let rightText = '';
+    let rightPlain = '';
+    if (rightIndex < sortedModels.length) {
+      const rightModel = sortedModels[rightIndex];
+      const rightNum = chalk.cyan(`[${rightIndex + 1}]`);
+      const rightName = rightModel.length > colWidth - 6 
+        ? rightModel.substring(0, colWidth - 9) + '...' 
+        : rightModel;
+      rightText = `${rightNum} ${chalk.yellow(rightName)}`;
+      rightPlain = `[${rightIndex + 1}] ${rightName}`;
+    }
+    
+    // Pad left column and combine
+    const leftPadding = colWidth - leftPlain.length;
+    const line = leftText + ' '.repeat(Math.max(2, leftPadding)) + rightText;
+    console.log(makeLine(line));
+  }
   
   console.log(makeLine(''));
-  console.log(makeLine(chalk.gray('[<] BACK')));
+  console.log(makeLine(chalk.white('[<] BACK')));
   
   drawBoxFooter(boxWidth);
   
@@ -998,7 +1038,7 @@ const selectModel = async (agent) => {
   displayBanner();
   drawBoxHeaderContinue(`SELECT MODEL - ${agent.name}`, boxWidth);
   
-  console.log(makeLine(chalk.gray('FETCHING AVAILABLE MODELS FROM API...')));
+  console.log(makeLine(chalk.white('FETCHING AVAILABLE MODELS FROM API...')));
   drawBoxFooter(boxWidth);
   
   // Fetch models from real API
@@ -1033,9 +1073,9 @@ const selectModel = async (agent) => {
   
   if (!models || models.length === 0) {
     console.log(makeLine(chalk.red('COULD NOT FETCH MODELS FROM API')));
-    console.log(makeLine(chalk.gray('Check your API key or network connection.')));
+    console.log(makeLine(chalk.white('Check your API key or network connection.')));
     console.log(makeLine(''));
-    console.log(makeLine(chalk.gray('[<] BACK')));
+    console.log(makeLine(chalk.white('[<] BACK')));
     drawBoxFooter(boxWidth);
     
     await prompts.waitForEnter();
@@ -1045,15 +1085,46 @@ const selectModel = async (agent) => {
   // Sort models (newest first typically)
   models.sort((a, b) => b.localeCompare(a));
   
-  // Display models from API
-  models.forEach((model, index) => {
-    const displayModel = model.length > W - 10 ? model.substring(0, W - 13) + '...' : model;
-    const currentMarker = model === agent.model ? chalk.yellow(' (CURRENT)') : '';
-    console.log(makeLine(chalk.cyan(`[${index + 1}] ${displayModel}`) + currentMarker));
-  });
+  // Display models in 2 columns
+  const rows = Math.ceil(models.length / 2);
+  const colWidth = Math.floor((W - 4) / 2);
+  
+  for (let i = 0; i < rows; i++) {
+    const leftIndex = i;
+    const rightIndex = i + rows;
+    
+    // Left column
+    const leftModel = models[leftIndex];
+    const leftNum = chalk.cyan(`[${leftIndex + 1}]`);
+    const leftCurrent = leftModel === agent.model ? chalk.green(' *') : '';
+    const leftName = leftModel.length > colWidth - 8 
+      ? leftModel.substring(0, colWidth - 11) + '...' 
+      : leftModel;
+    const leftText = `${leftNum} ${chalk.yellow(leftName)}${leftCurrent}`;
+    const leftPlain = `[${leftIndex + 1}] ${leftName}${leftModel === agent.model ? ' *' : ''}`;
+    
+    // Right column (if exists)
+    let rightText = '';
+    let rightPlain = '';
+    if (rightIndex < models.length) {
+      const rightModel = models[rightIndex];
+      const rightNum = chalk.cyan(`[${rightIndex + 1}]`);
+      const rightCurrent = rightModel === agent.model ? chalk.green(' *') : '';
+      const rightName = rightModel.length > colWidth - 8 
+        ? rightModel.substring(0, colWidth - 11) + '...' 
+        : rightModel;
+      rightText = `${rightNum} ${chalk.yellow(rightName)}${rightCurrent}`;
+      rightPlain = `[${rightIndex + 1}] ${rightName}${rightModel === agent.model ? ' *' : ''}`;
+    }
+    
+    // Pad left column and combine
+    const leftPadding = colWidth - leftPlain.length;
+    const line = leftText + ' '.repeat(Math.max(2, leftPadding)) + rightText;
+    console.log(makeLine(line));
+  }
   
   console.log(makeLine(''));
-  console.log(makeLine(chalk.gray('[<] BACK')));
+  console.log(makeLine(chalk.white('[<] BACK') + chalk.white('                                        * = CURRENT')));
   
   drawBoxFooter(boxWidth);
   
