@@ -608,11 +608,18 @@ const showStats = async (service) => {
       // Empty line
       console.log(chalk.cyan('\u2551') + ' '.repeat(behaviorInnerWidth) + chalk.cyan('\u2551'));
       
-      // Stats line
-      const durationMin = behaviorData.duration ? Math.floor(behaviorData.duration / 60000) : 0;
-      const statsLine = `  CURRENT: ${barColors[currentAction](currentAction)} | PATTERNS: ${learningStats.patternsLearned.total} (${learningStats.patternsLearned.winning}W/${learningStats.patternsLearned.losing}L) | OPTIMIZATIONS: ${learningStats.optimizations}`;
+      // Current session stats line
+      const statsLine = `  CURRENT: ${barColors[currentAction](currentAction)} | SESSION PATTERNS: ${learningStats.patternsLearned.total} (${learningStats.patternsLearned.winning}W/${learningStats.patternsLearned.losing}L) | OPTIMIZATIONS: ${learningStats.optimizations}`;
       const statsLen = statsLine.replace(/\x1b\[[0-9;]*m/g, '').length;
       console.log(chalk.cyan('\u2551') + statsLine + ' '.repeat(Math.max(0, behaviorInnerWidth - statsLen)) + chalk.cyan('\u2551'));
+      
+      // Lifetime stats line (memory across sessions)
+      const lifetimeStats = StrategySupervisor.getLifetimeStats();
+      if (lifetimeStats.totalSessions > 0) {
+        const lifetimeLine = `  LIFETIME: ${lifetimeStats.totalSessions} sessions | ${lifetimeStats.totalTrades} trades | WR: ${lifetimeStats.lifetimeWinRate} | P&L: $${lifetimeStats.lifetimePnL.toFixed(2)} | ${lifetimeStats.patternsLearned.winning + lifetimeStats.patternsLearned.losing} patterns learned`;
+        const lifetimeLen = lifetimeLine.length;
+        console.log(chalk.cyan('\u2551') + chalk.magenta(lifetimeLine) + ' '.repeat(Math.max(0, behaviorInnerWidth - lifetimeLen)) + chalk.cyan('\u2551'));
+      }
       
       drawBoxFooter(boxWidth);
     }

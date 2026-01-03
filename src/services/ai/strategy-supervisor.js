@@ -8,11 +8,113 @@
  * 2. LEARN - Analyze winning/losing trades to identify patterns
  * 3. OPTIMIZE - Suggest and apply parameter improvements
  * 4. SUPERVISE - Monitor risk and intervene when necessary
+ * 5. PERSIST - Save learned patterns and optimizations between sessions
  * 
  * In CONSENSUS mode (2+ agents), ALL agents must agree before applying changes.
  */
 
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 const { analyzePerformance, getMarketAdvice, callAI } = require('./client');
+
+// Path for persisted learning data
+const DATA_DIR = path.join(os.homedir(), '.hqx');
+const LEARNING_FILE = path.join(DATA_DIR, 'ai-learning.json');
+
+/**
+ * Load persisted learning data from disk
+ * Called on startup to restore previous learnings
+ */
+const loadLearningData = () => {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    
+    if (fs.existsSync(LEARNING_FILE)) {
+      const data = JSON.parse(fs.readFileSync(LEARNING_FILE, 'utf8'));
+      return {
+        winningPatterns: data.winningPatterns || [],
+        losingPatterns: data.losingPatterns || [],
+        optimizations: data.optimizations || [],
+        totalSessions: data.totalSessions || 0,
+        totalTrades: data.totalTrades || 0,
+        totalWins: data.totalWins || 0,
+        totalLosses: data.totalLosses || 0,
+        lifetimePnL: data.lifetimePnL || 0,
+        lastUpdated: data.lastUpdated || null
+      };
+    }
+  } catch (e) {
+    // Silent fail - start fresh
+  }
+  
+  return {
+    winningPatterns: [],
+    losingPatterns: [],
+    optimizations: [],
+    totalSessions: 0,
+    totalTrades: 0,
+    totalWins: 0,
+    totalLosses: 0,
+    lifetimePnL: 0,
+    lastUpdated: null
+  };
+};
+
+/**
+ * Save learning data to disk
+ * Called after each trade and on session end
+ */
+const saveLearningData = () => {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    
+    // Load existing data first
+    const existing = loadLearningData();
+    
+    // Merge with current session data
+    const dataToSave = {
+      // Patterns - keep last 100 of each type (merge and dedupe by timestamp)
+      winningPatterns: mergePatterns(existing.winningPatterns, supervisorState.winningPatterns, 100),
+      losingPatterns: mergePatterns(existing.losingPatterns, supervisorState.losingPatterns, 100),
+      
+      // Optimizations history - keep last 50
+      optimizations: [...existing.optimizations, ...supervisorState.optimizations].slice(-50),
+      
+      // Lifetime stats
+      totalSessions: existing.totalSessions + (supervisorState.active ? 0 : 1),
+      totalTrades: existing.totalTrades + supervisorState.performance.trades,
+      totalWins: existing.totalWins + supervisorState.performance.wins,
+      totalLosses: existing.totalLosses + supervisorState.performance.losses,
+      lifetimePnL: existing.lifetimePnL + supervisorState.performance.totalPnL,
+      
+      // Metadata
+      lastUpdated: new Date().toISOString()
+    };
+    
+    fs.writeFileSync(LEARNING_FILE, JSON.stringify(dataToSave, null, 2));
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
+/**
+ * Merge pattern arrays, keeping most recent unique entries
+ */
+const mergePatterns = (existing, current, maxCount) => {
+  const merged = [...existing, ...current];
+  
+  // Sort by timestamp descending (most recent first)
+  merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  
+  // Keep only maxCount most recent
+  return merged.slice(0, maxCount);
+};
 
 // Singleton supervisor state
 let supervisorState = {
@@ -69,9 +171,13 @@ let analysisInterval = null;
 
 /**
  * Initialize supervisor with strategy and agents
+ * Loads previous learning data to continue improving
  */
 const initialize = (strategy, agents, service, accountId) => {
   const now = Date.now();
+  
+  // Load previously learned patterns and optimizations
+  const previousLearning = loadLearningData();
   
   supervisorState = {
     ...supervisorState,
@@ -83,8 +189,17 @@ const initialize = (strategy, agents, service, accountId) => {
     ticks: [],
     signals: [],
     trades: [],
-    winningPatterns: [],
-    losingPatterns: [],
+    // Restore previous learning
+    winningPatterns: previousLearning.winningPatterns || [],
+    losingPatterns: previousLearning.losingPatterns || [],
+    previousOptimizations: previousLearning.optimizations || [],
+    lifetimeStats: {
+      sessions: previousLearning.totalSessions || 0,
+      trades: previousLearning.totalTrades || 0,
+      wins: previousLearning.totalWins || 0,
+      losses: previousLearning.totalLosses || 0,
+      pnl: previousLearning.lifetimePnL || 0
+    },
     performance: {
       trades: 0,
       wins: 0,
@@ -124,7 +239,7 @@ const initialize = (strategy, agents, service, accountId) => {
 };
 
 /**
- * Stop supervisor
+ * Stop supervisor and save learned data
  */
 const stop = () => {
   if (analysisInterval) {
@@ -132,11 +247,16 @@ const stop = () => {
     analysisInterval = null;
   }
   
+  // Save all learned data before stopping
+  const saved = saveLearningData();
+  
   const summary = {
     ...supervisorState.performance,
     optimizationsApplied: supervisorState.optimizations.length,
     winningPatterns: supervisorState.winningPatterns.length,
-    losingPatterns: supervisorState.losingPatterns.length
+    losingPatterns: supervisorState.losingPatterns.length,
+    dataSaved: saved,
+    lifetimeStats: supervisorState.lifetimeStats
   };
   
   supervisorState.active = false;
@@ -768,6 +888,44 @@ const getLearningStats = () => {
   };
 };
 
+/**
+ * Get lifetime stats across all sessions
+ * Shows cumulative learning progress
+ */
+const getLifetimeStats = () => {
+  const saved = loadLearningData();
+  
+  return {
+    totalSessions: saved.totalSessions,
+    totalTrades: saved.totalTrades,
+    totalWins: saved.totalWins,
+    totalLosses: saved.totalLosses,
+    lifetimeWinRate: saved.totalTrades > 0 ? 
+      ((saved.totalWins / saved.totalTrades) * 100).toFixed(1) + '%' : 'N/A',
+    lifetimePnL: saved.lifetimePnL,
+    patternsLearned: {
+      winning: saved.winningPatterns?.length || 0,
+      losing: saved.losingPatterns?.length || 0
+    },
+    optimizationsApplied: saved.optimizations?.length || 0,
+    lastUpdated: saved.lastUpdated
+  };
+};
+
+/**
+ * Clear all learned data (reset AI memory)
+ */
+const clearLearningData = () => {
+  try {
+    if (fs.existsSync(LEARNING_FILE)) {
+      fs.unlinkSync(LEARNING_FILE);
+    }
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
 module.exports = {
   initialize,
   stop,
@@ -779,5 +937,8 @@ module.exports = {
   getStatus,
   analyzeAndOptimize,
   getBehaviorHistory,
-  getLearningStats
+  getLearningStats,
+  getLifetimeStats,
+  clearLearningData,
+  loadLearningData
 };
