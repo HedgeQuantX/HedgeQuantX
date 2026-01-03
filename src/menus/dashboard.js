@@ -10,6 +10,7 @@ const { connections } = require('../services');
 const { getLogoWidth, centerText, prepareStdin } = require('../ui');
 const { getCachedStats } = require('../services/stats-cache');
 const { prompts } = require('../utils');
+const aiService = require('../services/ai');
 
 /**
  * Dashboard menu after login
@@ -60,9 +61,18 @@ const dashboardMenu = async (service) => {
       pnlDisplay = '--';
     }
     
+    // AI status
+    const aiConnection = aiService.getConnection();
+    const aiStatus = aiConnection 
+      ? aiConnection.provider.name.split(' ')[0]  // Just "CLAUDE" or "OPENAI"
+      : null;
+    
     // Yellow icons: ✔ for each stat
     const icon = chalk.yellow('✔ ');
-    const statsPlain = `✔ CONNECTIONS: ${statsInfo.connections}    ✔ ACCOUNTS: ${statsInfo.accounts}    ✔ BALANCE: ${balStr}    ✔ P&L: ${pnlDisplay}`;
+    const aiIcon = aiStatus ? chalk.magenta('✔ ') : chalk.gray('○ ');
+    const aiText = aiStatus ? chalk.magenta(aiStatus) : chalk.gray('NONE');
+    
+    const statsPlain = `✔ CONNECTIONS: ${statsInfo.connections}    ✔ ACCOUNTS: ${statsInfo.accounts}    ✔ BALANCE: ${balStr}    AI: ${aiStatus || 'NONE'}`;
     const statsLeftPad = Math.max(0, Math.floor((W - statsPlain.length) / 2));
     const statsRightPad = Math.max(0, W - statsPlain.length - statsLeftPad);
     
@@ -70,7 +80,7 @@ const dashboardMenu = async (service) => {
       icon + chalk.white(`CONNECTIONS: ${statsInfo.connections}`) + '    ' +
       icon + chalk.white(`ACCOUNTS: ${statsInfo.accounts}`) + '    ' +
       icon + chalk.white('BALANCE: ') + balColor(balStr) + '    ' +
-      icon + chalk.white('P&L: ') + pnlColor(pnlDisplay) +
+      aiIcon + chalk.white('AI: ') + aiText +
       ' '.repeat(Math.max(0, statsRightPad)) + chalk.cyan('║'));
   }
   
@@ -87,19 +97,21 @@ const dashboardMenu = async (service) => {
   };
   
   menuRow(chalk.cyan('[1] VIEW ACCOUNTS'), chalk.cyan('[2] VIEW STATS'));
-  menuRow(chalk.cyan('[+] ADD PROP-ACCOUNT'), chalk.magenta('[A] ALGO-TRADING'));
-  menuRow(chalk.yellow('[U] UPDATE HQX'), chalk.red('[X] DISCONNECT'));
+  menuRow(chalk.cyan('[+] ADD PROP-ACCOUNT'), chalk.magenta('[A] ALGO TRADING'));
+  menuRow(chalk.magenta('[I] AI AGENT'), chalk.yellow('[U] UPDATE HQX'));
+  menuRow(chalk.red('[X] DISCONNECT'), '');
   
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
   
   // Simple input - no duplicate menu
-  const input = await prompts.textInput(chalk.cyan('SELECT (1/2/+/A/U/X)'));
+  const input = await prompts.textInput(chalk.cyan('SELECT (1/2/+/A/I/U/X)'));
   
   const actionMap = {
     '1': 'accounts',
     '2': 'stats',
     '+': 'add_prop_account',
     'a': 'algotrading',
+    'i': 'ai_agent',
     'u': 'update',
     'x': 'disconnect'
   };

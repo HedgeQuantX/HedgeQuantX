@@ -27,6 +27,7 @@ const {
   dashboardMenu,
   handleUpdate,
 } = require('./menus');
+const { aiAgentMenu } = require('./menus/ai-agent');
 
 /** @type {Object|null} */
 let currentService = null;
@@ -334,6 +335,10 @@ const run = async () => {
                 console.log(chalk.red(`  Algo error: ${err.message}`));
                 prepareStdin();
               }
+              break;
+
+            case 'ai_agent':
+              await aiAgentMenu();
               break;
 
             case 'update':
