@@ -609,10 +609,117 @@ const initialize = (strategy, agents, service, accountId) => {
     }
   }, 10000);
   
+  // Start agent sync interval - ensures new agents are picked up dynamically
+  if (!supervisorState.agentSyncInterval) {
+    supervisorState.agentSyncInterval = setInterval(syncAgents, 5000);
+  }
+  
   return {
     success: true,
     agents: agents.length,
     mode: agents.length >= 2 ? 'CONSENSUS' : 'INDIVIDUAL'
+  };
+};
+
+/**
+ * Sync agents with AI service
+ * Called periodically to pick up newly added/removed agents
+ * Ensures all agents are always connected to the supervisor
+ */
+const syncAgents = () => {
+  if (!supervisorState.active) return;
+  
+  try {
+    // Dynamic import to avoid circular dependency
+    const aiService = require('./index');
+    const currentAgents = aiService.getAgents();
+    
+    if (!currentAgents) return;
+    
+    const currentIds = new Set(currentAgents.map(a => a.id));
+    const supervisorIds = new Set(supervisorState.agents.map(a => a.id));
+    
+    // Check for new agents
+    const newAgents = currentAgents.filter(a => !supervisorIds.has(a.id));
+    
+    // Check for removed agents
+    const removedIds = [...supervisorIds].filter(id => !currentIds.has(id));
+    
+    // Add new agents
+    if (newAgents.length > 0) {
+      supervisorState.agents = [...supervisorState.agents, ...newAgents];
+      // Log would go here if we had UI access
+    }
+    
+    // Remove agents that were disconnected
+    if (removedIds.length > 0) {
+      supervisorState.agents = supervisorState.agents.filter(a => !removedIds.includes(a.id));
+    }
+    
+    // Update mode based on current agent count
+    supervisorState.mode = supervisorState.agents.length >= 2 ? 'CONSENSUS' : 'INDIVIDUAL';
+    
+  } catch (e) {
+    // Silent fail - aiService might not be ready
+  }
+};
+
+/**
+ * Force refresh agents from AI service
+ * Call this when you know agents have changed
+ */
+const refreshAgents = () => {
+  syncAgents();
+  return {
+    agents: supervisorState.agents.length,
+    mode: supervisorState.agents.length >= 2 ? 'CONSENSUS' : 'INDIVIDUAL'
+  };
+};
+
+/**
+ * Add a single agent to the supervisor (called when agent is added)
+ */
+const addAgent = (agent) => {
+  if (!supervisorState.active) return false;
+  
+  // Check if already exists
+  if (supervisorState.agents.some(a => a.id === agent.id)) {
+    return false;
+  }
+  
+  supervisorState.agents.push(agent);
+  supervisorState.mode = supervisorState.agents.length >= 2 ? 'CONSENSUS' : 'INDIVIDUAL';
+  
+  return true;
+};
+
+/**
+ * Remove an agent from the supervisor (called when agent is removed)
+ */
+const removeAgent = (agentId) => {
+  if (!supervisorState.active) return false;
+  
+  const index = supervisorState.agents.findIndex(a => a.id === agentId);
+  if (index === -1) return false;
+  
+  supervisorState.agents.splice(index, 1);
+  supervisorState.mode = supervisorState.agents.length >= 2 ? 'CONSENSUS' : 'INDIVIDUAL';
+  
+  return true;
+};
+
+/**
+ * Get current agent count and mode
+ */
+const getAgentInfo = () => {
+  return {
+    count: supervisorState.agents.length,
+    mode: supervisorState.agents.length >= 2 ? 'CONSENSUS' : 'INDIVIDUAL',
+    agents: supervisorState.agents.map(a => ({
+      id: a.id,
+      name: a.name,
+      provider: a.providerId
+    }))
   };
 };
 
@@ -623,6 +730,12 @@ const stop = () => {
   if (analysisInterval) {
     clearInterval(analysisInterval);
     analysisInterval = null;
+  }
+  
+  // Stop agent sync
+  if (supervisorState.agentSyncInterval) {
+    clearInterval(supervisorState.agentSyncInterval);
+    supervisorState.agentSyncInterval = null;
   }
   
   // Save all learned data before stopping
@@ -1921,18 +2034,34 @@ const clearLearningData = () => {
 };
 
 module.exports = {
+  // Core lifecycle
   initialize,
   stop,
+  
+  // Data feeds (from algo)
   feedTick,
   feedSignal,
   feedTradeResult,
+  
+  // Trading decisions
   getCurrentAdvice,
   shouldTrade,
+  
+  // Agent management (dynamic sync)
+  syncAgents,
+  refreshAgents,
+  addAgent,
+  removeAgent,
+  getAgentInfo,
+  
+  // Status & stats
   getStatus,
   analyzeAndOptimize,
   getBehaviorHistory,
   getLearningStats,
   getLifetimeStats,
+  
+  // Data management
   clearLearningData,
   loadLearningData
 };

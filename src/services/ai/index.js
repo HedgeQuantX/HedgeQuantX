@@ -6,6 +6,7 @@
 const { getProviders, getProvider } = require('./providers');
 const { storage } = require('../session');
 const AISupervisor = require('./supervisor');
+const StrategySupervisor = require('./strategy-supervisor');
 
 // In-memory cache of connections
 let connectionsCache = null;
@@ -228,9 +229,16 @@ const addAgent = async (providerId, optionId, credentials, model = null, customN
   
   saveAISettings(aiSettings);
   
-  // Agent is ready - supervision will start when algo trading begins
-  // Supervision requires a real service connection and account
+  // Get the full agent object
   const agent = getAgent(agentId);
+  
+  // Notify StrategySupervisor if algo is running
+  // This ensures new agents are immediately connected to live trading
+  try {
+    StrategySupervisor.addAgent(agent);
+  } catch (e) {
+    // Supervisor might not be active - that's OK
+  }
   
   return agent;
 };
@@ -252,6 +260,13 @@ const removeAgent = (agentId) => {
   
   // Stop AI supervision for this agent
   AISupervisor.stop(agentId);
+  
+  // Notify StrategySupervisor to remove agent from live trading
+  try {
+    StrategySupervisor.removeAgent(agentId);
+  } catch (e) {
+    // Supervisor might not be active - that's OK
+  }
   
   // If removed agent was active, set new active
   if (aiSettings.activeAgentId === agentId) {
@@ -288,6 +303,13 @@ const updateAgent = (agentId, updates) => {
 const disconnectAll = () => {
   // Stop all AI supervision sessions
   AISupervisor.stopAll();
+  
+  // Refresh StrategySupervisor to clear agents
+  try {
+    StrategySupervisor.refreshAgents();
+  } catch (e) {
+    // Supervisor might not be active
+  }
   
   saveAISettings({ agents: [] });
 };
