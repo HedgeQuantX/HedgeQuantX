@@ -357,11 +357,12 @@ const fetchAnthropicModelsOAuth = async (accessToken) => {
   try {
     const response = await makeRequest(url, { method: 'GET', headers, timeout: 10000 });
     if (response.data && Array.isArray(response.data)) {
-      return response.data.map(m => m.id).filter(Boolean);
+      const models = response.data.map(m => m.id).filter(Boolean);
+      if (models.length > 0) return models;
     }
     return null;
   } catch (error) {
-    // OAuth may not support /models endpoint, return null to use defaults
+    // OAuth token may not support /models endpoint
     return null;
   }
 };

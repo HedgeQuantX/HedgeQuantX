@@ -374,58 +374,28 @@ const validateConnection = async (providerId, optionId, credentials) => {
 const validateAnthropic = async (credentials) => {
   try {
     const token = credentials.apiKey || credentials.sessionKey || credentials.accessToken;
+    if (!token) return { valid: false, error: 'No API key provided' };
     
-    // Check if it's an OAuth token (sk-ant-oat...) vs API key (sk-ant-api...)
-    const isOAuthToken = token && token.startsWith('sk-ant-oat');
-    
-    if (isOAuthToken) {
-      // OAuth tokens (from Claude Max/Pro subscription) cannot be validated via public API
-      // They use a different authentication flow through claude.ai
-      // Trust them if they have the correct format (sk-ant-oatXX-...)
-      if (token.length > 50 && /^sk-ant-oat\d{2}-[a-zA-Z0-9_-]+$/.test(token)) {
-        return { 
-          valid: true, 
-          tokenType: 'oauth', 
-          subscriptionType: credentials.subscriptionType || 'max',
-          trusted: credentials.fromKeychain || false
-        };
-      }
-      
-      return { valid: false, error: 'Invalid OAuth token format' };
-    }
-    
-    // Standard API key validation (sk-ant-api...)
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
+    // Validate by fetching models from API - this proves the token works
+    const response = await fetch('https://api.anthropic.com/v1/models', {
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
         'x-api-key': token,
         'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250929',
-        max_tokens: 10,
-        messages: [{ role: 'user', content: 'Hi' }]
-      })
+      }
     });
     
     if (response.ok) {
-      return { valid: true, tokenType: 'api_key' };
+      const data = await response.json();
+      if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+        return { valid: true, tokenType: 'api_key' };
+      }
+      return { valid: false, error: 'API returned no models' };
     }
     
     const error = await response.json();
     return { valid: false, error: error.error?.message || 'Invalid API key' };
   } catch (e) {
-    // Network error - if it's an OAuth token, still accept it (can't validate anyway)
-    const token = credentials.apiKey || credentials.sessionKey || credentials.accessToken;
-    if (token && token.startsWith('sk-ant-oat') && token.length > 50) {
-      return { 
-        valid: true, 
-        tokenType: 'oauth', 
-        subscriptionType: credentials.subscriptionType || 'max',
-        warning: 'Could not validate online (network error), but token format is valid'
-      };
-    }
     return { valid: false, error: e.message };
   }
 };

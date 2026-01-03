@@ -10,17 +10,8 @@ const PROVIDERS = {
     name: 'OPENROUTER (RECOMMENDED)',
     description: '1 API key for 100+ models',
     category: 'unified',
-    models: [
-      'anthropic/claude-sonnet-4',
-      'anthropic/claude-3-opus',
-      'openai/gpt-4o',
-      'openai/gpt-4-turbo',
-      'google/gemini-pro-1.5',
-      'meta-llama/llama-3-70b',
-      'mistralai/mistral-large',
-      'deepseek/deepseek-chat'
-    ],
-    defaultModel: 'anthropic/claude-sonnet-4',
+    models: [], // Fetched from API at runtime
+    defaultModel: null, // Will use first model from API
     options: [
       {
         id: 'api_key',

@@ -10,7 +10,6 @@ const { getLogoWidth, drawBoxHeader, drawBoxHeaderContinue, drawBoxFooter, displ
 const { prompts } = require('../utils');
 const aiService = require('../services/ai');
 const { getCategories, getProvidersByCategory } = require('../services/ai/providers');
-const tokenScanner = require('../services/ai/token-scanner');
 const oauthAnthropic = require('../services/ai/oauth-anthropic');
 
 /**
@@ -118,7 +117,7 @@ const aiAgentMenu = async () => {
   
   switch (input) {
     case '+':
-      return await showExistingTokens();
+      return await selectCategory();
     case 's':
       if (agentCount > 1) {
         return await selectActiveAgent();
@@ -365,178 +364,6 @@ const selectAgentToRemove = async () => {
   console.log(chalk.yellow(`\n  ${agents[index].name} REMOVED`));
   await prompts.waitForEnter();
   return await aiAgentMenu();
-};
-
-// Cache for scanned tokens (avoid multiple Keychain prompts)
-let cachedTokens = null;
-let cacheTimestamp = 0;
-const CACHE_TTL = 60000; // 1 minute cache
-
-/**
- * Show existing tokens found on the system
- */
-const showExistingTokens = async () => {
-  const boxWidth = getLogoWidth();
-  const W = boxWidth - 2;
-  
-  const makeLine = (content) => {
-    const plainLen = content.replace(/\x1b\[[0-9;]*m/g, '').length;
-    const padding = W - plainLen;
-    return chalk.cyan('║') + ' ' + content + ' '.repeat(Math.max(0, padding - 1)) + chalk.cyan('║');
-  };
-  
-  // Check cache first
-  const now = Date.now();
-  let tokens;
-  
-  if (cachedTokens && (now - cacheTimestamp) < CACHE_TTL) {
-    tokens = cachedTokens;
-  } else {
-    console.clear();
-    displayBanner();
-    drawBoxHeaderContinue('SCANNING FOR EXISTING SESSIONS...', boxWidth);
-    console.log(makeLine(''));
-    console.log(makeLine(chalk.gray('CHECKING VS CODE, CURSOR, CLAUDE CLI, OPENCODE...')));
-    console.log(makeLine(''));
-    drawBoxFooter(boxWidth);
-    
-    // Scan for tokens and cache
-    tokens = tokenScanner.scanAllSources();
-    cachedTokens = tokens;
-    cacheTimestamp = now;
-  }
-  
-  if (tokens.length === 0) {
-    // No tokens found, go directly to category selection
-    return await selectCategory();
-  }
-  
-  // Show found tokens
-  console.clear();
-  displayBanner();
-  drawBoxHeaderContinue('EXISTING SESSIONS FOUND', boxWidth);
-  
-  console.log(makeLine(chalk.green(`FOUND ${tokens.length} EXISTING SESSION(S)`)));
-  console.log(makeLine(''));
-  
-  const formatted = tokenScanner.formatResults(tokens);
-  
-  for (const t of formatted) {
-    const providerColor = t.provider.includes('CLAUDE') ? chalk.magenta : 
-                          t.provider.includes('OPENAI') ? chalk.green :
-                          t.provider.includes('OPENROUTER') ? chalk.yellow : chalk.cyan;
-    
-    console.log(makeLine(
-      chalk.white(`[${t.index}] `) + 
-      providerColor(t.provider) + 
-      chalk.gray(` (${t.type})`)
-    ));
-    console.log(makeLine(
-      chalk.gray(`    ${t.icon} ${t.source} - ${t.lastUsed}`)
-    ));
-    console.log(makeLine(
-      chalk.gray(`    TOKEN: ${t.tokenPreview}`)
-    ));
-    console.log(makeLine(''));
-  }
-  
-  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
-  console.log(makeLine(chalk.cyan('[N] CONNECT NEW PROVIDER')));
-  console.log(makeLine(chalk.gray('[<] BACK')));
-  
-  drawBoxFooter(boxWidth);
-  
-  const choice = await prompts.textInput(chalk.cyan('SELECT (1-' + tokens.length + '/N/<):'));
-  
-  if (choice === '<' || choice?.toLowerCase() === 'b') {
-    return await aiAgentMenu();
-  }
-  
-  if (choice?.toLowerCase() === 'n') {
-    return await selectCategory();
-  }
-  
-  const index = parseInt(choice) - 1;
-  if (isNaN(index) || index < 0 || index >= tokens.length) {
-    return await showExistingTokens();
-  }
-  
-  // Use selected token
-  const selectedToken = tokens[index];
-  
-  const spinner = ora({ text: 'VALIDATING TOKEN...', color: 'cyan' }).start();
-  
-  try {
-    // Validate the token - include metadata from scanner
-    const credentials = { 
-      apiKey: selectedToken.token,
-      sessionKey: selectedToken.token,
-      accessToken: selectedToken.token,
-      fromKeychain: selectedToken.sourceId === 'secureStorage' || selectedToken.sourceId === 'keychain',
-      subscriptionType: selectedToken.subscriptionType,
-      refreshToken: selectedToken.refreshToken,
-      expiresAt: selectedToken.expiresAt
-    };
-    const validation = await aiService.validateConnection(selectedToken.provider, selectedToken.type, credentials);
-    
-    if (!validation.valid) {
-      spinner.fail(`TOKEN INVALID OR EXPIRED: ${validation.error}`);
-      await prompts.waitForEnter();
-      return await showExistingTokens();
-    }
-    
-    // Get provider info
-    const { getProvider } = require('../services/ai/providers');
-    const provider = getProvider(selectedToken.provider);
-    
-    if (!provider) {
-      spinner.fail('PROVIDER NOT SUPPORTED');
-      await prompts.waitForEnter();
-      return await showExistingTokens();
-    }
-    
-    spinner.text = 'FETCHING AVAILABLE MODELS...';
-    
-    // Fetch models from API with the token
-    const { fetchAnthropicModels, fetchOpenAIModels } = require('../services/ai/client');
-    
-    let models = null;
-    if (selectedToken.provider === 'anthropic') {
-      models = await fetchAnthropicModels(credentials.apiKey);
-    } else {
-      models = await fetchOpenAIModels(provider.endpoint, credentials.apiKey);
-    }
-    
-    if (!models || models.length === 0) {
-      spinner.fail('COULD NOT FETCH MODELS FROM API');
-      await prompts.waitForEnter();
-      return await showExistingTokens();
-    }
-    
-    spinner.succeed(`FOUND ${models.length} MODELS`);
-    
-    // Let user select model
-    const selectedModel = await selectModelFromList(models, provider.name);
-    if (!selectedModel) {
-      return await showExistingTokens();
-    }
-    
-    // Add agent with selected model
-    const agentName = `${provider.name} (${selectedToken.source})`;
-    await aiService.addAgent(selectedToken.provider, 'api_key', credentials, selectedModel, agentName);
-    
-    console.log(chalk.green(`\n  AGENT ADDED: ${provider.name}`));
-    console.log(chalk.gray(`  SOURCE: ${selectedToken.source}`));
-    console.log(chalk.gray(`  MODEL: ${selectedModel}`));
-    
-    await prompts.waitForEnter();
-    return await aiAgentMenu();
-    
-  } catch (error) {
-    spinner.fail(`CONNECTION FAILED: ${error.message}`);
-    await prompts.waitForEnter();
-    return await showExistingTokens();
-  }
 };
 
 /**
@@ -937,16 +764,18 @@ const setupOAuthConnection = async (provider) => {
     spinner.succeed(`FOUND ${models.length} MODELS`);
   }
   
-  // Let user select model
-  const availableModels = models && models.length > 0 ? models : [
-    'claude-sonnet-4-20250514',
-    'claude-sonnet-4-5-20250514',
-    'claude-3-5-sonnet-20241022',
-    'claude-3-5-haiku-20241022',
-    'claude-3-opus-20240229'
-  ];
+  if (!models || models.length === 0) {
+    spinner.fail('COULD NOT FETCH MODELS FROM API');
+    console.log(chalk.gray('  OAuth authentication may not support model listing.'));
+    console.log(chalk.gray('  Please use API KEY authentication instead.'));
+    await prompts.waitForEnter();
+    return await selectProviderOption(provider);
+  }
   
-  const selectedModel = await selectModelFromList(availableModels, 'CLAUDE PRO/MAX');
+  spinner.succeed(`FOUND ${models.length} MODELS`);
+  
+  // Let user select model
+  const selectedModel = await selectModelFromList(models, 'CLAUDE PRO/MAX');
   if (!selectedModel) {
     return await selectProviderOption(provider);
   }
@@ -1173,13 +1002,24 @@ const selectModel = async (agent) => {
   drawBoxFooter(boxWidth);
   
   // Fetch models from real API
-  const { fetchAnthropicModels, fetchOpenAIModels } = require('../services/ai/client');
+  const { fetchAnthropicModels, fetchAnthropicModelsOAuth, fetchOpenAIModels } = require('../services/ai/client');
   
   let models = null;
   const agentCredentials = aiService.getAgentCredentials(agent.id);
   
   if (agent.providerId === 'anthropic') {
-    models = await fetchAnthropicModels(agentCredentials?.apiKey);
+    // Check if OAuth credentials or OAuth-like token (sk-ant-oat...)
+    const token = agentCredentials?.apiKey || agentCredentials?.accessToken || agentCredentials?.sessionKey;
+    const isOAuthToken = agentCredentials?.oauth?.access || (token && token.startsWith('sk-ant-oat'));
+    
+    if (isOAuthToken) {
+      // Use OAuth endpoint with Bearer token
+      const accessToken = agentCredentials?.oauth?.access || token;
+      models = await fetchAnthropicModelsOAuth(accessToken);
+    } else {
+      // Standard API key
+      models = await fetchAnthropicModels(token);
+    }
   } else {
     // OpenAI-compatible providers
     const endpoint = agentCredentials?.endpoint || agent.provider?.endpoint;
