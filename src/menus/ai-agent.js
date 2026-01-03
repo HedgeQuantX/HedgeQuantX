@@ -6,7 +6,7 @@
 const chalk = require('chalk');
 const ora = require('ora');
 
-const { getLogoWidth, drawBoxHeader, drawBoxFooter } = require('../ui');
+const { getLogoWidth, drawBoxHeader, drawBoxFooter, displayBanner } = require('../ui');
 const { prompts } = require('../utils');
 const aiService = require('../services/ai');
 const { getCategories, getProvidersByCategory } = require('../services/ai/providers');
@@ -29,6 +29,7 @@ const aiAgentMenu = async () => {
   };
   
   console.clear();
+  displayBanner();
   drawBoxHeader('AI AGENT', boxWidth);
   
   // Show current status
@@ -93,6 +94,7 @@ const aiAgentMenu = async () => {
 const selectCategory = async () => {
   const boxWidth = getLogoWidth();
   const W = boxWidth - 2;
+  const col1Width = Math.floor(W / 2);
   
   const makeLine = (content) => {
     const plainLen = content.replace(/\x1b\[[0-9;]*m/g, '').length;
@@ -100,19 +102,39 @@ const selectCategory = async () => {
     return chalk.cyan('║') + ' ' + content + ' '.repeat(Math.max(0, padding - 1)) + chalk.cyan('║');
   };
   
+  const make2ColRow = (left, right) => {
+    const leftPlain = left.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const rightPlain = right.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const leftPadded = ' ' + left + ' '.repeat(Math.max(0, col1Width - leftPlain - 1));
+    const rightPadded = right + ' '.repeat(Math.max(0, W - col1Width - rightPlain));
+    return chalk.cyan('║') + leftPadded + rightPadded + chalk.cyan('║');
+  };
+  
   console.clear();
+  displayBanner();
   drawBoxHeader('SELECT PROVIDER TYPE', boxWidth);
   
   const categories = getCategories();
   
-  categories.forEach((cat, index) => {
-    const color = cat.id === 'unified' ? chalk.green : 
-                  cat.id === 'local' ? chalk.yellow : chalk.cyan;
-    console.log(makeLine(color(`[${index + 1}] ${cat.name}`)));
-    console.log(makeLine(chalk.gray('    ' + cat.description)));
-    console.log(makeLine(''));
-  });
-  
+  // Display in 2 columns
+  console.log(make2ColRow(
+    chalk.green('[1] UNIFIED (RECOMMENDED)'),
+    chalk.cyan('[2] DIRECT PROVIDERS')
+  ));
+  console.log(make2ColRow(
+    chalk.gray('    1 API = 100+ models'),
+    chalk.gray('    Connect to each provider')
+  ));
+  console.log(makeLine(''));
+  console.log(make2ColRow(
+    chalk.yellow('[3] LOCAL (FREE)'),
+    chalk.gray('[4] CUSTOM')
+  ));
+  console.log(make2ColRow(
+    chalk.gray('    Run on your machine'),
+    chalk.gray('    Self-hosted solutions')
+  ));
+  console.log(makeLine(''));
   console.log(makeLine(chalk.gray('[<] BACK')));
   
   drawBoxFooter(boxWidth);
@@ -138,6 +160,7 @@ const selectCategory = async () => {
 const selectProvider = async (categoryId) => {
   const boxWidth = getLogoWidth();
   const W = boxWidth - 2;
+  const col1Width = Math.floor(W / 2);
   
   const makeLine = (content) => {
     const plainLen = content.replace(/\x1b\[[0-9;]*m/g, '').length;
@@ -145,7 +168,16 @@ const selectProvider = async (categoryId) => {
     return chalk.cyan('║') + ' ' + content + ' '.repeat(Math.max(0, padding - 1)) + chalk.cyan('║');
   };
   
+  const make2ColRow = (left, right) => {
+    const leftPlain = left.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const rightPlain = right.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const leftPadded = ' ' + left + ' '.repeat(Math.max(0, col1Width - leftPlain - 1));
+    const rightPadded = right + ' '.repeat(Math.max(0, W - col1Width - rightPlain));
+    return chalk.cyan('║') + leftPadded + rightPadded + chalk.cyan('║');
+  };
+  
   console.clear();
+  displayBanner();
   
   const categories = getCategories();
   const category = categories.find(c => c.id === categoryId);
@@ -154,30 +186,44 @@ const selectProvider = async (categoryId) => {
   const providers = getProvidersByCategory(categoryId);
   
   if (providers.length === 0) {
-    console.log(makeLine(chalk.gray('No providers in this category')));
+    console.log(makeLine(chalk.gray('NO PROVIDERS IN THIS CATEGORY')));
     drawBoxFooter(boxWidth);
     await prompts.waitForEnter();
     return await selectCategory();
   }
   
-  // Display providers
-  providers.forEach((provider, index) => {
-    const isRecommended = provider.id === 'openrouter';
-    const color = isRecommended ? chalk.green : chalk.cyan;
-    console.log(makeLine(color(`[${index + 1}] ${provider.name}`)));
-    console.log(makeLine(chalk.gray('    ' + provider.description)));
-    if (provider.models && provider.models.length > 0) {
-      const modelList = provider.models.slice(0, 3).join(', ');
-      console.log(makeLine(chalk.gray('    Models: ' + modelList + (provider.models.length > 3 ? '...' : ''))));
-    }
+  // Display providers in 2 columns
+  for (let i = 0; i < providers.length; i += 2) {
+    const left = providers[i];
+    const right = providers[i + 1];
+    
+    // Provider names
+    const leftName = `[${i + 1}] ${left.name}`;
+    const rightName = right ? `[${i + 2}] ${right.name}` : '';
+    
+    console.log(make2ColRow(
+      chalk.cyan(leftName.length > col1Width - 3 ? leftName.substring(0, col1Width - 6) + '...' : leftName),
+      right ? chalk.cyan(rightName.length > col1Width - 3 ? rightName.substring(0, col1Width - 6) + '...' : rightName) : ''
+    ));
+    
+    // Descriptions (truncated)
+    const leftDesc = '    ' + left.description;
+    const rightDesc = right ? '    ' + right.description : '';
+    
+    console.log(make2ColRow(
+      chalk.gray(leftDesc.length > col1Width - 3 ? leftDesc.substring(0, col1Width - 6) + '...' : leftDesc),
+      chalk.gray(rightDesc.length > col1Width - 3 ? rightDesc.substring(0, col1Width - 6) + '...' : rightDesc)
+    ));
+    
     console.log(makeLine(''));
-  });
+  }
   
   console.log(makeLine(chalk.gray('[<] BACK')));
   
   drawBoxFooter(boxWidth);
   
-  const choice = await prompts.textInput(chalk.cyan('SELECT PROVIDER:'));
+  const maxNum = providers.length;
+  const choice = await prompts.textInput(chalk.cyan(`SELECT (1-${maxNum}):`));
   
   if (choice === '<' || choice?.toLowerCase() === 'b') {
     return await selectCategory();
@@ -198,11 +244,20 @@ const selectProvider = async (categoryId) => {
 const selectProviderOption = async (provider) => {
   const boxWidth = getLogoWidth();
   const W = boxWidth - 2;
+  const col1Width = Math.floor(W / 2);
   
   const makeLine = (content) => {
     const plainLen = content.replace(/\x1b\[[0-9;]*m/g, '').length;
     const padding = W - plainLen;
     return chalk.cyan('║') + ' ' + content + ' '.repeat(Math.max(0, padding - 1)) + chalk.cyan('║');
+  };
+  
+  const make2ColRow = (left, right) => {
+    const leftPlain = left.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const rightPlain = right.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const leftPadded = ' ' + left + ' '.repeat(Math.max(0, col1Width - leftPlain - 1));
+    const rightPadded = right + ' '.repeat(Math.max(0, W - col1Width - rightPlain));
+    return chalk.cyan('║') + leftPadded + rightPadded + chalk.cyan('║');
   };
   
   // If only one option, skip selection
@@ -211,18 +266,43 @@ const selectProviderOption = async (provider) => {
   }
   
   console.clear();
+  displayBanner();
   drawBoxHeader(provider.name, boxWidth);
   
   console.log(makeLine(chalk.white('SELECT CONNECTION METHOD:')));
   console.log(makeLine(''));
   
-  provider.options.forEach((option, index) => {
-    console.log(makeLine(chalk.cyan(`[${index + 1}] ${option.label}`)));
-    option.description.forEach(desc => {
-      console.log(makeLine(chalk.gray('    ' + desc)));
-    });
+  // Display options in 2 columns
+  for (let i = 0; i < provider.options.length; i += 2) {
+    const left = provider.options[i];
+    const right = provider.options[i + 1];
+    
+    // Option labels
+    console.log(make2ColRow(
+      chalk.cyan(`[${i + 1}] ${left.label}`),
+      right ? chalk.cyan(`[${i + 2}] ${right.label}`) : ''
+    ));
+    
+    // First description line
+    const leftDesc1 = left.description[0] ? '    ' + left.description[0] : '';
+    const rightDesc1 = right?.description[0] ? '    ' + right.description[0] : '';
+    console.log(make2ColRow(
+      chalk.gray(leftDesc1.length > col1Width - 2 ? leftDesc1.substring(0, col1Width - 5) + '...' : leftDesc1),
+      chalk.gray(rightDesc1.length > col1Width - 2 ? rightDesc1.substring(0, col1Width - 5) + '...' : rightDesc1)
+    ));
+    
+    // Second description line if exists
+    const leftDesc2 = left.description[1] ? '    ' + left.description[1] : '';
+    const rightDesc2 = right?.description[1] ? '    ' + right.description[1] : '';
+    if (leftDesc2 || rightDesc2) {
+      console.log(make2ColRow(
+        chalk.gray(leftDesc2.length > col1Width - 2 ? leftDesc2.substring(0, col1Width - 5) + '...' : leftDesc2),
+        chalk.gray(rightDesc2.length > col1Width - 2 ? rightDesc2.substring(0, col1Width - 5) + '...' : rightDesc2)
+      ));
+    }
+    
     console.log(makeLine(''));
-  });
+  }
   
   console.log(makeLine(chalk.gray('[<] BACK')));
   
@@ -257,6 +337,7 @@ const setupConnection = async (provider, option) => {
   };
   
   console.clear();
+  displayBanner();
   drawBoxHeader(`CONNECT TO ${provider.name}`, boxWidth);
   
   // Show instructions
@@ -265,6 +346,8 @@ const setupConnection = async (provider, option) => {
     console.log(makeLine(chalk.cyan(option.url)));
     console.log(makeLine(''));
   }
+  
+  console.log(makeLine(chalk.gray('TYPE < TO GO BACK')));
   
   drawBoxFooter(boxWidth);
   console.log();
@@ -277,33 +360,34 @@ const setupConnection = async (provider, option) => {
     
     switch (field) {
       case 'apiKey':
-        value = await prompts.passwordInput('ENTER API KEY:');
-        if (!value) return await selectProviderOption(provider);
+        value = await prompts.textInput('ENTER API KEY (OR < TO GO BACK):');
+        if (!value || value === '<') return await selectProviderOption(provider);
         credentials.apiKey = value;
         break;
         
       case 'sessionKey':
-        value = await prompts.passwordInput('ENTER SESSION KEY:');
-        if (!value) return await selectProviderOption(provider);
+        value = await prompts.textInput('ENTER SESSION KEY (OR < TO GO BACK):');
+        if (!value || value === '<') return await selectProviderOption(provider);
         credentials.sessionKey = value;
         break;
         
       case 'accessToken':
-        value = await prompts.passwordInput('ENTER ACCESS TOKEN:');
-        if (!value) return await selectProviderOption(provider);
+        value = await prompts.textInput('ENTER ACCESS TOKEN (OR < TO GO BACK):');
+        if (!value || value === '<') return await selectProviderOption(provider);
         credentials.accessToken = value;
         break;
         
       case 'endpoint':
         const defaultEndpoint = option.defaultEndpoint || '';
-        value = await prompts.textInput(`ENDPOINT [${defaultEndpoint || 'required'}]:`);
+        value = await prompts.textInput(`ENDPOINT [${defaultEndpoint || 'required'}] (OR < TO GO BACK):`);
+        if (value === '<') return await selectProviderOption(provider);
         credentials.endpoint = value || defaultEndpoint;
         if (!credentials.endpoint) return await selectProviderOption(provider);
         break;
         
       case 'model':
-        value = await prompts.textInput('MODEL NAME:');
-        if (!value) return await selectProviderOption(provider);
+        value = await prompts.textInput('MODEL NAME (OR < TO GO BACK):');
+        if (!value || value === '<') return await selectProviderOption(provider);
         credentials.model = value;
         break;
     }
@@ -354,27 +438,33 @@ const selectModel = async (provider) => {
   };
   
   console.clear();
+  displayBanner();
   drawBoxHeader('SELECT MODEL', boxWidth);
   
   const models = provider.models || [];
   
   if (models.length === 0) {
-    console.log(makeLine(chalk.gray('No predefined models. Enter model name manually.')));
+    console.log(makeLine(chalk.gray('NO PREDEFINED MODELS. ENTER MODEL NAME MANUALLY.')));
+    console.log(makeLine(''));
+    console.log(makeLine(chalk.gray('[<] BACK')));
     drawBoxFooter(boxWidth);
     
-    const model = await prompts.textInput('ENTER MODEL NAME:');
-    if (model) {
-      const settings = aiService.getAISettings();
-      settings.model = model;
-      aiService.saveAISettings(settings);
-      console.log(chalk.green(`\n  MODEL CHANGED TO: ${model}`));
+    const model = await prompts.textInput('ENTER MODEL NAME (OR < TO GO BACK):');
+    if (!model || model === '<') {
+      return await aiAgentMenu();
     }
+    const settings = aiService.getAISettings();
+    settings.model = model;
+    aiService.saveAISettings(settings);
+    console.log(chalk.green(`\n  MODEL CHANGED TO: ${model}`));
     await prompts.waitForEnter();
     return await aiAgentMenu();
   }
   
   models.forEach((model, index) => {
-    console.log(makeLine(chalk.cyan(`[${index + 1}] ${model}`)));
+    // Truncate long model names
+    const displayModel = model.length > W - 10 ? model.substring(0, W - 13) + '...' : model;
+    console.log(makeLine(chalk.cyan(`[${index + 1}] ${displayModel}`)));
   });
   
   console.log(makeLine(''));
