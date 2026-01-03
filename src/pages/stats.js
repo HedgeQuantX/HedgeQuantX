@@ -428,15 +428,43 @@ const showStats = async (service) => {
       
       // Calculate max agent name length to fit in column (label=18 + space=1 + padding buffer)
       const maxAgentNameLen = col1 - 20;
-      const agentNamesDisplay = agentNames.length > maxAgentNameLen 
-        ? agentNames.substring(0, maxAgentNameLen - 2) + '..' 
-        : agentNames;
       
-      console.log(chalk.cyan('\u2551') + fmtRow('CONNECTED AGENTS:', chalk.green(String(aiAgents.length)), col1) + chalk.cyan('\u2502') + fmtRow('SUPERVISED ACCOUNTS:', chalk.white(String(supervisedAccounts)), col2) + chalk.cyan('\u2551'));
-      console.log(chalk.cyan('\u2551') + fmtRow('MODE:', modeColor(agentMode), col1) + chalk.cyan('\u2502') + fmtRow('SUPERVISED P&L:', supervisedPnL >= 0 ? chalk.green('$' + supervisedPnL.toFixed(2)) : chalk.red('$' + supervisedPnL.toFixed(2)), col2) + chalk.cyan('\u2551'));
-      console.log(chalk.cyan('\u2551') + fmtRow('ACTIVE:', activeAgent ? chalk.green(activeAgent.name) : chalk.white('NONE'), col1) + chalk.cyan('\u2502') + fmtRow('POSITIONS:', chalk.white(String(supervisionData.totalPositions)), col2) + chalk.cyan('\u2551'));
-      console.log(chalk.cyan('\u2551') + fmtRow('SESSION TIME:', sessionTimeStr === 'INACTIVE' ? chalk.yellow(sessionTimeStr) : chalk.white(sessionTimeStr), col1) + chalk.cyan('\u2502') + fmtRow('OPEN ORDERS:', chalk.white(String(supervisionData.totalOrders)), col2) + chalk.cyan('\u2551'));
-      console.log(chalk.cyan('\u2551') + fmtRow('AGENTS:', chalk.white(agentNamesDisplay), col1) + chalk.cyan('\u2502') + fmtRow('TRADES TODAY:', chalk.white(String(supervisionData.totalTrades)), col2) + chalk.cyan('\u2551'));
+      // Performance column data (right side)
+      const perfData = [
+        { label: 'SUPERVISED ACCOUNTS:', value: chalk.white(String(supervisedAccounts)) },
+        { label: 'SUPERVISED P&L:', value: supervisedPnL >= 0 ? chalk.green('$' + supervisedPnL.toFixed(2)) : chalk.red('$' + supervisedPnL.toFixed(2)) },
+        { label: 'POSITIONS:', value: chalk.white(String(supervisionData.totalPositions)) },
+        { label: 'OPEN ORDERS:', value: chalk.white(String(supervisionData.totalOrders)) },
+        { label: 'TRADES TODAY:', value: chalk.white(String(supervisionData.totalTrades)) }
+      ];
+      
+      // Agents column data (left side) - each agent on its own line
+      const agentsData = [
+        { label: 'CONNECTED AGENTS:', value: chalk.green(String(aiAgents.length)) },
+        { label: 'MODE:', value: modeColor(agentMode) },
+        { label: 'SESSION TIME:', value: sessionTimeStr === 'INACTIVE' ? chalk.yellow(sessionTimeStr) : chalk.white(sessionTimeStr) }
+      ];
+      
+      // Add each agent as a separate line
+      aiAgents.forEach((agent, idx) => {
+        const agentLabel = idx === 0 ? 'AGENTS:' : '';
+        const isActive = activeAgent && agent.id === activeAgent.id;
+        const agentName = agent.name.length > maxAgentNameLen 
+          ? agent.name.substring(0, maxAgentNameLen - 2) + '..' 
+          : agent.name;
+        const agentDisplay = isActive 
+          ? chalk.green('● ') + chalk.green(agentName)
+          : chalk.white('○ ') + chalk.white(agentName);
+        agentsData.push({ label: agentLabel, value: agentDisplay });
+      });
+      
+      // Print rows - match left and right columns
+      const maxRows = Math.max(agentsData.length, perfData.length);
+      for (let i = 0; i < maxRows; i++) {
+        const leftData = agentsData[i] || { label: '', value: '' };
+        const rightData = perfData[i] || { label: '', value: '' };
+        console.log(chalk.cyan('\u2551') + fmtRow(leftData.label, leftData.value, col1) + chalk.cyan('\u2502') + fmtRow(rightData.label, rightData.value, col2) + chalk.cyan('\u2551'));
+      }
       
       drawBoxFooter(boxWidth);
     }
