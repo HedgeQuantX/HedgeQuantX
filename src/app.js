@@ -115,9 +115,10 @@ const refreshStats = async () => {
 
 /**
  * Display application banner
+ * @param {boolean} [clear=true] - Whether to clear screen first
  */
-const banner = async () => {
-  console.clear();
+const banner = async (clear = true) => {
+  if (clear) console.clear();
   
   const termWidth = process.stdout.columns || 100;
   const isMobile = termWidth < 60;
@@ -240,7 +241,8 @@ const run = async () => {
     while (true) {
       try {
         prepareStdin();
-        await banner();
+        console.clear();
+        await banner(false);
 
         if (!connections.isConnected()) {
           const choice = await mainMenu();
