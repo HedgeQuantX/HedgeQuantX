@@ -203,12 +203,30 @@ Mirror trades from Lead to Follower accounts.
 
 ---
 
+## Community
+
+<div align="center">
+
+### Contributors
+
+<a href="https://github.com/HedgeQuantX/HedgeQuantX/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=HedgeQuantX/HedgeQuantX" />
+</a>
+
+### Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=HedgeQuantX/HedgeQuantX&type=Date)](https://star-history.com/#HedgeQuantX/HedgeQuantX&Date)
+
+</div>
+
+---
+
 ## Support
 
 <div align="center">
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/UBKCERctZu)
-[![GitHub Issues](https://img.shields.io/badge/GitHub-Issues-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/HedgeQuantX/HQX-CLI/issues)
+[![GitHub Issues](https://img.shields.io/badge/GitHub-Issues-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/HedgeQuantX/HedgeQuantX/issues)
 
 </div>
 
