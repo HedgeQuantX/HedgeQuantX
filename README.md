@@ -213,10 +213,6 @@ Mirror trades from Lead to Follower accounts.
   <img src="https://contrib.rocks/image?repo=HedgeQuantX/HedgeQuantX" />
 </a>
 
-### Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=HedgeQuantX/HedgeQuantX&type=Date)](https://star-history.com/#HedgeQuantX/HedgeQuantX&Date)
-
 </div>
 
 ---
