@@ -381,7 +381,8 @@ const PROVIDER_PATTERNS = {
     displayName: 'CLAUDE (ANTHROPIC)',
     keyPatterns: [
       /sk-ant-api\d{2}-[a-zA-Z0-9_-]{80,}/g,           // New format API key
-      /sk-ant-[a-zA-Z0-9_-]{40,}/g,                     // Old format API key
+      /sk-ant-oat\d{2}-[a-zA-Z0-9_-]{40,}/g,           // OAuth access token (from Claude Max/Pro subscription)
+      /sk-ant-(?!ort)[a-zA-Z0-9_-]{40,}/g,             // Old format API key (excludes refresh tokens: sk-ant-ort...)
     ],
     sessionPatterns: [
       /"sessionKey"\s*:\s*"([^"]+)"/gi,
@@ -515,6 +516,340 @@ const getFileModTime = (filePath) => {
     return stats.mtime;
   } catch {
     return null;
+  }
+};
+
+/**
+ * Known credential entries for AI providers (used by all OS)
+ * Organized by IDE/App
+ */
+const CREDENTIAL_ENTRIES = [
+  // VS Code
+  { service: 'Claude Code-credentials', provider: 'anthropic', name: 'CLAUDE CODE (VS CODE)', ide: 'vscode' },
+  { service: 'vscode.anthropic-credentials', provider: 'anthropic', name: 'VS CODE ANTHROPIC', ide: 'vscode' },
+  { service: 'vscode-openai', provider: 'openai', name: 'VS CODE OPENAI', ide: 'vscode' },
+  { service: 'copilot-credentials', provider: 'openai', name: 'GITHUB COPILOT', ide: 'vscode' },
+  
+  // VS Code Insiders
+  { service: 'Claude Code-credentials-insiders', provider: 'anthropic', name: 'CLAUDE CODE (INSIDERS)', ide: 'vscode-insiders' },
+  
+  // Cursor
+  { service: 'Cursor-credentials', provider: 'anthropic', name: 'CURSOR (CLAUDE)', ide: 'cursor' },
+  { service: 'cursor.anthropic-credentials', provider: 'anthropic', name: 'CURSOR ANTHROPIC', ide: 'cursor' },
+  { service: 'cursor.openai-credentials', provider: 'openai', name: 'CURSOR OPENAI', ide: 'cursor' },
+  
+  // Windsurf
+  { service: 'Windsurf-credentials', provider: 'anthropic', name: 'WINDSURF (CLAUDE)', ide: 'windsurf' },
+  { service: 'windsurf.anthropic-credentials', provider: 'anthropic', name: 'WINDSURF ANTHROPIC', ide: 'windsurf' },
+  
+  // Zed
+  { service: 'Zed-credentials', provider: 'anthropic', name: 'ZED (CLAUDE)', ide: 'zed' },
+  { service: 'zed.anthropic-credentials', provider: 'anthropic', name: 'ZED ANTHROPIC', ide: 'zed' },
+  { service: 'zed.openai-credentials', provider: 'openai', name: 'ZED OPENAI', ide: 'zed' },
+  
+  // Claude CLI / App
+  { service: 'Claude Safe Storage', provider: 'anthropic', name: 'CLAUDE CLI', ide: 'claude-cli' },
+  { service: 'claude-cli-credentials', provider: 'anthropic', name: 'CLAUDE CLI', ide: 'claude-cli' },
+  
+  // Continue.dev
+  { service: 'Continue-credentials', provider: 'anthropic', name: 'CONTINUE.DEV', ide: 'continue' },
+  { service: 'continue.anthropic-credentials', provider: 'anthropic', name: 'CONTINUE ANTHROPIC', ide: 'continue' },
+  { service: 'continue.openai-credentials', provider: 'openai', name: 'CONTINUE OPENAI', ide: 'continue' },
+  
+  // Cline
+  { service: 'Cline-credentials', provider: 'anthropic', name: 'CLINE', ide: 'cline' },
+  { service: 'saoudrizwan.claude-dev-credentials', provider: 'anthropic', name: 'CLINE (CLAUDE DEV)', ide: 'cline' },
+  
+  // OpenCode
+  { service: 'OpenCode-credentials', provider: 'anthropic', name: 'OPENCODE', ide: 'opencode' },
+  { service: 'opencode.anthropic-credentials', provider: 'anthropic', name: 'OPENCODE ANTHROPIC', ide: 'opencode' },
+  
+  // Aider
+  { service: 'Aider-credentials', provider: 'anthropic', name: 'AIDER', ide: 'aider' },
+  { service: 'aider.anthropic-credentials', provider: 'anthropic', name: 'AIDER ANTHROPIC', ide: 'aider' },
+  { service: 'aider.openai-credentials', provider: 'openai', name: 'AIDER OPENAI', ide: 'aider' },
+  
+  // Generic OpenAI
+  { service: 'openai-credentials', provider: 'openai', name: 'OPENAI', ide: 'generic' },
+  
+  // Generic OpenRouter
+  { service: 'openrouter-credentials', provider: 'openrouter', name: 'OPENROUTER', ide: 'generic' },
+];
+
+/**
+ * Parse credential JSON and extract tokens
+ */
+const parseCredentialJson = (output, entry) => {
+  const results = [];
+  
+  try {
+    const data = JSON.parse(output);
+    
+    // Extract Claude OAuth access token
+    if (data.claudeAiOauth?.accessToken) {
+      results.push({
+        source: `SECURE STORAGE - ${entry.name}`,
+        sourceId: 'secureStorage',
+        icon: '🔐',
+        type: data.claudeAiOauth.subscriptionType === 'max' ? 'session' : 'api_key',
+        provider: entry.provider,
+        providerName: PROVIDER_PATTERNS[entry.provider]?.displayName || entry.provider.toUpperCase(),
+        token: data.claudeAiOauth.accessToken,
+        refreshToken: data.claudeAiOauth.refreshToken,
+        expiresAt: data.claudeAiOauth.expiresAt,
+        subscriptionType: data.claudeAiOauth.subscriptionType,
+        lastUsed: new Date()
+      });
+    }
+    
+    // Extract OpenAI token
+    if (data.accessToken && entry.provider === 'openai') {
+      results.push({
+        source: `SECURE STORAGE - ${entry.name}`,
+        sourceId: 'secureStorage',
+        icon: '🔐',
+        type: 'session',
+        provider: entry.provider,
+        providerName: PROVIDER_PATTERNS[entry.provider]?.displayName || entry.provider.toUpperCase(),
+        token: data.accessToken,
+        lastUsed: new Date()
+      });
+    }
+    
+    // Generic API key in JSON
+    if (data.apiKey) {
+      results.push({
+        source: `SECURE STORAGE - ${entry.name}`,
+        sourceId: 'secureStorage',
+        icon: '🔐',
+        type: 'api_key',
+        provider: entry.provider,
+        providerName: PROVIDER_PATTERNS[entry.provider]?.displayName || entry.provider.toUpperCase(),
+        token: data.apiKey,
+        lastUsed: new Date()
+      });
+    }
+  } catch {
+    // Not JSON, treat as raw token
+    if (output.length > 20) {
+      for (const [providerId, provider] of Object.entries(PROVIDER_PATTERNS)) {
+        for (const pattern of provider.keyPatterns) {
+          pattern.lastIndex = 0;
+          if (pattern.test(output)) {
+            results.push({
+              source: `SECURE STORAGE - ${entry.name}`,
+              sourceId: 'secureStorage',
+              icon: '🔐',
+              type: 'api_key',
+              provider: providerId,
+              providerName: provider.displayName,
+              token: output,
+              lastUsed: new Date()
+            });
+            break;
+          }
+        }
+      }
+    }
+  }
+  
+  return results;
+};
+
+/**
+ * Read tokens from macOS Keychain
+ * Optimized: stops after finding first valid token per provider to minimize password prompts
+ */
+const readMacOSKeychain = () => {
+  if (platform !== 'darwin') return [];
+  
+  const results = [];
+  const { execSync } = require('child_process');
+  const foundProviders = new Set(); // Track which providers we already found
+  
+  // Sort entries to prioritize most common ones first
+  const priorityOrder = ['Claude Code-credentials', 'Cursor-credentials', 'Claude Safe Storage'];
+  const sortedEntries = [...CREDENTIAL_ENTRIES].sort((a, b) => {
+    const aIdx = priorityOrder.indexOf(a.service);
+    const bIdx = priorityOrder.indexOf(b.service);
+    if (aIdx === -1 && bIdx === -1) return 0;
+    if (aIdx === -1) return 1;
+    if (bIdx === -1) return -1;
+    return aIdx - bIdx;
+  });
+  
+  for (const entry of sortedEntries) {
+    // Skip if we already found a token for this provider
+    if (foundProviders.has(entry.provider)) {
+      continue;
+    }
+    
+    try {
+      const output = execSync(
+        `security find-generic-password -s "${entry.service}" -w 2>/dev/null`,
+        { encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] }
+      ).trim();
+      
+      if (output) {
+        const tokens = parseCredentialJson(output, entry);
+        if (tokens.length > 0) {
+          results.push(...tokens);
+          foundProviders.add(entry.provider); // Mark this provider as found
+        }
+      }
+    } catch {
+      // Entry not found or access denied - no password prompt for missing entries
+    }
+  }
+  
+  return results;
+};
+
+/**
+ * Read tokens from Linux Secret Service (libsecret/gnome-keyring)
+ */
+const readLinuxSecretService = () => {
+  if (platform !== 'linux') return [];
+  
+  const results = [];
+  const { execSync } = require('child_process');
+  
+  // Check if secret-tool is available
+  try {
+    execSync('which secret-tool', { stdio: 'pipe' });
+  } catch {
+    return results; // secret-tool not available
+  }
+  
+  for (const entry of CREDENTIAL_ENTRIES) {
+    try {
+      // Try different attribute combinations
+      const commands = [
+        `secret-tool lookup service "${entry.service}" 2>/dev/null`,
+        `secret-tool lookup application "${entry.service}" 2>/dev/null`,
+        `secret-tool lookup xdg:schema "org.freedesktop.Secret.Generic" service "${entry.service}" 2>/dev/null`,
+      ];
+      
+      for (const cmd of commands) {
+        try {
+          const output = execSync(cmd, { 
+            encoding: 'utf8', 
+            timeout: 5000, 
+            stdio: ['pipe', 'pipe', 'pipe'] 
+          }).trim();
+          
+          if (output) {
+            results.push(...parseCredentialJson(output, entry));
+            break; // Found it, no need to try other commands
+          }
+        } catch {
+          // Command failed, try next
+        }
+      }
+    } catch {
+      // Entry not found
+    }
+  }
+  
+  // Also check VS Code's pass-based storage on Linux
+  const passEntries = [
+    'vscode/Claude Code-credentials',
+    'vscode/Cursor-credentials',
+    'vscode/openai-credentials',
+  ];
+  
+  for (const passPath of passEntries) {
+    try {
+      const output = execSync(`pass show "${passPath}" 2>/dev/null`, {
+        encoding: 'utf8',
+        timeout: 5000,
+        stdio: ['pipe', 'pipe', 'pipe']
+      }).trim();
+      
+      if (output) {
+        const entry = CREDENTIAL_ENTRIES.find(e => passPath.includes(e.service)) || 
+          { service: passPath, provider: 'unknown', name: passPath };
+        results.push(...parseCredentialJson(output, entry));
+      }
+    } catch {
+      // pass entry not found
+    }
+  }
+  
+  return results;
+};
+
+/**
+ * Read tokens from Windows Credential Manager
+ */
+const readWindowsCredentialManager = () => {
+  if (platform !== 'win32') return [];
+  
+  const results = [];
+  const { execSync } = require('child_process');
+  
+  for (const entry of CREDENTIAL_ENTRIES) {
+    try {
+      // Use PowerShell to read from Credential Manager
+      const psCommand = `
+        $cred = Get-StoredCredential -Target "${entry.service}" -ErrorAction SilentlyContinue
+        if ($cred) { 
+          [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
+            [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($cred.Password)
+          )
+        }
+      `;
+      
+      const output = execSync(`powershell -Command "${psCommand.replace(/\n/g, ' ')}"`, {
+        encoding: 'utf8',
+        timeout: 10000,
+        stdio: ['pipe', 'pipe', 'pipe']
+      }).trim();
+      
+      if (output) {
+        results.push(...parseCredentialJson(output, entry));
+      }
+    } catch {
+      // Try cmdkey as fallback (less reliable for getting password)
+      try {
+        // cmdkey can list but not retrieve passwords directly
+        // VS Code on Windows often uses DPAPI-encrypted files instead
+      } catch {
+        // Entry not found
+      }
+    }
+  }
+  
+  // Also check VS Code's DPAPI-encrypted storage on Windows
+  const vscodeCredPath = path.join(
+    process.env.APPDATA || '',
+    'Code',
+    'User',
+    'globalStorage',
+    'state.vscdb'
+  );
+  
+  if (pathExists(vscodeCredPath)) {
+    const dbResults = readVSCodeStateDb(vscodeCredPath);
+    results.push(...dbResults);
+  }
+  
+  return results;
+};
+
+/**
+ * Read tokens from OS secure storage (unified function)
+ */
+const readSecureStorage = () => {
+  switch (platform) {
+    case 'darwin':
+      return readMacOSKeychain();
+    case 'linux':
+      return readLinuxSecretService();
+    case 'win32':
+      return readWindowsCredentialManager();
+    default:
+      return [];
   }
 };
 
@@ -935,10 +1270,18 @@ const scanSource = (sourceId) => {
 const scanAllSources = () => {
   const allResults = [];
   
-  // First, scan environment variables (highest priority)
+  // First, scan OS secure storage (Keychain, libsecret, Credential Manager)
+  // This is the most reliable source for IDE tokens
+  try {
+    allResults.push(...readSecureStorage());
+  } catch (err) {
+    // Silent fail
+  }
+  
+  // Then scan environment variables
   allResults.push(...scanEnvironmentVariables());
   
-  // Then scan all tool sources
+  // Then scan all tool sources (config files)
   for (const sourceId of Object.keys(TOKEN_SOURCES)) {
     if (sourceId === 'envVars') continue; // Already scanned
     
@@ -1056,10 +1399,12 @@ const getSystemInfo = () => {
 module.exports = {
   TOKEN_SOURCES,
   PROVIDER_PATTERNS,
+  CREDENTIAL_ENTRIES,
   scanAllSources,
   scanForProvider,
   scanSource,
   scanEnvironmentVariables,
+  readSecureStorage,
   formatResults,
   timeAgo,
   hasExistingTokens,

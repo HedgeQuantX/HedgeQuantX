@@ -1,6 +1,6 @@
 /**
  * AI Agent Menu
- * Configure AI provider connection
+ * Configure multiple AI provider connections
  */
 
 const chalk = require('chalk');
@@ -31,63 +31,317 @@ const aiAgentMenu = async () => {
   
   console.clear();
   displayBanner();
-  drawBoxHeaderContinue('AI AGENT', boxWidth);
+  drawBoxHeaderContinue('AI AGENTS', boxWidth);
   
-  // Show current status
-  const connection = aiService.getConnection();
+  // Get all connected agents
+  const agents = aiService.getAgents();
+  const agentCount = agents.length;
   
-  if (connection) {
-    console.log(makeLine(chalk.green('STATUS: ● CONNECTED'), 'left'));
-    console.log(makeLine(chalk.white(`PROVIDER: ${connection.provider.name}`), 'left'));
-    console.log(makeLine(chalk.white(`MODEL: ${connection.model}`), 'left'));
+  if (agentCount === 0) {
+    console.log(makeLine(chalk.gray('STATUS: NO AGENTS CONNECTED'), 'left'));
   } else {
-    console.log(makeLine(chalk.gray('STATUS: ○ NOT CONNECTED'), 'left'));
+    console.log(makeLine(chalk.green(`STATUS: ${agentCount} AGENT${agentCount > 1 ? 'S' : ''} CONNECTED`), 'left'));
+    console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
+    
+    // List all agents
+    for (let i = 0; i < agents.length; i++) {
+      const agent = agents[i];
+      const activeMarker = agent.isActive ? chalk.yellow(' *') : '';
+      const providerColor = agent.providerId === 'anthropic' ? chalk.magenta :
+                           agent.providerId === 'openai' ? chalk.green :
+                           agent.providerId === 'openrouter' ? chalk.yellow : chalk.cyan;
+      
+      console.log(makeLine(
+        chalk.white(`[${i + 1}] `) + 
+        providerColor(agent.name) + 
+        activeMarker + 
+        chalk.gray(` - ${agent.model}`)
+      ));
+    }
   }
   
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
   // Menu options
-  const options = [];
+  console.log(makeLine(chalk.green('[+] ADD NEW AGENT')));
   
-  if (!connection) {
-    options.push({ label: chalk.green('[1] CONNECT PROVIDER'), value: 'connect' });
-  } else {
-    options.push({ label: chalk.cyan('[1] CHANGE PROVIDER'), value: 'connect' });
-    options.push({ label: chalk.yellow('[2] CHANGE MODEL'), value: 'model' });
-    options.push({ label: chalk.red('[3] DISCONNECT'), value: 'disconnect' });
+  if (agentCount > 0) {
+    console.log(makeLine(chalk.cyan('[S] SET ACTIVE AGENT')));
+    console.log(makeLine(chalk.yellow('[M] CHANGE MODEL')));
+    console.log(makeLine(chalk.red('[R] REMOVE AGENT')));
+    if (agentCount > 1) {
+      console.log(makeLine(chalk.red('[X] REMOVE ALL')));
+    }
   }
-  options.push({ label: chalk.gray('[<] BACK'), value: 'back' });
   
-  for (const opt of options) {
-    console.log(makeLine(opt.label, 'left'));
+  console.log(makeLine(chalk.gray('[<] BACK')));
+  
+  drawBoxFooter(boxWidth);
+  
+  const choice = await prompts.textInput(chalk.cyan('SELECT:'));
+  const input = (choice || '').toLowerCase();
+  
+  // Handle number input (select agent for details)
+  const num = parseInt(choice);
+  if (!isNaN(num) && num >= 1 && num <= agentCount) {
+    return await showAgentDetails(agents[num - 1]);
   }
+  
+  switch (input) {
+    case '+':
+      return await showExistingTokens();
+    case 's':
+      if (agentCount > 1) {
+        return await selectActiveAgent();
+      }
+      return await aiAgentMenu();
+    case 'm':
+      if (agentCount > 0) {
+        return await selectAgentForModelChange();
+      }
+      return await aiAgentMenu();
+    case 'r':
+      if (agentCount > 0) {
+        return await selectAgentToRemove();
+      }
+      return await aiAgentMenu();
+    case 'x':
+      if (agentCount > 1) {
+        aiService.disconnectAll();
+        console.log(chalk.yellow('\n  ALL AGENTS REMOVED'));
+        await prompts.waitForEnter();
+      }
+      return await aiAgentMenu();
+    case '<':
+    case 'b':
+      return;
+    default:
+      return await aiAgentMenu();
+  }
+};
+
+/**
+ * Show agent details
+ */
+const showAgentDetails = async (agent) => {
+  const boxWidth = getLogoWidth();
+  const W = boxWidth - 2;
+  
+  const makeLine = (content) => {
+    const plainLen = content.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const padding = W - plainLen;
+    return chalk.cyan('║') + ' ' + content + ' '.repeat(Math.max(0, padding - 1)) + chalk.cyan('║');
+  };
+  
+  console.clear();
+  displayBanner();
+  drawBoxHeaderContinue('AGENT DETAILS', boxWidth);
+  
+  const providerColor = agent.providerId === 'anthropic' ? chalk.magenta :
+                       agent.providerId === 'openai' ? chalk.green :
+                       agent.providerId === 'openrouter' ? chalk.yellow : chalk.cyan;
+  
+  console.log(makeLine(chalk.white('NAME: ') + providerColor(agent.name)));
+  console.log(makeLine(chalk.white('PROVIDER: ') + chalk.gray(agent.provider?.name || agent.providerId)));
+  console.log(makeLine(chalk.white('MODEL: ') + chalk.gray(agent.model)));
+  console.log(makeLine(chalk.white('STATUS: ') + (agent.isActive ? chalk.green('ACTIVE') : chalk.gray('STANDBY'))));
+  
+  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
+  
+  if (!agent.isActive) {
+    console.log(makeLine(chalk.cyan('[A] SET AS ACTIVE')));
+  }
+  console.log(makeLine(chalk.yellow('[M] CHANGE MODEL')));
+  console.log(makeLine(chalk.red('[R] REMOVE')));
+  console.log(makeLine(chalk.gray('[<] BACK')));
   
   drawBoxFooter(boxWidth);
   
   const choice = await prompts.textInput(chalk.cyan('SELECT:'));
   
-  switch (choice?.toLowerCase()) {
-    case '1':
-      return await showExistingTokens();
-    case '2':
-      if (connection) {
-        return await selectModel(connection.provider);
-      }
-      return;
-    case '3':
-      if (connection) {
-        aiService.disconnect();
-        console.log(chalk.yellow('\n  AI AGENT DISCONNECTED'));
+  switch ((choice || '').toLowerCase()) {
+    case 'a':
+      if (!agent.isActive) {
+        aiService.setActiveAgent(agent.id);
+        console.log(chalk.green(`\n  ${agent.name} IS NOW ACTIVE`));
         await prompts.waitForEnter();
       }
-      return;
+      return await aiAgentMenu();
+    case 'm':
+      return await selectModel(agent);
+    case 'r':
+      aiService.removeAgent(agent.id);
+      console.log(chalk.yellow(`\n  ${agent.name} REMOVED`));
+      await prompts.waitForEnter();
+      return await aiAgentMenu();
     case '<':
     case 'b':
-      return;
+      return await aiAgentMenu();
     default:
-      return;
+      return await aiAgentMenu();
   }
 };
+
+/**
+ * Select active agent
+ */
+const selectActiveAgent = async () => {
+  const boxWidth = getLogoWidth();
+  const W = boxWidth - 2;
+  
+  const makeLine = (content) => {
+    const plainLen = content.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const padding = W - plainLen;
+    return chalk.cyan('║') + ' ' + content + ' '.repeat(Math.max(0, padding - 1)) + chalk.cyan('║');
+  };
+  
+  console.clear();
+  displayBanner();
+  drawBoxHeaderContinue('SET ACTIVE AGENT', boxWidth);
+  
+  const agents = aiService.getAgents();
+  
+  for (let i = 0; i < agents.length; i++) {
+    const agent = agents[i];
+    const activeMarker = agent.isActive ? chalk.yellow(' (CURRENT)') : '';
+    const providerColor = agent.providerId === 'anthropic' ? chalk.magenta :
+                         agent.providerId === 'openai' ? chalk.green : chalk.cyan;
+    
+    console.log(makeLine(
+      chalk.white(`[${i + 1}] `) + providerColor(agent.name) + activeMarker
+    ));
+  }
+  
+  console.log(makeLine(''));
+  console.log(makeLine(chalk.gray('[<] BACK')));
+  
+  drawBoxFooter(boxWidth);
+  
+  const choice = await prompts.textInput(chalk.cyan('SELECT AGENT:'));
+  
+  if (choice === '<' || choice?.toLowerCase() === 'b') {
+    return await aiAgentMenu();
+  }
+  
+  const index = parseInt(choice) - 1;
+  if (isNaN(index) || index < 0 || index >= agents.length) {
+    return await aiAgentMenu();
+  }
+  
+  aiService.setActiveAgent(agents[index].id);
+  console.log(chalk.green(`\n  ${agents[index].name} IS NOW ACTIVE`));
+  await prompts.waitForEnter();
+  return await aiAgentMenu();
+};
+
+/**
+ * Select agent to change model
+ */
+const selectAgentForModelChange = async () => {
+  const agents = aiService.getAgents();
+  
+  if (agents.length === 1) {
+    return await selectModel(agents[0]);
+  }
+  
+  const boxWidth = getLogoWidth();
+  const W = boxWidth - 2;
+  
+  const makeLine = (content) => {
+    const plainLen = content.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const padding = W - plainLen;
+    return chalk.cyan('║') + ' ' + content + ' '.repeat(Math.max(0, padding - 1)) + chalk.cyan('║');
+  };
+  
+  console.clear();
+  displayBanner();
+  drawBoxHeaderContinue('SELECT AGENT TO CHANGE MODEL', boxWidth);
+  
+  for (let i = 0; i < agents.length; i++) {
+    const agent = agents[i];
+    console.log(makeLine(
+      chalk.white(`[${i + 1}] `) + chalk.cyan(agent.name) + chalk.gray(` - ${agent.model}`)
+    ));
+  }
+  
+  console.log(makeLine(''));
+  console.log(makeLine(chalk.gray('[<] BACK')));
+  
+  drawBoxFooter(boxWidth);
+  
+  const choice = await prompts.textInput(chalk.cyan('SELECT AGENT:'));
+  
+  if (choice === '<' || choice?.toLowerCase() === 'b') {
+    return await aiAgentMenu();
+  }
+  
+  const index = parseInt(choice) - 1;
+  if (isNaN(index) || index < 0 || index >= agents.length) {
+    return await aiAgentMenu();
+  }
+  
+  return await selectModel(agents[index]);
+};
+
+/**
+ * Select agent to remove
+ */
+const selectAgentToRemove = async () => {
+  const agents = aiService.getAgents();
+  
+  if (agents.length === 1) {
+    aiService.removeAgent(agents[0].id);
+    console.log(chalk.yellow(`\n  ${agents[0].name} REMOVED`));
+    await prompts.waitForEnter();
+    return await aiAgentMenu();
+  }
+  
+  const boxWidth = getLogoWidth();
+  const W = boxWidth - 2;
+  
+  const makeLine = (content) => {
+    const plainLen = content.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const padding = W - plainLen;
+    return chalk.cyan('║') + ' ' + content + ' '.repeat(Math.max(0, padding - 1)) + chalk.cyan('║');
+  };
+  
+  console.clear();
+  displayBanner();
+  drawBoxHeaderContinue('SELECT AGENT TO REMOVE', boxWidth);
+  
+  for (let i = 0; i < agents.length; i++) {
+    const agent = agents[i];
+    console.log(makeLine(
+      chalk.white(`[${i + 1}] `) + chalk.red(agent.name)
+    ));
+  }
+  
+  console.log(makeLine(''));
+  console.log(makeLine(chalk.gray('[<] BACK')));
+  
+  drawBoxFooter(boxWidth);
+  
+  const choice = await prompts.textInput(chalk.cyan('SELECT AGENT TO REMOVE:'));
+  
+  if (choice === '<' || choice?.toLowerCase() === 'b') {
+    return await aiAgentMenu();
+  }
+  
+  const index = parseInt(choice) - 1;
+  if (isNaN(index) || index < 0 || index >= agents.length) {
+    return await aiAgentMenu();
+  }
+  
+  aiService.removeAgent(agents[index].id);
+  console.log(chalk.yellow(`\n  ${agents[index].name} REMOVED`));
+  await prompts.waitForEnter();
+  return await aiAgentMenu();
+};
+
+// Cache for scanned tokens (avoid multiple Keychain prompts)
+let cachedTokens = null;
+let cacheTimestamp = 0;
+const CACHE_TTL = 60000; // 1 minute cache
 
 /**
  * Show existing tokens found on the system
@@ -102,16 +356,26 @@ const showExistingTokens = async () => {
     return chalk.cyan('║') + ' ' + content + ' '.repeat(Math.max(0, padding - 1)) + chalk.cyan('║');
   };
   
-  console.clear();
-  displayBanner();
-  drawBoxHeaderContinue('SCANNING FOR EXISTING SESSIONS...', boxWidth);
-  console.log(makeLine(''));
-  console.log(makeLine(chalk.gray('CHECKING VS CODE, CURSOR, CLAUDE CLI, OPENCODE...')));
-  console.log(makeLine(''));
-  drawBoxFooter(boxWidth);
+  // Check cache first
+  const now = Date.now();
+  let tokens;
   
-  // Scan for tokens
-  const tokens = tokenScanner.scanAllSources();
+  if (cachedTokens && (now - cacheTimestamp) < CACHE_TTL) {
+    tokens = cachedTokens;
+  } else {
+    console.clear();
+    displayBanner();
+    drawBoxHeaderContinue('SCANNING FOR EXISTING SESSIONS...', boxWidth);
+    console.log(makeLine(''));
+    console.log(makeLine(chalk.gray('CHECKING VS CODE, CURSOR, CLAUDE CLI, OPENCODE...')));
+    console.log(makeLine(''));
+    drawBoxFooter(boxWidth);
+    
+    // Scan for tokens and cache
+    tokens = tokenScanner.scanAllSources();
+    cachedTokens = tokens;
+    cacheTimestamp = now;
+  }
   
   if (tokens.length === 0) {
     // No tokens found, go directly to category selection
@@ -121,7 +385,7 @@ const showExistingTokens = async () => {
   // Show found tokens
   console.clear();
   displayBanner();
-  drawBoxHeader('EXISTING SESSIONS FOUND', boxWidth);
+  drawBoxHeaderContinue('EXISTING SESSIONS FOUND', boxWidth);
   
   console.log(makeLine(chalk.green(`FOUND ${tokens.length} EXISTING SESSION(S)`)));
   console.log(makeLine(''));
@@ -174,9 +438,17 @@ const showExistingTokens = async () => {
   const spinner = ora({ text: 'VALIDATING TOKEN...', color: 'cyan' }).start();
   
   try {
-    // Validate the token
-    const credentials = { apiKey: selectedToken.token };
-    const validation = await aiService.validateConnection(selectedToken.provider, 'api_key', credentials);
+    // Validate the token - include metadata from scanner
+    const credentials = { 
+      apiKey: selectedToken.token,
+      sessionKey: selectedToken.token,
+      accessToken: selectedToken.token,
+      fromKeychain: selectedToken.sourceId === 'secureStorage' || selectedToken.sourceId === 'keychain',
+      subscriptionType: selectedToken.subscriptionType,
+      refreshToken: selectedToken.refreshToken,
+      expiresAt: selectedToken.expiresAt
+    };
+    const validation = await aiService.validateConnection(selectedToken.provider, selectedToken.type, credentials);
     
     if (!validation.valid) {
       spinner.fail(`TOKEN INVALID OR EXPIRED: ${validation.error}`);
@@ -194,11 +466,12 @@ const showExistingTokens = async () => {
       return await showExistingTokens();
     }
     
-    // Save connection
+    // Add as new agent
     const model = provider.defaultModel;
-    await aiService.connect(selectedToken.provider, 'api_key', credentials, model);
+    const agentName = `${provider.name} (${selectedToken.source})`;
+    await aiService.addAgent(selectedToken.provider, 'api_key', credentials, model, agentName);
     
-    spinner.succeed(`CONNECTED TO ${provider.name}`);
+    spinner.succeed(`AGENT ADDED: ${provider.name}`);
     console.log(chalk.gray(`  SOURCE: ${selectedToken.source}`));
     console.log(chalk.gray(`  MODEL: ${model}`));
     
@@ -236,7 +509,7 @@ const selectCategory = async () => {
   
   console.clear();
   displayBanner();
-  drawBoxHeader('SELECT PROVIDER TYPE', boxWidth);
+  drawBoxHeaderContinue('SELECT PROVIDER TYPE', boxWidth);
   
   const categories = getCategories();
   
@@ -305,7 +578,7 @@ const selectProvider = async (categoryId) => {
   
   const categories = getCategories();
   const category = categories.find(c => c.id === categoryId);
-  drawBoxHeader(category.name, boxWidth);
+  drawBoxHeaderContinue(category.name, boxWidth);
   
   const providers = getProvidersByCategory(categoryId);
   
@@ -391,7 +664,7 @@ const selectProviderOption = async (provider) => {
   
   console.clear();
   displayBanner();
-  drawBoxHeader(provider.name, boxWidth);
+  drawBoxHeaderContinue(provider.name, boxWidth);
   
   console.log(makeLine(chalk.white('SELECT CONNECTION METHOD:')));
   console.log(makeLine(''));
@@ -539,7 +812,7 @@ const setupConnection = async (provider, option) => {
     // Show instructions for this field
     console.clear();
     displayBanner();
-    drawBoxHeader(`CONNECT TO ${provider.name}`, boxWidth);
+    drawBoxHeaderContinue(`CONNECT TO ${provider.name}`, boxWidth);
     
     const instructions = getCredentialInstructions(provider, option, field);
     
@@ -621,11 +894,11 @@ const setupConnection = async (provider, option) => {
     return await selectProviderOption(provider);
   }
   
-  // Save connection
+  // Add as new agent
   try {
     const model = credentials.model || provider.defaultModel;
-    await aiService.connect(provider.id, option.id, credentials, model);
-    spinner.succeed(`CONNECTED TO ${provider.name}`);
+    await aiService.addAgent(provider.id, option.id, credentials, model, provider.name);
+    spinner.succeed(`AGENT ADDED: ${provider.name}`);
     
     // Show available models for local providers
     if (validation.models && validation.models.length > 0) {
@@ -642,9 +915,9 @@ const setupConnection = async (provider, option) => {
 };
 
 /**
- * Select/change model for current provider
+ * Select/change model for an agent
  */
-const selectModel = async (provider) => {
+const selectModel = async (agent) => {
   const boxWidth = getLogoWidth();
   const W = boxWidth - 2;
   
@@ -656,9 +929,9 @@ const selectModel = async (provider) => {
   
   console.clear();
   displayBanner();
-  drawBoxHeader('SELECT MODEL', boxWidth);
+  drawBoxHeaderContinue(`SELECT MODEL - ${agent.name}`, boxWidth);
   
-  const models = provider.models || [];
+  const models = agent.provider?.models || [];
   
   if (models.length === 0) {
     console.log(makeLine(chalk.gray('NO PREDEFINED MODELS. ENTER MODEL NAME MANUALLY.')));
@@ -670,9 +943,7 @@ const selectModel = async (provider) => {
     if (!model || model === '<') {
       return await aiAgentMenu();
     }
-    const settings = aiService.getAISettings();
-    settings.model = model;
-    aiService.saveAISettings(settings);
+    aiService.updateAgent(agent.id, { model });
     console.log(chalk.green(`\n  MODEL CHANGED TO: ${model}`));
     await prompts.waitForEnter();
     return await aiAgentMenu();
@@ -681,7 +952,8 @@ const selectModel = async (provider) => {
   models.forEach((model, index) => {
     // Truncate long model names
     const displayModel = model.length > W - 10 ? model.substring(0, W - 13) + '...' : model;
-    console.log(makeLine(chalk.cyan(`[${index + 1}] ${displayModel}`)));
+    const currentMarker = model === agent.model ? chalk.yellow(' (CURRENT)') : '';
+    console.log(makeLine(chalk.cyan(`[${index + 1}] ${displayModel}`) + currentMarker));
   });
   
   console.log(makeLine(''));
@@ -701,9 +973,7 @@ const selectModel = async (provider) => {
   }
   
   const selectedModel = models[index];
-  const settings = aiService.getAISettings();
-  settings.model = selectedModel;
-  aiService.saveAISettings(settings);
+  aiService.updateAgent(agent.id, { model: selectedModel });
   
   console.log(chalk.green(`\n  MODEL CHANGED TO: ${selectedModel}`));
   await prompts.waitForEnter();

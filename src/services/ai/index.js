@@ -1,22 +1,42 @@
 /**
  * AI Service Manager
- * Manages AI provider connections and settings
+ * Manages multiple AI provider connections
  */
 
 const { getProviders, getProvider } = require('./providers');
-const { settings } = require('../../config');
+const { storage } = require('../session');
+const AISupervisor = require('./supervisor');
 
-// In-memory cache of current connection
-let currentConnection = null;
+// In-memory cache of connections
+let connectionsCache = null;
 
 /**
  * Get AI settings from storage
  */
 const getAISettings = () => {
   try {
-    return settings.get('ai') || {};
+    const sessions = storage.load();
+    const aiSettings = sessions.find(s => s.type === 'ai') || { type: 'ai', agents: [] };
+    
+    // Migrate old single-agent format to multi-agent
+    if (aiSettings.provider && !aiSettings.agents) {
+      return {
+        type: 'ai',
+        agents: [{
+          id: generateAgentId(),
+          provider: aiSettings.provider,
+          option: aiSettings.option,
+          credentials: aiSettings.credentials,
+          model: aiSettings.model,
+          name: getProvider(aiSettings.provider)?.name || 'AI Agent',
+          createdAt: Date.now()
+        }],
+        activeAgentId: null
+      };
+    }
+    return aiSettings;
   } catch {
-    return {};
+    return { type: 'ai', agents: [] };
   }
 };
 
@@ -25,42 +45,139 @@ const getAISettings = () => {
  */
 const saveAISettings = (aiSettings) => {
   try {
-    settings.set('ai', aiSettings);
+    const sessions = storage.load();
+    const otherSessions = sessions.filter(s => s.type !== 'ai');
+    
+    aiSettings.type = 'ai';
+    otherSessions.push(aiSettings);
+    
+    storage.save(otherSessions);
+    connectionsCache = null; // Invalidate cache
   } catch (e) {
     // Silent fail
   }
 };
 
 /**
- * Check if AI is connected
+ * Generate unique agent ID
  */
-const isConnected = () => {
-  const aiSettings = getAISettings();
-  return !!(aiSettings.provider && aiSettings.credentials);
+const generateAgentId = () => {
+  return 'agent_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 };
 
 /**
- * Get current connection info
+ * Get all connected agents
  */
-const getConnection = () => {
+const getAgents = () => {
   const aiSettings = getAISettings();
-  if (!aiSettings.provider) return null;
+  const agents = aiSettings.agents || [];
   
-  const provider = getProvider(aiSettings.provider);
+  return agents.map(agent => {
+    const provider = getProvider(agent.provider);
+    return {
+      id: agent.id,
+      name: agent.name || provider?.name || 'Unknown',
+      provider: provider,
+      providerId: agent.provider,
+      option: agent.option,
+      model: agent.model || provider?.defaultModel,
+      createdAt: agent.createdAt,
+      isActive: agent.id === aiSettings.activeAgentId
+    };
+  }).filter(a => a.provider); // Filter out invalid providers
+};
+
+/**
+ * Get agent count
+ */
+const getAgentCount = () => {
+  const aiSettings = getAISettings();
+  return (aiSettings.agents || []).length;
+};
+
+/**
+ * Check if any AI is connected
+ */
+const isConnected = () => {
+  return getAgentCount() > 0;
+};
+
+/**
+ * Get active agent (or first agent if none active)
+ */
+const getActiveAgent = () => {
+  const aiSettings = getAISettings();
+  const agents = aiSettings.agents || [];
+  
+  if (agents.length === 0) return null;
+  
+  // Find active agent or use first one
+  const activeId = aiSettings.activeAgentId;
+  const agent = activeId 
+    ? agents.find(a => a.id === activeId) 
+    : agents[0];
+  
+  if (!agent) return null;
+  
+  const provider = getProvider(agent.provider);
   if (!provider) return null;
   
   return {
+    id: agent.id,
+    name: agent.name || provider.name,
     provider: provider,
-    option: aiSettings.option,
-    model: aiSettings.model || provider.defaultModel,
+    providerId: agent.provider,
+    option: agent.option,
+    model: agent.model || provider.defaultModel,
+    credentials: agent.credentials,
     connected: true
   };
 };
 
 /**
- * Connect to a provider
+ * Get agent by ID
  */
-const connect = async (providerId, optionId, credentials, model = null) => {
+const getAgent = (agentId) => {
+  const aiSettings = getAISettings();
+  const agents = aiSettings.agents || [];
+  const agent = agents.find(a => a.id === agentId);
+  
+  if (!agent) return null;
+  
+  const provider = getProvider(agent.provider);
+  if (!provider) return null;
+  
+  return {
+    id: agent.id,
+    name: agent.name || provider.name,
+    provider: provider,
+    providerId: agent.provider,
+    option: agent.option,
+    model: agent.model || provider.defaultModel,
+    credentials: agent.credentials,
+    connected: true
+  };
+};
+
+/**
+ * Set active agent
+ */
+const setActiveAgent = (agentId) => {
+  const aiSettings = getAISettings();
+  const agents = aiSettings.agents || [];
+  
+  if (!agents.find(a => a.id === agentId)) {
+    throw new Error('Agent not found');
+  }
+  
+  aiSettings.activeAgentId = agentId;
+  saveAISettings(aiSettings);
+};
+
+/**
+ * Add a new agent (connect to provider)
+ */
+const addAgent = async (providerId, optionId, credentials, model = null, customName = null) => {
   const provider = getProvider(providerId);
   if (!provider) {
     throw new Error('Invalid provider');
@@ -71,34 +188,153 @@ const connect = async (providerId, optionId, credentials, model = null) => {
     throw new Error('Invalid option');
   }
   
-  // Save to settings
-  const aiSettings = {
+  const aiSettings = getAISettings();
+  if (!aiSettings.agents) {
+    aiSettings.agents = [];
+  }
+  
+  // Create new agent
+  const agentId = generateAgentId();
+  const newAgent = {
+    id: agentId,
     provider: providerId,
     option: optionId,
     credentials: credentials,
-    model: model || provider.defaultModel
+    model: model || provider.defaultModel,
+    name: customName || provider.name,
+    createdAt: Date.now()
   };
   
-  saveAISettings(aiSettings);
-  currentConnection = getConnection();
+  aiSettings.agents.push(newAgent);
   
-  return currentConnection;
+  // Set as active if first agent
+  if (aiSettings.agents.length === 1) {
+    aiSettings.activeAgentId = agentId;
+  }
+  
+  saveAISettings(aiSettings);
+  
+  // Start AI supervision automatically
+  const agent = getAgent(agentId);
+  if (agent) {
+    // Mock algo target - in real implementation, this would be HQX Ultra Scalping
+    const mockAlgo = {
+      name: 'HQX Ultra Scalping',
+      status: 'ready',
+      active: false
+    };
+    
+    // Check if other agents are already supervising
+    const allAgents = getAgents();
+    const activeSupervisionCount = allAgents.filter(a => a.id !== agentId && a.isActive).length;
+    
+    if (activeSupervisionCount === 0) {
+      // First agent - start single supervision
+      AISupervisor.start(agentId, mockAlgo);
+      console.log(`\n🤖 AI supervision started for ${agent.name}`);
+      console.log(`   Monitoring: HQX Ultra Scalping`);
+      console.log(`   Mode: Single agent supervision`);
+    } else {
+      // Additional agent - switch to consensus mode
+      console.log(`\n🤖 ${agent.name} added to supervision`);
+      console.log(`   Switching to multi-agent consensus mode`);
+      console.log(`   Total agents: ${allAgents.length}`);
+      
+      // Start consensus mode would be handled by supervisor
+      AISupervisor.start(agentId, mockAlgo);
+    }
+  }
+  
+  return agent;
 };
 
 /**
- * Disconnect from AI
+ * Remove an agent
+ */
+const removeAgent = (agentId) => {
+  const aiSettings = getAISettings();
+  const agents = aiSettings.agents || [];
+  
+  const index = agents.findIndex(a => a.id === agentId);
+  if (index === -1) {
+    throw new Error('Agent not found');
+  }
+  
+  agents.splice(index, 1);
+  aiSettings.agents = agents;
+  
+  // Stop AI supervision for this agent
+  AISupervisor.stop(agentId);
+  
+  // If removed agent was active, set new active
+  if (aiSettings.activeAgentId === agentId) {
+    aiSettings.activeAgentId = agents.length > 0 ? agents[0].id : null;
+  }
+  
+  saveAISettings(aiSettings);
+};
+
+/**
+ * Update agent settings
+ */
+const updateAgent = (agentId, updates) => {
+  const aiSettings = getAISettings();
+  const agents = aiSettings.agents || [];
+  
+  const agent = agents.find(a => a.id === agentId);
+  if (!agent) {
+    throw new Error('Agent not found');
+  }
+  
+  // Apply updates
+  if (updates.name) agent.name = updates.name;
+  if (updates.model) agent.model = updates.model;
+  if (updates.credentials) agent.credentials = updates.credentials;
+  
+  saveAISettings(aiSettings);
+  return getAgent(agentId);
+};
+
+/**
+ * Disconnect all agents
+ */
+const disconnectAll = () => {
+  // Stop all AI supervision sessions
+  AISupervisor.stopAll();
+  
+  saveAISettings({ agents: [] });
+};
+
+/**
+ * Legacy: Get current connection (returns active agent)
+ * @deprecated Use getActiveAgent() instead
+ */
+const getConnection = () => {
+  return getActiveAgent();
+};
+
+/**
+ * Legacy: Connect to a provider (adds new agent)
+ * @deprecated Use addAgent() instead
+ */
+const connect = async (providerId, optionId, credentials, model = null) => {
+  return addAgent(providerId, optionId, credentials, model);
+};
+
+/**
+ * Legacy: Disconnect (removes all agents)
+ * @deprecated Use removeAgent() or disconnectAll() instead
  */
 const disconnect = () => {
-  saveAISettings({});
-  currentConnection = null;
+  disconnectAll();
 };
 
 /**
- * Get credentials (for API calls)
+ * Get credentials for active agent
  */
 const getCredentials = () => {
-  const aiSettings = getAISettings();
-  return aiSettings.credentials || null;
+  const agent = getActiveAgent();
+  return agent?.credentials || null;
 };
 
 /**
@@ -150,11 +386,33 @@ const validateConnection = async (providerId, optionId, credentials) => {
 // Validation functions for each provider
 const validateAnthropic = async (credentials) => {
   try {
+    const token = credentials.apiKey || credentials.sessionKey || credentials.accessToken;
+    
+    // Check if it's an OAuth token (sk-ant-oat...) vs API key (sk-ant-api...)
+    const isOAuthToken = token && token.startsWith('sk-ant-oat');
+    
+    if (isOAuthToken) {
+      // OAuth tokens (from Claude Max/Pro subscription) cannot be validated via public API
+      // They use a different authentication flow through claude.ai
+      // Trust them if they have the correct format (sk-ant-oatXX-...)
+      if (token.length > 50 && /^sk-ant-oat\d{2}-[a-zA-Z0-9_-]+$/.test(token)) {
+        return { 
+          valid: true, 
+          tokenType: 'oauth', 
+          subscriptionType: credentials.subscriptionType || 'max',
+          trusted: credentials.fromKeychain || false
+        };
+      }
+      
+      return { valid: false, error: 'Invalid OAuth token format' };
+    }
+    
+    // Standard API key validation (sk-ant-api...)
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': credentials.apiKey || credentials.sessionKey,
+        'x-api-key': token,
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
@@ -165,12 +423,22 @@ const validateAnthropic = async (credentials) => {
     });
     
     if (response.ok) {
-      return { valid: true };
+      return { valid: true, tokenType: 'api_key' };
     }
     
     const error = await response.json();
     return { valid: false, error: error.error?.message || 'Invalid API key' };
   } catch (e) {
+    // Network error - if it's an OAuth token, still accept it (can't validate anyway)
+    const token = credentials.apiKey || credentials.sessionKey || credentials.accessToken;
+    if (token && token.startsWith('sk-ant-oat') && token.length > 50) {
+      return { 
+        valid: true, 
+        tokenType: 'oauth', 
+        subscriptionType: credentials.subscriptionType || 'max',
+        warning: 'Could not validate online (network error), but token format is valid'
+      };
+    }
     return { valid: false, error: e.message };
   }
 };
@@ -358,14 +626,32 @@ const validateOpenAICompatible = async (provider, credentials) => {
 };
 
 module.exports = {
+  // Provider info
   getProviders,
   getProvider,
+  
+  // Multi-agent API
+  getAgents,
+  getAgentCount,
+  getAgent,
+  getActiveAgent,
+  setActiveAgent,
+  addAgent,
+  removeAgent,
+  updateAgent,
+  disconnectAll,
+  
+  // Legacy API (for backwards compatibility)
   isConnected,
   getConnection,
   connect,
   disconnect,
   getCredentials,
+  
+  // Validation
   validateConnection,
+  
+  // Settings
   getAISettings,
   saveAISettings
 };

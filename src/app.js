@@ -235,13 +235,14 @@ const mainMenu = async () => {
   console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
 
   menuRow(chalk.cyan('[1] ProjectX'), chalk.cyan('[2] Rithmic'));
-  menuRow(chalk.cyan('[3] Tradovate'), chalk.red('[X] Exit'));
+  menuRow(chalk.cyan('[3] Tradovate'), chalk.magenta('[I] AI Agent'));
+  menuRow(chalk.red('[X] Exit'), '');
 
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
 
-  const input = await prompts.textInput(chalk.cyan('Select (1/2/3/X)'));
+  const input = await prompts.textInput(chalk.cyan('Select (1/2/3/I/X)'));
 
-  const actions = { '1': 'projectx', '2': 'rithmic', '3': 'tradovate', 'x': 'exit' };
+  const actions = { '1': 'projectx', '2': 'rithmic', '3': 'tradovate', 'i': 'ai_agent', 'x': 'exit' };
   return actions[(input || '').toLowerCase()] || 'exit';
 };
 
@@ -280,6 +281,11 @@ const run = async () => {
           if (choice === 'exit') {
             console.log(chalk.gray('GOODBYE!'));
             process.exit(0);
+          }
+
+          if (choice === 'ai_agent') {
+            await aiAgentMenu();
+            continue;
           }
 
           let service = null;
