@@ -481,7 +481,7 @@ const showStats = async (service) => {
       
       drawBoxFooter(boxWidth);
       
-      // ========== AI BEHAVIOR DIAGRAM ==========
+      // ========== AI BEHAVIOR DIAGRAM (HORIZONTAL BARS) ==========
       const behaviorData = StrategySupervisor.getBehaviorHistory(100);
       const learningStats = StrategySupervisor.getLearningStats();
       
@@ -511,27 +511,9 @@ const showStats = async (service) => {
         PAUSE: Math.round((behaviorCounts.PAUSE / total) * 100)
       };
       
-      // Bar chart configuration
-      const labelWidth = 12;
-      const percentWidth = 6;
-      const barMaxWidth = behaviorInnerWidth - labelWidth - percentWidth - 6;
-      
       // Get current behavior
       const currentValue = behaviorData.values.length > 0 ? behaviorData.values[behaviorData.values.length - 1] : 2;
       const currentAction = valueToAction[Math.round(currentValue)] || 'NORMAL';
-      
-      // Draw vertical bar chart (bars going up)
-      const chartHeight = 8;
-      const barWidth = Math.floor((barMaxWidth - 12) / 4); // 4 bars with spacing
-      
-      // Calculate bar heights (max height = chartHeight)
-      const maxPercent = Math.max(...Object.values(percentages), 1);
-      const barHeights = {
-        AGGRESSIVE: Math.round((percentages.AGGRESSIVE / 100) * chartHeight),
-        NORMAL: Math.round((percentages.NORMAL / 100) * chartHeight),
-        CAUTIOUS: Math.round((percentages.CAUTIOUS / 100) * chartHeight),
-        PAUSE: Math.round((percentages.PAUSE / 100) * chartHeight)
-      };
       
       // Colors for each behavior
       const barColors = {
@@ -541,69 +523,49 @@ const showStats = async (service) => {
         PAUSE: chalk.red
       };
       
-      // Draw bars from top to bottom
+      // Horizontal bar chart configuration
       const barLabels = ['AGGRESSIVE', 'NORMAL', 'CAUTIOUS', 'PAUSE'];
       const shortLabels = ['AGR', 'NOR', 'CAU', 'PAU'];
+      const labelWidth = 6; // "AGR  " etc.
+      const pctWidth = 6;   // "100% "
+      const spacing = 4;    // spaces between bars
       
-      // Calculate left padding to center the chart
-      const totalBarWidth = (barWidth * 4) + 9; // 4 bars + 3 spaces of 3 chars
-      const leftPad = Math.floor((behaviorInnerWidth - totalBarWidth - 4) / 2);
+      // Calculate bar width for each category (total 4 bars with spacing)
+      const availableWidth = behaviorInnerWidth - (labelWidth * 4) - (pctWidth * 4) - (spacing * 3) - 4;
+      const maxBarWidth = Math.floor(availableWidth / 4);
       
-      for (let row = chartHeight; row >= 1; row--) {
-        let line = ' '.repeat(leftPad);
+      // Calculate bar widths based on percentage (max 100% = maxBarWidth)
+      const barWidths = {
+        AGGRESSIVE: Math.round((percentages.AGGRESSIVE / 100) * maxBarWidth),
+        NORMAL: Math.round((percentages.NORMAL / 100) * maxBarWidth),
+        CAUTIOUS: Math.round((percentages.CAUTIOUS / 100) * maxBarWidth),
+        PAUSE: Math.round((percentages.PAUSE / 100) * maxBarWidth)
+      };
+      
+      // Draw horizontal bars (each bar is a row)
+      for (let i = 0; i < 4; i++) {
+        const label = barLabels[i];
+        const shortLabel = shortLabels[i];
+        const pct = percentages[label];
+        const barWidth = barWidths[label];
+        const color = barColors[label];
+        const isCurrent = label === currentAction;
         
-        for (let i = 0; i < 4; i++) {
-          const label = barLabels[i];
-          const height = barHeights[label];
-          const color = barColors[label];
-          const isCurrent = label === currentAction;
-          
-          if (row <= height) {
-            // Draw filled bar
-            const block = isCurrent ? '█' : '▓';
-            line += color(block.repeat(barWidth));
-          } else {
-            // Empty space
-            line += ' '.repeat(barWidth);
-          }
-          
-          if (i < 3) line += '   '; // Space between bars
-        }
+        // Build the bar
+        const block = isCurrent ? '█' : '▓';
+        const bar = barWidth > 0 ? color(block.repeat(barWidth)) : '';
+        const emptySpace = ' '.repeat(Math.max(0, maxBarWidth - barWidth));
         
+        // Format: "  AGR  ████████████████  100%  "
+        const labelPart = '  ' + color(shortLabel.padEnd(labelWidth));
+        const barPart = bar + emptySpace;
+        const pctPart = chalk.white((pct + '%').padStart(pctWidth));
+        
+        let line = labelPart + barPart + pctPart;
         const lineLen = line.replace(/\x1b\[[0-9;]*m/g, '').length;
         line += ' '.repeat(Math.max(0, behaviorInnerWidth - lineLen));
         console.log(chalk.cyan('\u2551') + line + chalk.cyan('\u2551'));
       }
-      
-      // Draw baseline
-      let baseLine = ' '.repeat(leftPad) + '─'.repeat(totalBarWidth);
-      const baseLen = baseLine.length;
-      baseLine += ' '.repeat(Math.max(0, behaviorInnerWidth - baseLen));
-      console.log(chalk.cyan('\u2551') + chalk.white(baseLine) + chalk.cyan('\u2551'));
-      
-      // Draw labels
-      let labelLine = ' '.repeat(leftPad);
-      for (let i = 0; i < 4; i++) {
-        const lbl = shortLabels[i];
-        const pad = Math.floor((barWidth - lbl.length) / 2);
-        labelLine += ' '.repeat(pad) + barColors[barLabels[i]](lbl) + ' '.repeat(barWidth - pad - lbl.length);
-        if (i < 3) labelLine += '   ';
-      }
-      const lblLen = labelLine.replace(/\x1b\[[0-9;]*m/g, '').length;
-      labelLine += ' '.repeat(Math.max(0, behaviorInnerWidth - lblLen));
-      console.log(chalk.cyan('\u2551') + labelLine + chalk.cyan('\u2551'));
-      
-      // Draw percentages
-      let pctLine = ' '.repeat(leftPad);
-      for (let i = 0; i < 4; i++) {
-        const pct = percentages[barLabels[i]] + '%';
-        const pad = Math.floor((barWidth - pct.length) / 2);
-        pctLine += ' '.repeat(pad) + chalk.white(pct) + ' '.repeat(barWidth - pad - pct.length);
-        if (i < 3) pctLine += '   ';
-      }
-      const pctLen = pctLine.replace(/\x1b\[[0-9;]*m/g, '').length;
-      pctLine += ' '.repeat(Math.max(0, behaviorInnerWidth - pctLen));
-      console.log(chalk.cyan('\u2551') + pctLine + chalk.cyan('\u2551'));
       
       // Empty line
       console.log(chalk.cyan('\u2551') + ' '.repeat(behaviorInnerWidth) + chalk.cyan('\u2551'));
