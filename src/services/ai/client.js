@@ -309,6 +309,145 @@ Analyze and provide recommendation.`;
 };
 
 /**
+ * Analyze strategy performance and suggest optimizations
+ * Called periodically to help the strategy improve
+ * 
+ * @param {Object} agent - AI agent
+ * @param {Object} performanceData - Strategy performance data
+ * @returns {Promise<Object|null>} Optimization suggestions
+ */
+const analyzePerformance = async (agent, performanceData) => {
+  if (!agent || !performanceData) return null;
+  
+  const systemPrompt = `You are an AI supervisor for HQX Ultra Scalping, a professional prop firm futures trading strategy.
+
+The strategy uses advanced mathematical models:
+- Order flow analysis (delta, cumulative delta, absorption)
+- Market microstructure (bid/ask imbalance, volume profile)
+- Statistical edge detection (z-score, standard deviation bands)
+- Dynamic risk management (Kelly criterion, volatility-adjusted sizing)
+
+Your job is to analyze performance data and suggest parameter optimizations.
+Be precise and actionable. Focus on improving win rate, reducing drawdown, and optimizing risk/reward.
+
+Respond ONLY in valid JSON format:
+{
+  "assessment": "brief performance assessment",
+  "winRateAnalysis": "analysis of win/loss patterns",
+  "riskAnalysis": "analysis of risk management",
+  "optimizations": [
+    { "param": "parameter_name", "current": "current_value", "suggested": "new_value", "reason": "why" }
+  ],
+  "marketCondition": "trending|ranging|volatile|calm",
+  "confidence": 0-100
+}`;
+  
+  const prompt = `STRATEGY PERFORMANCE DATA - ANALYZE AND OPTIMIZE
+
+Session Stats:
+- Trades: ${performanceData.trades || 0}
+- Wins: ${performanceData.wins || 0}
+- Losses: ${performanceData.losses || 0}
+- Win Rate: ${performanceData.winRate ? (performanceData.winRate * 100).toFixed(1) + '%' : 'N/A'}
+- Total P&L: $${performanceData.pnl?.toFixed(2) || '0.00'}
+- Avg Win: $${performanceData.avgWin?.toFixed(2) || 'N/A'}
+- Avg Loss: $${performanceData.avgLoss?.toFixed(2) || 'N/A'}
+- Largest Win: $${performanceData.largestWin?.toFixed(2) || 'N/A'}
+- Largest Loss: $${performanceData.largestLoss?.toFixed(2) || 'N/A'}
+- Max Drawdown: $${performanceData.maxDrawdown?.toFixed(2) || 'N/A'}
+- Profit Factor: ${performanceData.profitFactor?.toFixed(2) || 'N/A'}
+
+Current Parameters:
+- Position Size: ${performanceData.positionSize || 'N/A'} contracts
+- Daily Target: $${performanceData.dailyTarget || 'N/A'}
+- Max Risk: $${performanceData.maxRisk || 'N/A'}
+- Symbol: ${performanceData.symbol || 'N/A'}
+
+Recent Trades:
+${performanceData.recentTrades?.map(t => 
+  `- ${t.side} ${t.qty}x @ ${t.price} → P&L: $${t.pnl?.toFixed(2) || 'N/A'}`
+).join('\n') || 'No recent trades'}
+
+Market Context:
+- Volatility: ${performanceData.volatility || 'N/A'}
+- Trend: ${performanceData.trend || 'N/A'}
+- Session: ${performanceData.session || 'N/A'}
+
+Analyze and suggest optimizations to improve performance.`;
+
+  try {
+    const response = await callAI(agent, prompt, systemPrompt);
+    if (!response) return null;
+    
+    // Parse JSON from response
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    
+    return null;
+  } catch (error) {
+    return null;
+  }
+};
+
+/**
+ * Get real-time trading advice based on current market conditions
+ * 
+ * @param {Object} agent - AI agent
+ * @param {Object} marketData - Current market data
+ * @returns {Promise<Object|null>} Trading advice
+ */
+const getMarketAdvice = async (agent, marketData) => {
+  if (!agent || !marketData) return null;
+  
+  const systemPrompt = `You are an AI supervisor for HQX Ultra Scalping futures strategy.
+Analyze real-time market data and provide actionable advice.
+Be concise and precise. The strategy will use your recommendations.
+
+Respond ONLY in valid JSON:
+{
+  "action": "AGGRESSIVE|NORMAL|CAUTIOUS|PAUSE",
+  "sizeMultiplier": 0.5-1.5,
+  "reason": "brief reason",
+  "confidence": 0-100
+}`;
+  
+  const prompt = `REAL-TIME MARKET ANALYSIS
+
+Current Price: ${marketData.price || 'N/A'}
+Bid: ${marketData.bid || 'N/A'} | Ask: ${marketData.ask || 'N/A'}
+Spread: ${marketData.spread || 'N/A'}
+Volume: ${marketData.volume || 'N/A'}
+Delta: ${marketData.delta || 'N/A'}
+Volatility: ${marketData.volatility || 'N/A'}
+
+Recent Price Action:
+- High: ${marketData.high || 'N/A'}
+- Low: ${marketData.low || 'N/A'}
+- Range: ${marketData.range || 'N/A'}
+
+Current Position: ${marketData.position || 'FLAT'}
+Session P&L: $${marketData.pnl?.toFixed(2) || '0.00'}
+
+What should the strategy do?`;
+
+  try {
+    const response = await callAI(agent, prompt, systemPrompt);
+    if (!response) return null;
+    
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    
+    return null;
+  } catch (error) {
+    return null;
+  }
+};
+
+/**
  * Fetch available models from Anthropic API (API Key auth)
  * @param {string} apiKey - API key
  * @returns {Promise<Array|null>} Array of model IDs or null on error
@@ -429,6 +568,8 @@ const fetchOpenAIModels = async (endpoint, apiKey) => {
 module.exports = {
   callAI,
   analyzeTrading,
+  analyzePerformance,
+  getMarketAdvice,
   callOpenAICompatible,
   callAnthropic,
   callGemini,

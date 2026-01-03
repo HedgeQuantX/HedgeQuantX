@@ -16,6 +16,10 @@ const { M1 } = require('../../../dist/lib/m/s1');
 const { MarketDataFeed } = require('../../../dist/lib/data');
 const { algoLogger } = require('./logger');
 
+// AI Strategy Supervisor - observes, learns, and optimizes the strategy
+const aiService = require('../../services/ai');
+const StrategySupervisor = require('../../services/ai/strategy-supervisor');
+
 
 
 /**
@@ -167,6 +171,7 @@ const configureAlgo = async (account, contract) => {
 /**
  * Launch algo trading - HQX Ultra Scalping Strategy
  * Real-time market data + Strategy signals + Auto order execution
+ * AI Supervision: All connected agents monitor and supervise trading
  */
 const launchAlgo = async (service, account, contract, config) => {
   const { contracts, dailyTarget, maxRisk, showName } = config;
@@ -197,7 +202,9 @@ const launchAlgo = async (service, account, contract, config) => {
     losses: 0,
     latency: 0,
     connected: false,
-    startTime: Date.now()
+    startTime: Date.now(),
+    aiSupervision: false,
+    aiMode: null
   };
   
   let running = true;
@@ -213,6 +220,14 @@ const launchAlgo = async (service, account, contract, config) => {
   const strategy = M1;
   strategy.initialize(contractId, tickSize, tickValue);
   
+  // Initialize AI Strategy Supervisor - agents observe, learn & optimize
+  const aiAgents = aiService.getAgents();
+  if (aiAgents.length > 0) {
+    const supervisorResult = StrategySupervisor.initialize(strategy, aiAgents, service, account.accountId);
+    stats.aiSupervision = supervisorResult.success;
+    stats.aiMode = supervisorResult.mode;
+  }
+  
   // Initialize Market Data Feed
   const marketFeed = new MarketDataFeed({ propfirm: account.propfirm });
   
@@ -225,17 +240,44 @@ const launchAlgo = async (service, account, contract, config) => {
   algoLogger.engineStarting(ui, connectionType, dailyTarget, maxRisk);
   algoLogger.marketOpen(ui, sessionName.toUpperCase(), etTime);
   
+  // Log AI supervision status
+  if (stats.aiSupervision) {
+    algoLogger.info(ui, 'AI SUPERVISION', `${aiAgents.length} agent(s) - ${stats.aiMode} mode - LEARNING ACTIVE`);
+  }
+  
   // Handle strategy signals
   strategy.on('signal', async (signal) => {
     if (!running || pendingOrder || currentPosition !== 0) return;
     
     const { side, direction, entry, stopLoss, takeProfit, confidence } = signal;
     
-    // Calculate position size with kelly
-    const kelly = Math.min(0.25, confidence);
-    const riskAmount = Math.round(maxRisk * kelly);
-    const riskPct = Math.round((riskAmount / maxRisk) * 100);
+    // Feed signal to AI supervisor (agents observe the signal)
+    if (stats.aiSupervision) {
+      StrategySupervisor.feedSignal({ direction, entry, stopLoss, takeProfit, confidence });
+      
+      // Check AI advice - agents may recommend caution based on learned patterns
+      const advice = StrategySupervisor.shouldTrade();
+      if (!advice.proceed) {
+        algoLogger.info(ui, 'AI HOLD', advice.reason);
+        return; // Skip - agents learned this pattern leads to losses
+      }
+    }
     
+    // Calculate position size with kelly
+    let kelly = Math.min(0.25, confidence);
+    let riskAmount = Math.round(maxRisk * kelly);
+    
+    // AI may adjust size based on learning
+    if (stats.aiSupervision) {
+      const advice = StrategySupervisor.getCurrentAdvice();
+      if (advice.sizeMultiplier && advice.sizeMultiplier !== 1.0) {
+        kelly = kelly * advice.sizeMultiplier;
+        riskAmount = Math.round(riskAmount * advice.sizeMultiplier);
+        algoLogger.info(ui, 'AI ADJUST', `Size x${advice.sizeMultiplier.toFixed(2)} - ${advice.reason}`);
+      }
+    }
+    
+    const riskPct = Math.round((riskAmount / maxRisk) * 100);
     algoLogger.positionSized(ui, contracts, kelly, riskAmount, riskPct);
     
     // Place order via API
@@ -318,6 +360,11 @@ const launchAlgo = async (service, account, contract, config) => {
       side: tick.lastTradeSide || tick.side || 'unknown',
       timestamp: tick.timestamp || Date.now()
     };
+    
+    // Feed tick to AI supervisor (agents observe same data as strategy)
+    if (stats.aiSupervision) {
+      StrategySupervisor.feedTick(tickData);
+    }
     
     strategy.processTick(tickData);
     
@@ -443,6 +490,25 @@ const launchAlgo = async (service, account, contract, config) => {
                 
                 // Record in strategy for adaptation
                 strategy.recordTradeResult(pnl);
+                
+                // Feed trade result to AI supervisor - THIS IS WHERE AGENTS LEARN
+                if (stats.aiSupervision) {
+                  StrategySupervisor.feedTradeResult({
+                    side,
+                    qty: contracts,
+                    price: exitPrice,
+                    pnl,
+                    symbol: symbolName,
+                    direction: side
+                  });
+                  
+                  // Log if AI learned something
+                  const status = StrategySupervisor.getStatus();
+                  if (status.patternsLearned.winning + status.patternsLearned.losing > 0) {
+                    algoLogger.info(ui, 'AI LEARNING', 
+                      `${status.patternsLearned.winning}W/${status.patternsLearned.losing}L patterns`);
+                  }
+                }
               }
             }
           } catch (e) {
@@ -509,6 +575,15 @@ const launchAlgo = async (service, account, contract, config) => {
   // Cleanup with timeout protection
   clearInterval(refreshInterval);
   clearInterval(pnlInterval);
+  
+  // Stop AI Supervisor and get learning summary
+  if (stats.aiSupervision) {
+    const aiSummary = StrategySupervisor.stop();
+    stats.aiLearning = {
+      optimizations: aiSummary.optimizationsApplied || 0,
+      patternsLearned: (aiSummary.winningPatterns || 0) + (aiSummary.losingPatterns || 0)
+    };
+  }
   
   // Disconnect market feed with timeout
   try {

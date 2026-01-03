@@ -7,7 +7,7 @@
  */
 
 const { connections } = require('../session');
-const { analyzeTrading } = require('./client');
+const { analyzeTrading, analyzePerformance, getMarketAdvice } = require('./client');
 
 let aiService = null;
 
@@ -566,6 +566,383 @@ class AISupervisor {
    */
   static getSessionCount() {
     return supervisionSessions.size;
+  }
+  
+  /**
+   * Feed market tick to all agents (sync with strategy)
+   * Agents receive the same data as the strategy in real-time
+   * 
+   * @param {Object} tick - Market tick data { price, bid, ask, volume, timestamp }
+   */
+  static feedTick(tick) {
+    if (supervisionSessions.size === 0) return;
+    
+    // Store latest tick in all sessions
+    for (const [agentId, session] of supervisionSessions.entries()) {
+      if (!session.marketData) {
+        session.marketData = { ticks: [], lastTick: null };
+      }
+      session.marketData.lastTick = tick;
+      session.marketData.ticks.push(tick);
+      
+      // Keep only last 1000 ticks to prevent memory bloat
+      if (session.marketData.ticks.length > 1000) {
+        session.marketData.ticks = session.marketData.ticks.slice(-1000);
+      }
+    }
+  }
+  
+  /**
+   * Feed strategy signal to all agents (sync with strategy)
+   * Agents see every signal the strategy generates
+   * 
+   * @param {Object} signal - Strategy signal { direction, entry, stopLoss, takeProfit, confidence }
+   */
+  static feedSignal(signal) {
+    if (supervisionSessions.size === 0) return;
+    
+    const signalData = {
+      timestamp: Date.now(),
+      direction: signal.direction,
+      entry: signal.entry,
+      stopLoss: signal.stopLoss,
+      takeProfit: signal.takeProfit,
+      confidence: signal.confidence
+    };
+    
+    // Store signal in all sessions
+    for (const [agentId, session] of supervisionSessions.entries()) {
+      if (!session.signals) {
+        session.signals = [];
+      }
+      session.signals.push(signalData);
+      
+      // Keep only last 100 signals
+      if (session.signals.length > 100) {
+        session.signals = session.signals.slice(-100);
+      }
+    }
+  }
+  
+  /**
+   * Feed trade execution to all agents (sync with strategy)
+   * Agents see every trade executed
+   * 
+   * @param {Object} trade - Trade data { side, qty, price, pnl, symbol }
+   */
+  static feedTrade(trade) {
+    if (supervisionSessions.size === 0) return;
+    
+    const tradeData = {
+      timestamp: Date.now(),
+      side: trade.side,
+      qty: trade.qty,
+      price: trade.price,
+      pnl: trade.pnl,
+      symbol: trade.symbol
+    };
+    
+    // Store trade in all sessions
+    for (const [agentId, session] of supervisionSessions.entries()) {
+      if (!session.trades) {
+        session.trades = [];
+      }
+      session.trades.push(tradeData);
+    }
+  }
+  
+  /**
+   * Update current position for all agents
+   * 
+   * @param {Object} position - Position data { qty, side, entryPrice, pnl }
+   */
+  static updatePosition(position) {
+    if (supervisionSessions.size === 0) return;
+    
+    for (const [agentId, session] of supervisionSessions.entries()) {
+      session.currentPosition = {
+        timestamp: Date.now(),
+        qty: position.qty,
+        side: position.side,
+        entryPrice: position.entryPrice,
+        pnl: position.pnl
+      };
+    }
+  }
+  
+  /**
+   * Update P&L for all agents
+   * 
+   * @param {number} pnl - Current session P&L
+   * @param {number} balance - Account balance
+   */
+  static updatePnL(pnl, balance) {
+    if (supervisionSessions.size === 0) return;
+    
+    for (const [agentId, session] of supervisionSessions.entries()) {
+      session.currentPnL = pnl;
+      session.currentBalance = balance;
+    }
+  }
+  
+  /**
+   * Check if agents recommend intervention (PAUSE, REDUCE_SIZE, etc.)
+   * In CONSENSUS mode, ALL agents must agree to continue trading
+   * 
+   * @returns {Object} { shouldContinue: boolean, action: string, reason: string }
+   */
+  static checkIntervention() {
+    if (supervisionSessions.size === 0) {
+      return { shouldContinue: true, action: 'CONTINUE', reason: 'No AI supervision active' };
+    }
+    
+    // Get last consensus or individual decision
+    const consensus = this.getConsensus();
+    
+    if (consensus && consensus.isUnanimous) {
+      if (consensus.action === 'PAUSE' || consensus.action === 'STOP') {
+        return { shouldContinue: false, action: consensus.action, reason: 'AI agents recommend pause' };
+      }
+      if (consensus.action === 'REDUCE_SIZE') {
+        return { shouldContinue: true, action: 'REDUCE_SIZE', reason: 'AI agents recommend reducing size' };
+      }
+    } else if (consensus && !consensus.isUnanimous) {
+      // Agents disagree - be conservative, don't take new trades
+      return { shouldContinue: false, action: 'HOLD', reason: 'AI agents disagree - waiting for consensus' };
+    }
+    
+    return { shouldContinue: true, action: 'CONTINUE', reason: 'AI supervision active' };
+  }
+  
+  /**
+   * Get real-time sync status for display
+   * Shows what data the agents are receiving
+   * 
+   * @returns {Object} Sync status
+   */
+  static getSyncStatus() {
+    if (supervisionSessions.size === 0) {
+      return { synced: false, agents: 0 };
+    }
+    
+    const firstSession = supervisionSessions.values().next().value;
+    
+    return {
+      synced: true,
+      agents: supervisionSessions.size,
+      lastTick: firstSession?.marketData?.lastTick?.timestamp || null,
+      tickCount: firstSession?.marketData?.ticks?.length || 0,
+      signalCount: firstSession?.signals?.length || 0,
+      tradeCount: firstSession?.trades?.length || 0,
+      currentPnL: firstSession?.currentPnL || 0,
+      currentPosition: firstSession?.currentPosition || null
+    };
+  }
+  
+  /**
+   * Request strategy optimization from all agents
+   * Agents analyze performance data and suggest improvements
+   * In CONSENSUS mode, only unanimous suggestions are applied
+   * 
+   * @param {Object} performanceData - Strategy performance data
+   * @returns {Promise<Object|null>} Optimization suggestions (consensus)
+   */
+  static async requestOptimization(performanceData) {
+    if (supervisionSessions.size === 0) return null;
+    
+    const allSessions = Array.from(supervisionSessions.values());
+    const suggestions = [];
+    
+    // Get optimization suggestions from each agent
+    for (const session of allSessions) {
+      try {
+        const suggestion = await analyzePerformance(session.agent, performanceData);
+        if (suggestion) {
+          suggestions.push({
+            agentId: session.agentId,
+            agentName: session.agent.name,
+            ...suggestion
+          });
+        }
+      } catch (e) {
+        // Silent fail for individual agent
+      }
+    }
+    
+    if (suggestions.length === 0) return null;
+    
+    // If single agent, return its suggestion
+    if (suggestions.length === 1) {
+      return {
+        mode: 'INDIVIDUAL',
+        ...suggestions[0]
+      };
+    }
+    
+    // CONSENSUS MODE: Find common optimizations
+    const consensusOptimizations = [];
+    const allOptimizations = suggestions.flatMap(s => s.optimizations || []);
+    
+    // Group by parameter name
+    const paramGroups = {};
+    for (const opt of allOptimizations) {
+      if (!opt.param) continue;
+      if (!paramGroups[opt.param]) {
+        paramGroups[opt.param] = [];
+      }
+      paramGroups[opt.param].push(opt);
+    }
+    
+    // Find unanimous suggestions (all agents agree on direction)
+    for (const [param, opts] of Object.entries(paramGroups)) {
+      if (opts.length === suggestions.length) {
+        // All agents suggested this param - check if they agree on direction
+        const directions = opts.map(o => {
+          const current = parseFloat(o.current) || 0;
+          const suggested = parseFloat(o.suggested) || 0;
+          return suggested > current ? 'increase' : suggested < current ? 'decrease' : 'same';
+        });
+        
+        const allSame = directions.every(d => d === directions[0]);
+        if (allSame && directions[0] !== 'same') {
+          // Unanimous - use average of suggested values
+          const avgSuggested = opts.reduce((sum, o) => sum + (parseFloat(o.suggested) || 0), 0) / opts.length;
+          consensusOptimizations.push({
+            param,
+            current: opts[0].current,
+            suggested: avgSuggested.toFixed(2),
+            reason: `Unanimous (${suggestions.length} agents agree)`,
+            direction: directions[0]
+          });
+        }
+      }
+    }
+    
+    // Calculate average confidence
+    const avgConfidence = Math.round(
+      suggestions.reduce((sum, s) => sum + (s.confidence || 0), 0) / suggestions.length
+    );
+    
+    // Determine consensus market condition
+    const conditions = suggestions.map(s => s.marketCondition).filter(Boolean);
+    const conditionCounts = {};
+    for (const c of conditions) {
+      conditionCounts[c] = (conditionCounts[c] || 0) + 1;
+    }
+    const consensusCondition = Object.entries(conditionCounts)
+      .sort((a, b) => b[1] - a[1])[0]?.[0] || 'unknown';
+    
+    return {
+      mode: 'CONSENSUS',
+      agentCount: suggestions.length,
+      isUnanimous: consensusOptimizations.length > 0,
+      optimizations: consensusOptimizations,
+      marketCondition: consensusCondition,
+      confidence: avgConfidence,
+      individualSuggestions: suggestions
+    };
+  }
+  
+  /**
+   * Get real-time market advice from all agents
+   * Used for dynamic position sizing and risk adjustment
+   * 
+   * @param {Object} marketData - Current market data
+   * @returns {Promise<Object|null>} Market advice (consensus)
+   */
+  static async getMarketAdvice(marketData) {
+    if (supervisionSessions.size === 0) return null;
+    
+    const allSessions = Array.from(supervisionSessions.values());
+    const advices = [];
+    
+    // Get advice from each agent
+    for (const session of allSessions) {
+      try {
+        const advice = await getMarketAdvice(session.agent, marketData);
+        if (advice) {
+          advices.push({
+            agentId: session.agentId,
+            agentName: session.agent.name,
+            ...advice
+          });
+        }
+      } catch (e) {
+        // Silent fail
+      }
+    }
+    
+    if (advices.length === 0) return null;
+    
+    // Single agent
+    if (advices.length === 1) {
+      return {
+        mode: 'INDIVIDUAL',
+        ...advices[0]
+      };
+    }
+    
+    // CONSENSUS: All agents must agree on action
+    const actions = advices.map(a => a.action);
+    const allSameAction = actions.every(a => a === actions[0]);
+    
+    if (allSameAction) {
+      // Unanimous action - average the size multiplier
+      const avgMultiplier = advices.reduce((sum, a) => sum + (a.sizeMultiplier || 1), 0) / advices.length;
+      const avgConfidence = Math.round(advices.reduce((sum, a) => sum + (a.confidence || 0), 0) / advices.length);
+      
+      return {
+        mode: 'CONSENSUS',
+        isUnanimous: true,
+        action: actions[0],
+        sizeMultiplier: Math.round(avgMultiplier * 100) / 100,
+        confidence: avgConfidence,
+        reason: `${advices.length} agents unanimous`,
+        agentCount: advices.length
+      };
+    } else {
+      // Agents disagree - be conservative
+      return {
+        mode: 'CONSENSUS',
+        isUnanimous: false,
+        action: 'CAUTIOUS',
+        sizeMultiplier: 0.5,
+        confidence: 0,
+        reason: 'Agents disagree - reducing exposure',
+        agentCount: advices.length,
+        votes: actions.reduce((acc, a) => { acc[a] = (acc[a] || 0) + 1; return acc; }, {})
+      };
+    }
+  }
+  
+  /**
+   * Apply optimization to strategy
+   * Called when agents have consensus on improvements
+   * 
+   * @param {Object} strategy - Strategy instance (M1)
+   * @param {Object} optimization - Optimization to apply
+   * @returns {boolean} Success
+   */
+  static applyOptimization(strategy, optimization) {
+    if (!strategy || !optimization) return false;
+    
+    try {
+      // Check if strategy has optimization method
+      if (typeof strategy.applyOptimization === 'function') {
+        strategy.applyOptimization(optimization);
+        return true;
+      }
+      
+      // Fallback: try to set individual parameters
+      if (typeof strategy.setParameter === 'function' && optimization.param) {
+        strategy.setParameter(optimization.param, optimization.suggested);
+        return true;
+      }
+      
+      return false;
+    } catch (e) {
+      return false;
+    }
   }
 }
 
