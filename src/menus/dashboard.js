@@ -79,30 +79,26 @@ const balStr = statsInfo.balance !== null ? `$${statsInfo.balance.toLocaleString
   
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
-  // Menu in 3 columns - centered
-  const colWidth = Math.floor(W / 3);
-  
+  // Menu in 3 columns - evenly distributed
   const menuRow3 = (col1, col2, col3) => {
     const c1Plain = col1.replace(/\x1b\[[0-9;]*m/g, '');
     const c2Plain = col2.replace(/\x1b\[[0-9;]*m/g, '');
     const c3Plain = col3.replace(/\x1b\[[0-9;]*m/g, '');
     
-    // Center each column within its space
-    const c1LeftPad = Math.floor((colWidth - c1Plain.length) / 2);
-    const c1RightPad = colWidth - c1Plain.length - c1LeftPad;
+    // Total content length
+    const totalContent = c1Plain.length + c2Plain.length + c3Plain.length;
+    // Available space for padding
+    const totalPadding = W - totalContent;
+    // Divide into 4 gaps: left margin, between 1-2, between 2-3, right margin
+    const gap = Math.floor(totalPadding / 4);
+    const extraPad = totalPadding - (gap * 4);
     
-    const c2LeftPad = Math.floor((colWidth - c2Plain.length) / 2);
-    const c2RightPad = colWidth - c2Plain.length - c2LeftPad;
+    const line = ' '.repeat(gap) + 
+      col1 + ' '.repeat(gap) + 
+      col2 + ' '.repeat(gap) + 
+      col3 + ' '.repeat(gap + extraPad);
     
-    const c3Width = W - colWidth * 2;
-    const c3LeftPad = Math.floor((c3Width - c3Plain.length) / 2);
-    const c3RightPad = c3Width - c3Plain.length - c3LeftPad;
-    
-    console.log(chalk.cyan('║') + 
-      ' '.repeat(Math.max(0, c1LeftPad)) + col1 + ' '.repeat(Math.max(0, c1RightPad)) +
-      ' '.repeat(Math.max(0, c2LeftPad)) + col2 + ' '.repeat(Math.max(0, c2RightPad)) +
-      ' '.repeat(Math.max(0, c3LeftPad)) + col3 + ' '.repeat(Math.max(0, c3RightPad)) +
-      chalk.cyan('║'));
+    console.log(chalk.cyan('║') + line + chalk.cyan('║'));
   };
   
   const centerLine = (content) => {
