@@ -426,11 +426,17 @@ const showStats = async (service) => {
       const supervisedAccounts = supervisionData.totalAccounts;
       const supervisedPnL = supervisionData.totalPnL;
       
-      console.log(chalk.cyan('\u2551') + fmtRow('CONNECTED AGENTS:', chalk.green(String(aiAgents.length)), col1) + chalk.cyan('\u2502') + fmtRow('SUPERVISED ACCOUNTS:', supervisedAccounts > 0 ? chalk.white(String(supervisedAccounts)) : chalk.gray('0'), col2) + chalk.cyan('\u2551'));
-      console.log(chalk.cyan('\u2551') + fmtRow('MODE:', modeColor(agentMode), col1) + chalk.cyan('\u2502') + fmtRow('SUPERVISED P&L:', supervisedPnL !== 0 ? (supervisedPnL >= 0 ? chalk.green('$' + supervisedPnL.toFixed(2)) : chalk.red('$' + supervisedPnL.toFixed(2))) : chalk.gray('$0.00'), col2) + chalk.cyan('\u2551'));
-      console.log(chalk.cyan('\u2551') + fmtRow('ACTIVE:', activeAgent ? chalk.green(activeAgent.name) : chalk.gray('NONE'), col1) + chalk.cyan('\u2502') + fmtRow('POSITIONS:', chalk.white(String(supervisionData.totalPositions)), col2) + chalk.cyan('\u2551'));
-      console.log(chalk.cyan('\u2551') + fmtRow('SESSION TIME:', chalk.white(sessionTimeStr), col1) + chalk.cyan('\u2502') + fmtRow('OPEN ORDERS:', chalk.white(String(supervisionData.totalOrders)), col2) + chalk.cyan('\u2551'));
-      console.log(chalk.cyan('\u2551') + fmtRow('AGENTS:', chalk.gray(agentNames.substring(0, col1 - 10)), col1) + chalk.cyan('\u2502') + fmtRow('TRADES TODAY:', chalk.white(String(supervisionData.totalTrades)), col2) + chalk.cyan('\u2551'));
+      // Calculate max agent name length to fit in column (label=18 + space=1 + padding buffer)
+      const maxAgentNameLen = col1 - 20;
+      const agentNamesDisplay = agentNames.length > maxAgentNameLen 
+        ? agentNames.substring(0, maxAgentNameLen - 2) + '..' 
+        : agentNames;
+      
+      console.log(chalk.cyan('\u2551') + fmtRow('CONNECTED AGENTS:', chalk.green(String(aiAgents.length)), col1) + chalk.cyan('\u2502') + fmtRow('SUPERVISED ACCOUNTS:', chalk.white(String(supervisedAccounts)), col2) + chalk.cyan('\u2551'));
+      console.log(chalk.cyan('\u2551') + fmtRow('MODE:', modeColor(agentMode), col1) + chalk.cyan('\u2502') + fmtRow('SUPERVISED P&L:', supervisedPnL >= 0 ? chalk.green('$' + supervisedPnL.toFixed(2)) : chalk.red('$' + supervisedPnL.toFixed(2)), col2) + chalk.cyan('\u2551'));
+      console.log(chalk.cyan('\u2551') + fmtRow('ACTIVE:', activeAgent ? chalk.green(activeAgent.name) : chalk.white('NONE'), col1) + chalk.cyan('\u2502') + fmtRow('POSITIONS:', chalk.white(String(supervisionData.totalPositions)), col2) + chalk.cyan('\u2551'));
+      console.log(chalk.cyan('\u2551') + fmtRow('SESSION TIME:', sessionTimeStr === 'INACTIVE' ? chalk.yellow(sessionTimeStr) : chalk.white(sessionTimeStr), col1) + chalk.cyan('\u2502') + fmtRow('OPEN ORDERS:', chalk.white(String(supervisionData.totalOrders)), col2) + chalk.cyan('\u2551'));
+      console.log(chalk.cyan('\u2551') + fmtRow('AGENTS:', chalk.white(agentNamesDisplay), col1) + chalk.cyan('\u2502') + fmtRow('TRADES TODAY:', chalk.white(String(supervisionData.totalTrades)), col2) + chalk.cyan('\u2551'));
       
       drawBoxFooter(boxWidth);
     }
