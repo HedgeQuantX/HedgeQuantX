@@ -143,6 +143,38 @@ const banner = async (clear = true) => {
   
   const tagline = isMobile ? `HQX v${version}` : `PROP FUTURES ALGO TRADING  v${version}`;
   console.log(chalk.cyan('║') + chalk.white(centerText(tagline, innerWidth)) + chalk.cyan('║'));
+  
+  // Close box for loading state
+  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
+};
+
+/**
+ * Display banner WITHOUT bottom border (for dashboard to continue)
+ */
+const bannerOpen = async () => {
+  const termWidth = process.stdout.columns || 100;
+  const isMobile = termWidth < 60;
+  const boxWidth = isMobile ? Math.max(termWidth - 2, 40) : Math.max(getLogoWidth(), 98);
+  const innerWidth = boxWidth - 2;
+  const version = require('../package.json').version;
+
+  console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
+
+  const logoLines = isMobile ? getMobileLogo() : getFullLogo();
+  
+  for (const [hq, x] of logoLines) {
+    const fullLine = chalk.cyan(hq) + chalk.yellow(x);
+    const totalLen = hq.length + x.length;
+    const padding = innerWidth - totalLen;
+    const leftPad = Math.floor(padding / 2);
+    console.log(chalk.cyan('║') + ' '.repeat(leftPad) + fullLine + ' '.repeat(padding - leftPad) + chalk.cyan('║'));
+  }
+
+  console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+  
+  const tagline = isMobile ? `HQX v${version}` : `PROP FUTURES ALGO TRADING  v${version}`;
+  console.log(chalk.cyan('║') + chalk.white(centerText(tagline, innerWidth)) + chalk.cyan('║'));
+  // NO bottom border - dashboardMenu will continue
 };
 
 /**
@@ -172,13 +204,10 @@ const getMobileLogo = () => [
 ];
 
 /**
- * Display banner with closing border
+ * Display banner with closing border (alias for banner)
  */
 const bannerClosed = async () => {
   await banner();
-  const termWidth = process.stdout.columns || 100;
-  const boxWidth = termWidth < 60 ? Math.max(termWidth - 2, 40) : Math.max(getLogoWidth(), 98);
-  console.log(chalk.cyan('╚' + '═'.repeat(boxWidth - 2) + '╝'));
 };
 
 // ==================== MENUS ====================
@@ -262,13 +291,17 @@ const run = async () => {
             await refreshStats();
           }
         } else {
-          // Clear screen first, show banner, then spinner while loading
+          // Show banner with loading spinner
           console.clear();
           await banner(false);
           
           const spinner = ora({ text: 'LOADING DASHBOARD...', color: 'cyan' }).start();
           await refreshStats();
-          spinner.succeed('READY');
+          spinner.stop();
+          
+          // Redraw clean dashboard (banner without bottom border + menu)
+          console.clear();
+          await bannerOpen();
           
           const action = await dashboardMenu(currentService);
 
