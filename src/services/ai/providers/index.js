@@ -43,21 +43,8 @@ const PROVIDERS = {
     name: 'CLAUDE (ANTHROPIC)',
     description: 'Direct connection to Claude',
     category: 'direct',
-    models: [
-      // Claude 4.5 (Latest flagship)
-      'claude-opus-4-5-20250514',
-      // Claude 4
-      'claude-opus-4-20250514',
-      'claude-sonnet-4-20250514',
-      // Claude 3.5 
-      'claude-3-5-sonnet-20241022',
-      'claude-3-5-haiku-20241022',
-      // Claude 3
-      'claude-3-opus-20240229',
-      'claude-3-sonnet-20240229',
-      'claude-3-haiku-20240307'
-    ],
-    defaultModel: 'claude-opus-4-5-20250514',
+    models: [], // Fetched from API at runtime
+    defaultModel: null, // Will use first model from API
     options: [
       {
         id: 'api_key',

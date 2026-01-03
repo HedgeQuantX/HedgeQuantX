@@ -494,14 +494,39 @@ const showExistingTokens = async () => {
       return await showExistingTokens();
     }
     
-    // Add as new agent
-    const model = provider.defaultModel;
-    const agentName = `${provider.name} (${selectedToken.source})`;
-    await aiService.addAgent(selectedToken.provider, 'api_key', credentials, model, agentName);
+    spinner.text = 'FETCHING AVAILABLE MODELS...';
     
-    spinner.succeed(`AGENT ADDED: ${provider.name}`);
+    // Fetch models from API with the token
+    const { fetchAnthropicModels, fetchOpenAIModels } = require('../services/ai/client');
+    
+    let models = null;
+    if (selectedToken.provider === 'anthropic') {
+      models = await fetchAnthropicModels(credentials.apiKey);
+    } else {
+      models = await fetchOpenAIModels(provider.endpoint, credentials.apiKey);
+    }
+    
+    if (!models || models.length === 0) {
+      spinner.fail('COULD NOT FETCH MODELS FROM API');
+      await prompts.waitForEnter();
+      return await showExistingTokens();
+    }
+    
+    spinner.succeed(`FOUND ${models.length} MODELS`);
+    
+    // Let user select model
+    const selectedModel = await selectModelFromList(models, provider.name);
+    if (!selectedModel) {
+      return await showExistingTokens();
+    }
+    
+    // Add agent with selected model
+    const agentName = `${provider.name} (${selectedToken.source})`;
+    await aiService.addAgent(selectedToken.provider, 'api_key', credentials, selectedModel, agentName);
+    
+    console.log(chalk.green(`\n  AGENT ADDED: ${provider.name}`));
     console.log(chalk.gray(`  SOURCE: ${selectedToken.source}`));
-    console.log(chalk.gray(`  MODEL: ${model}`));
+    console.log(chalk.gray(`  MODEL: ${selectedModel}`));
     
     await prompts.waitForEnter();
     return await aiAgentMenu();
@@ -943,7 +968,66 @@ const setupConnection = async (provider, option) => {
 };
 
 /**
+ * Select model from a list (used when adding new agent)
+ * @param {Array} models - Array of model IDs from API
+ * @param {string} providerName - Provider name for display
+ * @returns {string|null} Selected model ID or null if cancelled
+ * 
+ * Data source: models array comes from provider API (/v1/models)
+ */
+const selectModelFromList = async (models, providerName) => {
+  const boxWidth = getLogoWidth();
+  const W = boxWidth - 2;
+  
+  const makeLine = (content) => {
+    const plainLen = content.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const padding = W - plainLen;
+    return chalk.cyan('║') + ' ' + content + ' '.repeat(Math.max(0, padding - 1)) + chalk.cyan('║');
+  };
+  
+  console.clear();
+  displayBanner();
+  drawBoxHeaderContinue(`SELECT MODEL - ${providerName}`, boxWidth);
+  
+  if (!models || models.length === 0) {
+    console.log(makeLine(chalk.red('NO MODELS AVAILABLE')));
+    console.log(makeLine(chalk.gray('[<] BACK')));
+    drawBoxFooter(boxWidth);
+    await prompts.waitForEnter();
+    return null;
+  }
+  
+  // Sort models (newest first)
+  const sortedModels = [...models].sort((a, b) => b.localeCompare(a));
+  
+  // Display models from API
+  sortedModels.forEach((model, index) => {
+    const displayModel = model.length > W - 10 ? model.substring(0, W - 13) + '...' : model;
+    console.log(makeLine(chalk.cyan(`[${index + 1}] ${displayModel}`)));
+  });
+  
+  console.log(makeLine(''));
+  console.log(makeLine(chalk.gray('[<] BACK')));
+  
+  drawBoxFooter(boxWidth);
+  
+  const choice = await prompts.textInput(chalk.cyan('SELECT MODEL:'));
+  
+  if (choice === '<' || choice?.toLowerCase() === 'b') {
+    return null;
+  }
+  
+  const index = parseInt(choice) - 1;
+  if (isNaN(index) || index < 0 || index >= sortedModels.length) {
+    return await selectModelFromList(models, providerName);
+  }
+  
+  return sortedModels[index];
+};
+
+/**
  * Select/change model for an agent
+ * Fetches available models from the provider's API
  */
 const selectModel = async (agent) => {
   const boxWidth = getLogoWidth();
@@ -959,26 +1043,44 @@ const selectModel = async (agent) => {
   displayBanner();
   drawBoxHeaderContinue(`SELECT MODEL - ${agent.name}`, boxWidth);
   
-  const models = agent.provider?.models || [];
+  console.log(makeLine(chalk.gray('FETCHING AVAILABLE MODELS FROM API...')));
+  drawBoxFooter(boxWidth);
   
-  if (models.length === 0) {
-    console.log(makeLine(chalk.gray('NO PREDEFINED MODELS. ENTER MODEL NAME MANUALLY.')));
+  // Fetch models from real API
+  const { fetchAnthropicModels, fetchOpenAIModels } = require('../services/ai/client');
+  
+  let models = null;
+  const agentCredentials = aiService.getAgentCredentials(agent.id);
+  
+  if (agent.providerId === 'anthropic') {
+    models = await fetchAnthropicModels(agentCredentials?.apiKey);
+  } else {
+    // OpenAI-compatible providers
+    const endpoint = agentCredentials?.endpoint || agent.provider?.endpoint;
+    models = await fetchOpenAIModels(endpoint, agentCredentials?.apiKey);
+  }
+  
+  // Redraw with results
+  console.clear();
+  displayBanner();
+  drawBoxHeaderContinue(`SELECT MODEL - ${agent.name}`, boxWidth);
+  
+  if (!models || models.length === 0) {
+    console.log(makeLine(chalk.red('COULD NOT FETCH MODELS FROM API')));
+    console.log(makeLine(chalk.gray('Check your API key or network connection.')));
     console.log(makeLine(''));
     console.log(makeLine(chalk.gray('[<] BACK')));
     drawBoxFooter(boxWidth);
     
-    const model = await prompts.textInput('ENTER MODEL NAME (OR < TO GO BACK):');
-    if (!model || model === '<') {
-      return await aiAgentMenu();
-    }
-    aiService.updateAgent(agent.id, { model });
-    console.log(chalk.green(`\n  MODEL CHANGED TO: ${model}`));
     await prompts.waitForEnter();
     return await aiAgentMenu();
   }
   
+  // Sort models (newest first typically)
+  models.sort((a, b) => b.localeCompare(a));
+  
+  // Display models from API
   models.forEach((model, index) => {
-    // Truncate long model names
     const displayModel = model.length > W - 10 ? model.substring(0, W - 13) + '...' : model;
     const currentMarker = model === agent.model ? chalk.yellow(' (CURRENT)') : '';
     console.log(makeLine(chalk.cyan(`[${index + 1}] ${displayModel}`) + currentMarker));
@@ -992,22 +1094,6 @@ const selectModel = async (agent) => {
   const choice = await prompts.textInput(chalk.cyan('SELECT MODEL:'));
   
   if (choice === '<' || choice?.toLowerCase() === 'b') {
-    return await aiAgentMenu();
-  }
-  
-  // Custom model option
-  if (choice?.toLowerCase() === 'c') {
-    console.log(chalk.gray('\n  Enter any model name supported by your provider.'));
-    console.log(chalk.gray('  Examples: claude-opus-4-20250514, gpt-4o-2024-11-20, etc.\n'));
-    
-    const customModel = await prompts.textInput(chalk.cyan('ENTER MODEL NAME:'));
-    if (!customModel || customModel === '<') {
-      return await selectModel(agent);
-    }
-    
-    aiService.updateAgent(agent.id, { model: customModel.trim() });
-    console.log(chalk.green(`\n  MODEL CHANGED TO: ${customModel.trim()}`));
-    await prompts.waitForEnter();
     return await aiAgentMenu();
   }
   

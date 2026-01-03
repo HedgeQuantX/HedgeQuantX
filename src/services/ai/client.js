@@ -272,10 +272,72 @@ Analyze and provide recommendation.`;
   }
 };
 
+/**
+ * Fetch available models from Anthropic API
+ * @param {string} apiKey - API key
+ * @returns {Promise<Array|null>} Array of model IDs or null on error
+ * 
+ * Data source: https://api.anthropic.com/v1/models (GET)
+ */
+const fetchAnthropicModels = async (apiKey) => {
+  if (!apiKey) return null;
+  
+  const url = 'https://api.anthropic.com/v1/models';
+  
+  const headers = {
+    'x-api-key': apiKey,
+    'anthropic-version': '2023-06-01'
+  };
+  
+  try {
+    const response = await makeRequest(url, { method: 'GET', headers, timeout: 10000 });
+    if (response.data && Array.isArray(response.data)) {
+      return response.data.map(m => m.id).filter(Boolean);
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
+};
+
+/**
+ * Fetch available models from OpenAI-compatible API
+ * @param {string} endpoint - API endpoint
+ * @param {string} apiKey - API key
+ * @returns {Promise<Array|null>} Array of model IDs or null on error
+ * 
+ * Data source: {endpoint}/models (GET)
+ */
+const fetchOpenAIModels = async (endpoint, apiKey) => {
+  if (!endpoint) return null;
+  
+  const url = `${endpoint}/models`;
+  
+  const headers = {
+    'Content-Type': 'application/json'
+  };
+  
+  if (apiKey) {
+    headers['Authorization'] = `Bearer ${apiKey}`;
+  }
+  
+  try {
+    const response = await makeRequest(url, { method: 'GET', headers, timeout: 10000 });
+    if (response.data && Array.isArray(response.data)) {
+      return response.data.map(m => m.id).filter(Boolean);
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
+};
+
 module.exports = {
   callAI,
   analyzeTrading,
   callOpenAICompatible,
   callAnthropic,
-  callGemini
+  callGemini,
+  fetchAnthropicModels,
+  fetchOpenAIModels
 };

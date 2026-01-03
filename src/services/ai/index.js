@@ -160,6 +160,20 @@ const getAgent = (agentId) => {
 };
 
 /**
+ * Get agent credentials by ID
+ * @param {string} agentId - Agent ID
+ * @returns {Object|null} Credentials object or null
+ */
+const getAgentCredentials = (agentId) => {
+  const aiSettings = getAISettings();
+  const agents = aiSettings.agents || [];
+  const agent = agents.find(a => a.id === agentId);
+  
+  if (!agent) return null;
+  return agent.credentials || null;
+};
+
+/**
  * Set active agent
  */
 const setActiveAgent = (agentId) => {
@@ -607,6 +621,7 @@ module.exports = {
   getAgents,
   getAgentCount,
   getAgent,
+  getAgentCredentials,
   getActiveAgent,
   setActiveAgent,
   addAgent,
