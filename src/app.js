@@ -262,14 +262,13 @@ const run = async () => {
             await refreshStats();
           }
         } else {
-          // Show spinner while refreshing stats
-          const spinner = ora({ text: 'LOADING...', color: 'cyan' }).start();
-          await refreshStats();
-          spinner.stop();
-          
-          // Clear and display dashboard
+          // Clear screen first, show banner, then spinner while loading
           console.clear();
           await banner(false);
+          
+          const spinner = ora({ text: 'LOADING DASHBOARD...', color: 'cyan' }).start();
+          await refreshStats();
+          spinner.succeed('READY');
           
           const action = await dashboardMenu(currentService);
 
