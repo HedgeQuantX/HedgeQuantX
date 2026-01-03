@@ -259,7 +259,7 @@ const PROVIDERS = {
     endpoint: 'https://api.together.xyz/v1'
   },
 
-  // ========== CHINESE PROVIDERS ==========
+
   qwen: {
     id: 'qwen',
     name: 'QWEN (ALIBABA)',
