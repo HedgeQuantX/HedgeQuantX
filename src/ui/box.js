@@ -11,22 +11,19 @@ let logoWidth = null;
 /**
  * Get logo width for consistent box sizing
  * Adapts to terminal width for mobile devices
+ * Returns 98 for desktop to match the full HEDGEQUANTX logo width
  */
 const getLogoWidth = () => {
-  const termWidth = process.stdout.columns || 80;
+  const termWidth = process.stdout.columns || 100;
   
   // Mobile: use terminal width
   if (termWidth < 60) {
     return Math.max(termWidth - 2, 40);
   }
   
-  // Desktop: use logo width
-  if (!logoWidth) {
-    const logoText = figlet.textSync('HEDGEQUANTX', { font: 'ANSI Shadow' });
-    const lines = logoText.split('\n').filter(line => line.trim().length > 0);
-    logoWidth = Math.max(...lines.map(line => line.length)) + 4;
-  }
-  return Math.min(logoWidth, termWidth - 2);
+  // Desktop: fixed width of 98 to match banner
+  // Logo line = 86 chars (HEDGEQUANT) + 8 chars (X) + 2 borders = 96, round to 98
+  return Math.min(98, termWidth - 2);
 };
 
 /**
@@ -58,11 +55,21 @@ const padText = (text, width) => {
 };
 
 /**
- * Draw box header with title
+ * Draw box header with title (starts new box with ╔)
  */
 const drawBoxHeader = (title, width) => {
   const innerWidth = width - 2;
   console.log(chalk.cyan('\u2554' + '\u2550'.repeat(innerWidth) + '\u2557'));
+  console.log(chalk.cyan('\u2551') + chalk.cyan.bold(centerText(title, innerWidth)) + chalk.cyan('\u2551'));
+  console.log(chalk.cyan('\u2560' + '\u2550'.repeat(innerWidth) + '\u2563'));
+};
+
+/**
+ * Draw box header that continues from previous box (uses ╠ instead of ╔)
+ */
+const drawBoxHeaderContinue = (title, width) => {
+  const innerWidth = width - 2;
+  console.log(chalk.cyan('\u2560' + '\u2550'.repeat(innerWidth) + '\u2563'));
   console.log(chalk.cyan('\u2551') + chalk.cyan.bold(centerText(title, innerWidth)) + chalk.cyan('\u2551'));
   console.log(chalk.cyan('\u2560' + '\u2550'.repeat(innerWidth) + '\u2563'));
 };
@@ -107,6 +114,7 @@ module.exports = {
   centerText,
   padText,
   drawBoxHeader,
+  drawBoxHeaderContinue,
   drawBoxFooter,
   drawBoxRow,
   drawBoxSeparator,

@@ -54,17 +54,7 @@ const PROVIDERS = {
           '~$0.10 per trading session'
         ],
         fields: ['apiKey'],
-        url: 'https://console.anthropic.com'
-      },
-      {
-        id: 'max_plan',
-        label: 'MAX PLAN ($100/MONTH)',
-        description: [
-          'Subscribe at claude.ai',
-          'Unlimited usage'
-        ],
-        fields: ['sessionKey'],
-        url: 'https://claude.ai'
+        url: 'https://console.anthropic.com/settings/keys'
       }
     ],
     endpoint: 'https://api.anthropic.com/v1'
@@ -87,16 +77,6 @@ const PROVIDERS = {
         ],
         fields: ['apiKey'],
         url: 'https://platform.openai.com/api-keys'
-      },
-      {
-        id: 'plus_plan',
-        label: 'PLUS PLAN ($20/MONTH)',
-        description: [
-          'Subscribe at chat.openai.com',
-          'GPT-4 access included'
-        ],
-        fields: ['accessToken'],
-        url: 'https://chat.openai.com'
       }
     ],
     endpoint: 'https://api.openai.com/v1'

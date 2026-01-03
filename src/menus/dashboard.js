@@ -44,7 +44,7 @@ const dashboardMenu = async (service) => {
     console.log(makeLine(propfirmText, 'center'));
   }
   
-  // Stats bar with yellow icons
+  // Stats bar with icons
   const statsInfo = getCachedStats();
   if (statsInfo) {
     console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
@@ -52,54 +52,62 @@ const dashboardMenu = async (service) => {
     const balStr = statsInfo.balance !== null ? `$${statsInfo.balance.toLocaleString()}` : '--';
     const balColor = statsInfo.balance !== null ? chalk.green : chalk.gray;
     
-    let pnlDisplay, pnlColor;
-    if (statsInfo.pnl !== null) {
-      pnlColor = statsInfo.pnl >= 0 ? chalk.green : chalk.red;
-      pnlDisplay = `${statsInfo.pnl >= 0 ? '+' : ''}$${Math.abs(statsInfo.pnl).toLocaleString()}`;
-    } else {
-      pnlColor = chalk.gray;
-      pnlDisplay = '--';
-    }
-    
     // AI status
     const aiConnection = aiService.getConnection();
     const aiStatus = aiConnection 
       ? aiConnection.provider.name.split(' ')[0]  // Just "CLAUDE" or "OPENAI"
       : null;
     
-    // Yellow icons: ✔ for each stat
-    const icon = chalk.yellow('✔ ');
+    // Build plain text for length calculation (unicode ✔ and ○ are 1 char width each)
+    // Format: "✔ CONNECTIONS: X    ✔ ACCOUNTS: X    ✔ BALANCE: $X    ○ AI: NONE"
+    const plainText = `* CONNECTIONS: ${statsInfo.connections}    * ACCOUNTS: ${statsInfo.accounts}    * BALANCE: ${balStr}    * AI: ${aiStatus || 'NONE'}`;
+    const statsLen = plainText.length;
+    const statsLeftPad = Math.max(0, Math.floor((W - statsLen) / 2));
+    const statsRightPad = Math.max(0, W - statsLen - statsLeftPad);
+    
+    // Build with unicode icons and colors
+    const checkIcon = chalk.yellow('✔ ');
     const aiIcon = aiStatus ? chalk.magenta('✔ ') : chalk.gray('○ ');
     const aiText = aiStatus ? chalk.magenta(aiStatus) : chalk.gray('NONE');
     
-    const statsPlain = `✔ CONNECTIONS: ${statsInfo.connections}    ✔ ACCOUNTS: ${statsInfo.accounts}    ✔ BALANCE: ${balStr}    AI: ${aiStatus || 'NONE'}`;
-    const statsLeftPad = Math.max(0, Math.floor((W - statsPlain.length) / 2));
-    const statsRightPad = Math.max(0, W - statsPlain.length - statsLeftPad);
-    
     console.log(chalk.cyan('║') + ' '.repeat(statsLeftPad) +
-      icon + chalk.white(`CONNECTIONS: ${statsInfo.connections}`) + '    ' +
-      icon + chalk.white(`ACCOUNTS: ${statsInfo.accounts}`) + '    ' +
-      icon + chalk.white('BALANCE: ') + balColor(balStr) + '    ' +
+      checkIcon + chalk.white(`CONNECTIONS: ${statsInfo.connections}`) + '    ' +
+      checkIcon + chalk.white(`ACCOUNTS: ${statsInfo.accounts}`) + '    ' +
+      checkIcon + chalk.white('BALANCE: ') + balColor(balStr) + '    ' +
       aiIcon + chalk.white('AI: ') + aiText +
-      ' '.repeat(Math.max(0, statsRightPad)) + chalk.cyan('║'));
+      ' '.repeat(statsRightPad) + chalk.cyan('║'));
   }
   
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
-  // Menu in 2 columns
-  const col1Width = Math.floor(W / 2);
-  const menuRow = (left, right) => {
-    const leftPlain = left.replace(/\x1b\[[0-9;]*m/g, '');
-    const rightPlain = right.replace(/\x1b\[[0-9;]*m/g, '');
-    const leftPadded = '  ' + left + ' '.repeat(Math.max(0, col1Width - leftPlain.length - 2));
-    const rightPadded = right + ' '.repeat(Math.max(0, W - col1Width - rightPlain.length));
-    console.log(chalk.cyan('║') + leftPadded + rightPadded + chalk.cyan('║'));
+  // Menu in 3 columns
+  const colWidth = Math.floor(W / 3);
+  
+  const menuRow3 = (col1, col2, col3) => {
+    const c1Plain = col1.replace(/\x1b\[[0-9;]*m/g, '');
+    const c2Plain = col2.replace(/\x1b\[[0-9;]*m/g, '');
+    const c3Plain = col3.replace(/\x1b\[[0-9;]*m/g, '');
+    
+    const c1Padded = '  ' + col1 + ' '.repeat(Math.max(0, colWidth - c1Plain.length - 2));
+    const c2Padded = col2 + ' '.repeat(Math.max(0, colWidth - c2Plain.length));
+    const c3Padded = col3 + ' '.repeat(Math.max(0, W - colWidth * 2 - c3Plain.length));
+    
+    console.log(chalk.cyan('║') + c1Padded + c2Padded + c3Padded + chalk.cyan('║'));
   };
   
-  menuRow(chalk.cyan('[1] VIEW ACCOUNTS'), chalk.cyan('[2] VIEW STATS'));
-  menuRow(chalk.cyan('[+] ADD PROP-ACCOUNT'), chalk.magenta('[A] ALGO TRADING'));
-  menuRow(chalk.magenta('[I] AI AGENT'), chalk.yellow('[U] UPDATE HQX'));
-  menuRow(chalk.red('[X] DISCONNECT'), '');
+  const centerLine = (content) => {
+    const plainLen = content.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const padding = W - plainLen;
+    const leftPad = Math.floor(padding / 2);
+    console.log(chalk.cyan('║') + ' '.repeat(leftPad) + content + ' '.repeat(padding - leftPad) + chalk.cyan('║'));
+  };
+  
+  menuRow3(chalk.cyan('[1] VIEW ACCOUNTS'), chalk.cyan('[2] VIEW STATS'), chalk.cyan('[+] ADD ACCOUNT'));
+  menuRow3(chalk.magenta('[A] ALGO TRADING'), chalk.magenta('[I] AI AGENT'), chalk.yellow('[U] UPDATE HQX'));
+  
+  // Separator and disconnect button centered
+  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
+  centerLine(chalk.red('[X] DISCONNECT'));
   
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
   

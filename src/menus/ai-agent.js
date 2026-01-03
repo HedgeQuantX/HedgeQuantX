@@ -6,10 +6,11 @@
 const chalk = require('chalk');
 const ora = require('ora');
 
-const { getLogoWidth, drawBoxHeader, drawBoxFooter, displayBanner } = require('../ui');
+const { getLogoWidth, drawBoxHeader, drawBoxHeaderContinue, drawBoxFooter, displayBanner } = require('../ui');
 const { prompts } = require('../utils');
 const aiService = require('../services/ai');
 const { getCategories, getProvidersByCategory } = require('../services/ai/providers');
+const tokenScanner = require('../services/ai/token-scanner');
 
 /**
  * Main AI Agent menu
@@ -30,7 +31,7 @@ const aiAgentMenu = async () => {
   
   console.clear();
   displayBanner();
-  drawBoxHeader('AI AGENT', boxWidth);
+  drawBoxHeaderContinue('AI AGENT', boxWidth);
   
   // Show current status
   const connection = aiService.getConnection();
@@ -67,7 +68,7 @@ const aiAgentMenu = async () => {
   
   switch (choice?.toLowerCase()) {
     case '1':
-      return await selectCategory();
+      return await showExistingTokens();
     case '2':
       if (connection) {
         return await selectModel(connection.provider);
@@ -85,6 +86,129 @@ const aiAgentMenu = async () => {
       return;
     default:
       return;
+  }
+};
+
+/**
+ * Show existing tokens found on the system
+ */
+const showExistingTokens = async () => {
+  const boxWidth = getLogoWidth();
+  const W = boxWidth - 2;
+  
+  const makeLine = (content) => {
+    const plainLen = content.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const padding = W - plainLen;
+    return chalk.cyan('║') + ' ' + content + ' '.repeat(Math.max(0, padding - 1)) + chalk.cyan('║');
+  };
+  
+  console.clear();
+  displayBanner();
+  drawBoxHeaderContinue('SCANNING FOR EXISTING SESSIONS...', boxWidth);
+  console.log(makeLine(''));
+  console.log(makeLine(chalk.gray('CHECKING VS CODE, CURSOR, CLAUDE CLI, OPENCODE...')));
+  console.log(makeLine(''));
+  drawBoxFooter(boxWidth);
+  
+  // Scan for tokens
+  const tokens = tokenScanner.scanAllSources();
+  
+  if (tokens.length === 0) {
+    // No tokens found, go directly to category selection
+    return await selectCategory();
+  }
+  
+  // Show found tokens
+  console.clear();
+  displayBanner();
+  drawBoxHeader('EXISTING SESSIONS FOUND', boxWidth);
+  
+  console.log(makeLine(chalk.green(`FOUND ${tokens.length} EXISTING SESSION(S)`)));
+  console.log(makeLine(''));
+  
+  const formatted = tokenScanner.formatResults(tokens);
+  
+  for (const t of formatted) {
+    const providerColor = t.provider.includes('CLAUDE') ? chalk.magenta : 
+                          t.provider.includes('OPENAI') ? chalk.green :
+                          t.provider.includes('OPENROUTER') ? chalk.yellow : chalk.cyan;
+    
+    console.log(makeLine(
+      chalk.white(`[${t.index}] `) + 
+      providerColor(t.provider) + 
+      chalk.gray(` (${t.type})`)
+    ));
+    console.log(makeLine(
+      chalk.gray(`    ${t.icon} ${t.source} - ${t.lastUsed}`)
+    ));
+    console.log(makeLine(
+      chalk.gray(`    TOKEN: ${t.tokenPreview}`)
+    ));
+    console.log(makeLine(''));
+  }
+  
+  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
+  console.log(makeLine(chalk.cyan('[N] CONNECT NEW PROVIDER')));
+  console.log(makeLine(chalk.gray('[<] BACK')));
+  
+  drawBoxFooter(boxWidth);
+  
+  const choice = await prompts.textInput(chalk.cyan('SELECT (1-' + tokens.length + '/N/<):'));
+  
+  if (choice === '<' || choice?.toLowerCase() === 'b') {
+    return await aiAgentMenu();
+  }
+  
+  if (choice?.toLowerCase() === 'n') {
+    return await selectCategory();
+  }
+  
+  const index = parseInt(choice) - 1;
+  if (isNaN(index) || index < 0 || index >= tokens.length) {
+    return await showExistingTokens();
+  }
+  
+  // Use selected token
+  const selectedToken = tokens[index];
+  
+  const spinner = ora({ text: 'VALIDATING TOKEN...', color: 'cyan' }).start();
+  
+  try {
+    // Validate the token
+    const credentials = { apiKey: selectedToken.token };
+    const validation = await aiService.validateConnection(selectedToken.provider, 'api_key', credentials);
+    
+    if (!validation.valid) {
+      spinner.fail(`TOKEN INVALID OR EXPIRED: ${validation.error}`);
+      await prompts.waitForEnter();
+      return await showExistingTokens();
+    }
+    
+    // Get provider info
+    const { getProvider } = require('../services/ai/providers');
+    const provider = getProvider(selectedToken.provider);
+    
+    if (!provider) {
+      spinner.fail('PROVIDER NOT SUPPORTED');
+      await prompts.waitForEnter();
+      return await showExistingTokens();
+    }
+    
+    // Save connection
+    const model = provider.defaultModel;
+    await aiService.connect(selectedToken.provider, 'api_key', credentials, model);
+    
+    spinner.succeed(`CONNECTED TO ${provider.name}`);
+    console.log(chalk.gray(`  SOURCE: ${selectedToken.source}`));
+    console.log(chalk.gray(`  MODEL: ${model}`));
+    
+    await prompts.waitForEnter();
+    return await aiAgentMenu();
+    
+  } catch (error) {
+    spinner.fail(`CONNECTION FAILED: ${error.message}`);
+    await prompts.waitForEnter();
+    return await showExistingTokens();
   }
 };
 
@@ -324,6 +448,78 @@ const selectProviderOption = async (provider) => {
 };
 
 /**
+ * Open URL in default browser
+ */
+const openBrowser = (url) => {
+  const { exec } = require('child_process');
+  const platform = process.platform;
+  
+  let cmd;
+  if (platform === 'darwin') cmd = `open "${url}"`;
+  else if (platform === 'win32') cmd = `start "" "${url}"`;
+  else cmd = `xdg-open "${url}"`;
+  
+  exec(cmd, (err) => {
+    if (err) console.log(chalk.gray('  Could not open browser automatically'));
+  });
+};
+
+/**
+ * Get instructions for each credential type
+ */
+const getCredentialInstructions = (provider, option, field) => {
+  const instructions = {
+    apiKey: {
+      title: 'API KEY REQUIRED',
+      steps: [
+        '1. CLICK THE LINK BELOW TO OPEN IN BROWSER',
+        '2. SIGN IN OR CREATE AN ACCOUNT',
+        '3. GENERATE A NEW API KEY',
+        '4. COPY AND PASTE IT HERE'
+      ]
+    },
+    sessionKey: {
+      title: 'SESSION KEY REQUIRED (SUBSCRIPTION PLAN)',
+      steps: [
+        '1. OPEN THE LINK BELOW IN YOUR BROWSER',
+        '2. SIGN IN WITH YOUR SUBSCRIPTION ACCOUNT',
+        '3. OPEN DEVELOPER TOOLS (F12 OR CMD+OPT+I)',
+        '4. GO TO APPLICATION > COOKIES',
+        '5. FIND "sessionKey" OR SIMILAR TOKEN',
+        '6. COPY THE VALUE AND PASTE IT HERE'
+      ]
+    },
+    accessToken: {
+      title: 'ACCESS TOKEN REQUIRED (SUBSCRIPTION PLAN)',
+      steps: [
+        '1. OPEN THE LINK BELOW IN YOUR BROWSER',
+        '2. SIGN IN WITH YOUR SUBSCRIPTION ACCOUNT',
+        '3. OPEN DEVELOPER TOOLS (F12 OR CMD+OPT+I)',
+        '4. GO TO APPLICATION > COOKIES OR LOCAL STORAGE',
+        '5. FIND "accessToken" OR "token"',
+        '6. COPY THE VALUE AND PASTE IT HERE'
+      ]
+    },
+    endpoint: {
+      title: 'ENDPOINT URL',
+      steps: [
+        '1. ENTER THE API ENDPOINT URL',
+        '2. USUALLY http://localhost:PORT FOR LOCAL'
+      ]
+    },
+    model: {
+      title: 'MODEL NAME',
+      steps: [
+        '1. ENTER THE MODEL NAME TO USE',
+        '2. CHECK PROVIDER DOCS FOR AVAILABLE MODELS'
+      ]
+    }
+  };
+  
+  return instructions[field] || { title: field.toUpperCase(), steps: [] };
+};
+
+/**
  * Setup connection with credentials
  */
 const setupConnection = async (provider, option) => {
@@ -336,64 +532,85 @@ const setupConnection = async (provider, option) => {
     return chalk.cyan('║') + ' ' + content + ' '.repeat(Math.max(0, padding - 1)) + chalk.cyan('║');
   };
   
-  console.clear();
-  displayBanner();
-  drawBoxHeader(`CONNECT TO ${provider.name}`, boxWidth);
-  
-  // Show instructions
-  if (option.url) {
-    console.log(makeLine(chalk.white('GET YOUR CREDENTIALS:')));
-    console.log(makeLine(chalk.cyan(option.url)));
-    console.log(makeLine(''));
-  }
-  
-  console.log(makeLine(chalk.gray('TYPE < TO GO BACK')));
-  
-  drawBoxFooter(boxWidth);
-  console.log();
-  
   // Collect credentials based on fields
   const credentials = {};
   
   for (const field of option.fields) {
+    // Show instructions for this field
+    console.clear();
+    displayBanner();
+    drawBoxHeader(`CONNECT TO ${provider.name}`, boxWidth);
+    
+    const instructions = getCredentialInstructions(provider, option, field);
+    
+    console.log(makeLine(chalk.yellow(instructions.title)));
+    console.log(makeLine(''));
+    
+    // Show steps
+    for (const step of instructions.steps) {
+      console.log(makeLine(chalk.white(step)));
+    }
+    
+    console.log(makeLine(''));
+    
+    // Show URL and open browser
+    if (option.url && (field === 'apiKey' || field === 'sessionKey' || field === 'accessToken')) {
+      console.log(makeLine(chalk.cyan('LINK: ') + chalk.green(option.url)));
+      console.log(makeLine(''));
+      console.log(makeLine(chalk.gray('OPENING BROWSER...')));
+      openBrowser(option.url);
+    }
+    
+    // Show default for endpoint
+    if (field === 'endpoint' && option.defaultEndpoint) {
+      console.log(makeLine(chalk.gray(`DEFAULT: ${option.defaultEndpoint}`)));
+    }
+    
+    console.log(makeLine(''));
+    console.log(makeLine(chalk.gray('TYPE < TO GO BACK')));
+    
+    drawBoxFooter(boxWidth);
+    console.log();
+    
     let value;
     
     switch (field) {
       case 'apiKey':
-        value = await prompts.textInput('ENTER API KEY (OR < TO GO BACK):');
+        value = await prompts.textInput(chalk.cyan('PASTE API KEY:'));
         if (!value || value === '<') return await selectProviderOption(provider);
-        credentials.apiKey = value;
+        credentials.apiKey = value.trim();
         break;
         
       case 'sessionKey':
-        value = await prompts.textInput('ENTER SESSION KEY (OR < TO GO BACK):');
+        value = await prompts.textInput(chalk.cyan('PASTE SESSION KEY:'));
         if (!value || value === '<') return await selectProviderOption(provider);
-        credentials.sessionKey = value;
+        credentials.sessionKey = value.trim();
         break;
         
       case 'accessToken':
-        value = await prompts.textInput('ENTER ACCESS TOKEN (OR < TO GO BACK):');
+        value = await prompts.textInput(chalk.cyan('PASTE ACCESS TOKEN:'));
         if (!value || value === '<') return await selectProviderOption(provider);
-        credentials.accessToken = value;
+        credentials.accessToken = value.trim();
         break;
         
       case 'endpoint':
         const defaultEndpoint = option.defaultEndpoint || '';
-        value = await prompts.textInput(`ENDPOINT [${defaultEndpoint || 'required'}] (OR < TO GO BACK):`);
+        value = await prompts.textInput(chalk.cyan(`ENDPOINT [${defaultEndpoint || 'required'}]:`));
         if (value === '<') return await selectProviderOption(provider);
-        credentials.endpoint = value || defaultEndpoint;
+        credentials.endpoint = (value || defaultEndpoint).trim();
         if (!credentials.endpoint) return await selectProviderOption(provider);
         break;
         
       case 'model':
-        value = await prompts.textInput('MODEL NAME (OR < TO GO BACK):');
+        value = await prompts.textInput(chalk.cyan('MODEL NAME:'));
         if (!value || value === '<') return await selectProviderOption(provider);
-        credentials.model = value;
+        credentials.model = value.trim();
         break;
     }
   }
   
   // Validate connection
+  console.log();
   const spinner = ora({ text: 'VALIDATING CONNECTION...', color: 'cyan' }).start();
   
   const validation = await aiService.validateConnection(provider.id, option.id, credentials);
