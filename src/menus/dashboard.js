@@ -79,24 +79,30 @@ const balStr = statsInfo.balance !== null ? `$${statsInfo.balance.toLocaleString
   
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
-  // Menu in 3 columns - evenly distributed
+  // Menu in 3 columns - fixed width columns for perfect alignment
+  const colWidth = Math.floor(W / 3);
+  
   const menuRow3 = (col1, col2, col3) => {
     const c1Plain = col1.replace(/\x1b\[[0-9;]*m/g, '');
     const c2Plain = col2.replace(/\x1b\[[0-9;]*m/g, '');
     const c3Plain = col3.replace(/\x1b\[[0-9;]*m/g, '');
     
-    // Total content length
-    const totalContent = c1Plain.length + c2Plain.length + c3Plain.length;
-    // Available space for padding
-    const totalPadding = W - totalContent;
-    // Divide into 4 gaps: left margin, between 1-2, between 2-3, right margin
-    const gap = Math.floor(totalPadding / 4);
-    const extraPad = totalPadding - (gap * 4);
+    // Center each item within its fixed-width column
+    const pad1Left = Math.floor((colWidth - c1Plain.length) / 2);
+    const pad1Right = colWidth - c1Plain.length - pad1Left;
     
-    const line = ' '.repeat(gap) + 
-      col1 + ' '.repeat(gap) + 
-      col2 + ' '.repeat(gap) + 
-      col3 + ' '.repeat(gap + extraPad);
+    const pad2Left = Math.floor((colWidth - c2Plain.length) / 2);
+    const pad2Right = colWidth - c2Plain.length - pad2Left;
+    
+    // Third column gets remaining width
+    const col3Width = W - (colWidth * 2);
+    const pad3Left = Math.floor((col3Width - c3Plain.length) / 2);
+    const pad3Right = col3Width - c3Plain.length - pad3Left;
+    
+    const line = 
+      ' '.repeat(pad1Left) + col1 + ' '.repeat(pad1Right) +
+      ' '.repeat(pad2Left) + col2 + ' '.repeat(pad2Right) +
+      ' '.repeat(pad3Left) + col3 + ' '.repeat(pad3Right);
     
     console.log(chalk.cyan('║') + line + chalk.cyan('║'));
   };
@@ -108,8 +114,14 @@ const balStr = statsInfo.balance !== null ? `$${statsInfo.balance.toLocaleString
     console.log(chalk.cyan('║') + ' '.repeat(leftPad) + content + ' '.repeat(padding - leftPad) + chalk.cyan('║'));
   };
   
-  menuRow3(chalk.cyan('[1] VIEW ACCOUNTS'), chalk.cyan('[2] VIEW STATS'), chalk.cyan('[+] ADD ACCOUNT'));
-  menuRow3(chalk.magenta('[A] ALGO TRADING'), chalk.magenta('[I] AI AGENT'), chalk.yellow('[U] UPDATE HQX'));
+  // Fixed-width menu items for perfect alignment
+  const menuItem = (key, label, color) => {
+    const text = `[${key}] ${label.padEnd(14)}`;
+    return color(text);
+  };
+  
+  menuRow3(menuItem('1', 'VIEW ACCOUNTS', chalk.cyan), menuItem('2', 'VIEW STATS', chalk.cyan), menuItem('+', 'ADD ACCOUNT', chalk.cyan));
+  menuRow3(menuItem('A', 'ALGO TRADING', chalk.magenta), menuItem('I', 'AI AGENT', chalk.magenta), menuItem('U', 'UPDATE HQX', chalk.yellow));
   
   // Separator and disconnect button centered
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
