@@ -85,6 +85,7 @@ const nativePrompt = (message) => {
  */
 const waitForEnter = async (message = 'PRESS ENTER TO CONTINUE...') => {
   await nativePrompt(message);
+  console.clear();
 };
 
 /**

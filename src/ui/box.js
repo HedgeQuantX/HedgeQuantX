@@ -97,7 +97,7 @@ const drawBoxSeparator = (width) => {
 const printLogo = () => {
   const logoText = figlet.textSync('HEDGEQUANTX', { font: 'ANSI Shadow' });
   console.log(chalk.cyan(logoText));
-  console.log(chalk.gray.italic('  Prop Futures Algo Trading CLI'));
+  console.log(chalk.gray.italic('  PROP FUTURES ALGO TRADING CLI'));
   console.log();
 };
 

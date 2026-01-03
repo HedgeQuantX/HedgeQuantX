@@ -343,7 +343,7 @@ const showStats = async (service) => {
     console.log(chalk.cyan('\u2551') + fmtRow('STARTING BALANCE:', chalk.white(startBalStr), col1) + chalk.cyan('\u2502') + fmtRow('WIN RATE:', winRate !== 'N/A' ? (parseFloat(winRate) >= 50 ? chalk.green(winRate + '%') : chalk.yellow(winRate + '%')) : chalk.gray('N/A'), col2) + chalk.cyan('\u2551'));
     console.log(chalk.cyan('\u2551') + fmtRow('TOTAL P&L:', pnlColor(pnlStr), col1) + chalk.cyan('\u2502') + fmtRow('LONG TRADES:', hasTradeData ? chalk.white(stats.longTrades + (longWinRate !== 'N/A' ? ' (' + longWinRate + '%)' : '')) : chalk.gray('N/A'), col2) + chalk.cyan('\u2551'));
     console.log(chalk.cyan('\u2551') + fmtRow('OPEN POSITIONS:', chalk.white(String(totalOpenPositions)), col1) + chalk.cyan('\u2502') + fmtRow('SHORT TRADES:', hasTradeData ? chalk.white(stats.shortTrades + (shortWinRate !== 'N/A' ? ' (' + shortWinRate + '%)' : '')) : chalk.gray('N/A'), col2) + chalk.cyan('\u2551'));
-    console.log(chalk.cyan('\u2551') + fmtRow('OPEN ORDERS:', chalk.white(String(totalOpenOrders)), col1) + chalk.cyan('\u2502') + fmtRow('VOLUME:', hasTradeData ? chalk.white(stats.totalVolume + ' contracts') : chalk.gray('N/A'), col2) + chalk.cyan('\u2551'));
+    console.log(chalk.cyan('\u2551') + fmtRow('OPEN ORDERS:', chalk.white(String(totalOpenOrders)), col1) + chalk.cyan('\u2502') + fmtRow('VOLUME:', hasTradeData ? chalk.white(stats.totalVolume + ' CONTRACTS') : chalk.gray('N/A'), col2) + chalk.cyan('\u2551'));
     
     // ========== P&L METRICS ==========
     draw2ColSeparator(boxWidth);
@@ -421,8 +421,8 @@ const showStats = async (service) => {
       });
     } else {
       const msg = connectionTypes.rithmic > 0 
-        ? '  No trade history (Rithmic does not provide trade history API)'
-        : '  No trade data available';
+        ? '  NO TRADE HISTORY (RITHMIC DOES NOT PROVIDE TRADE HISTORY API)'
+        : '  NO TRADE DATA AVAILABLE';
       console.log(chalk.cyan('\u2551') + chalk.gray(msg) + ' '.repeat(Math.max(0, chartInnerWidth - msg.length)) + chalk.cyan('\u2551'));
     }
     
@@ -467,13 +467,13 @@ const showStats = async (service) => {
       
       // Header - build with exact spacing
       const headerParts = [
-        ' ' + 'Time'.padEnd(colTime),
-        'Symbol'.padEnd(colSymbol),
-        'Side'.padEnd(colSide),
+        ' ' + 'TIME'.padEnd(colTime),
+        'SYMBOL'.padEnd(colSymbol),
+        'SIDE'.padEnd(colSide),
         'P&L'.padEnd(colPnl),
-        'Fees'.padEnd(colFees),
-        'Net'.padEnd(colNet),
-        'Account'.padEnd(colAccount)
+        'FEES'.padEnd(colFees),
+        'NET'.padEnd(colNet),
+        'ACCOUNT'.padEnd(colAccount)
       ];
       const header = headerParts.join('| ');
       console.log(chalk.cyan('\u2551') + chalk.white(header) + chalk.cyan('\u2551'));
@@ -540,13 +540,13 @@ const showStats = async (service) => {
       }
       
       if (sortedTrades.length === 0) {
-        const msg = '  No completed trades yet';
+        const msg = '  NO COMPLETED TRADES YET';
         console.log(chalk.cyan('\u2551') + chalk.gray(msg.padEnd(innerWidth)) + chalk.cyan('\u2551'));
       }
     } else {
       const msg = connectionTypes.rithmic > 0 
-        ? '  No trade history (Rithmic API limitation)'
-        : '  No trade history available';
+        ? '  NO TRADE HISTORY (RITHMIC API LIMITATION)'
+        : '  NO TRADE HISTORY AVAILABLE';
       console.log(chalk.cyan('\u2551') + chalk.gray(msg.padEnd(innerWidth)) + chalk.cyan('\u2551'));
     }
     
@@ -581,18 +581,18 @@ const showStats = async (service) => {
       };
       
       const metricsDisplay = [
-        { name: 'Win Rate', score: winRateScore },
-        { name: 'Profit Factor', score: profitFactorScore },
-        { name: 'Consistency', score: consistencyScore },
-        { name: 'Risk Management', score: riskScore },
-        { name: 'Volume', score: volumeScore },
-        { name: 'Returns', score: returnScore }
+        { name: 'WIN RATE', score: winRateScore },
+        { name: 'PROFIT FACTOR', score: profitFactorScore },
+        { name: 'CONSISTENCY', score: consistencyScore },
+        { name: 'RISK MANAGEMENT', score: riskScore },
+        { name: 'VOLUME', score: volumeScore },
+        { name: 'RETURNS', score: returnScore }
       ];
       
       const barWidth = 30;
       const labelWidth = 18;
       
-      const overallLine = `  OVERALL SCORE: ${scoreColor(String(hqxScore))} / 100  [Grade: ${scoreColor(scoreGrade)}]`;
+      const overallLine = `  OVERALL SCORE: ${scoreColor(String(hqxScore))} / 100  [GRADE: ${scoreColor(scoreGrade)}]`;
       const overallVisLen = overallLine.replace(/\x1b\[[0-9;]*m/g, '').length;
       console.log(chalk.cyan('\u2551') + overallLine + ' '.repeat(innerWidth - overallVisLen) + chalk.cyan('\u2551'));
       console.log(chalk.cyan('\u2551') + chalk.gray('\u2500'.repeat(innerWidth)) + chalk.cyan('\u2551'));
@@ -613,9 +613,9 @@ const showStats = async (service) => {
     
     // Show data source notice
     if (connectionTypes.rithmic > 0 && connectionTypes.projectx === 0) {
-      console.log(chalk.gray('  Note: Rithmic API provides balance/P&L only. Trade history not available.'));
+      console.log(chalk.gray('  NOTE: RITHMIC API PROVIDES BALANCE/P&L ONLY. TRADE HISTORY NOT AVAILABLE.'));
     } else if (connectionTypes.rithmic > 0 && connectionTypes.projectx > 0) {
-      console.log(chalk.gray('  Note: Trade history shown from ProjectX accounts only.'));
+      console.log(chalk.gray('  NOTE: TRADE HISTORY SHOWN FROM PROJECTX ACCOUNTS ONLY.'));
     }
     
   } catch (error) {

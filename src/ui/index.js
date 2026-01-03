@@ -70,7 +70,7 @@ const displayBanner = () => {
   }
   
   console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
-  const tagline = isMobile ? `HQX v${version}` : `Prop Futures Algo Trading  v${version}`;
+  const tagline = isMobile ? `HQX v${version}` : `PROP FUTURES ALGO TRADING  v${version}`;
   console.log(chalk.cyan('║') + chalk.white(centerText(tagline, innerWidth)) + chalk.cyan('║'));
 };
 

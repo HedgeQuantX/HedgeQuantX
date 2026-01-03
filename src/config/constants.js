@@ -4,49 +4,49 @@
 
 // Account Status Codes (ProjectX UserAPI)
 const ACCOUNT_STATUS = {
-  0: { text: 'Active', color: 'green' },
-  1: { text: 'End Of Day', color: 'cyan' },
-  2: { text: 'Halted', color: 'red' },
-  3: { text: 'Paused', color: 'yellow' },
-  4: { text: 'Holiday', color: 'blue' },
-  5: { text: 'Expired', color: 'gray' },
-  6: { text: 'Terminated', color: 'red' },
-  7: { text: 'Cancelled', color: 'red' },
-  8: { text: 'Failed', color: 'red' },
-  9: { text: 'Passed', color: 'green' }
+  0: { text: 'ACTIVE', color: 'green' },
+  1: { text: 'END OF DAY', color: 'cyan' },
+  2: { text: 'HALTED', color: 'red' },
+  3: { text: 'PAUSED', color: 'yellow' },
+  4: { text: 'HOLIDAY', color: 'blue' },
+  5: { text: 'EXPIRED', color: 'gray' },
+  6: { text: 'TERMINATED', color: 'red' },
+  7: { text: 'CANCELLED', color: 'red' },
+  8: { text: 'FAILED', color: 'red' },
+  9: { text: 'PASSED', color: 'green' }
 };
 
 // Account Types (ProjectX UserAPI)
 const ACCOUNT_TYPE = {
-  0: { text: 'Practice', color: 'blue' },
-  1: { text: 'Evaluation', color: 'yellow' },
-  2: { text: 'Live', color: 'green' },
-  3: { text: 'Express', color: 'magenta' },
-  4: { text: 'Sim', color: 'gray' }
+  0: { text: 'PRACTICE', color: 'blue' },
+  1: { text: 'EVALUATION', color: 'yellow' },
+  2: { text: 'LIVE', color: 'green' },
+  3: { text: 'EXPRESS', color: 'magenta' },
+  4: { text: 'SIM', color: 'gray' }
 };
 
 // Order Status
 const ORDER_STATUS = {
-  0: { text: 'Pending', color: 'yellow', icon: '[~]' },
-  1: { text: 'Working', color: 'cyan', icon: '[>]' },
-  2: { text: 'Filled', color: 'green', icon: '[OK]' },
-  3: { text: 'Cancelled', color: 'gray', icon: '[X]' },
-  4: { text: 'Rejected', color: 'red', icon: '[!]' },
-  5: { text: 'Expired', color: 'gray', icon: '[-]' }
+  0: { text: 'PENDING', color: 'yellow', icon: '[~]' },
+  1: { text: 'WORKING', color: 'cyan', icon: '[>]' },
+  2: { text: 'FILLED', color: 'green', icon: '[OK]' },
+  3: { text: 'CANCELLED', color: 'gray', icon: '[X]' },
+  4: { text: 'REJECTED', color: 'red', icon: '[!]' },
+  5: { text: 'EXPIRED', color: 'gray', icon: '[-]' }
 };
 
 // Order Types
 const ORDER_TYPE = {
-  1: 'Market',
-  2: 'Limit',
-  3: 'Stop',
-  4: 'Stop Limit'
+  1: 'MARKET',
+  2: 'LIMIT',
+  3: 'STOP',
+  4: 'STOP LIMIT'
 };
 
 // Order Side
 const ORDER_SIDE = {
-  0: { text: 'Buy', color: 'green' },
-  1: { text: 'Sell', color: 'red' }
+  0: { text: 'BUY', color: 'green' },
+  1: { text: 'SELL', color: 'red' }
 };
 
 // NO STATIC CONTRACT DATA - All symbols/contracts come from API

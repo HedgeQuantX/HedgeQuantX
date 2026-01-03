@@ -31,7 +31,7 @@ const showAccounts = async (service) => {
     // Single spinner for loading (appears below the dashboard header)
     spinner = ora({ text: 'LOADING ACCOUNTS...', color: 'yellow' }).start();
     
-    const allConns = connections.count() > 0 ? connections.getAll() : (service ? [{ service, propfirm: service.propfirm?.name || 'Unknown', type: 'single' }] : []);
+    const allConns = connections.count() > 0 ? connections.getAll() : (service ? [{ service, propfirm: service.propfirm?.name || 'UNKNOWN', type: 'single' }] : []);
     
     if (allConns.length === 0) {
       spinner.fail('NO CONNECTIONS FOUND');
@@ -41,7 +41,7 @@ const showAccounts = async (service) => {
 
     // Fetch accounts from each connection
     for (const conn of allConns) {
-      const propfirmName = conn.propfirm || conn.type || 'Unknown';
+      const propfirmName = conn.propfirm || conn.type || 'UNKNOWN';
       
       try {
         const result = await conn.service.getTradingAccounts();
@@ -94,9 +94,9 @@ const showAccounts = async (service) => {
       draw2ColHeader(name1.substring(0, col1 - 4), name2 ? name2.substring(0, col2 - 4) : '', boxWidth);
 
       // PropFirm
-      const pf1 = chalk.magenta(acc1.propfirm || 'Unknown');
-      const pf2 = acc2 ? chalk.magenta(acc2.propfirm || 'Unknown') : '';
-      console.log(chalk.cyan('║') + fmtRow('PropFirm:', pf1, col1) + chalk.cyan('│') + (acc2 ? fmtRow('PropFirm:', pf2, col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+      const pf1 = chalk.magenta(acc1.propfirm || 'UNKNOWN');
+      const pf2 = acc2 ? chalk.magenta(acc2.propfirm || 'UNKNOWN') : '';
+      console.log(chalk.cyan('║') + fmtRow('PROPFIRM:', pf1, col1) + chalk.cyan('│') + (acc2 ? fmtRow('PROPFIRM:', pf2, col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
       // Balance
       const bal1 = acc1.balance;
@@ -117,14 +117,14 @@ const showAccounts = async (service) => {
       console.log(chalk.cyan('║') + fmtRow('P&L:', pnlColor1(pnlStr1), col1) + chalk.cyan('│') + (acc2 ? fmtRow('P&L:', pnlColor2(pnlStr2), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
       // Status
-      const status1 = ACCOUNT_STATUS[acc1.status] || { text: 'Unknown', color: 'gray' };
-      const status2 = acc2 ? (ACCOUNT_STATUS[acc2.status] || { text: 'Unknown', color: 'gray' }) : null;
+      const status1 = ACCOUNT_STATUS[acc1.status] || { text: 'UNKNOWN', color: 'gray' };
+      const status2 = acc2 ? (ACCOUNT_STATUS[acc2.status] || { text: 'UNKNOWN', color: 'gray' }) : null;
       console.log(chalk.cyan('║') + fmtRow('STATUS:', chalk[status1.color](status1.text), col1) + chalk.cyan('│') + (acc2 ? fmtRow('STATUS:', chalk[status2.color](status2.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
       // Type
-      const type1 = ACCOUNT_TYPE[acc1.type] || { text: 'Unknown', color: 'white' };
-      const type2 = acc2 ? (ACCOUNT_TYPE[acc2.type] || { text: 'Unknown', color: 'white' }) : null;
-      console.log(chalk.cyan('║') + fmtRow('Type:', chalk[type1.color](type1.text), col1) + chalk.cyan('│') + (acc2 ? fmtRow('Type:', chalk[type2.color](type2.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+      const type1 = ACCOUNT_TYPE[acc1.type] || { text: 'UNKNOWN', color: 'white' };
+      const type2 = acc2 ? (ACCOUNT_TYPE[acc2.type] || { text: 'UNKNOWN', color: 'white' }) : null;
+      console.log(chalk.cyan('║') + fmtRow('TYPE:', chalk[type1.color](type1.text), col1) + chalk.cyan('│') + (acc2 ? fmtRow('TYPE:', chalk[type2.color](type2.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
       if (i + 2 < allAccounts.length) {
         console.log(chalk.cyan('╠') + chalk.cyan('═'.repeat(col1)) + chalk.cyan('╪') + chalk.cyan('═'.repeat(col2)) + chalk.cyan('╣'));

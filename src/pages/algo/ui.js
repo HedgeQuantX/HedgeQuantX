@@ -136,7 +136,7 @@ class AlgoUI {
     
     // Separator + title
     this._line(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
-    this._line(chalk.cyan(BOX.V) + chalk.white(center(`Prop Futures Algo Trading  v${version}`, W)) + chalk.cyan(BOX.V));
+    this._line(chalk.cyan(BOX.V) + chalk.white(center(`PROP FUTURES ALGO TRADING  v${version}`, W)) + chalk.cyan(BOX.V));
     this._line(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
     this._line(chalk.cyan(BOX.V) + chalk.yellow.bold(center((this.config.subtitle || 'HQX ALGO TRADING').toUpperCase(), W)) + chalk.cyan(BOX.V));
   }
@@ -396,7 +396,7 @@ const renderSessionSummary = (stats, stopReason) => {
   
   // Separator + title
   console.log(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
-  console.log(chalk.cyan(BOX.V) + chalk.white(center(`Prop Futures Algo Trading  v${version}`, W)) + chalk.cyan(BOX.V));
+  console.log(chalk.cyan(BOX.V) + chalk.white(center(`PROP FUTURES ALGO TRADING  v${version}`, W)) + chalk.cyan(BOX.V));
   console.log(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
   console.log(chalk.cyan(BOX.V) + chalk.yellow.bold(center('SESSION SUMMARY', W)) + chalk.cyan(BOX.V));
   
