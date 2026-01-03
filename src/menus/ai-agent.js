@@ -181,17 +181,39 @@ const showAgentDetails = async (agent) => {
   
   console.log(makeLine(chalk.white('NAME: ') + providerColor(agent.name)));
   console.log(makeLine(chalk.white('PROVIDER: ') + chalk.white(agent.provider?.name || agent.providerId)));
-  console.log(makeLine(chalk.white('MODEL: ') + chalk.white(agent.model)));
+  console.log(makeLine(chalk.white('MODEL: ') + chalk.white(agent.model || 'N/A')));
   console.log(makeLine(chalk.white('STATUS: ') + (agent.isActive ? chalk.green('ACTIVE') : chalk.white('STANDBY'))));
   
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
+  // Menu in 2 columns
+  const colWidth = Math.floor(W / 2);
+  
+  const menuRow = (col1, col2 = '') => {
+    const c1Plain = col1.replace(/\x1b\[[0-9;]*m/g, '');
+    const c2Plain = col2.replace(/\x1b\[[0-9;]*m/g, '');
+    
+    const pad1Left = Math.floor((colWidth - c1Plain.length) / 2);
+    const pad1Right = colWidth - c1Plain.length - pad1Left;
+    
+    const col2Width = W - colWidth;
+    const pad2Left = Math.floor((col2Width - c2Plain.length) / 2);
+    const pad2Right = col2Width - c2Plain.length - pad2Left;
+    
+    const line = 
+      ' '.repeat(pad1Left) + col1 + ' '.repeat(pad1Right) +
+      ' '.repeat(pad2Left) + col2 + ' '.repeat(pad2Right);
+    
+    console.log(chalk.cyan('║') + line + chalk.cyan('║'));
+  };
+  
   if (!agent.isActive) {
-    console.log(makeLine(chalk.cyan('[A] SET AS ACTIVE')));
+    menuRow(chalk.cyan('[A] SET AS ACTIVE'), chalk.yellow('[M] CHANGE MODEL'));
+    menuRow(chalk.red('[R] REMOVE'), chalk.white('[<] BACK'));
+  } else {
+    menuRow(chalk.yellow('[M] CHANGE MODEL'), chalk.red('[R] REMOVE'));
+    menuRow(chalk.white('[<] BACK'), '');
   }
-  console.log(makeLine(chalk.yellow('[M] CHANGE MODEL')));
-  console.log(makeLine(chalk.red('[R] REMOVE')));
-  console.log(makeLine(chalk.white('[<] BACK')));
   
   drawBoxFooter(boxWidth);
   
