@@ -64,22 +64,45 @@ const aiAgentMenu = async () => {
   
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
-  // Menu options
-  console.log(makeLine(chalk.green('[+] ADD NEW AGENT')));
+  // Menu in 2 columns
+  const colWidth = Math.floor(W / 2);
   
+  const menuRow2 = (col1, col2 = '') => {
+    const c1Plain = col1.replace(/\x1b\[[0-9;]*m/g, '');
+    const c2Plain = col2.replace(/\x1b\[[0-9;]*m/g, '');
+    
+    const pad1Left = Math.floor((colWidth - c1Plain.length) / 2);
+    const pad1Right = colWidth - c1Plain.length - pad1Left;
+    
+    const col2Width = W - colWidth;
+    const pad2Left = Math.floor((col2Width - c2Plain.length) / 2);
+    const pad2Right = col2Width - c2Plain.length - pad2Left;
+    
+    const line = 
+      ' '.repeat(pad1Left) + col1 + ' '.repeat(pad1Right) +
+      ' '.repeat(pad2Left) + col2 + ' '.repeat(pad2Right);
+    
+    console.log(chalk.cyan('║') + line + chalk.cyan('║'));
+  };
+  
+  const menuItem = (key, label, color) => {
+    const text = `[${key}] ${label.padEnd(14)}`;
+    return color(text);
+  };
+  
+  // Menu options in 2 columns
   if (agentCount > 0) {
-    // Only show SET ACTIVE if more than 1 agent
     if (agentCount > 1) {
-      console.log(makeLine(chalk.cyan('[S] SET ACTIVE AGENT')));
+      menuRow2(menuItem('+', 'ADD AGENT', chalk.green), menuItem('S', 'SET ACTIVE', chalk.cyan));
+      menuRow2(menuItem('M', 'CHANGE MODEL', chalk.yellow), menuItem('R', 'REMOVE AGENT', chalk.red));
+      menuRow2(menuItem('X', 'REMOVE ALL', chalk.red), menuItem('<', 'BACK', chalk.gray));
+    } else {
+      menuRow2(menuItem('+', 'ADD AGENT', chalk.green), menuItem('M', 'CHANGE MODEL', chalk.yellow));
+      menuRow2(menuItem('R', 'REMOVE AGENT', chalk.red), menuItem('<', 'BACK', chalk.gray));
     }
-    console.log(makeLine(chalk.yellow('[M] CHANGE MODEL')));
-    console.log(makeLine(chalk.red('[R] REMOVE AGENT')));
-    if (agentCount > 1) {
-      console.log(makeLine(chalk.red('[X] REMOVE ALL')));
-    }
+  } else {
+    menuRow2(menuItem('+', 'ADD AGENT', chalk.green), menuItem('<', 'BACK', chalk.gray));
   }
-  
-  console.log(makeLine(chalk.gray('[<] BACK')));
   
   drawBoxFooter(boxWidth);
   
