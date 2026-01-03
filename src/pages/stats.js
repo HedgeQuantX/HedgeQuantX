@@ -481,84 +481,140 @@ const showStats = async (service) => {
       
       drawBoxFooter(boxWidth);
       
-      // ========== AI BEHAVIOR GRAPH ==========
-      const behaviorData = StrategySupervisor.getBehaviorHistory(boxWidth - 20);
+      // ========== AI BEHAVIOR DIAGRAM ==========
+      const behaviorData = StrategySupervisor.getBehaviorHistory(100);
       const learningStats = StrategySupervisor.getLearningStats();
       
-      if (behaviorData.values.length > 2) {
-        console.log();
-        drawBoxHeader('AI AGENTS BEHAVIOR', boxWidth);
-        
-        const behaviorInnerWidth = boxWidth - 2;
-        const yAxisWidth = 12;
-        const chartWidth = behaviorInnerWidth - yAxisWidth - 4;
-        
-        // Scale values for better visualization (0-3 -> 0-100 with some padding)
-        let scaledValues = behaviorData.values.map(v => (v + 0.5) * 25); // 0->12.5, 1->37.5, 2->62.5, 3->87.5
-        
-        // Ensure we have enough points for a nice curve
-        if (scaledValues.length < 10) {
-          const newValues = [];
-          for (let i = 0; i < scaledValues.length - 1; i++) {
-            newValues.push(scaledValues[i]);
-            // Smooth interpolation
-            const diff = scaledValues[i + 1] - scaledValues[i];
-            newValues.push(scaledValues[i] + diff * 0.33);
-            newValues.push(scaledValues[i] + diff * 0.66);
-          }
-          newValues.push(scaledValues[scaledValues.length - 1]);
-          scaledValues = newValues;
+      console.log();
+      drawBoxHeader('AI AGENTS BEHAVIOR', boxWidth);
+      
+      const behaviorInnerWidth = boxWidth - 2;
+      
+      // Count behavior occurrences
+      const behaviorCounts = { AGGRESSIVE: 0, NORMAL: 0, CAUTIOUS: 0, PAUSE: 0 };
+      const valueToAction = { 3: 'AGGRESSIVE', 2: 'NORMAL', 1: 'CAUTIOUS', 0: 'PAUSE' };
+      
+      if (behaviorData.values.length > 0) {
+        for (const val of behaviorData.values) {
+          const action = valueToAction[Math.round(val)] || 'NORMAL';
+          behaviorCounts[action]++;
         }
-        
-        // Limit data points to chart width
-        if (scaledValues.length > chartWidth) {
-          const step = Math.ceil(scaledValues.length / chartWidth);
-          scaledValues = scaledValues.filter((_, i) => i % step === 0);
-        }
-        
-        // Determine color based on current behavior
-        const currentValue = behaviorData.values[behaviorData.values.length - 1];
-        let chartColor = asciichart.white;
-        if (currentValue >= 2.5) chartColor = asciichart.green; // AGGRESSIVE
-        else if (currentValue >= 1.5) chartColor = asciichart.cyan; // NORMAL
-        else if (currentValue >= 0.5) chartColor = asciichart.yellow; // CAUTIOUS
-        else chartColor = asciichart.red; // PAUSE
-        
-        const behaviorConfig = {
-          height: 6,
-          min: 0,
-          max: 100,
-          colors: [chartColor],
-          format: (x) => {
-            if (x >= 75) return 'AGGRESSIVE'.padStart(yAxisWidth);
-            if (x >= 50) return '    NORMAL'.padStart(yAxisWidth);
-            if (x >= 25) return '  CAUTIOUS'.padStart(yAxisWidth);
-            return '     PAUSE'.padStart(yAxisWidth);
-          }
-        };
-        
-        try {
-          const behaviorChart = asciichart.plot(scaledValues, behaviorConfig);
-          behaviorChart.split('\n').forEach(line => {
-            let chartLine = '  ' + line;
-            const len = chartLine.replace(/\x1b\[[0-9;]*m/g, '').length;
-            if (len < behaviorInnerWidth) chartLine += ' '.repeat(behaviorInnerWidth - len);
-            console.log(chalk.cyan('\u2551') + chartLine + chalk.cyan('\u2551'));
-          });
-        } catch (e) {
-          // Fallback if chart fails
-          const msg = '  BEHAVIOR DATA INSUFFICIENT';
-          console.log(chalk.cyan('\u2551') + chalk.white(msg) + ' '.repeat(Math.max(0, behaviorInnerWidth - msg.length)) + chalk.cyan('\u2551'));
-        }
-        
-        // Add learning stats line
-        const durationMin = Math.floor(behaviorData.duration / 60000);
-        const statsLine = `  SESSION: ${durationMin}m | PATTERNS: ${learningStats.patternsLearned.total} (${learningStats.patternsLearned.winning}W/${learningStats.patternsLearned.losing}L) | OPTIMIZATIONS: ${learningStats.optimizations} | SIGNALS: ${learningStats.signalsObserved}`;
-        const statsLen = statsLine.length;
-        console.log(chalk.cyan('\u2551') + chalk.white(statsLine) + ' '.repeat(Math.max(0, behaviorInnerWidth - statsLen)) + chalk.cyan('\u2551'));
-        
-        drawBoxFooter(boxWidth);
+      } else {
+        behaviorCounts.NORMAL = 1; // Default
       }
+      
+      const total = Object.values(behaviorCounts).reduce((a, b) => a + b, 0) || 1;
+      const percentages = {
+        AGGRESSIVE: Math.round((behaviorCounts.AGGRESSIVE / total) * 100),
+        NORMAL: Math.round((behaviorCounts.NORMAL / total) * 100),
+        CAUTIOUS: Math.round((behaviorCounts.CAUTIOUS / total) * 100),
+        PAUSE: Math.round((behaviorCounts.PAUSE / total) * 100)
+      };
+      
+      // Bar chart configuration
+      const labelWidth = 12;
+      const percentWidth = 6;
+      const barMaxWidth = behaviorInnerWidth - labelWidth - percentWidth - 6;
+      
+      // Get current behavior
+      const currentValue = behaviorData.values.length > 0 ? behaviorData.values[behaviorData.values.length - 1] : 2;
+      const currentAction = valueToAction[Math.round(currentValue)] || 'NORMAL';
+      
+      // Draw vertical bar chart (bars going up)
+      const chartHeight = 8;
+      const barWidth = Math.floor((barMaxWidth - 12) / 4); // 4 bars with spacing
+      
+      // Calculate bar heights (max height = chartHeight)
+      const maxPercent = Math.max(...Object.values(percentages), 1);
+      const barHeights = {
+        AGGRESSIVE: Math.round((percentages.AGGRESSIVE / 100) * chartHeight),
+        NORMAL: Math.round((percentages.NORMAL / 100) * chartHeight),
+        CAUTIOUS: Math.round((percentages.CAUTIOUS / 100) * chartHeight),
+        PAUSE: Math.round((percentages.PAUSE / 100) * chartHeight)
+      };
+      
+      // Colors for each behavior
+      const barColors = {
+        AGGRESSIVE: chalk.green,
+        NORMAL: chalk.cyan,
+        CAUTIOUS: chalk.yellow,
+        PAUSE: chalk.red
+      };
+      
+      // Draw bars from top to bottom
+      const barLabels = ['AGGRESSIVE', 'NORMAL', 'CAUTIOUS', 'PAUSE'];
+      const shortLabels = ['AGR', 'NOR', 'CAU', 'PAU'];
+      
+      // Calculate left padding to center the chart
+      const totalBarWidth = (barWidth * 4) + 9; // 4 bars + 3 spaces of 3 chars
+      const leftPad = Math.floor((behaviorInnerWidth - totalBarWidth - 4) / 2);
+      
+      for (let row = chartHeight; row >= 1; row--) {
+        let line = ' '.repeat(leftPad);
+        
+        for (let i = 0; i < 4; i++) {
+          const label = barLabels[i];
+          const height = barHeights[label];
+          const color = barColors[label];
+          const isCurrent = label === currentAction;
+          
+          if (row <= height) {
+            // Draw filled bar
+            const block = isCurrent ? '█' : '▓';
+            line += color(block.repeat(barWidth));
+          } else {
+            // Empty space
+            line += ' '.repeat(barWidth);
+          }
+          
+          if (i < 3) line += '   '; // Space between bars
+        }
+        
+        const lineLen = line.replace(/\x1b\[[0-9;]*m/g, '').length;
+        line += ' '.repeat(Math.max(0, behaviorInnerWidth - lineLen));
+        console.log(chalk.cyan('\u2551') + line + chalk.cyan('\u2551'));
+      }
+      
+      // Draw baseline
+      let baseLine = ' '.repeat(leftPad) + '─'.repeat(totalBarWidth);
+      const baseLen = baseLine.length;
+      baseLine += ' '.repeat(Math.max(0, behaviorInnerWidth - baseLen));
+      console.log(chalk.cyan('\u2551') + chalk.white(baseLine) + chalk.cyan('\u2551'));
+      
+      // Draw labels
+      let labelLine = ' '.repeat(leftPad);
+      for (let i = 0; i < 4; i++) {
+        const lbl = shortLabels[i];
+        const pad = Math.floor((barWidth - lbl.length) / 2);
+        labelLine += ' '.repeat(pad) + barColors[barLabels[i]](lbl) + ' '.repeat(barWidth - pad - lbl.length);
+        if (i < 3) labelLine += '   ';
+      }
+      const lblLen = labelLine.replace(/\x1b\[[0-9;]*m/g, '').length;
+      labelLine += ' '.repeat(Math.max(0, behaviorInnerWidth - lblLen));
+      console.log(chalk.cyan('\u2551') + labelLine + chalk.cyan('\u2551'));
+      
+      // Draw percentages
+      let pctLine = ' '.repeat(leftPad);
+      for (let i = 0; i < 4; i++) {
+        const pct = percentages[barLabels[i]] + '%';
+        const pad = Math.floor((barWidth - pct.length) / 2);
+        pctLine += ' '.repeat(pad) + chalk.white(pct) + ' '.repeat(barWidth - pad - pct.length);
+        if (i < 3) pctLine += '   ';
+      }
+      const pctLen = pctLine.replace(/\x1b\[[0-9;]*m/g, '').length;
+      pctLine += ' '.repeat(Math.max(0, behaviorInnerWidth - pctLen));
+      console.log(chalk.cyan('\u2551') + pctLine + chalk.cyan('\u2551'));
+      
+      // Empty line
+      console.log(chalk.cyan('\u2551') + ' '.repeat(behaviorInnerWidth) + chalk.cyan('\u2551'));
+      
+      // Stats line
+      const durationMin = behaviorData.duration ? Math.floor(behaviorData.duration / 60000) : 0;
+      const statsLine = `  CURRENT: ${barColors[currentAction](currentAction)} | PATTERNS: ${learningStats.patternsLearned.total} (${learningStats.patternsLearned.winning}W/${learningStats.patternsLearned.losing}L) | OPTIMIZATIONS: ${learningStats.optimizations}`;
+      const statsLen = statsLine.replace(/\x1b\[[0-9;]*m/g, '').length;
+      console.log(chalk.cyan('\u2551') + statsLine + ' '.repeat(Math.max(0, behaviorInnerWidth - statsLen)) + chalk.cyan('\u2551'));
+      
+      drawBoxFooter(boxWidth);
     }
     
     // ========== EQUITY CURVE ==========
