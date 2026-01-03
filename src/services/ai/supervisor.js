@@ -298,6 +298,8 @@ class AISupervisor {
   
   /**
    * Calculate consensus from multiple agent decisions
+   * RULE: ALL agents must agree (100% unanimity) before taking action
+   * 
    * @param {Array} decisions - Array of agent decisions
    * @returns {Object|null} Consensus result
    */
@@ -319,13 +321,16 @@ class AISupervisor {
       }
     }
     
-    // Find majority action
-    let majorityAction = null;
-    let maxVotes = 0;
+    // Check for UNANIMITY - ALL agents must agree
+    let unanimousAction = null;
+    let isUnanimous = false;
+    
     for (const [action, count] of Object.entries(votes)) {
-      if (count > maxVotes) {
-        maxVotes = count;
-        majorityAction = action;
+      if (count === decisions.length) {
+        // All agents voted for this action
+        unanimousAction = action;
+        isUnanimous = true;
+        break;
       }
     }
     
@@ -335,13 +340,15 @@ class AISupervisor {
       : null;
     
     // Store consensus result
+    // If not unanimous, action is HOLD (no action taken)
     const consensus = {
       timestamp: Date.now(),
-      action: majorityAction,
-      confidence: avgConfidence,
+      action: isUnanimous ? unanimousAction : 'HOLD',
+      confidence: isUnanimous ? avgConfidence : null,
       votes,
       agentCount: decisions.length,
-      agreement: maxVotes / decisions.length
+      isUnanimous,
+      agreement: isUnanimous ? 1.0 : 0
     };
     
     // Store consensus in first session for retrieval

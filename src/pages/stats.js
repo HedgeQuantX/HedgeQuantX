@@ -449,11 +449,15 @@ const showStats = async (service) => {
       
       // Add consensus info if in consensus mode
       if (isConsensusMode && consensusData) {
-        const agreement = consensusData.agreement !== null 
-          ? Math.round(consensusData.agreement * 100) + '%' 
-          : 'N/A';
+        const isUnanimous = consensusData.isUnanimous;
         const consensusAction = consensusData.action || 'PENDING';
-        agentsData.push({ label: 'CONSENSUS:', value: chalk.magenta(consensusAction + ' (' + agreement + ')') });
+        // Show action with unanimity status
+        const consensusDisplay = isUnanimous 
+          ? chalk.green(consensusAction + ' (UNANIMOUS)')
+          : chalk.yellow(consensusAction + ' (DISAGREEMENT)');
+        agentsData.push({ label: 'DECISION:', value: consensusDisplay });
+      } else if (isConsensusMode) {
+        agentsData.push({ label: 'DECISION:', value: chalk.white('WAITING...') });
       }
       
       // Add each agent as a separate line with ● indicator
