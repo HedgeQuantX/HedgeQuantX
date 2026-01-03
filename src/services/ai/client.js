@@ -106,7 +106,31 @@ const callOpenAICompatible = async (agent, prompt, systemPrompt) => {
 };
 
 /**
+ * Get valid OAuth token (refresh if needed)
+ * @param {Object} credentials - Agent credentials with oauth data
+ * @returns {Promise<string|null>} Valid access token or null
+ */
+const getValidOAuthToken = async (credentials) => {
+  if (!credentials?.oauth) return null;
+  
+  const oauthAnthropic = require('./oauth-anthropic');
+  const validToken = await oauthAnthropic.getValidToken(credentials.oauth);
+  
+  if (!validToken) return null;
+  
+  // If token was refreshed, we should update storage (handled by caller)
+  if (validToken.refreshed) {
+    credentials.oauth.access = validToken.access;
+    credentials.oauth.refresh = validToken.refresh;
+    credentials.oauth.expires = validToken.expires;
+  }
+  
+  return validToken.access;
+};
+
+/**
  * Call Anthropic Claude API
+ * Supports both API key and OAuth authentication
  * @param {Object} agent - Agent configuration
  * @param {string} prompt - User prompt
  * @param {string} systemPrompt - System prompt
@@ -116,18 +140,30 @@ const callAnthropic = async (agent, prompt, systemPrompt) => {
   const provider = getProvider('anthropic');
   if (!provider) return null;
   
-  const apiKey = agent.credentials?.apiKey;
   const model = agent.model || provider.defaultModel;
-  
-  if (!apiKey) return null;
-  
   const url = `${provider.endpoint}/messages`;
   
-  const headers = {
+  // Determine authentication method
+  const isOAuth = agent.credentials?.oauth?.refresh;
+  let headers = {
     'Content-Type': 'application/json',
-    'x-api-key': apiKey,
     'anthropic-version': '2023-06-01'
   };
+  
+  if (isOAuth) {
+    // OAuth Bearer token authentication
+    const accessToken = await getValidOAuthToken(agent.credentials);
+    if (!accessToken) return null;
+    
+    headers['Authorization'] = `Bearer ${accessToken}`;
+    headers['anthropic-beta'] = 'oauth-2025-04-20,interleaved-thinking-2025-05-14';
+  } else {
+    // Standard API key authentication
+    const apiKey = agent.credentials?.apiKey;
+    if (!apiKey) return null;
+    
+    headers['x-api-key'] = apiKey;
+  }
   
   const body = {
     model,
@@ -273,7 +309,7 @@ Analyze and provide recommendation.`;
 };
 
 /**
- * Fetch available models from Anthropic API
+ * Fetch available models from Anthropic API (API Key auth)
  * @param {string} apiKey - API key
  * @returns {Promise<Array|null>} Array of model IDs or null on error
  * 
@@ -296,6 +332,36 @@ const fetchAnthropicModels = async (apiKey) => {
     }
     return null;
   } catch (error) {
+    return null;
+  }
+};
+
+/**
+ * Fetch available models from Anthropic API (OAuth auth)
+ * @param {string} accessToken - OAuth access token
+ * @returns {Promise<Array|null>} Array of model IDs or null on error
+ * 
+ * Data source: https://api.anthropic.com/v1/models (GET with Bearer token)
+ */
+const fetchAnthropicModelsOAuth = async (accessToken) => {
+  if (!accessToken) return null;
+  
+  const url = 'https://api.anthropic.com/v1/models';
+  
+  const headers = {
+    'Authorization': `Bearer ${accessToken}`,
+    'anthropic-version': '2023-06-01',
+    'anthropic-beta': 'oauth-2025-04-20'
+  };
+  
+  try {
+    const response = await makeRequest(url, { method: 'GET', headers, timeout: 10000 });
+    if (response.data && Array.isArray(response.data)) {
+      return response.data.map(m => m.id).filter(Boolean);
+    }
+    return null;
+  } catch (error) {
+    // OAuth may not support /models endpoint, return null to use defaults
     return null;
   }
 };
@@ -339,5 +405,7 @@ module.exports = {
   callAnthropic,
   callGemini,
   fetchAnthropicModels,
-  fetchOpenAIModels
+  fetchAnthropicModelsOAuth,
+  fetchOpenAIModels,
+  getValidOAuthToken
 };

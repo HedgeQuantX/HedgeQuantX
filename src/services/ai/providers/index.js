@@ -47,6 +47,16 @@ const PROVIDERS = {
     defaultModel: null, // Will use first model from API
     options: [
       {
+        id: 'oauth_max',
+        label: 'CLAUDE PRO/MAX (OAUTH)',
+        description: [
+          'Login with your Claude subscription',
+          'Unlimited usage with your plan'
+        ],
+        fields: ['oauth'],
+        authType: 'oauth'
+      },
+      {
         id: 'api_key',
         label: 'API KEY (PAY-PER-USE)',
         description: [

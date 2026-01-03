@@ -11,6 +11,7 @@ const { prompts } = require('../utils');
 const aiService = require('../services/ai');
 const { getCategories, getProvidersByCategory } = require('../services/ai/providers');
 const tokenScanner = require('../services/ai/token-scanner');
+const oauthAnthropic = require('../services/ai/oauth-anthropic');
 
 /**
  * Main AI Agent menu
@@ -846,9 +847,134 @@ const getCredentialInstructions = (provider, option, field) => {
 };
 
 /**
+ * Setup OAuth connection for Anthropic Claude Pro/Max
+ */
+const setupOAuthConnection = async (provider) => {
+  const boxWidth = getLogoWidth();
+  const W = boxWidth - 2;
+  
+  const makeLine = (content) => {
+    const plainLen = content.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const padding = W - plainLen;
+    return chalk.cyan('║') + ' ' + content + ' '.repeat(Math.max(0, padding - 1)) + chalk.cyan('║');
+  };
+  
+  console.clear();
+  displayBanner();
+  drawBoxHeaderContinue('CLAUDE PRO/MAX LOGIN', boxWidth);
+  
+  console.log(makeLine(chalk.yellow('OAUTH AUTHENTICATION')));
+  console.log(makeLine(''));
+  console.log(makeLine(chalk.white('1. A BROWSER WINDOW WILL OPEN')));
+  console.log(makeLine(chalk.white('2. LOGIN WITH YOUR CLAUDE ACCOUNT')));
+  console.log(makeLine(chalk.white('3. COPY THE AUTHORIZATION CODE')));
+  console.log(makeLine(chalk.white('4. PASTE IT HERE')));
+  console.log(makeLine(''));
+  console.log(makeLine(chalk.gray('OPENING BROWSER IN 3 SECONDS...')));
+  
+  drawBoxFooter(boxWidth);
+  
+  // Generate OAuth URL
+  const { url, verifier } = oauthAnthropic.authorize('max');
+  
+  // Wait a moment then open browser
+  await new Promise(resolve => setTimeout(resolve, 3000));
+  openBrowser(url);
+  
+  // Redraw with code input
+  console.clear();
+  displayBanner();
+  drawBoxHeaderContinue('CLAUDE PRO/MAX LOGIN', boxWidth);
+  
+  console.log(makeLine(chalk.green('BROWSER OPENED')));
+  console.log(makeLine(''));
+  console.log(makeLine(chalk.white('AFTER LOGGING IN, YOU WILL SEE A CODE')));
+  console.log(makeLine(chalk.white('COPY THE ENTIRE CODE AND PASTE IT BELOW')));
+  console.log(makeLine(''));
+  console.log(makeLine(chalk.gray('THE CODE LOOKS LIKE: abc123...#xyz789...')));
+  console.log(makeLine(''));
+  console.log(makeLine(chalk.gray('TYPE < TO CANCEL')));
+  
+  drawBoxFooter(boxWidth);
+  console.log();
+  
+  const code = await prompts.textInput(chalk.cyan('PASTE AUTHORIZATION CODE:'));
+  
+  if (!code || code === '<') {
+    return await selectProviderOption(provider);
+  }
+  
+  // Exchange code for tokens
+  const spinner = ora({ text: 'EXCHANGING CODE FOR TOKENS...', color: 'cyan' }).start();
+  
+  const result = await oauthAnthropic.exchange(code.trim(), verifier);
+  
+  if (result.type === 'failed') {
+    spinner.fail(`AUTHENTICATION FAILED: ${result.error || 'Invalid code'}`);
+    await prompts.waitForEnter();
+    return await selectProviderOption(provider);
+  }
+  
+  spinner.text = 'FETCHING AVAILABLE MODELS...';
+  
+  // Store OAuth credentials
+  const credentials = {
+    oauth: {
+      access: result.access,
+      refresh: result.refresh,
+      expires: result.expires
+    }
+  };
+  
+  // Fetch models using OAuth token
+  const { fetchAnthropicModelsOAuth } = require('../services/ai/client');
+  const models = await fetchAnthropicModelsOAuth(result.access);
+  
+  if (!models || models.length === 0) {
+    // Use default models if API doesn't return list
+    spinner.warn('COULD NOT FETCH MODEL LIST, USING DEFAULTS');
+  } else {
+    spinner.succeed(`FOUND ${models.length} MODELS`);
+  }
+  
+  // Let user select model
+  const availableModels = models && models.length > 0 ? models : [
+    'claude-sonnet-4-20250514',
+    'claude-sonnet-4-5-20250514',
+    'claude-3-5-sonnet-20241022',
+    'claude-3-5-haiku-20241022',
+    'claude-3-opus-20240229'
+  ];
+  
+  const selectedModel = await selectModelFromList(availableModels, 'CLAUDE PRO/MAX');
+  if (!selectedModel) {
+    return await selectProviderOption(provider);
+  }
+  
+  // Add agent with OAuth credentials
+  try {
+    await aiService.addAgent('anthropic', 'oauth_max', credentials, selectedModel, 'Claude Pro/Max');
+    
+    console.log(chalk.green('\n  CONNECTED TO CLAUDE PRO/MAX'));
+    console.log(chalk.gray(`  MODEL: ${selectedModel}`));
+    console.log(chalk.gray('  UNLIMITED USAGE WITH YOUR SUBSCRIPTION'));
+  } catch (error) {
+    console.log(chalk.red(`\n  FAILED TO SAVE: ${error.message}`));
+  }
+  
+  await prompts.waitForEnter();
+  return await aiAgentMenu();
+};
+
+/**
  * Setup connection with credentials
  */
 const setupConnection = async (provider, option) => {
+  // Handle OAuth flow separately
+  if (option.authType === 'oauth') {
+    return await setupOAuthConnection(provider);
+  }
+  
   const boxWidth = getLogoWidth();
   const W = boxWidth - 2;
   
