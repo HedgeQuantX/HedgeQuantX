@@ -241,10 +241,10 @@ const run = async () => {
     while (true) {
       try {
         prepareStdin();
-        console.clear();
-        await banner(false);
 
         if (!connections.isConnected()) {
+          console.clear();
+          await banner(false);
           const choice = await mainMenu();
 
           if (choice === 'exit') {
@@ -262,8 +262,10 @@ const run = async () => {
             await refreshStats();
           }
         } else {
-          // Refresh stats before showing dashboard
+          // Refresh stats BEFORE clearing screen, so everything displays at once
           await refreshStats();
+          console.clear();
+          await banner(false);
           
           const action = await dashboardMenu(currentService);
 
