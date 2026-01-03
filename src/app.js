@@ -262,8 +262,12 @@ const run = async () => {
             await refreshStats();
           }
         } else {
-          // Refresh stats BEFORE clearing screen, so everything displays at once
+          // Show spinner while refreshing stats
+          const spinner = ora({ text: 'LOADING...', color: 'cyan' }).start();
           await refreshStats();
+          spinner.stop();
+          
+          // Clear and display dashboard
           console.clear();
           await banner(false);
           
