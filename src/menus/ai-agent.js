@@ -934,20 +934,44 @@ const setupConnection = async (provider, option) => {
     return await selectProviderOption(provider);
   }
   
-  // Add as new agent
+  spinner.text = 'FETCHING AVAILABLE MODELS...';
+  
+  // Fetch models from real API
+  const { fetchAnthropicModels, fetchGeminiModels, fetchOpenAIModels } = require('../services/ai/client');
+  
+  let models = null;
+  if (provider.id === 'anthropic') {
+    models = await fetchAnthropicModels(credentials.apiKey);
+  } else if (provider.id === 'gemini') {
+    models = await fetchGeminiModels(credentials.apiKey);
+  } else {
+    const endpoint = credentials.endpoint || provider.endpoint;
+    models = await fetchOpenAIModels(endpoint, credentials.apiKey);
+  }
+  
+  if (!models || models.length === 0) {
+    spinner.fail('COULD NOT FETCH MODELS FROM API');
+    console.log(chalk.white('  Check your API key or network connection.'));
+    await prompts.waitForEnter();
+    return await selectProviderOption(provider);
+  }
+  
+  spinner.succeed(`FOUND ${models.length} MODELS`);
+  
+  // Let user select a model
+  const selectedModel = await selectModelFromList(models, provider.name);
+  if (!selectedModel) {
+    return await selectProviderOption(provider);
+  }
+  
+  // Add as new agent with selected model
   try {
-    const model = credentials.model || provider.defaultModel;
-    await aiService.addAgent(provider.id, option.id, credentials, model, provider.name);
-    spinner.succeed(`AGENT ADDED: ${provider.name}`);
+    await aiService.addAgent(provider.id, option.id, credentials, selectedModel, provider.name);
     
-    // Show available models for local providers
-    if (validation.models && validation.models.length > 0) {
-      console.log(chalk.white(`  AVAILABLE MODELS: ${validation.models.slice(0, 5).join(', ')}`));
-    }
-    
-    console.log(chalk.white(`  USING MODEL: ${model}`));
+    console.log(chalk.green(`\n  AGENT ADDED: ${provider.name}`));
+    console.log(chalk.white(`  MODEL: ${selectedModel}`));
   } catch (error) {
-    spinner.fail(`FAILED TO SAVE: ${error.message}`);
+    console.log(chalk.red(`\n  FAILED TO SAVE: ${error.message}`));
   }
   
   await prompts.waitForEnter();
