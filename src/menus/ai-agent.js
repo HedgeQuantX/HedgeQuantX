@@ -995,9 +995,25 @@ const selectModel = async (agent) => {
     return await aiAgentMenu();
   }
   
+  // Custom model option
+  if (choice?.toLowerCase() === 'c') {
+    console.log(chalk.gray('\n  Enter any model name supported by your provider.'));
+    console.log(chalk.gray('  Examples: claude-opus-4-20250514, gpt-4o-2024-11-20, etc.\n'));
+    
+    const customModel = await prompts.textInput(chalk.cyan('ENTER MODEL NAME:'));
+    if (!customModel || customModel === '<') {
+      return await selectModel(agent);
+    }
+    
+    aiService.updateAgent(agent.id, { model: customModel.trim() });
+    console.log(chalk.green(`\n  MODEL CHANGED TO: ${customModel.trim()}`));
+    await prompts.waitForEnter();
+    return await aiAgentMenu();
+  }
+  
   const index = parseInt(choice) - 1;
   if (isNaN(index) || index < 0 || index >= models.length) {
-    return await aiAgentMenu();
+    return await selectModel(agent);
   }
   
   const selectedModel = models[index];
