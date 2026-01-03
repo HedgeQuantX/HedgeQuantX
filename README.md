@@ -203,20 +203,6 @@ Mirror trades from Lead to Follower accounts.
 
 ---
 
-## Community
-
-<div align="center">
-
-### Contributors
-
-<a href="https://github.com/HedgeQuantX/HedgeQuantX/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=HedgeQuantX/HedgeQuantX" />
-</a>
-
-</div>
-
----
-
 ## Support
 
 <div align="center">
