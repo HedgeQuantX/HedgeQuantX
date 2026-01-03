@@ -88,8 +88,8 @@ const PROVIDERS = {
     name: 'GEMINI (GOOGLE)',
     description: 'Direct connection to Gemini',
     category: 'direct',
-    models: ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro'],
-    defaultModel: 'gemini-1.5-flash',
+    models: [], // Fetched from API at runtime
+    defaultModel: null, // Will use first model from API
     options: [
       {
         id: 'api_key',

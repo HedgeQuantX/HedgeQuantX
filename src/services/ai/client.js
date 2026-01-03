@@ -368,6 +368,33 @@ const fetchAnthropicModelsOAuth = async (accessToken) => {
 };
 
 /**
+ * Fetch available models from Google Gemini API
+ * @param {string} apiKey - API key
+ * @returns {Promise<Array|null>} Array of model IDs or null on error
+ * 
+ * Data source: https://generativelanguage.googleapis.com/v1/models (GET)
+ */
+const fetchGeminiModels = async (apiKey) => {
+  if (!apiKey) return null;
+  
+  const url = `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`;
+  
+  try {
+    const response = await makeRequest(url, { method: 'GET', timeout: 10000 });
+    if (response.models && Array.isArray(response.models)) {
+      // Filter only generative models and extract the model name
+      return response.models
+        .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
+        .map(m => m.name.replace('models/', ''))
+        .filter(Boolean);
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
+};
+
+/**
  * Fetch available models from OpenAI-compatible API
  * @param {string} endpoint - API endpoint
  * @param {string} apiKey - API key
@@ -407,6 +434,7 @@ module.exports = {
   callGemini,
   fetchAnthropicModels,
   fetchAnthropicModelsOAuth,
+  fetchGeminiModels,
   fetchOpenAIModels,
   getValidOAuthToken
 };

@@ -1042,7 +1042,7 @@ const selectModel = async (agent) => {
   drawBoxFooter(boxWidth);
   
   // Fetch models from real API
-  const { fetchAnthropicModels, fetchAnthropicModelsOAuth, fetchOpenAIModels } = require('../services/ai/client');
+  const { fetchAnthropicModels, fetchAnthropicModelsOAuth, fetchGeminiModels, fetchOpenAIModels } = require('../services/ai/client');
   
   let models = null;
   const agentCredentials = aiService.getAgentCredentials(agent.id);
@@ -1060,6 +1060,9 @@ const selectModel = async (agent) => {
       // Standard API key
       models = await fetchAnthropicModels(token);
     }
+  } else if (agent.providerId === 'gemini') {
+    // Google Gemini API
+    models = await fetchGeminiModels(agentCredentials?.apiKey);
   } else {
     // OpenAI-compatible providers
     const endpoint = agentCredentials?.endpoint || agent.provider?.endpoint;
