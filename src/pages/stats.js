@@ -16,6 +16,7 @@ const { getLogoWidth, visibleLength, drawBoxHeader, drawBoxFooter, getColWidths,
 const { prompts } = require('../utils');
 const aiService = require('../services/ai');
 const AISupervisor = require('../services/ai/supervisor');
+const StrategySupervisor = require('../services/ai/strategy-supervisor');
 
 /**
  * Show Stats Page
@@ -479,6 +480,85 @@ const showStats = async (service) => {
       }
       
       drawBoxFooter(boxWidth);
+      
+      // ========== AI BEHAVIOR GRAPH ==========
+      const behaviorData = StrategySupervisor.getBehaviorHistory(boxWidth - 20);
+      const learningStats = StrategySupervisor.getLearningStats();
+      
+      if (behaviorData.values.length > 2) {
+        console.log();
+        drawBoxHeader('AI AGENTS BEHAVIOR', boxWidth);
+        
+        const behaviorInnerWidth = boxWidth - 2;
+        const yAxisWidth = 12;
+        const chartWidth = behaviorInnerWidth - yAxisWidth - 4;
+        
+        // Scale values for better visualization (0-3 -> 0-100 with some padding)
+        let scaledValues = behaviorData.values.map(v => (v + 0.5) * 25); // 0->12.5, 1->37.5, 2->62.5, 3->87.5
+        
+        // Ensure we have enough points for a nice curve
+        if (scaledValues.length < 10) {
+          const newValues = [];
+          for (let i = 0; i < scaledValues.length - 1; i++) {
+            newValues.push(scaledValues[i]);
+            // Smooth interpolation
+            const diff = scaledValues[i + 1] - scaledValues[i];
+            newValues.push(scaledValues[i] + diff * 0.33);
+            newValues.push(scaledValues[i] + diff * 0.66);
+          }
+          newValues.push(scaledValues[scaledValues.length - 1]);
+          scaledValues = newValues;
+        }
+        
+        // Limit data points to chart width
+        if (scaledValues.length > chartWidth) {
+          const step = Math.ceil(scaledValues.length / chartWidth);
+          scaledValues = scaledValues.filter((_, i) => i % step === 0);
+        }
+        
+        // Determine color based on current behavior
+        const currentValue = behaviorData.values[behaviorData.values.length - 1];
+        let chartColor = asciichart.white;
+        if (currentValue >= 2.5) chartColor = asciichart.green; // AGGRESSIVE
+        else if (currentValue >= 1.5) chartColor = asciichart.cyan; // NORMAL
+        else if (currentValue >= 0.5) chartColor = asciichart.yellow; // CAUTIOUS
+        else chartColor = asciichart.red; // PAUSE
+        
+        const behaviorConfig = {
+          height: 6,
+          min: 0,
+          max: 100,
+          colors: [chartColor],
+          format: (x) => {
+            if (x >= 75) return 'AGGRESSIVE'.padStart(yAxisWidth);
+            if (x >= 50) return '    NORMAL'.padStart(yAxisWidth);
+            if (x >= 25) return '  CAUTIOUS'.padStart(yAxisWidth);
+            return '     PAUSE'.padStart(yAxisWidth);
+          }
+        };
+        
+        try {
+          const behaviorChart = asciichart.plot(scaledValues, behaviorConfig);
+          behaviorChart.split('\n').forEach(line => {
+            let chartLine = '  ' + line;
+            const len = chartLine.replace(/\x1b\[[0-9;]*m/g, '').length;
+            if (len < behaviorInnerWidth) chartLine += ' '.repeat(behaviorInnerWidth - len);
+            console.log(chalk.cyan('\u2551') + chartLine + chalk.cyan('\u2551'));
+          });
+        } catch (e) {
+          // Fallback if chart fails
+          const msg = '  BEHAVIOR DATA INSUFFICIENT';
+          console.log(chalk.cyan('\u2551') + chalk.white(msg) + ' '.repeat(Math.max(0, behaviorInnerWidth - msg.length)) + chalk.cyan('\u2551'));
+        }
+        
+        // Add learning stats line
+        const durationMin = Math.floor(behaviorData.duration / 60000);
+        const statsLine = `  SESSION: ${durationMin}m | PATTERNS: ${learningStats.patternsLearned.total} (${learningStats.patternsLearned.winning}W/${learningStats.patternsLearned.losing}L) | OPTIMIZATIONS: ${learningStats.optimizations} | SIGNALS: ${learningStats.signalsObserved}`;
+        const statsLen = statsLine.length;
+        console.log(chalk.cyan('\u2551') + chalk.white(statsLine) + ' '.repeat(Math.max(0, behaviorInnerWidth - statsLen)) + chalk.cyan('\u2551'));
+        
+        drawBoxFooter(boxWidth);
+      }
     }
     
     // ========== EQUITY CURVE ==========

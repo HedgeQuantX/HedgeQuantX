@@ -56,7 +56,12 @@ let supervisorState = {
     action: 'NORMAL',
     sizeMultiplier: 1.0,
     reason: 'Starting'
-  }
+  },
+  
+  // Behavior history for graph (action over time)
+  // Values: 0=PAUSE, 1=CAUTIOUS, 2=NORMAL, 3=AGGRESSIVE
+  behaviorHistory: [],
+  behaviorStartTime: null
 };
 
 // Analysis interval
@@ -66,6 +71,8 @@ let analysisInterval = null;
  * Initialize supervisor with strategy and agents
  */
 const initialize = (strategy, agents, service, accountId) => {
+  const now = Date.now();
+  
   supervisorState = {
     ...supervisorState,
     active: true,
@@ -92,12 +99,22 @@ const initialize = (strategy, agents, service, accountId) => {
       maxLossStreak: 0
     },
     optimizations: [],
-    lastOptimizationTime: Date.now()
+    lastOptimizationTime: now,
+    behaviorHistory: [{ timestamp: now, value: 2, action: 'NORMAL' }], // Start with NORMAL
+    behaviorStartTime: now,
+    currentAdvice: { action: 'NORMAL', sizeMultiplier: 1.0, reason: 'Starting' }
   };
   
   // Start continuous analysis loop
   if (analysisInterval) clearInterval(analysisInterval);
   analysisInterval = setInterval(analyzeAndOptimize, supervisorState.optimizationInterval);
+  
+  // Also record behavior every 10 seconds to have smooth graph
+  setInterval(() => {
+    if (supervisorState.active) {
+      recordBehavior(supervisorState.currentAdvice.action);
+    }
+  }, 10000);
   
   return {
     success: true,
@@ -410,6 +427,7 @@ const analyzeAndOptimize = async () => {
         sizeMultiplier: consensusResult.sizeMultiplier || 1.0,
         reason: consensusResult.reason || 'Consensus recommendation'
       };
+      recordBehavior(consensusResult.action);
     }
   } else {
     // INDIVIDUAL MODE: Apply single agent's suggestions
@@ -427,10 +445,38 @@ const analyzeAndOptimize = async () => {
         sizeMultiplier: suggestion.sizeMultiplier || 1.0,
         reason: suggestion.reason || 'Agent recommendation'
       };
+      recordBehavior(suggestion.action);
     }
   }
   
   supervisorState.lastOptimizationTime = Date.now();
+};
+
+/**
+ * Record behavior for graph visualization
+ * Converts action to numeric value: PAUSE=0, CAUTIOUS=1, NORMAL=2, AGGRESSIVE=3
+ */
+const recordBehavior = (action) => {
+  const actionToValue = {
+    'PAUSE': 0,
+    'CAUTIOUS': 1,
+    'NORMAL': 2,
+    'AGGRESSIVE': 3
+  };
+  
+  const value = actionToValue[action] ?? 2; // Default to NORMAL
+  const now = Date.now();
+  
+  supervisorState.behaviorHistory.push({
+    timestamp: now,
+    value,
+    action
+  });
+  
+  // Keep last 200 data points
+  if (supervisorState.behaviorHistory.length > 200) {
+    supervisorState.behaviorHistory = supervisorState.behaviorHistory.slice(-200);
+  }
 };
 
 /**
@@ -662,6 +708,66 @@ const shouldTrade = () => {
   };
 };
 
+/**
+ * Get behavior history for graph visualization
+ * Returns array of numeric values (0-3) representing agent behavior over time
+ * 
+ * @param {number} maxPoints - Maximum data points to return
+ * @returns {Object} { values: number[], labels: string[], startTime: number }
+ */
+const getBehaviorHistory = (maxPoints = 50) => {
+  if (!supervisorState.active || supervisorState.behaviorHistory.length === 0) {
+    return { values: [], labels: [], startTime: null };
+  }
+  
+  let history = [...supervisorState.behaviorHistory];
+  
+  // Downsample if too many points
+  if (history.length > maxPoints) {
+    const step = Math.ceil(history.length / maxPoints);
+    history = history.filter((_, i) => i % step === 0);
+  }
+  
+  // If too few points, interpolate to make smooth curve
+  if (history.length < 10 && history.length > 1) {
+    const interpolated = [];
+    for (let i = 0; i < history.length - 1; i++) {
+      interpolated.push(history[i]);
+      // Add intermediate points
+      const curr = history[i].value;
+      const next = history[i + 1].value;
+      const mid = (curr + next) / 2;
+      interpolated.push({ value: mid, action: 'interpolated' });
+    }
+    interpolated.push(history[history.length - 1]);
+    history = interpolated;
+  }
+  
+  return {
+    values: history.map(h => h.value),
+    actions: history.map(h => h.action),
+    startTime: supervisorState.behaviorStartTime,
+    duration: Date.now() - supervisorState.behaviorStartTime
+  };
+};
+
+/**
+ * Get learning statistics for display
+ */
+const getLearningStats = () => {
+  return {
+    patternsLearned: {
+      winning: supervisorState.winningPatterns.length,
+      losing: supervisorState.losingPatterns.length,
+      total: supervisorState.winningPatterns.length + supervisorState.losingPatterns.length
+    },
+    optimizations: supervisorState.optimizations.length,
+    tradesAnalyzed: supervisorState.trades.length,
+    ticksProcessed: supervisorState.ticks.length,
+    signalsObserved: supervisorState.signals.length
+  };
+};
+
 module.exports = {
   initialize,
   stop,
@@ -671,5 +777,7 @@ module.exports = {
   getCurrentAdvice,
   shouldTrade,
   getStatus,
-  analyzeAndOptimize
+  analyzeAndOptimize,
+  getBehaviorHistory,
+  getLearningStats
 };
