@@ -214,36 +214,9 @@ const addAgent = async (providerId, optionId, credentials, model = null, customN
   
   saveAISettings(aiSettings);
   
-  // Start AI supervision automatically
+  // Agent is ready - supervision will start when algo trading begins
+  // Supervision requires a real service connection and account
   const agent = getAgent(agentId);
-  if (agent) {
-    // Mock algo target - in real implementation, this would be HQX Ultra Scalping
-    const mockAlgo = {
-      name: 'HQX Ultra Scalping',
-      status: 'ready',
-      active: false
-    };
-    
-    // Check if other agents are already supervising
-    const allAgents = getAgents();
-    const activeSupervisionCount = allAgents.filter(a => a.id !== agentId && a.isActive).length;
-    
-    if (activeSupervisionCount === 0) {
-      // First agent - start single supervision
-      AISupervisor.start(agentId, mockAlgo);
-      console.log(`\n🤖 AI supervision started for ${agent.name}`);
-      console.log(`   Monitoring: HQX Ultra Scalping`);
-      console.log(`   Mode: Single agent supervision`);
-    } else {
-      // Additional agent - switch to consensus mode
-      console.log(`\n🤖 ${agent.name} added to supervision`);
-      console.log(`   Switching to multi-agent consensus mode`);
-      console.log(`   Total agents: ${allAgents.length}`);
-      
-      // Start consensus mode would be handled by supervisor
-      AISupervisor.start(agentId, mockAlgo);
-    }
-  }
   
   return agent;
 };

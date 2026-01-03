@@ -1,7 +1,13 @@
 /**
  * AI Supervisor
  * Manages AI supervision of algo trading
+ * 
+ * STRICT RULE: NO MOCK DATA, NO SIMULATION, NO ESTIMATION
+ * All data comes from real APIs (ProjectX, Rithmic, Tradovate)
  */
+
+const { connections } = require('../session');
+const { analyzeTrading } = require('./client');
 
 let aiService = null;
 
@@ -21,29 +27,34 @@ let consensusInterval = null;
 
 /**
  * AI Supervisor Class
+ * Uses REAL data from connected trading APIs
  */
 class AISupervisor {
   /**
    * Start supervision for an agent
    */
-  static start(agentId, targetAlgo) {
+  static start(agentId, service, accountId) {
     if (supervisionSessions.has(agentId)) {
-      console.log(`Supervision already active for agent ${agentId}`);
-      return false;
+      return { success: false, error: 'Supervision already active' };
     }
     
     const agentInfo = getAIService().getAgent(agentId);
     if (!agentInfo) {
-      console.log(`Agent ${agentId} not found`);
-      return false;
+      return { success: false, error: 'Agent not found' };
+    }
+    
+    if (!service || !accountId) {
+      return { success: false, error: 'Service and accountId required' };
     }
     
     const session = {
       agentId,
       agent: agentInfo,
-      algo: targetAlgo,
+      service,
+      accountId,
       startTime: Date.now(),
       lastCheck: Date.now(),
+      lastData: null,
       decisions: [],
       metrics: {
         totalDecisions: 0,
@@ -54,40 +65,41 @@ class AISupervisor {
       interval: null
     };
     
-    // Check if this is the first agent or if we need consensus mode
     const currentSessionCount = supervisionSessions.size;
     
     if (currentSessionCount === 0) {
       // First agent - start individual supervision
       session.interval = setInterval(() => {
         this.supervise(agentId);
-      }, 5000);
+      }, 10000); // Every 10 seconds
       
       supervisionSessions.set(agentId, session);
-      console.log(`AI supervision started: ${agentInfo.name} monitoring HQX algo`);
-      console.log(`   Mode: Single agent supervision`);
+      
+      return { 
+        success: true, 
+        message: `AI supervision started: ${agentInfo.name}`,
+        mode: 'single'
+      };
       
     } else {
       // Additional agent - switch to consensus mode
-      console.log(`Adding ${agentInfo.name} to supervision`);
-      console.log(`   Total agents: ${currentSessionCount + 1}`);
-      
-      // Stop individual loops and start consensus loop
       this.switchToConsensusMode();
-      
-      session.interval = null; // Will use consensus loop
+      session.interval = null;
       supervisionSessions.set(agentId, session);
+      
+      return { 
+        success: true, 
+        message: `Added ${agentInfo.name} to supervision`,
+        mode: 'consensus',
+        totalAgents: currentSessionCount + 1
+      };
     }
-    
-    return true;
   }
 
   /**
    * Switch to consensus mode when multiple agents
    */
   static switchToConsensusMode() {
-    console.log(`\n🤝 SWITCHING TO MULTI-AGENT CONSENSUS MODE`);
-    
     // Clear all individual intervals
     for (const [agentId, session] of supervisionSessions.entries()) {
       if (session.interval) {
@@ -97,64 +109,20 @@ class AISupervisor {
     }
     
     // Start single consensus loop
-    if (!this.consensusInterval) {
-      this.consensusInterval = setInterval(() => {
+    if (!consensusInterval) {
+      consensusInterval = setInterval(() => {
         this.superviseConsensus();
-      }, 5000);
-      
-      console.log(`   Consensus loop started - all agents will vote on decisions`);
+      }, 10000);
     }
   }
 
-  /**
-   * Start supervision for an agent
-   */
-  static start(agentId, targetAlgo) {
-    if (supervisionSessions.has(agentId)) {
-      console.log(`Supervision already active for agent ${agentId}`);
-      return false;
-    }
-    
-    const agent = getAIService().getAgent(agentId);
-    if (!agent) {
-      console.log(`Agent ${agentId} not found`);
-      return false;
-    }
-    
-    const session = {
-      agentId,
-      agent: agent,
-      algo: targetAlgo,
-      startTime: Date.now(),
-      lastCheck: Date.now(),
-      decisions: [],
-      metrics: {
-        totalDecisions: 0,
-        interventions: 0,
-        optimizations: 0,
-        riskWarnings: 0
-      },
-      interval: null
-    };
-    
-    // Start supervision loop (every 5 seconds)
-    session.interval = setInterval(() => {
-      this.supervise(agentId);
-    }, 5000);
-    
-    supervisionSessions.set(agentId, session);
-    console.log(`AI supervision started: ${agent.name} monitoring HQX algo`);
-    
-    return true;
-  }
-  
   /**
    * Stop supervision for an agent
    */
   static stop(agentId) {
     const session = supervisionSessions.get(agentId);
     if (!session) {
-      return false;
+      return { success: false, error: 'Session not found' };
     }
     
     if (session.interval) {
@@ -164,14 +132,9 @@ class AISupervisor {
     const duration = Date.now() - session.startTime;
     supervisionSessions.delete(agentId);
     
-    console.log(`AI supervision stopped for ${session.agent.name}`);
-    console.log(`Session duration: ${Math.round(duration / 1000)}s`);
-    console.log(`Decisions: ${session.metrics.totalDecisions}, Interventions: ${session.metrics.interventions}`);
-    
     // Check if we need to switch back to single agent mode
     const remainingSessions = supervisionSessions.size;
     if (remainingSessions === 1 && consensusInterval) {
-      // Last agent - switch back to single mode
       clearInterval(consensusInterval);
       consensusInterval = null;
       
@@ -180,21 +143,26 @@ class AISupervisor {
         const remainingAgentId = remainingSession.agentId;
         remainingSession.interval = setInterval(() => {
           this.supervise(remainingAgentId);
-        }, 5000);
-        
-        console.log(`Switched back to single agent supervision for ${remainingSession.agent.name}`);
+        }, 10000);
       }
     } else if (remainingSessions === 0 && consensusInterval) {
-      // No agents left
       clearInterval(consensusInterval);
       consensusInterval = null;
     }
     
-    return true;
+    return { 
+      success: true, 
+      duration: Math.round(duration / 1000),
+      metrics: session.metrics
+    };
   }
   
   /**
    * Main supervision loop - single agent
+   * Fetches REAL data from APIs and analyzes with AI
+   * 
+   * Data source: Trading APIs (ProjectX, Rithmic, Tradovate)
+   * AI source: Configured AI provider (real API call)
    */
   static async supervise(agentId) {
     const session = supervisionSessions.get(agentId);
@@ -203,456 +171,241 @@ class AISupervisor {
     try {
       session.lastCheck = Date.now();
       
-      // Get algo status
-      const algoStatus = this.getAlgoStatus(session.algo);
-      const marketData = this.getMarketData();
-      const riskMetrics = this.getRiskMetrics(session.algo);
+      // Get REAL data from API
+      const data = await this.fetchRealData(session.service, session.accountId);
+      if (!data) return;
       
-      // Make AI decision
-      const decision = await this.makeAIDecision(session.agent, algoStatus, marketData, riskMetrics);
+      session.lastData = data;
+      session.metrics.lastFetch = Date.now();
       
-      if (decision) {
+      // Call AI for analysis (real API call, returns null if fails)
+      const aiDecision = await analyzeTrading(session.agent, data);
+      
+      if (aiDecision) {
+        // Store decision with timestamp
+        const decision = {
+          timestamp: Date.now(),
+          action: aiDecision.action || null,
+          confidence: aiDecision.confidence || null,
+          reason: aiDecision.reason || null,
+          dataSnapshot: {
+            balance: data.account?.balance ?? null,
+            pnl: data.account?.profitAndLoss ?? null,
+            positions: data.positions?.length ?? 0,
+            orders: data.orders?.length ?? 0
+          }
+        };
+        
         session.decisions.push(decision);
         session.metrics.totalDecisions++;
         
-        // Execute decision if confidence is high enough
-        if (decision.confidence > 75) {
-          await this.executeDecision(session, decision);
+        // Track decision types
+        if (aiDecision.action === 'REDUCE_SIZE' || aiDecision.action === 'PAUSE') {
+          session.metrics.interventions++;
+        } else if (aiDecision.action === 'CONTINUE') {
+          session.metrics.optimizations++;
+        }
+        
+        // Check for risk warnings
+        if (aiDecision.confidence !== null && aiDecision.confidence < 50) {
+          session.metrics.riskWarnings++;
+        }
+        
+        // Keep only last 100 decisions to prevent memory bloat
+        if (session.decisions.length > 100) {
+          session.decisions = session.decisions.slice(-100);
         }
       }
       
     } catch (error) {
-      console.log(`Supervision error for agent ${agentId}: ${error.message}`);
+      // Silent fail - don't spam logs
     }
   }
 
   /**
    * Multi-agent consensus supervision loop
+   * Each agent analyzes data independently, then consensus is calculated
+   * 
+   * Data source: Trading APIs (ProjectX, Rithmic, Tradovate)
+   * AI source: Each agent's configured AI provider (real API calls)
    */
   static async superviseConsensus() {
     const allSessions = Array.from(supervisionSessions.entries());
     if (allSessions.length === 0) return;
     
     try {
-      // Get all active agents
-      const allAgents = allSessions.map(([id, session]) => session.agent).filter(Boolean);
+      const decisions = [];
       
-      if (allAgents.length === 0) return;
-      
-      console.log(`🤝 MULTI-AGENT CONSENSUS: ${allAgents.length} agents participating`);
-      
-      // Get algo status (use same algo for all agents)
-      const mockAlgo = { name: 'HQX Ultra Scalping' }; // Would be real algo
-      const algoStatus = this.getAlgoStatus(mockAlgo);
-      const marketData = this.getMarketData();
-      const riskMetrics = this.getRiskMetrics(mockAlgo);
-      
-      // Make consensus decision
-      const consensusDecision = await this.makeConsensusDecision(allAgents, algoStatus, marketData, riskMetrics);
-      
-      if (consensusDecision) {
-        // Update all sessions with the consensus decision
-        for (const [agentId, session] of allSessions) {
-          session.decisions.push({
-            ...consensusDecision,
+      // Fetch data and get AI analysis for each session
+      for (const [agentId, session] of allSessions) {
+        const data = await this.fetchRealData(session.service, session.accountId);
+        if (!data) continue;
+        
+        session.lastData = data;
+        session.lastCheck = Date.now();
+        session.metrics.lastFetch = Date.now();
+        
+        // Call AI for analysis (real API call)
+        const aiDecision = await analyzeTrading(session.agent, data);
+        
+        if (aiDecision) {
+          const decision = {
             timestamp: Date.now(),
-            isConsensus: true,
-            participantAgents: consensusDecision.agentNames
-          });
+            agentId,
+            agentName: session.agent.name,
+            action: aiDecision.action || null,
+            confidence: aiDecision.confidence || null,
+            reason: aiDecision.reason || null,
+            dataSnapshot: {
+              balance: data.account?.balance ?? null,
+              pnl: data.account?.profitAndLoss ?? null,
+              positions: data.positions?.length ?? 0,
+              orders: data.orders?.length ?? 0
+            }
+          };
           
+          session.decisions.push(decision);
           session.metrics.totalDecisions++;
+          decisions.push(decision);
           
-          // Execute decision if confidence is high enough (lower threshold for consensus)
-          if (consensusDecision.confidence > 70) {
-            await this.executeConsensusDecision(session, consensusDecision);
+          // Track decision types
+          if (aiDecision.action === 'REDUCE_SIZE' || aiDecision.action === 'PAUSE') {
+            session.metrics.interventions++;
+          } else if (aiDecision.action === 'CONTINUE') {
+            session.metrics.optimizations++;
+          }
+          
+          if (aiDecision.confidence !== null && aiDecision.confidence < 50) {
+            session.metrics.riskWarnings++;
+          }
+          
+          // Keep only last 100 decisions
+          if (session.decisions.length > 100) {
+            session.decisions = session.decisions.slice(-100);
           }
         }
       }
       
-    } catch (error) {
-      console.log(`Consensus supervision error: ${error.message}`);
-    }
-  }
-
-  /**
-   * Execute multi-agent consensus decision
-   */
-  static async executeConsensusDecision(session, decision) {
-    const { agent, metrics } = session;
-    
-    console.log(`\n🎯 MULTI-AGENT CONSENSUS ACTION:`);
-    console.log(`   Agents: ${decision.agentNames.join(', ')}`);
-    console.log(`   Type: ${decision.type}`);
-    console.log(`   Confidence: ${decision.confidence}%`);
-    console.log(`   Reason: ${decision.reason}`);
-    
-    // Update metrics
-    switch (decision.type) {
-      case 'ADJUST_SIZE':
-      case 'ADJUST_PARAMETERS':
-      case 'ADJUST_STRATEGY':
-        metrics.optimizations++;
-        console.log(`   Action: Consensus optimization - ${decision.agentNames.length} agents agree`);
-        break;
-      case 'PAUSE_TRADING':
-      case 'RISK_ADJUSTMENT':
-        metrics.interventions++;
-        console.log(`   Action: Consensus risk intervention - ${decision.agentNames.length} agents agree`);
-        break;
-      case 'ADJUST_FREQUENCY':
-        metrics.interventions++;
-        console.log(`   Action: Consensus frequency adjustment - ${decision.agentNames.length} agents agree`);
-        break;
-    }
-    
-    // In real implementation, this would actually modify the algo
-    console.log(`   Status: Consensus decision executed across all agents\n`);
-    
-    return decision;
-  }
-  
-  /**
-   * Get algo status (placeholder for real implementation)
-   */
-  static getAlgoStatus(algo) {
-    // This would interface with HQX Ultra Scalping
-    // For now, return mock data
-    return {
-      active: true,
-      positions: 1,
-      currentPnL: 145.50,
-      dayTrades: 8,
-      winRate: 0.75,
-      avgWin: 25.30,
-      avgLoss: 8.20,
-      lastTradeTime: Date.now() - 120000, // 2 minutes ago
-      currentStrategy: 'momentum_scalping',
-      parameters: {
-        tradeSize: 2,
-        stopLoss: 3,
-        takeProfit: 6,
-        maxPositions: 3
+      // Calculate consensus if multiple decisions
+      if (decisions.length > 1) {
+        this.calculateConsensus(decisions);
       }
-    };
-  }
-  
-  /**
-   * Get market data (placeholder)
-   */
-  static getMarketData() {
-    // This would get real market data
-    return {
-      symbol: 'ES',
-      price: 4502.25,
-      change: 12.50,
-      volume: 1250000,
-      volatility: 0.018,
-      trend: 'bullish',
-      momentum: 'strong',
-      timeframe: '1m'
-    };
-  }
-  
-  /**
-   * Get risk metrics (placeholder)
-   */
-  static getRiskMetrics(algo) {
-    return {
-      maxDrawdown: 0.025, // 2.5%
-      currentDrawdown: 0.008, // 0.8%
-      exposure: 0.65, // 65% of max
-      dailyLoss: -45.30,
-      sharpeRatio: 1.8,
-      var95: 125.50 // Value at Risk
-    };
-  }
-  
-  /**
-   * Make AI decision for single agent
-   */
-  static async makeAIDecision(agent, algoStatus, marketData, riskMetrics) {
-    // Simulate AI decision making based on provider
-    const decisions = [];
-    
-    switch (agent.providerId) {
-      case 'anthropic':
-        // Claude: Technical analysis expert
-        if (marketData.volatility > 0.025 && algoStatus.parameters.tradeSize > 1) {
-          decisions.push({
-            type: 'ADJUST_SIZE',
-            action: 'REDUCE',
-            currentSize: algoStatus.parameters.tradeSize,
-            suggestedSize: Math.max(1, Math.floor(algoStatus.parameters.tradeSize * 0.7)),
-            reason: 'High volatility detected - reducing position size',
-            confidence: 85,
-            agentType: 'technical',
-            urgency: 'medium'
-          });
-        }
-        
-        if (riskMetrics.currentDrawdown > 0.02) {
-          decisions.push({
-            type: 'PAUSE_TRADING',
-            reason: 'Drawdown exceeding 2% - pausing to preserve capital',
-            confidence: 92,
-            agentType: 'technical',
-            urgency: 'high'
-          });
-        }
-        break;
-        
-      case 'openai':
-        // OpenAI: Parameter optimization expert
-        if (marketData.trend === 'bullish' && marketData.momentum === 'strong') {
-          decisions.push({
-            type: 'ADJUST_PARAMETERS',
-            parameter: 'takeProfit',
-            current: algoStatus.parameters.takeProfit,
-            suggested: algoStatus.parameters.takeProfit * 1.25,
-            reason: 'Strong bullish trend - increasing take profit target',
-            confidence: 78,
-            agentType: 'optimization',
-            urgency: 'low'
-          });
-        }
-        
-        // OpenAI suggests scaling in consolidation
-        if (marketData.volatility < 0.015) {
-          decisions.push({
-            type: 'ADJUST_STRATEGY',
-            suggestedStrategy: 'scaling',
-            reason: 'Low volatility - switching to scaling strategy',
-            confidence: 72,
-            agentType: 'optimization',
-            urgency: 'medium'
-          });
-        }
-        break;
-        
-      case 'deepseek':
-        // DeepSeek: Trading and prop firm expert
-        if (algoStatus.dayTrades > 8) {
-          decisions.push({
-            type: 'ADJUST_FREQUENCY',
-            action: 'REDUCE',
-            reason: 'Overtrading detected - reducing trade frequency',
-            confidence: 88,
-            agentType: 'trading',
-            urgency: 'high'
-          });
-        }
-        
-        // DeepSeek focuses on prop firm rules
-        if (riskMetrics.dailyLoss < -100) {
-          decisions.push({
-            type: 'RISK_ADJUSTMENT',
-            adjustment: 'HALF_SIZE',
-            reason: 'Daily loss approaching limit - halving position size',
-            confidence: 95,
-            agentType: 'trading',
-            urgency: 'critical'
-          });
-        }
-        break;
-        
-      default:
-        // Generic decision for other providers
-        if (marketData.volatility > 0.03) {
-          decisions.push({
-            type: 'ADJUST_SIZE',
-            action: 'REDUCE',
-            suggestedSize: Math.max(1, Math.floor(algoStatus.parameters.tradeSize * 0.6)),
-            reason: 'Very high volatility - significant size reduction',
-            confidence: 80,
-            agentType: 'generic',
-            urgency: 'medium'
-          });
-        }
-        break;
-    }
-    
-    return decisions.length > 0 ? decisions[0] : null;
-  }
-
-  /**
-   * Make multi-agent consensus decision
-   */
-  static async makeConsensusDecision(allAgents, algoStatus, marketData, riskMetrics) {
-    if (!allAgents || allAgents.length === 0) return null;
-    
-    if (allAgents.length === 1) {
-      // Single agent - use normal decision
-      return await this.makeAIDecision(allAgents[0], algoStatus, marketData, riskMetrics);
-    }
-    
-    console.log(`🤝 CONSENSUS: Getting decisions from ${allAgents.length} agents...`);
-    
-    // Get decision from each agent
-    const agentDecisions = [];
-    
-    for (const agent of allAgents) {
-      const decision = await this.makeAIDecision(agent, algoStatus, marketData, riskMetrics);
       
-      if (decision) {
-        agentDecisions.push({
-          agentId: agent.id,
-          agentName: agent.name,
-          providerId: agent.providerId,
-          agentType: decision.agentType,
-          ...decision
-        });
-        
-        console.log(`   ${agent.name} (${agent.providerId}): ${decision.type} (${decision.confidence}% confidence)`);
+    } catch (error) {
+      // Silent fail
+    }
+  }
+  
+  /**
+   * Calculate consensus from multiple agent decisions
+   * @param {Array} decisions - Array of agent decisions
+   * @returns {Object|null} Consensus result
+   */
+  static calculateConsensus(decisions) {
+    if (!decisions || decisions.length === 0) return null;
+    
+    // Count votes for each action
+    const votes = {};
+    let totalConfidence = 0;
+    let validConfidenceCount = 0;
+    
+    for (const decision of decisions) {
+      if (decision.action) {
+        votes[decision.action] = (votes[decision.action] || 0) + 1;
+      }
+      if (decision.confidence !== null) {
+        totalConfidence += decision.confidence;
+        validConfidenceCount++;
       }
     }
     
-    if (agentDecisions.length === 0) {
-      console.log('   No consensus - all agents agree current parameters are optimal');
+    // Find majority action
+    let majorityAction = null;
+    let maxVotes = 0;
+    for (const [action, count] of Object.entries(votes)) {
+      if (count > maxVotes) {
+        maxVotes = count;
+        majorityAction = action;
+      }
+    }
+    
+    // Calculate average confidence
+    const avgConfidence = validConfidenceCount > 0 
+      ? Math.round(totalConfidence / validConfidenceCount) 
+      : null;
+    
+    // Store consensus result
+    const consensus = {
+      timestamp: Date.now(),
+      action: majorityAction,
+      confidence: avgConfidence,
+      votes,
+      agentCount: decisions.length,
+      agreement: maxVotes / decisions.length
+    };
+    
+    // Store consensus in first session for retrieval
+    const firstSession = supervisionSessions.values().next().value;
+    if (firstSession) {
+      firstSession.lastConsensus = consensus;
+    }
+    
+    return consensus;
+  }
+
+  /**
+   * Fetch REAL data from trading API
+   * NO MOCK, NO SIMULATION
+   */
+  static async fetchRealData(service, accountId) {
+    if (!service || !accountId) return null;
+    
+    const data = {
+      timestamp: Date.now(),
+      account: null,
+      positions: [],
+      orders: [],
+      trades: []
+    };
+    
+    try {
+      // Get account with P&L
+      const accountResult = await service.getTradingAccounts();
+      if (accountResult.success && accountResult.accounts) {
+        data.account = accountResult.accounts.find(a => 
+          a.accountId === accountId || 
+          a.rithmicAccountId === accountId ||
+          String(a.accountId) === String(accountId)
+        );
+      }
+      
+      // Get open positions
+      const posResult = await service.getPositions(accountId);
+      if (posResult.success && posResult.positions) {
+        data.positions = posResult.positions;
+      }
+      
+      // Get open orders
+      const orderResult = await service.getOrders(accountId);
+      if (orderResult.success && orderResult.orders) {
+        data.orders = orderResult.orders;
+      }
+      
+      // Get today's trades (if available)
+      if (typeof service.getTrades === 'function') {
+        const tradesResult = await service.getTrades(accountId);
+        if (tradesResult.success && tradesResult.trades) {
+          data.trades = tradesResult.trades;
+        }
+      }
+      
+    } catch (error) {
       return null;
     }
     
-    // Group decisions by type
-    const decisionGroups = {};
-    for (const decision of agentDecisions) {
-      const key = `${decision.type}_${decision.action || ''}_${decision.parameter || ''}`;
-      if (!decisionGroups[key]) {
-        decisionGroups[key] = [];
-      }
-      decisionGroups[key].push(decision);
-    }
-    
-    // Weight agents by their expertise
-    const agentWeights = {
-      'anthropic': { technical: 1.2, optimization: 1.0, trading: 1.0, generic: 1.1 },
-      'openai': { technical: 1.0, optimization: 1.3, trading: 0.9, generic: 1.2 },
-      'deepseek': { technical: 0.9, optimization: 1.0, trading: 1.4, generic: 1.1 },
-      'groq': { technical: 1.1, optimization: 1.0, trading: 1.2, generic: 1.0 },
-      'gemini': { technical: 1.0, optimization: 1.1, trading: 1.0, generic: 1.2 }
-    };
-    
-    // Calculate weighted consensus for each decision type
-    const consensusResults = [];
-    
-    for (const [decisionKey, group] of Object.entries(decisionGroups)) {
-      let totalWeight = 0;
-      let weightedConfidence = 0;
-      let agentNames = [];
-      
-      for (const decision of group) {
-        const weight = agentWeights[decision.providerId]?.[decision.agentType] || 1.0;
-        totalWeight += weight;
-        weightedConfidence += decision.confidence * weight;
-        agentNames.push(decision.agentName);
-      }
-      
-      const consensusConfidence = weightedConfidence / totalWeight;
-      
-      consensusResults.push({
-        type: group[0].type,
-        action: group[0].action,
-        parameter: group[0].parameter,
-        currentSize: group[0].currentSize,
-        suggestedSize: group[0].suggestedSize,
-        current: group[0].current,
-        suggested: group[0].suggested,
-        adjustment: group[0].adjustment,
-        suggestedStrategy: group[0].suggestedStrategy,
-        reason: this.buildConsensusReason(group, decisionKey),
-        confidence: Math.round(consensusConfidence),
-        agentCount: group.length,
-        agentNames: [...new Set(agentNames)], // Unique names
-        agentTypes: [...new Set(group.map(d => d.agentType))],
-        urgency: this.calculateUrgency(group),
-        consensusStrength: totalWeight
-      });
-    }
-    
-    // Return highest confidence consensus decision
-    if (consensusResults.length > 0) {
-      const bestDecision = consensusResults.sort((a, b) => b.confidence - a.confidence)[0];
-      
-      console.log(`🎯 CONSENSUS DECISION:`);
-      console.log(`   Type: ${bestDecision.type}`);
-      console.log(`   Confidence: ${bestDecision.confidence}%`);
-      console.log(`   Agents: ${bestDecision.agentNames.join(', ')}`);
-      console.log(`   Reason: ${bestDecision.reason}`);
-      
-      return bestDecision;
-    }
-    
-    return null;
+    return data;
   }
 
-  /**
-   * Build consensus reason
-   */
-  static buildConsensusReason(group, decisionKey) {
-    const agentNames = group.map(d => d.agentName);
-    const agentTypes = [...new Set(group.map(d => d.agentType))];
-    
-    let expertise = '';
-    if (agentTypes.length === 1) {
-      const typeMap = {
-        'technical': 'technical analysis',
-        'optimization': 'parameter optimization',
-        'trading': 'trading strategy',
-        'generic': 'general analysis'
-      };
-      expertise = `based on ${typeMap[agentTypes[0]]}`;
-    } else {
-      expertise = `based on multiple expertises (${agentTypes.join(', ')})`;
-    }
-    
-    return `Consensus from ${agentNames.join(', ')} - ${expertise}`;
-  }
-
-  /**
-   * Calculate urgency from consensus
-   */
-  static calculateUrgency(group) {
-    const urgencyLevels = { 'low': 1, 'medium': 2, 'high': 3, 'critical': 4 };
-    const maxUrgency = Math.max(...group.map(d => urgencyLevels[d.urgency] || 1));
-    
-    const urgencyMap = { 1: 'low', 2: 'medium', 3: 'high', 4: 'critical' };
-    return urgencyMap[maxUrgency];
-  }
-  
-  /**
-   * Execute AI decision
-   */
-  static async executeDecision(session, decision) {
-    const { agent, algo, metrics } = session;
-    
-    console.log(`\n🤖 ${agent.name} Decision:`);
-    console.log(`   Type: ${decision.type}`);
-    console.log(`   Reason: ${decision.reason}`);
-    console.log(`   Confidence: ${decision.confidence}%`);
-    
-    // Update metrics
-    switch (decision.type) {
-      case 'ADJUST_SIZE':
-      case 'ADJUST_PARAMETERS':
-        metrics.optimizations++;
-        console.log(`   Action: Optimizing algo parameters`);
-        break;
-      case 'PAUSE_TRADING':
-      case 'REDUCE_EXPOSURE':
-        metrics.interventions++;
-        console.log(`   Action: Risk intervention - ${decision.reason.toLowerCase()}`);
-        break;
-      case 'RISK_WARNING':
-        metrics.riskWarnings++;
-        console.log(`   Action: Risk warning issued`);
-        break;
-    }
-    
-    // In real implementation, this would actually modify the algo
-    // For now, just log the decision
-    console.log(`   Status: Decision logged for manual review\n`);
-    
-    return decision;
-  }
-  
   /**
    * Get supervision status for an agent
    */
@@ -665,12 +418,14 @@ class AISupervisor {
     const duration = Date.now() - session.startTime;
     return {
       active: true,
+      agentId: session.agentId,
       agentName: session.agent.name,
-      duration: Math.round(duration / 1000),
-      decisions: session.metrics.totalDecisions,
-      interventions: session.metrics.interventions,
-      optimizations: session.metrics.optimizations,
-      lastDecision: session.decisions.length > 0 ? session.decisions[session.decisions.length - 1] : null
+      accountId: session.accountId,
+      duration,
+      lastCheck: session.lastCheck,
+      lastData: session.lastData,
+      metrics: session.metrics,
+      decisionsCount: session.decisions.length
     };
   }
   
@@ -678,35 +433,132 @@ class AISupervisor {
    * Get all active supervision sessions
    */
   static getAllStatus() {
-    const result = [];
-    const isConsensusMode = supervisionSessions.size > 1 && consensusInterval;
+    const sessions = [];
+    const isConsensusMode = supervisionSessions.size > 1 && consensusInterval !== null;
     
     for (const [agentId, session] of supervisionSessions.entries()) {
-      result.push({
+      sessions.push({
+        active: true,
         agentId,
         agentName: session.agent.name,
+        accountId: session.accountId,
         duration: Date.now() - session.startTime,
+        lastCheck: session.lastCheck,
         metrics: session.metrics,
-        lastDecision: session.decisions.length > 0 ? session.decisions[session.decisions.length - 1] : null,
         mode: isConsensusMode ? 'consensus' : 'single'
       });
     }
     
-    return {
-      sessions: result,
-      mode: isConsensusMode ? 'consensus' : 'single',
-      totalAgents: supervisionSessions.size
+    return sessions;
+  }
+  
+  /**
+   * Get aggregated data from all supervised accounts
+   * Returns REAL data only
+   */
+  static getAggregatedData() {
+    const result = {
+      totalAccounts: 0,
+      totalBalance: 0,
+      totalPnL: 0,
+      totalPositions: 0,
+      totalOrders: 0,
+      totalTrades: 0,
+      accounts: []
     };
+    
+    for (const [agentId, session] of supervisionSessions.entries()) {
+      if (session.lastData) {
+        const data = session.lastData;
+        
+        if (data.account) {
+          result.totalAccounts++;
+          result.totalBalance += data.account.balance || 0;
+          result.totalPnL += data.account.profitAndLoss || 0;
+          result.accounts.push({
+            accountId: data.account.accountId,
+            accountName: data.account.accountName,
+            balance: data.account.balance,
+            pnl: data.account.profitAndLoss,
+            platform: data.account.platform
+          });
+        }
+        
+        result.totalPositions += data.positions?.length || 0;
+        result.totalOrders += data.orders?.length || 0;
+        result.totalTrades += data.trades?.length || 0;
+      }
+    }
+    
+    return result;
+  }
+  
+  /**
+   * Get latest AI decision for an agent
+   * @param {string} agentId - Agent ID
+   * @returns {Object|null} Latest decision or null
+   */
+  static getLatestDecision(agentId) {
+    const session = supervisionSessions.get(agentId);
+    if (!session || session.decisions.length === 0) {
+      return null;
+    }
+    return session.decisions[session.decisions.length - 1];
+  }
+  
+  /**
+   * Get all decisions for an agent
+   * @param {string} agentId - Agent ID
+   * @param {number} limit - Max decisions to return (default 10)
+   * @returns {Array} Array of decisions
+   */
+  static getDecisions(agentId, limit = 10) {
+    const session = supervisionSessions.get(agentId);
+    if (!session) {
+      return [];
+    }
+    return session.decisions.slice(-limit);
+  }
+  
+  /**
+   * Get latest consensus (multi-agent mode only)
+   * @returns {Object|null} Latest consensus or null
+   */
+  static getConsensus() {
+    if (supervisionSessions.size <= 1) {
+      return null;
+    }
+    const firstSession = supervisionSessions.values().next().value;
+    return firstSession?.lastConsensus || null;
   }
   
   /**
    * Stop all supervision sessions
    */
   static stopAll() {
+    const results = [];
     const agentIds = Array.from(supervisionSessions.keys());
+    
     for (const agentId of agentIds) {
-      this.stop(agentId);
+      const result = this.stop(agentId);
+      results.push({ agentId, ...result });
     }
+    
+    return results;
+  }
+  
+  /**
+   * Check if any supervision is active
+   */
+  static isActive() {
+    return supervisionSessions.size > 0;
+  }
+  
+  /**
+   * Get session count
+   */
+  static getSessionCount() {
+    return supervisionSessions.size;
   }
 }
 

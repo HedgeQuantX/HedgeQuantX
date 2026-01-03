@@ -14,6 +14,8 @@ const asciichart = require('asciichart');
 const { connections } = require('../services');
 const { getLogoWidth, visibleLength, drawBoxHeader, drawBoxFooter, getColWidths, draw2ColHeader, draw2ColSeparator, fmtRow } = require('../ui');
 const { prompts } = require('../utils');
+const aiService = require('../services/ai');
+const AISupervisor = require('../services/ai/supervisor');
 
 /**
  * Show Stats Page
@@ -382,6 +384,56 @@ const showStats = async (service) => {
     console.log(chalk.cyan('\u2551') + fmtRow('STD DEVIATION:', hasTradeData ? chalk.white('$' + stdDev.toFixed(2)) : chalk.gray('N/A'), col1) + chalk.cyan('\u2502') + fmtRow('AVG TRADE:', hasTradeData ? (avgReturn >= 0 ? chalk.green('$' + avgReturn.toFixed(2)) : chalk.red('$' + avgReturn.toFixed(2))) : chalk.gray('N/A'), col2) + chalk.cyan('\u2551'));
     
     drawBoxFooter(boxWidth);
+    
+    // ========== AI SUPERVISION ==========
+    const aiAgents = aiService.getAgents();
+    const supervisionStatus = AISupervisor.getAllStatus();
+    
+    if (aiAgents.length > 0) {
+      console.log();
+      drawBoxHeader('AI SUPERVISION', boxWidth);
+      draw2ColHeader('AGENTS', 'PERFORMANCE', boxWidth);
+      
+      // Agent info
+      const activeAgent = aiService.getActiveAgent();
+      const agentNames = aiAgents.map(a => a.name).join(', ');
+      const agentMode = aiAgents.length >= 2 ? 'CONSENSUS' : 'INDIVIDUAL';
+      const modeColor = aiAgents.length >= 2 ? chalk.magenta : chalk.cyan;
+      
+      // Supervision metrics
+      let totalDecisions = 0;
+      let totalInterventions = 0;
+      let totalOptimizations = 0;
+      let totalRiskWarnings = 0;
+      let totalSessionTime = 0;
+      
+      for (const status of supervisionStatus) {
+        if (status.active) {
+          totalDecisions += status.metrics?.totalDecisions || 0;
+          totalInterventions += status.metrics?.interventions || 0;
+          totalOptimizations += status.metrics?.optimizations || 0;
+          totalRiskWarnings += status.metrics?.riskWarnings || 0;
+          totalSessionTime += status.duration || 0;
+        }
+      }
+      
+      const sessionTimeStr = totalSessionTime > 0 
+        ? Math.floor(totalSessionTime / 60000) + 'm ' + Math.floor((totalSessionTime % 60000) / 1000) + 's'
+        : 'INACTIVE';
+      
+      // Get real supervision data
+      const supervisionData = AISupervisor.getAggregatedData();
+      const supervisedAccounts = supervisionData.totalAccounts;
+      const supervisedPnL = supervisionData.totalPnL;
+      
+      console.log(chalk.cyan('\u2551') + fmtRow('CONNECTED AGENTS:', chalk.green(String(aiAgents.length)), col1) + chalk.cyan('\u2502') + fmtRow('SUPERVISED ACCOUNTS:', supervisedAccounts > 0 ? chalk.white(String(supervisedAccounts)) : chalk.gray('0'), col2) + chalk.cyan('\u2551'));
+      console.log(chalk.cyan('\u2551') + fmtRow('MODE:', modeColor(agentMode), col1) + chalk.cyan('\u2502') + fmtRow('SUPERVISED P&L:', supervisedPnL !== 0 ? (supervisedPnL >= 0 ? chalk.green('$' + supervisedPnL.toFixed(2)) : chalk.red('$' + supervisedPnL.toFixed(2))) : chalk.gray('$0.00'), col2) + chalk.cyan('\u2551'));
+      console.log(chalk.cyan('\u2551') + fmtRow('ACTIVE:', activeAgent ? chalk.green(activeAgent.name) : chalk.gray('NONE'), col1) + chalk.cyan('\u2502') + fmtRow('POSITIONS:', chalk.white(String(supervisionData.totalPositions)), col2) + chalk.cyan('\u2551'));
+      console.log(chalk.cyan('\u2551') + fmtRow('SESSION TIME:', chalk.white(sessionTimeStr), col1) + chalk.cyan('\u2502') + fmtRow('OPEN ORDERS:', chalk.white(String(supervisionData.totalOrders)), col2) + chalk.cyan('\u2551'));
+      console.log(chalk.cyan('\u2551') + fmtRow('AGENTS:', chalk.gray(agentNames.substring(0, col1 - 10)), col1) + chalk.cyan('\u2502') + fmtRow('TRADES TODAY:', chalk.white(String(supervisionData.totalTrades)), col2) + chalk.cyan('\u2551'));
+      
+      drawBoxFooter(boxWidth);
+    }
     
     // ========== EQUITY CURVE ==========
     console.log();

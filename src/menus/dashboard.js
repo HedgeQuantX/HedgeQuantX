@@ -22,6 +22,9 @@ const dashboardMenu = async (service) => {
   const boxWidth = getLogoWidth();
   const W = boxWidth - 2;
   
+  // Check AI connection status
+  const aiConnected = aiService.isConnected();
+  
   const makeLine = (content, align = 'left') => {
     const plainLen = content.replace(/\x1b\[[0-9;]*m/g, '').length;
     const padding = W - plainLen;

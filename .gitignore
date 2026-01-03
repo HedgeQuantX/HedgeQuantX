@@ -18,3 +18,7 @@ test-*.js
 
 # Config
 .config/
+
+# Context files (confidential - local only)
+.hqx-context/
+CLAUDE.md

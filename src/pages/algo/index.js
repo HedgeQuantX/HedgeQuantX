@@ -182,7 +182,7 @@ const startAISupervised = async (service, agent) => {
     
     await prompts.waitForEnter();
     
-    // Start the algo (placeholder for real implementation)
+    // Launch algo trading with AI supervision active
     return await oneAccountMenu(service);
     
   } else {

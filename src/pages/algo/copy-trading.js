@@ -330,12 +330,33 @@ const launchCopyTrading = async (config) => {
         if (!existing && pos.quantity !== 0) {
           // New position opened - copy to follower
           const side = pos.quantity > 0 ? 'LONG' : 'SHORT';
+          const orderSide = pos.quantity > 0 ? 0 : 1; // 0=Buy, 1=Sell
           const symbol = pos.symbol || pos.contractId;
           const size = Math.abs(pos.quantity);
           const entry = pos.averagePrice || 0;
+          
           algoLogger.positionOpened(ui, symbol, side, size, entry);
           algoLogger.info(ui, 'COPYING TO FOLLOWER', `${side} ${size}x ${symbol}`);
-          // TODO: Place order on follower account
+          
+          // Place order on follower account
+          try {
+            const orderResult = await follower.service.placeOrder({
+              accountId: follower.account.accountId,
+              contractId: pos.contractId,
+              type: 2, // Market order
+              side: orderSide,
+              size: follower.contracts
+            });
+            
+            if (orderResult.success) {
+              algoLogger.orderFilled(ui, symbol, side, follower.contracts, entry);
+              algoLogger.info(ui, 'FOLLOWER ORDER', `${side} ${follower.contracts}x filled`);
+            } else {
+              algoLogger.orderRejected(ui, symbol, orderResult.error || 'Order failed');
+            }
+          } catch (err) {
+            algoLogger.error(ui, 'FOLLOWER ORDER FAILED', err.message);
+          }
         }
       }
       
@@ -344,13 +365,44 @@ const launchCopyTrading = async (config) => {
         const stillOpen = currentPositions.find(p => p.contractId === oldPos.contractId);
         if (!stillOpen || stillOpen.quantity === 0) {
           const side = oldPos.quantity > 0 ? 'LONG' : 'SHORT';
+          const closeSide = oldPos.quantity > 0 ? 1 : 0; // Opposite side to close
           const symbol = oldPos.symbol || oldPos.contractId;
           const size = Math.abs(oldPos.quantity);
           const exit = stillOpen?.averagePrice || oldPos.averagePrice || 0;
           const pnl = oldPos.profitAndLoss || 0;
+          
           algoLogger.positionClosed(ui, symbol, side, size, exit, pnl);
           algoLogger.info(ui, 'CLOSING ON FOLLOWER', symbol);
-          // TODO: Close position on follower account
+          
+          // Close position on follower account
+          try {
+            // First try closePosition API
+            const closeResult = await follower.service.closePosition(
+              follower.account.accountId,
+              oldPos.contractId
+            );
+            
+            if (closeResult.success) {
+              algoLogger.info(ui, 'FOLLOWER CLOSED', `${symbol} position closed`);
+            } else {
+              // Fallback: place market order to close
+              const orderResult = await follower.service.placeOrder({
+                accountId: follower.account.accountId,
+                contractId: oldPos.contractId,
+                type: 2, // Market order
+                side: closeSide,
+                size: follower.contracts
+              });
+              
+              if (orderResult.success) {
+                algoLogger.info(ui, 'FOLLOWER CLOSED', `${symbol} via market order`);
+              } else {
+                algoLogger.error(ui, 'FOLLOWER CLOSE FAILED', orderResult.error || 'Close failed');
+              }
+            }
+          } catch (err) {
+            algoLogger.error(ui, 'FOLLOWER CLOSE ERROR', err.message);
+          }
         }
       }
       
