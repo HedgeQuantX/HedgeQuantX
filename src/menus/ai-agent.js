@@ -46,7 +46,9 @@ const aiAgentMenu = async () => {
     // List all agents
     for (let i = 0; i < agents.length; i++) {
       const agent = agents[i];
-      const activeMarker = agent.isActive ? chalk.yellow(' *') : '';
+      // Show ACTIVE marker (if single agent, it's always active)
+      const isActive = agent.isActive || agents.length === 1;
+      const activeMarker = isActive ? chalk.green(' [ACTIVE]') : '';
       const providerColor = agent.providerId === 'anthropic' ? chalk.magenta :
                            agent.providerId === 'openai' ? chalk.green :
                            agent.providerId === 'openrouter' ? chalk.yellow : chalk.cyan;
@@ -66,7 +68,10 @@ const aiAgentMenu = async () => {
   console.log(makeLine(chalk.green('[+] ADD NEW AGENT')));
   
   if (agentCount > 0) {
-    console.log(makeLine(chalk.cyan('[S] SET ACTIVE AGENT')));
+    // Only show SET ACTIVE if more than 1 agent
+    if (agentCount > 1) {
+      console.log(makeLine(chalk.cyan('[S] SET ACTIVE AGENT')));
+    }
     console.log(makeLine(chalk.yellow('[M] CHANGE MODEL')));
     console.log(makeLine(chalk.red('[R] REMOVE AGENT')));
     if (agentCount > 1) {
