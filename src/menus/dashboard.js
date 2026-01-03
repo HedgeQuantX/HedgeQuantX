@@ -24,6 +24,7 @@ const dashboardMenu = async (service) => {
   
   // Check AI connection status
   const aiConnected = aiService.isConnected();
+  const aiAgentCount = aiService.getAgentCount();
   
   const makeLine = (content, align = 'left') => {
     const plainLen = content.replace(/\x1b\[[0-9;]*m/g, '').length;
@@ -57,8 +58,10 @@ const balStr = statsInfo.balance !== null ? `$${statsInfo.balance.toLocaleString
     const balColor = statsInfo.balance !== null ? chalk.green : chalk.gray;
     
     // Build plain text for length calculation
-    // Format: "✔ CONNECTIONS: X    ✔ ACCOUNTS: X    ✔ BALANCE: $X    ✔ AI: CONNECTED"
-    const aiText = aiConnected ? 'CONNECTED' : 'NONE';
+    // Format: "✔ CONNECTIONS: X    ✔ ACCOUNTS: X    ✔ BALANCE: $X    ✔ AI: X AGENT(S)"
+    const aiText = aiAgentCount > 0 
+      ? `${aiAgentCount} AGENT${aiAgentCount > 1 ? 'S' : ''}` 
+      : 'NONE';
     const plainText = `* CONNECTIONS: ${statsInfo.connections}    * ACCOUNTS: ${statsInfo.accounts}    * BALANCE: ${balStr}    * AI: ${aiText}`;
     const statsLen = plainText.length;
     const statsLeftPad = Math.max(0, Math.floor((W - statsLen) / 2));
@@ -66,8 +69,10 @@ const balStr = statsInfo.balance !== null ? `$${statsInfo.balance.toLocaleString
     
     // Build with unicode icons and colors
     const checkIcon = chalk.yellow('✔ ');
-    const aiIcon = aiConnected ? chalk.magenta('✔ ') : chalk.gray('○ ');
-    const aiTextColored = aiConnected ? chalk.magenta('CONNECTED') : chalk.gray('NONE');
+    const aiIcon = aiAgentCount > 0 ? chalk.magenta('✔ ') : chalk.gray('○ ');
+    const aiTextColored = aiAgentCount > 0 
+      ? chalk.magenta(`${aiAgentCount} AGENT${aiAgentCount > 1 ? 'S' : ''}`) 
+      : chalk.gray('NONE');
     
     console.log(chalk.cyan('║') + ' '.repeat(statsLeftPad) +
       checkIcon + chalk.white(`CONNECTIONS: ${statsInfo.connections}`) + '    ' +
