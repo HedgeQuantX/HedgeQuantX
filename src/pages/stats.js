@@ -394,11 +394,7 @@ const showStats = async (service) => {
       drawBoxHeader('AI SUPERVISION', boxWidth);
       draw2ColHeader('AGENTS', 'PERFORMANCE', boxWidth);
       
-      // Agent info
-      const activeAgent = aiService.getActiveAgent();
-      const agentNames = aiAgents.map(a => a.name).join(', ');
-      const agentMode = aiAgents.length >= 2 ? 'CONSENSUS' : 'INDIVIDUAL';
-      const modeColor = aiAgents.length >= 2 ? chalk.magenta : chalk.cyan;
+      // Agent info (removed unused: activeAgent, agentNames, agentMode, modeColor)
       
       // Supervision metrics
       let totalDecisions = 0;
@@ -438,23 +434,19 @@ const showStats = async (service) => {
         { label: 'TRADES TODAY:', value: chalk.white(String(supervisionData.totalTrades)) }
       ];
       
-      // Agents column data (left side) - each agent on its own line
+      // Agents column data (left side) - each agent on its own line with ● indicator
       const agentsData = [
-        { label: 'CONNECTED AGENTS:', value: chalk.green(String(aiAgents.length)) },
-        { label: 'MODE:', value: modeColor(agentMode) },
-        { label: 'SESSION TIME:', value: sessionTimeStr === 'INACTIVE' ? chalk.yellow(sessionTimeStr) : chalk.white(sessionTimeStr) }
+        { label: 'CONNECTED:', value: chalk.green(String(aiAgents.length) + ' AGENT' + (aiAgents.length > 1 ? 'S' : '')) },
+        { label: 'SESSION:', value: sessionTimeStr === 'INACTIVE' ? chalk.yellow(sessionTimeStr) : chalk.white(sessionTimeStr) }
       ];
       
-      // Add each agent as a separate line
+      // Add each agent as a separate line with ● indicator
       aiAgents.forEach((agent, idx) => {
         const agentLabel = idx === 0 ? 'AGENTS:' : '';
-        const isActive = activeAgent && agent.id === activeAgent.id;
         const agentName = agent.name.length > maxAgentNameLen 
-          ? agent.name.substring(0, maxAgentNameLen - 2) + '..' 
+          ? agent.name.substring(0, maxAgentNameLen - 4) + '..' 
           : agent.name;
-        const agentDisplay = isActive 
-          ? chalk.green('● ') + chalk.green(agentName)
-          : chalk.white('○ ') + chalk.white(agentName);
+        const agentDisplay = chalk.green('● ') + chalk.white(agentName);
         agentsData.push({ label: agentLabel, value: agentDisplay });
       });
       
