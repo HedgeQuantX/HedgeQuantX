@@ -394,7 +394,13 @@ const showStats = async (service) => {
       drawBoxHeader('AI SUPERVISION', boxWidth);
       draw2ColHeader('AGENTS', 'PERFORMANCE', boxWidth);
       
-      // Agent info (removed unused: activeAgent, agentNames, agentMode, modeColor)
+      // Agent mode - INDIVIDUAL (1 agent) or CONSENSUS (2+ agents)
+      const isConsensusMode = aiAgents.length >= 2;
+      const agentMode = isConsensusMode ? 'CONSENSUS' : 'INDIVIDUAL';
+      const modeColor = isConsensusMode ? chalk.magenta : chalk.cyan;
+      
+      // Get consensus data if in consensus mode
+      const consensusData = isConsensusMode ? AISupervisor.getConsensus() : null;
       
       // Supervision metrics
       let totalDecisions = 0;
@@ -437,8 +443,18 @@ const showStats = async (service) => {
       // Agents column data (left side) - each agent on its own line with ● indicator
       const agentsData = [
         { label: 'CONNECTED:', value: chalk.green(String(aiAgents.length) + ' AGENT' + (aiAgents.length > 1 ? 'S' : '')) },
+        { label: 'MODE:', value: modeColor(agentMode) },
         { label: 'SESSION:', value: sessionTimeStr === 'INACTIVE' ? chalk.yellow(sessionTimeStr) : chalk.white(sessionTimeStr) }
       ];
+      
+      // Add consensus info if in consensus mode
+      if (isConsensusMode && consensusData) {
+        const agreement = consensusData.agreement !== null 
+          ? Math.round(consensusData.agreement * 100) + '%' 
+          : 'N/A';
+        const consensusAction = consensusData.action || 'PENDING';
+        agentsData.push({ label: 'CONSENSUS:', value: chalk.magenta(consensusAction + ' (' + agreement + ')') });
+      }
       
       // Add each agent as a separate line with ● indicator
       aiAgents.forEach((agent, idx) => {
