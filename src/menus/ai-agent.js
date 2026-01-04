@@ -219,11 +219,13 @@ const showAgentDetails = async (agent) => {
   
   const choice = await prompts.textInput(chalk.cyan('SELECT:'));
   
+  const agentDisplayName = agent.model ? `${agent.name} (${agent.model})` : agent.name;
+  
   switch ((choice || '').toLowerCase()) {
     case 'a':
       if (!agent.isActive) {
         aiService.setActiveAgent(agent.id);
-        console.log(chalk.green(`\n  ${agent.name} IS NOW ACTIVE`));
+        console.log(chalk.green(`\n  ${agentDisplayName} IS NOW ACTIVE`));
         await prompts.waitForEnter();
       }
       return await aiAgentMenu();
@@ -231,7 +233,7 @@ const showAgentDetails = async (agent) => {
       return await selectModel(agent);
     case 'r':
       aiService.removeAgent(agent.id);
-      console.log(chalk.yellow(`\n  ${agent.name} REMOVED`));
+      console.log(chalk.yellow(`\n  ${agentDisplayName} REMOVED`));
       await prompts.waitForEnter();
       return await aiAgentMenu();
     case '<':
@@ -267,8 +269,9 @@ const selectActiveAgent = async () => {
     const providerColor = agent.providerId === 'anthropic' ? chalk.magenta :
                          agent.providerId === 'openai' ? chalk.green : chalk.cyan;
     
+    const modelDisplay = agent.model ? chalk.gray(` (${agent.model})`) : '';
     console.log(makeLine(
-      chalk.white(`[${i + 1}] `) + providerColor(agent.name) + activeMarker
+      chalk.white(`[${i + 1}] `) + providerColor(agent.name) + modelDisplay + activeMarker
     ));
   }
   
@@ -289,7 +292,9 @@ const selectActiveAgent = async () => {
   }
   
   aiService.setActiveAgent(agents[index].id);
-  console.log(chalk.green(`\n  ${agents[index].name} IS NOW ACTIVE`));
+  const selectedAgent = agents[index];
+  const modelInfo = selectedAgent.model ? ` (${selectedAgent.model})` : '';
+  console.log(chalk.green(`\n  ${selectedAgent.name}${modelInfo} IS NOW ACTIVE`));
   await prompts.waitForEnter();
   return await aiAgentMenu();
 };
@@ -371,8 +376,9 @@ const selectAgentToRemove = async () => {
   
   for (let i = 0; i < agents.length; i++) {
     const agent = agents[i];
+    const modelDisplay = agent.model ? chalk.gray(` (${agent.model})`) : '';
     console.log(makeLine(
-      chalk.white(`[${i + 1}] `) + chalk.red(agent.name)
+      chalk.white(`[${i + 1}] `) + chalk.red(agent.name) + modelDisplay
     ));
   }
   
@@ -392,8 +398,10 @@ const selectAgentToRemove = async () => {
     return await aiAgentMenu();
   }
   
-  aiService.removeAgent(agents[index].id);
-  console.log(chalk.yellow(`\n  ${agents[index].name} REMOVED`));
+  const removedAgent = agents[index];
+  const modelInfo = removedAgent.model ? ` (${removedAgent.model})` : '';
+  aiService.removeAgent(removedAgent.id);
+  console.log(chalk.yellow(`\n  ${removedAgent.name}${modelInfo} REMOVED`));
   await prompts.waitForEnter();
   return await aiAgentMenu();
 };

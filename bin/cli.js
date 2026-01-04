@@ -51,6 +51,17 @@ program
     console.log(`HedgeQuantX CLI v${pkg.version}`);
   });
 
+program
+  .command('test-latency')
+  .description('Test order latency (requires active Rithmic connection)')
+  .option('-s, --symbol <symbol>', 'Symbol to test (e.g., NQ, ES, MNQ)', 'NQ')
+  .option('-c, --count <count>', 'Number of test iterations', '10')
+  .option('-p, --propfirm <propfirm>', 'Propfirm to use', 'apex')
+  .action(async (options) => {
+    const { runLatencyTest } = require('../src/commands/test-latency');
+    await runLatencyTest(options);
+  });
+
 // Handle -u flag before parsing commands
 if (process.argv.includes('-u') || process.argv.includes('--update')) {
   const { execSync } = require('child_process');

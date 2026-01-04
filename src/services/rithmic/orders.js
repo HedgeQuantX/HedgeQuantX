@@ -1,9 +1,198 @@
 /**
  * Rithmic Orders Module
  * Order placement, cancellation, and history
+ * 
+ * FAST SCALPING: fastEntry() and fastExit() for ultra-low latency execution
+ * Target: < 5ms local processing (network latency separate)
+ * 
+ * OPTIMIZATIONS:
+ * - Pre-allocated order template objects
+ * - Fast orderTag generation (no Date.now in hot path)
+ * - Direct proto encoding with cached types
+ * - Minimal object creation
  */
 
 const { REQ } = require('./constants');
+const { proto } = require('./protobuf');
+const { LatencyTracker } = require('./handlers');
+const { performance } = require('perf_hooks');
+
+// ==================== FAST ORDER TAG ====================
+// Pre-generate prefix once at module load (not per-order)
+const ORDER_TAG_PREFIX = `HQX${process.pid}-`;
+let orderIdCounter = 0;
+
+/**
+ * Ultra-fast order tag generation
+ * Avoids Date.now() and string interpolation in hot path
+ * @returns {string}
+ */
+const generateOrderTag = () => ORDER_TAG_PREFIX + (++orderIdCounter);
+
+// ==================== PRE-ALLOCATED ORDER TEMPLATES ====================
+// Reusable order object to minimize GC pressure
+
+/**
+ * Order object pool for zero-allocation hot path
+ */
+const OrderPool = {
+  // Pre-allocated order template
+  _template: {
+    templateId: REQ.NEW_ORDER,
+    userMsg: [''],
+    fcmId: '',
+    ibId: '',
+    accountId: '',
+    symbol: '',
+    exchange: 'CME',
+    quantity: 0,
+    transactionType: 1,
+    duration: 1,
+    orderType: 1,
+    manualOrAuto: 2,
+  },
+  
+  /**
+   * Get order object with values filled in
+   * Reuses same object to avoid allocation
+   */
+  fill(orderTag, loginInfo, orderData) {
+    const o = this._template;
+    o.userMsg[0] = orderTag;
+    o.fcmId = loginInfo.fcmId;
+    o.ibId = loginInfo.ibId;
+    o.accountId = orderData.accountId;
+    o.symbol = orderData.symbol;
+    o.exchange = orderData.exchange || 'CME';
+    o.quantity = orderData.size;
+    o.transactionType = orderData.side === 0 ? 1 : 2;
+    return o;
+  }
+};
+
+/**
+ * Ultra-fast market order entry - HOT PATH
+ * NO SL/TP, NO await confirmation, fire-and-forget
+ * Target latency: < 5ms local processing
+ * 
+ * OPTIMIZATIONS:
+ * - Reuses pre-allocated order object
+ * - Fast orderTag (no Date.now)
+ * - Uses fastEncode for cached protobuf type
+ * - Minimal branching
+ * 
+ * @param {RithmicService} service - The Rithmic service instance
+ * @param {Object} orderData - { accountId, symbol, exchange, size, side }
+ * @returns {{ success: boolean, orderTag: string, entryTime: number, latencyMs: number }}
+ */
+const fastEntry = (service, orderData) => {
+  const startTime = performance.now();
+  const orderTag = generateOrderTag();
+  const entryTime = Date.now();
+  
+  // Fast connection check
+  if (!service.orderConn?.isConnected || !service.loginInfo) {
+    return { 
+      success: false, 
+      error: 'Not connected',
+      orderTag,
+      entryTime,
+      latencyMs: performance.now() - startTime,
+    };
+  }
+
+  try {
+    // OPTIMIZED: Use pre-allocated order object
+    const order = OrderPool.fill(orderTag, service.loginInfo, orderData);
+    
+    // OPTIMIZED: Use fastEncode with cached type
+    const buffer = proto.fastEncode('RequestNewOrder', order);
+    
+    // ULTRA-OPTIMIZED: Try direct socket write first, fallback to fastSend
+    const sent = service.orderConn.ultraSend 
+      ? service.orderConn.ultraSend(buffer)
+      : (service.orderConn.fastSend(buffer), true);
+    
+    if (!sent) {
+      service.orderConn.fastSend(buffer);
+    }
+    
+    // Track for round-trip latency measurement
+    LatencyTracker.recordEntry(orderTag, entryTime);
+
+    return { 
+      success: true, 
+      orderTag,
+      entryTime,
+      latencyMs: performance.now() - startTime,
+    };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error.message,
+      orderTag,
+      entryTime,
+      latencyMs: performance.now() - startTime,
+    };
+  }
+};
+
+/**
+ * Ultra-fast market exit - for position closing
+ * Fire-and-forget like fastEntry
+ * Same optimizations as fastEntry
+ * 
+ * @param {RithmicService} service - The Rithmic service instance
+ * @param {Object} orderData - { accountId, symbol, exchange, size, side }
+ * @returns {{ success: boolean, orderTag: string, exitTime: number, latencyMs: number }}
+ */
+const fastExit = (service, orderData) => {
+  const startTime = performance.now();
+  const orderTag = generateOrderTag();
+  const exitTime = Date.now();
+  
+  if (!service.orderConn?.isConnected || !service.loginInfo) {
+    return { 
+      success: false, 
+      error: 'Not connected',
+      orderTag,
+      exitTime,
+      latencyMs: performance.now() - startTime,
+    };
+  }
+
+  try {
+    // OPTIMIZED: Use pre-allocated order object
+    const order = OrderPool.fill(orderTag, service.loginInfo, orderData);
+    
+    // OPTIMIZED: Use fastEncode with cached type
+    const buffer = proto.fastEncode('RequestNewOrder', order);
+    
+    // ULTRA-OPTIMIZED: Try direct socket write first, fallback to fastSend
+    const sent = service.orderConn.ultraSend 
+      ? service.orderConn.ultraSend(buffer)
+      : (service.orderConn.fastSend(buffer), true);
+    
+    if (!sent) {
+      service.orderConn.fastSend(buffer);
+    }
+    
+    return { 
+      success: true, 
+      orderTag,
+      exitTime,
+      latencyMs: performance.now() - startTime,
+    };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error.message,
+      orderTag,
+      exitTime,
+      latencyMs: performance.now() - startTime,
+    };
+  }
+};
 
 /**
  * Place order via ORDER_PLANT
@@ -188,5 +377,8 @@ module.exports = {
   cancelOrder,
   getOrders,
   getOrderHistory,
-  closePosition
+  closePosition,
+  // Fast scalping - ultra-low latency
+  fastEntry,
+  fastExit,
 };

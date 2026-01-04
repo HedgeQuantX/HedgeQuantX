@@ -136,6 +136,34 @@ const CACHE = {
   STATS_TTL: 60000, // 1 minute
 };
 
+// ==================== FAST SCALPING (Ultra-Low Latency) ====================
+const FAST_SCALPING = {
+  // Hold constraints (prop firm rules - NON-NEGOTIABLE)
+  MIN_HOLD_MS: 10000,           // 10 seconds minimum hold
+  MAX_HOLD_MS: 60000,           // 60 seconds failsafe (force exit if stuck)
+  
+  // Exit targets (in ticks) - defaults, override per symbol
+  TARGET_TICKS: 16,             // Take profit target
+  STOP_TICKS: 20,               // Stop loss
+  
+  // Trailing stop (activates after MIN_HOLD + profit threshold)
+  TRAILING_ACTIVATION_TICKS: 8, // Start trailing after +8 ticks profit
+  TRAILING_DISTANCE_TICKS: 4,   // Trail 4 ticks behind high/low
+  
+  // Position monitoring
+  MONITOR_INTERVAL_MS: 100,     // Check position every 100ms after hold
+  
+  // Momentum thresholds (cumulative delta over 5 seconds)
+  MOMENTUM_STRONG_THRESHOLD: 50,  // Delta > 50 = strong momentum, HOLD
+  MOMENTUM_WEAK_THRESHOLD: 20,    // Delta < 20 = weak momentum, consider EXIT
+  MOMENTUM_WINDOW_MS: 5000,       // 5 second window for momentum calc
+  
+  // Latency monitoring
+  LOG_LATENCY: true,
+  LATENCY_TARGET_MS: 50,        // Target entry latency
+  LATENCY_WARN_MS: 100,         // Warn if entry takes > 100ms
+};
+
 // ==================== DEBUG ====================
 const DEBUG = {
   get enabled() {
@@ -152,4 +180,5 @@ module.exports = {
   HQX_SERVER,
   CACHE,
   DEBUG,
+  FAST_SCALPING,
 };

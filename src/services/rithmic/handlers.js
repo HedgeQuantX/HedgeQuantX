@@ -1,14 +1,163 @@
 /**
  * Rithmic Message Handlers
  * Handles ORDER_PLANT and PNL_PLANT messages
+ * 
+ * FAST SCALPING: Handles order fill notifications (351) for position tracking
+ * 
+ * OPTIMIZED FOR LOW LATENCY:
+ * - Fast path for order notifications (351)
+ * - Minimal object creation in hot path
+ * - Template ID check before proto decode
+ * - Latency tracking for fills
  */
 
 const { proto, decodeAccountPnL, decodeInstrumentPnL } = require('./protobuf');
 const { RES, STREAM } = require('./constants');
+const { performance } = require('perf_hooks');
 
-// Debug mode
+// Debug mode - use no-op function when disabled for zero overhead
 const DEBUG = process.env.HQX_DEBUG === '1';
-const debug = (...args) => DEBUG && console.log('[Rithmic:Handler]', ...args);
+const debug = DEBUG ? (...args) => console.log('[Rithmic:Handler]', ...args) : () => {};
+
+// ==================== HIGH-RESOLUTION TIMING ====================
+// Use process.hrtime.bigint for sub-millisecond precision
+
+/**
+ * Get high-resolution timestamp in nanoseconds
+ * @returns {bigint}
+ */
+const hrNow = () => process.hrtime.bigint();
+
+/**
+ * Convert nanoseconds to milliseconds with precision
+ * @param {bigint} ns 
+ * @returns {number}
+ */
+const nsToMs = (ns) => Number(ns) / 1_000_000;
+
+// ==================== LATENCY TRACKING ====================
+// Track order-to-fill latency for performance monitoring
+// OPTIMIZED: Circular buffer (no array.shift), high-resolution timing
+
+const LatencyTracker = {
+  _pending: new Map(), // orderTag -> entryTime (bigint nanoseconds)
+  _samples: null,      // Pre-allocated Float64Array circular buffer
+  _maxSamples: 100,
+  _head: 0,            // Next write position
+  _count: 0,           // Number of valid samples
+  _initialized: false,
+  
+  /**
+   * Initialize circular buffer (lazy init)
+   * @private
+   */
+  _init() {
+    if (this._initialized) return;
+    this._samples = new Float64Array(this._maxSamples);
+    this._initialized = true;
+  },
+  
+  /**
+   * Record order sent time with high-resolution timestamp
+   * @param {string} orderTag 
+   * @param {number} entryTimeMs - Date.now() when order was sent (for compatibility)
+   */
+  recordEntry(orderTag, entryTimeMs) {
+    // Store high-resolution time for precise measurement
+    this._pending.set(orderTag, hrNow());
+  },
+  
+  /**
+   * Record fill received, calculate latency with sub-ms precision
+   * @param {string} orderTag 
+   * @returns {number|null} Round-trip latency in ms (with decimal precision), or null if not tracked
+   */
+  recordFill(orderTag) {
+    const entryTime = this._pending.get(orderTag);
+    if (!entryTime) return null;
+    
+    this._pending.delete(orderTag);
+    const latencyNs = hrNow() - entryTime;
+    const latencyMs = nsToMs(latencyNs);
+    
+    // Store in circular buffer (no shift, O(1))
+    this._init();
+    this._samples[this._head] = latencyMs;
+    this._head = (this._head + 1) % this._maxSamples;
+    if (this._count < this._maxSamples) this._count++;
+    
+    return latencyMs;
+  },
+  
+  /**
+   * Get average latency
+   * @returns {number|null}
+   */
+  getAverage() {
+    if (this._count === 0) return null;
+    let sum = 0;
+    for (let i = 0; i < this._count; i++) {
+      sum += this._samples[i];
+    }
+    return sum / this._count;
+  },
+  
+  /**
+   * Get min/max/avg stats with high precision
+   * @returns {Object}
+   */
+  getStats() {
+    if (this._count === 0) {
+      return { min: null, max: null, avg: null, p50: null, p99: null, samples: 0 };
+    }
+    
+    // Get valid samples
+    const valid = [];
+    for (let i = 0; i < this._count; i++) {
+      valid.push(this._samples[i]);
+    }
+    valid.sort((a, b) => a - b);
+    
+    const sum = valid.reduce((a, b) => a + b, 0);
+    
+    return {
+      min: valid[0],
+      max: valid[valid.length - 1],
+      avg: sum / valid.length,
+      p50: valid[Math.floor(valid.length * 0.5)],
+      p99: valid[Math.floor(valid.length * 0.99)] || valid[valid.length - 1],
+      samples: this._count,
+    };
+  },
+  
+  /**
+   * Get last N latency samples
+   * @param {number} n 
+   * @returns {number[]}
+   */
+  getRecent(n = 10) {
+    if (this._count === 0) return [];
+    const result = [];
+    const start = this._count < this._maxSamples ? 0 : this._head;
+    for (let i = 0; i < Math.min(n, this._count); i++) {
+      const idx = (start + this._count - 1 - i + this._maxSamples) % this._maxSamples;
+      result.push(this._samples[idx]);
+    }
+    return result;
+  },
+  
+  /**
+   * Clear all tracking data
+   */
+  clear() {
+    this._pending.clear();
+    this._head = 0;
+    this._count = 0;
+    if (this._samples) {
+      this._samples.fill(0);
+    }
+  }
+};
 
 /**
  * Create ORDER_PLANT message handler
@@ -35,11 +184,17 @@ const createOrderHandler = (service) => {
       case RES.SHOW_ORDERS:
         handleShowOrdersResponse(service, data);
         break;
+      case RES.NEW_ORDER:
+        debug('Handling NEW_ORDER response (313)');
+        handleNewOrderResponse(service, data);
+        break;
       case STREAM.EXCHANGE_NOTIFICATION:
-        service.emit('exchangeNotification', data);
+        debug('Handling EXCHANGE_NOTIFICATION (352)');
+        handleExchangeNotification(service, data);
         break;
       case STREAM.ORDER_NOTIFICATION:
-        service.emit('orderNotification', data);
+        debug('Handling ORDER_NOTIFICATION (351)');
+        handleOrderNotification(service, data);
         break;
     }
   };
@@ -211,7 +366,188 @@ const handleInstrumentPnLUpdate = (service, data) => {
   }
 };
 
+/**
+ * Handle new order response (313) - confirms order accepted
+ */
+const handleNewOrderResponse = (service, data) => {
+  try {
+    const res = proto.decode('ResponseNewOrder', data);
+    const orderTag = res.userMsg?.[0] || null;
+    const timestamp = performance.now();
+    
+    debug('New order response:', {
+      orderTag,
+      rpCode: res.rpCode,
+      basketId: res.basketId,
+      ssboe: res.ssboe,
+      usecs: res.usecs,
+    });
+
+    // Emit for position manager tracking
+    service.emit('orderAccepted', {
+      orderTag,
+      basketId: res.basketId,
+      rpCode: res.rpCode,
+      timestamp,
+    });
+  } catch (e) {
+    debug('Error decoding new order response:', e.message);
+  }
+};
+
+// ==================== PRE-ALLOCATED OBJECTS ====================
+// Reusable objects for hot path to avoid GC pressure
+
+const FillInfoPool = {
+  // Pre-allocated fill info template
+  _template: {
+    orderTag: null,
+    basketId: null,
+    orderId: null,
+    status: null,
+    symbol: null,
+    exchange: null,
+    accountId: null,
+    fillQuantity: 0,
+    totalFillQuantity: 0,
+    remainingQuantity: 0,
+    avgFillPrice: 0,
+    lastFillPrice: 0,
+    transactionType: 0,
+    orderType: 0,
+    quantity: 0,
+    ssboe: 0,
+    usecs: 0,
+    localTimestamp: 0,
+    roundTripLatencyMs: null,
+  },
+  
+  /**
+   * Fill template with notification data
+   * @param {Object} notif - Decoded notification
+   * @param {number} receiveTime - Local receive timestamp
+   * @param {number|null} latency - Round-trip latency
+   * @returns {Object}
+   */
+  fill(notif, receiveTime, latency) {
+    const o = this._template;
+    o.orderTag = notif.userMsg?.[0] || null;
+    o.basketId = notif.basketId;
+    o.orderId = notif.orderId;
+    o.status = notif.status;
+    o.symbol = notif.symbol;
+    o.exchange = notif.exchange;
+    o.accountId = notif.accountId;
+    o.fillQuantity = notif.fillQuantity || 0;
+    o.totalFillQuantity = notif.totalFillQuantity || 0;
+    o.remainingQuantity = notif.remainingQuantity || 0;
+    o.avgFillPrice = parseFloat(notif.avgFillPrice || 0);
+    o.lastFillPrice = parseFloat(notif.fillPrice || 0);
+    o.transactionType = notif.transactionType;
+    o.orderType = notif.orderType;
+    o.quantity = notif.quantity;
+    o.ssboe = notif.ssboe;
+    o.usecs = notif.usecs;
+    o.localTimestamp = receiveTime;
+    o.roundTripLatencyMs = latency;
+    return o;
+  },
+  
+  /**
+   * Create a copy for async operations that need to keep the data
+   * @param {Object} fillInfo 
+   * @returns {Object}
+   */
+  clone(fillInfo) {
+    return { ...fillInfo };
+  }
+};
+
+/**
+ * Handle order notification (351) - CRITICAL for fill tracking
+ * This is the primary notification for order status changes including FILLS
+ * 
+ * ULTRA-OPTIMIZED:
+ * - Pre-allocated fill info object (zero allocation in hot path)
+ * - Fast path for fill detection
+ * - High-resolution latency tracking
+ */
+const handleOrderNotification = (service, data) => {
+  const receiveTime = Date.now();
+  
+  try {
+    const notif = proto.decode('RithmicOrderNotification', data);
+    const orderTag = notif.userMsg?.[0] || null;
+    
+    // FAST PATH: Check for fill immediately
+    const fillQty = notif.fillQuantity || notif.totalFillQuantity || 0;
+    const isFill = fillQty > 0;
+    
+    // Calculate round-trip latency if this is a fill we're tracking
+    let roundTripLatency = null;
+    if (isFill && orderTag) {
+      roundTripLatency = LatencyTracker.recordFill(orderTag);
+    }
+    
+    debug('Order notification:', {
+      orderTag,
+      status: notif.status,
+      filledQty: fillQty,
+      avgFillPrice: notif.avgFillPrice,
+      roundTripLatency,
+    });
+
+    // OPTIMIZED: Use pre-allocated object
+    const fillInfo = FillInfoPool.fill(notif, receiveTime, roundTripLatency);
+
+    // Emit raw notification
+    service.emit('orderNotification', fillInfo);
+
+    // Emit fill event if this is a fill
+    if (isFill) {
+      debug('ORDER FILLED:', {
+        orderTag,
+        side: fillInfo.transactionType === 1 ? 'BUY' : 'SELL',
+        qty: fillQty,
+        avgPrice: fillInfo.avgFillPrice,
+        latencyMs: roundTripLatency,
+      });
+      
+      // Clone for fill event (async handlers may need to keep the data)
+      service.emit('orderFilled', FillInfoPool.clone(fillInfo));
+    }
+  } catch (e) {
+    debug('Error decoding order notification:', e.message);
+  }
+};
+
+/**
+ * Handle exchange notification (352) - exchange-level order updates
+ */
+const handleExchangeNotification = (service, data) => {
+  try {
+    const notif = proto.decode('ExchangeOrderNotification', data);
+    const timestamp = performance.now();
+    
+    debug('Exchange notification:', {
+      orderTag: notif.userMsg?.[0],
+      text: notif.text,
+      reportType: notif.reportType,
+    });
+
+    service.emit('exchangeNotification', {
+      orderTag: notif.userMsg?.[0] || null,
+      text: notif.text,
+      reportType: notif.reportType,
+      timestamp,
+    });
+  } catch (e) {
+    debug('Error decoding exchange notification:', e.message);
+  }
+};
+
 module.exports = {
   createOrderHandler,
-  createPnLHandler
+  createPnLHandler,
+  LatencyTracker,
 };

@@ -68,6 +68,7 @@ const generateAgentId = () => {
 
 /**
  * Get all connected agents
+ * IMPORTANT: Includes credentials for API calls in StrategySupervisor
  */
 const getAgents = () => {
   const aiSettings = getAISettings();
@@ -82,6 +83,7 @@ const getAgents = () => {
       providerId: agent.provider,
       option: agent.option,
       model: agent.model || provider?.defaultModel,
+      credentials: agent.credentials, // CRITICAL: Required for API calls
       createdAt: agent.createdAt,
       isActive: agent.id === aiSettings.activeAgentId
     };

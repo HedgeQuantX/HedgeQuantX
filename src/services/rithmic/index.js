@@ -8,7 +8,7 @@
 const EventEmitter = require('events');
 const { RithmicConnection } = require('./connection');
 const { RITHMIC_ENDPOINTS, RITHMIC_SYSTEMS } = require('./constants');
-const { createOrderHandler, createPnLHandler } = require('./handlers');
+const { createOrderHandler, createPnLHandler, LatencyTracker } = require('./handlers');
 const {
   fetchAccounts,
   getTradingAccounts,
@@ -17,7 +17,7 @@ const {
   getPositions,
   hashAccountId,
 } = require('./accounts');
-const { placeOrder, cancelOrder, getOrders, getOrderHistory, closePosition } = require('./orders');
+const { placeOrder, cancelOrder, getOrders, getOrderHistory, closePosition, fastEntry, fastExit } = require('./orders');
 const { decodeFrontMonthContract } = require('./protobuf');
 const { TIMEOUTS, CACHE } = require('../../config/settings');
 const { logger } = require('../../utils/logger');
@@ -254,6 +254,78 @@ class RithmicService extends EventEmitter {
   async placeOrder(orderData) { return placeOrder(this, orderData); }
   async cancelOrder(orderId) { return cancelOrder(this, orderId); }
   async closePosition(accountId, symbol) { return closePosition(this, accountId, symbol); }
+
+  // ==================== FAST SCALPING (Ultra-Low Latency) ====================
+
+  /**
+   * Ultra-fast market order entry - fire-and-forget
+   * Target latency: < 5ms local processing (network latency separate)
+   * @param {Object} orderData - { accountId, symbol, exchange, size, side }
+   * @returns {{ success: boolean, orderTag: string, entryTime: number, latencyMs: number }}
+   */
+  fastEntry(orderData) { return fastEntry(this, orderData); }
+
+  /**
+   * Ultra-fast market exit - fire-and-forget
+   * @param {Object} orderData - { accountId, symbol, exchange, size, side }
+   * @returns {{ success: boolean, orderTag: string, exitTime: number, latencyMs: number }}
+   */
+  fastExit(orderData) { return fastExit(this, orderData); }
+
+  /**
+   * Warmup connections for minimum latency
+   * Call after login but before trading starts
+   * @returns {Promise<boolean>}
+   */
+  async warmup() {
+    const results = [];
+    
+    if (this.orderConn) {
+      results.push(await this.orderConn.warmup());
+    }
+    if (this.pnlConn) {
+      results.push(await this.pnlConn.warmup());
+    }
+    
+    log.debug('Connection warmup complete', { 
+      success: results.filter(Boolean).length,
+      total: results.length,
+    });
+    
+    return results.every(Boolean);
+  }
+
+  /**
+   * Get latency statistics from order fills
+   * @returns {Object} Latency stats: min, max, avg, p50, p99, samples
+   */
+  getLatencyStats() {
+    return LatencyTracker.getStats();
+  }
+
+  /**
+   * Get recent latency samples
+   * @param {number} n - Number of samples to return
+   * @returns {number[]}
+   */
+  getRecentLatencies(n = 10) {
+    return LatencyTracker.getRecent(n);
+  }
+
+  /**
+   * Get connection diagnostics
+   * @returns {Object}
+   */
+  getDiagnostics() {
+    return {
+      orderConn: this.orderConn?.getDiagnostics() || null,
+      pnlConn: this.pnlConn?.getDiagnostics() || null,
+      tickerConn: this.tickerConn?.getDiagnostics() || null,
+      latency: this.getLatencyStats(),
+      accounts: this.accounts.length,
+      positions: this.positions.size,
+    };
+  }
 
   // ==================== STUBS ====================
 
@@ -552,4 +624,4 @@ class RithmicService extends EventEmitter {
   }
 }
 
-module.exports = { RithmicService, RITHMIC_SYSTEMS, RITHMIC_ENDPOINTS };
+module.exports = { RithmicService, RITHMIC_SYSTEMS, RITHMIC_ENDPOINTS, LatencyTracker };

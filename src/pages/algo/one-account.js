@@ -1,5 +1,8 @@
 /**
  * One Account Mode - HQX Ultra Scalping
+ * 
+ * FAST PATH: Rithmic direct execution (~10-50ms latency)
+ * SLOW PATH: ProjectX/Tradovate HTTP REST (~50-150ms latency)
  */
 
 const chalk = require('chalk');
@@ -10,6 +13,8 @@ const { connections } = require('../../services');
 const { AlgoUI, renderSessionSummary } = require('./ui');
 const { prompts } = require('../../utils');
 const { checkMarketHours } = require('../../services/projectx/market');
+const { FAST_SCALPING } = require('../../config/settings');
+const { PositionManager } = require('../../services/position-manager');
 
 // Strategy & Market Data (obfuscated)
 const { M1 } = require('../../../dist/lib/m/s1');
@@ -157,6 +162,32 @@ const configureAlgo = async (account, contract) => {
   const showName = await prompts.confirmPrompt('SHOW ACCOUNT NAME?', false);
   if (showName === null) return null;
   
+  // Check if AI agents are available
+  const aiAgents = aiService.getAgents();
+  let enableAI = false;
+  
+  if (aiAgents.length > 0) {
+    // Show available agents
+    console.log();
+    console.log(chalk.magenta(`  ${aiAgents.length} AI AGENT(S) AVAILABLE:`));
+    aiAgents.forEach((agent, i) => {
+      const modelInfo = agent.model ? chalk.gray(` (${agent.model})`) : '';
+      console.log(chalk.white(`    ${i + 1}. ${agent.name}${modelInfo}`));
+    });
+    console.log();
+    
+    enableAI = await prompts.confirmPrompt('CONNECT AI AGENTS TO ALGO?', true);
+    if (enableAI === null) return null;
+    
+    if (enableAI) {
+      const mode = aiAgents.length >= 2 ? 'CONSENSUS' : 'INDIVIDUAL';
+      console.log(chalk.green(`  AI MODE: ${mode} (${aiAgents.length} agent${aiAgents.length > 1 ? 's' : ''})`));
+    } else {
+      console.log(chalk.gray('  AI AGENTS DISABLED FOR THIS SESSION'));
+    }
+  }
+  
+  console.log();
   const confirm = await prompts.confirmPrompt('START ALGO TRADING?', true);
   if (!confirm) return null;
   
@@ -165,26 +196,45 @@ const configureAlgo = async (account, contract) => {
   await new Promise(r => setTimeout(r, 500));
   initSpinner.succeed('LAUNCHING ALGO...');
   
-  return { contracts, dailyTarget, maxRisk, showName };
+  return { contracts, dailyTarget, maxRisk, showName, enableAI };
+};
+
+/**
+ * Check if service supports fast path (Rithmic direct)
+ * @param {Object} service - Trading service
+ * @returns {boolean}
+ */
+const isRithmicFastPath = (service) => {
+  return typeof service.fastEntry === 'function' && 
+         typeof service.fastExit === 'function' &&
+         service.orderConn?.isConnected;
 };
 
 /**
  * Launch algo trading - HQX Ultra Scalping Strategy
  * Real-time market data + Strategy signals + Auto order execution
  * AI Supervision: All connected agents monitor and supervise trading
+ * 
+ * FAST PATH (Rithmic): Uses fastEntry() for ~10-50ms latency
+ * SLOW PATH (ProjectX): Uses placeOrder() for ~50-150ms latency
  */
 const launchAlgo = async (service, account, contract, config) => {
   const { contracts, dailyTarget, maxRisk, showName } = config;
   
-  // Use RAW API fields
+  // Use RAW API fields only - NO hardcoded fallbacks
   const accountName = showName 
     ? (account.accountName || account.rithmicAccountId || account.accountId) 
     : 'HQX *****';
   const symbolName = contract.name;
   const contractId = contract.id;
   const connectionType = account.platform || 'ProjectX';
-  const tickSize = contract.tickSize || 0.25;
-  const tickValue = contract.tickValue || 5.0;
+  
+  // Tick size/value from API - null if not available (RULES.md compliant)
+  const tickSize = contract.tickSize ?? null;
+  const tickValue = contract.tickValue ?? null;
+  
+  // Determine execution path
+  const useFastPath = isRithmicFastPath(service);
   
   const ui = new AlgoUI({ subtitle: 'HQX ULTRA SCALPING', mode: 'one-account' });
   
@@ -204,7 +254,12 @@ const launchAlgo = async (service, account, contract, config) => {
     connected: false,
     startTime: Date.now(),
     aiSupervision: false,
-    aiMode: null
+    aiMode: null,
+    // Fast path stats
+    fastPath: useFastPath,
+    avgEntryLatency: 0,
+    avgFillLatency: 0,
+    entryLatencies: [],
   };
   
   let running = true;
@@ -216,16 +271,86 @@ const launchAlgo = async (service, account, contract, config) => {
   let lastTradeCount = 0; // Track number of trades from API
   let lastPositionQty = 0; // Track position changes
   
-  // Initialize Strategy (M1 is singleton instance)
+  // Initialize Strategy FIRST (M1 is singleton instance)
+  // Strategy needs to be initialized before PositionManager so it can access math models
   const strategy = M1;
-  strategy.initialize(contractId, tickSize, tickValue);
+  
+  // Only initialize strategy if we have tick data from API
+  if (tickSize !== null && tickValue !== null) {
+    strategy.initialize(contractId, tickSize, tickValue);
+  } else {
+    algoLogger.warn(ui, 'WARNING', 'Tick size/value not available from API');
+  }
+  
+  // Initialize Position Manager for fast path
+  let positionManager = null;
+  if (useFastPath) {
+    // Pass strategy reference so PositionManager can access math models
+    positionManager = new PositionManager(service, strategy);
+    
+    // Set contract info from API (NOT hardcoded)
+    if (tickSize !== null && tickValue !== null) {
+      positionManager.setContractInfo(symbolName, {
+        tickSize,
+        tickValue,
+        contractId,
+      });
+    }
+    
+    positionManager.start();
+    
+    // Listen for position manager events
+    positionManager.on('entryFilled', ({ orderTag, position, fillLatencyMs }) => {
+      stats.entryLatencies.push(fillLatencyMs);
+      stats.avgFillLatency = stats.entryLatencies.reduce((a, b) => a + b, 0) / stats.entryLatencies.length;
+      algoLogger.info(ui, 'FAST FILL', `${fillLatencyMs}ms | avg=${stats.avgFillLatency.toFixed(1)}ms`);
+    });
+    
+    positionManager.on('exitFilled', ({ orderTag, exitPrice, pnlTicks, holdDurationMs }) => {
+      // Calculate PnL in dollars only if tickValue is available from API
+      if (pnlTicks !== null && tickValue !== null) {
+        const pnlDollars = pnlTicks * tickValue;
+        if (pnlDollars >= 0) {
+          stats.wins++;
+          algoLogger.targetHit(ui, symbolName, exitPrice, pnlDollars);
+        } else {
+          stats.losses++;
+          algoLogger.stopHit(ui, symbolName, exitPrice, Math.abs(pnlDollars));
+        }
+      } else {
+        // Log with ticks only if tickValue unavailable
+        if (pnlTicks !== null && pnlTicks >= 0) {
+          stats.wins++;
+          algoLogger.info(ui, 'TARGET', `+${pnlTicks} ticks`);
+        } else if (pnlTicks !== null) {
+          stats.losses++;
+          algoLogger.info(ui, 'STOP', `${pnlTicks} ticks`);
+        }
+      }
+      stats.trades++;
+      currentPosition = 0;
+      pendingOrder = false;
+      algoLogger.info(ui, 'HOLD TIME', `${(holdDurationMs / 1000).toFixed(1)}s`);
+    });
+    
+    positionManager.on('holdComplete', ({ orderTag, position }) => {
+      algoLogger.info(ui, 'HOLD COMPLETE', `${FAST_SCALPING.MIN_HOLD_MS / 1000}s minimum reached`);
+    });
+    
+    positionManager.on('exitOrderFired', ({ orderTag, exitReason, latencyMs }) => {
+      algoLogger.info(ui, 'EXIT FIRED', `${exitReason.reason} | ${latencyMs.toFixed(1)}ms`);
+    });
+  }
   
   // Initialize AI Strategy Supervisor - agents observe, learn & optimize
-  const aiAgents = aiService.getAgents();
-  if (aiAgents.length > 0) {
-    const supervisorResult = StrategySupervisor.initialize(strategy, aiAgents, service, account.accountId);
-    stats.aiSupervision = supervisorResult.success;
-    stats.aiMode = supervisorResult.mode;
+  // Only if user enabled AI in config
+  if (config.enableAI) {
+    const aiAgents = aiService.getAgents();
+    if (aiAgents.length > 0) {
+      const supervisorResult = StrategySupervisor.initialize(strategy, aiAgents, service, account.accountId);
+      stats.aiSupervision = supervisorResult.success;
+      stats.aiMode = supervisorResult.mode;
+    }
   }
   
   // Initialize Market Data Feed
@@ -245,9 +370,22 @@ const launchAlgo = async (service, account, contract, config) => {
     algoLogger.info(ui, 'AI SUPERVISION', `${aiAgents.length} agent(s) - ${stats.aiMode} mode - LEARNING ACTIVE`);
   }
   
+  // Log execution path
+  if (useFastPath) {
+    algoLogger.info(ui, 'FAST PATH', `Rithmic direct | Target <${FAST_SCALPING.LATENCY_TARGET_MS}ms | Hold ${FAST_SCALPING.MIN_HOLD_MS / 1000}s`);
+  } else {
+    algoLogger.info(ui, 'SLOW PATH', `HTTP REST | Bracket orders enabled`);
+  }
+  
   // Handle strategy signals
   strategy.on('signal', async (signal) => {
     if (!running || pendingOrder || currentPosition !== 0) return;
+    
+    // Fast path: check if position manager allows new entry
+    if (useFastPath && positionManager && !positionManager.canEnter(symbolName)) {
+      algoLogger.info(ui, 'BLOCKED', 'Existing position in symbol');
+      return;
+    }
     
     const { side, direction, entry, stopLoss, takeProfit, confidence } = signal;
     
@@ -282,58 +420,116 @@ const launchAlgo = async (service, account, contract, config) => {
     
     // Place order via API
     pendingOrder = true;
+    const orderSide = direction === 'long' ? 0 : 1; // 0=Buy, 1=Sell
+    
     try {
-      const orderSide = direction === 'long' ? 0 : 1; // 0=Buy, 1=Sell
-      const orderResult = await service.placeOrder({
-        accountId: account.accountId,
-        contractId: contractId,
-        type: 2, // Market order
-        side: orderSide,
-        size: contracts
-      });
-      
-      if (orderResult.success) {
-        currentPosition = direction === 'long' ? contracts : -contracts;
-        stats.trades++;
-        const sideStr = direction === 'long' ? 'BUY' : 'SELL';
-        const positionSide = direction === 'long' ? 'LONG' : 'SHORT';
+      // ═══════════════════════════════════════════════════════════════
+      // FAST PATH: Rithmic direct execution (~10-50ms)
+      // ═══════════════════════════════════════════════════════════════
+      if (useFastPath && positionManager) {
+        const orderData = {
+          accountId: account.accountId,
+          symbol: symbolName,
+          exchange: contract.exchange || 'CME',
+          size: contracts,
+          side: orderSide,
+        };
         
-        algoLogger.orderSubmitted(ui, symbolName, sideStr, contracts, entry);
-        algoLogger.orderFilled(ui, symbolName, sideStr, contracts, entry);
-        algoLogger.positionOpened(ui, symbolName, positionSide, contracts, entry);
-        algoLogger.entryConfirmed(ui, sideStr, contracts, symbolName, entry);
+        // Fire-and-forget entry (no await on fill)
+        const entryResult = service.fastEntry(orderData);
         
-        // Place bracket orders (SL/TP)
-        if (stopLoss && takeProfit) {
-          // Stop Loss
-          await service.placeOrder({
-            accountId: account.accountId,
-            contractId: contractId,
-            type: 4, // Stop order
-            side: direction === 'long' ? 1 : 0, // Opposite side
-            size: contracts,
-            stopPrice: stopLoss
-          });
+        if (entryResult.success) {
+          // Register with position manager for lifecycle tracking
+          // Pass contract info from API (NOT hardcoded)
+          const contractInfo = {
+            tickSize,
+            tickValue,
+            contractId,
+          };
+          positionManager.registerEntry(entryResult, orderData, contractInfo);
           
-          // Take Profit
-          await service.placeOrder({
-            accountId: account.accountId,
-            contractId: contractId,
-            type: 1, // Limit order
-            side: direction === 'long' ? 1 : 0,
-            size: contracts,
-            limitPrice: takeProfit
-          });
+          currentPosition = direction === 'long' ? contracts : -contracts;
+          const sideStr = direction === 'long' ? 'BUY' : 'SELL';
           
-          algoLogger.stopsSet(ui, stopLoss, takeProfit);
+          // Log with latency
+          const latencyColor = entryResult.latencyMs < FAST_SCALPING.LATENCY_TARGET_MS 
+            ? chalk.green 
+            : entryResult.latencyMs < FAST_SCALPING.LATENCY_WARN_MS 
+              ? chalk.yellow 
+              : chalk.red;
+          
+          stats.avgEntryLatency = stats.entryLatencies.length > 0 
+            ? (stats.avgEntryLatency * stats.entryLatencies.length + entryResult.latencyMs) / (stats.entryLatencies.length + 1)
+            : entryResult.latencyMs;
+          
+          algoLogger.info(ui, 'FAST ENTRY', `${sideStr} ${contracts}x ${symbolName} | ${latencyColor(entryResult.latencyMs.toFixed(2) + 'ms')}`);
+          algoLogger.info(ui, 'HOLD START', `Min ${FAST_SCALPING.MIN_HOLD_MS / 1000}s before exit`);
+          
+          // Note: NO bracket orders in fast path
+          // PositionManager handles exit logic after 10s hold
+          
+        } else {
+          algoLogger.orderRejected(ui, symbolName, entryResult.error || 'Fast entry failed');
+          pendingOrder = false;
         }
+        
+      // ═══════════════════════════════════════════════════════════════
+      // SLOW PATH: ProjectX/Tradovate HTTP REST (~50-150ms)
+      // ═══════════════════════════════════════════════════════════════
       } else {
-        algoLogger.orderRejected(ui, symbolName, orderResult.error || 'Unknown error');
+        const orderResult = await service.placeOrder({
+          accountId: account.accountId,
+          contractId: contractId,
+          type: 2, // Market order
+          side: orderSide,
+          size: contracts
+        });
+        
+        if (orderResult.success) {
+          currentPosition = direction === 'long' ? contracts : -contracts;
+          stats.trades++;
+          const sideStr = direction === 'long' ? 'BUY' : 'SELL';
+          const positionSide = direction === 'long' ? 'LONG' : 'SHORT';
+          
+          algoLogger.orderSubmitted(ui, symbolName, sideStr, contracts, entry);
+          algoLogger.orderFilled(ui, symbolName, sideStr, contracts, entry);
+          algoLogger.positionOpened(ui, symbolName, positionSide, contracts, entry);
+          algoLogger.entryConfirmed(ui, sideStr, contracts, symbolName, entry);
+          
+          // Place bracket orders (SL/TP) - SLOW PATH ONLY
+          if (stopLoss && takeProfit) {
+            // Stop Loss
+            await service.placeOrder({
+              accountId: account.accountId,
+              contractId: contractId,
+              type: 4, // Stop order
+              side: direction === 'long' ? 1 : 0, // Opposite side
+              size: contracts,
+              stopPrice: stopLoss
+            });
+            
+            // Take Profit
+            await service.placeOrder({
+              accountId: account.accountId,
+              contractId: contractId,
+              type: 1, // Limit order
+              side: direction === 'long' ? 1 : 0,
+              size: contracts,
+              limitPrice: takeProfit
+            });
+            
+            algoLogger.stopsSet(ui, stopLoss, takeProfit);
+          }
+          pendingOrder = false;
+        } else {
+          algoLogger.orderRejected(ui, symbolName, orderResult.error || 'Unknown error');
+          pendingOrder = false;
+        }
       }
     } catch (e) {
       algoLogger.error(ui, 'ORDER ERROR', e.message);
+      pendingOrder = false;
     }
-    pendingOrder = false;
   });
   
   // Handle market data ticks
@@ -367,6 +563,27 @@ const launchAlgo = async (service, account, contract, config) => {
     }
     
     strategy.processTick(tickData);
+    
+    // Feed price to position manager for exit monitoring (fast path)
+    if (useFastPath && positionManager) {
+      // Update latest price for position monitoring
+      service.emit('priceUpdate', {
+        symbol: symbolName,
+        price: tickData.price,
+        timestamp: tickData.timestamp,
+      });
+      
+      // Get momentum data from strategy if available
+      const modelValues = strategy.getModelValues?.(contractId);
+      if (modelValues) {
+        positionManager.updateMomentum(symbolName, {
+          ofi: modelValues.ofi || 0,
+          zscore: modelValues.zscore || 0,
+          delta: modelValues.delta || 0,
+          timestamp: tickData.timestamp,
+        });
+      }
+    }
     
     stats.latency = Date.now() - latencyStart;
     
@@ -575,6 +792,12 @@ const launchAlgo = async (service, account, contract, config) => {
   // Cleanup with timeout protection
   clearInterval(refreshInterval);
   clearInterval(pnlInterval);
+  
+  // Stop Position Manager (fast path)
+  if (positionManager) {
+    positionManager.stop();
+    positionManager = null;
+  }
   
   // Stop AI Supervisor and get learning summary
   if (stats.aiSupervision) {

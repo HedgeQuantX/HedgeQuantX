@@ -141,9 +141,15 @@ const connections = {
 
   /**
    * Saves all sessions to encrypted storage
+   * IMPORTANT: Preserves AI agent sessions when saving trading connections
    */
   saveToStorage() {
-    const sessions = this.services.map(conn => {
+    // Load existing sessions to preserve AI settings
+    const existingSessions = storage.load();
+    const aiSession = existingSessions.find(s => s.type === 'ai');
+    
+    // Build trading sessions
+    const tradingSessions = this.services.map(conn => {
       const session = {
         type: conn.type,
         propfirm: conn.propfirm,
@@ -163,7 +169,12 @@ const connections = {
       return session;
     });
     
-    storage.save(sessions);
+    // Combine: trading sessions + preserved AI session
+    const allSessions = aiSession 
+      ? [...tradingSessions, aiSession]
+      : tradingSessions;
+    
+    storage.save(allSessions);
   },
 
   /**
@@ -360,9 +371,13 @@ const connections = {
   },
 
   /**
-   * Disconnects all connections and clears sessions
+   * Disconnects all trading connections (preserves AI agents)
    */
   disconnectAll() {
+    // Preserve AI session before clearing
+    const existingSessions = storage.load();
+    const aiSession = existingSessions.find(s => s.type === 'ai');
+    
     for (const conn of this.services) {
       try {
         if (conn.service?.logout) {
@@ -381,8 +396,15 @@ const connections = {
     }
     
     this.services = [];
-    storage.clear();
-    log.info('All connections disconnected');
+    
+    // Save with preserved AI session (don't use storage.clear())
+    if (aiSession) {
+      storage.save([aiSession]);
+      log.info('Trading connections disconnected (AI agents preserved)');
+    } else {
+      storage.clear();
+      log.info('All connections disconnected');
+    }
   },
 
   /**

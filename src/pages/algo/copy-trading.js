@@ -652,6 +652,30 @@ const copyTradingMenu = async () => {
   ]);
   if (showNames === null) return;
 
+  // Step 7: AI Agents option
+  const aiAgents = aiService.getAgents();
+  let enableAI = false;
+  
+  if (aiAgents.length > 0) {
+    console.log();
+    console.log(chalk.magenta(`  ${aiAgents.length} AI AGENT(S) AVAILABLE:`));
+    aiAgents.forEach((agent, i) => {
+      const modelInfo = agent.model ? chalk.gray(` (${agent.model})`) : '';
+      console.log(chalk.white(`    ${i + 1}. ${agent.name}${modelInfo}`));
+    });
+    console.log();
+    
+    enableAI = await prompts.confirmPrompt('CONNECT AI AGENTS TO ALGO?', true);
+    if (enableAI === null) return;
+    
+    if (enableAI) {
+      const mode = aiAgents.length >= 2 ? 'CONSENSUS' : 'INDIVIDUAL';
+      console.log(chalk.green(`  AI MODE: ${mode} (${aiAgents.length} agent${aiAgents.length > 1 ? 's' : ''})`));
+    } else {
+      console.log(chalk.gray('  AI AGENTS DISABLED FOR THIS SESSION'));
+    }
+  }
+
   // Summary
   console.log();
   console.log(chalk.white.bold('  ═══════════════════════════════════════'));
@@ -677,6 +701,7 @@ const copyTradingMenu = async () => {
     dailyTarget,
     maxRisk,
     showNames,
+    enableAI,
   });
 };
 
@@ -810,7 +835,7 @@ const getContractsFromAPI = async () => {
  * Launch Copy Trading session
  */
 const launchCopyTrading = async (config) => {
-  const { lead, followers, dailyTarget, maxRisk, showNames } = config;
+  const { lead, followers, dailyTarget, maxRisk, showNames, enableAI } = config;
 
   const leadName = showNames 
     ? (lead.account.accountName || lead.account.accountId)
@@ -837,12 +862,14 @@ const launchCopyTrading = async (config) => {
     aiMode: null
   };
 
-  // Initialize AI Supervisor
-  const aiAgents = aiService.getAgents();
-  if (aiAgents.length > 0) {
-    const supervisorResult = StrategySupervisor.initialize(null, aiAgents, lead.service, lead.account.accountId);
-    stats.aiSupervision = supervisorResult.success;
-    stats.aiMode = supervisorResult.mode;
+  // Initialize AI Supervisor - only if user enabled it
+  if (enableAI) {
+    const aiAgents = aiService.getAgents();
+    if (aiAgents.length > 0) {
+      const supervisorResult = StrategySupervisor.initialize(null, aiAgents, lead.service, lead.account.accountId);
+      stats.aiSupervision = supervisorResult.success;
+      stats.aiMode = supervisorResult.mode;
+    }
   }
 
   // Startup logs

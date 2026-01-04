@@ -256,6 +256,17 @@ const run = async () => {
     log.info('Starting HQX CLI');
     await bannerClosed();
 
+    // PRE-LOAD: Initialize Rithmic protobuf definitions at startup
+    // This removes ~100ms latency from first order
+    const { proto } = require('./services/rithmic/protobuf');
+    const protoSpinner = ora({ text: 'INITIALIZING TRADING ENGINE...', color: 'cyan' }).start();
+    try {
+      await proto.load();
+      protoSpinner.succeed('TRADING ENGINE READY');
+    } catch (e) {
+      protoSpinner.warn('Trading engine partial init');
+    }
+
     // Restore session
     const spinner = ora({ text: 'RESTORING SESSION...', color: 'yellow' }).start();
     const restored = await connections.restoreFromStorage();
