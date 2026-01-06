@@ -149,6 +149,8 @@ const PROTO_FILES = [
   'response_show_order_history.proto',
   'request_show_order_history_dates.proto',
   'response_show_order_history_dates.proto',
+  'request_show_order_history_summary.proto',
+  'response_show_order_history_summary.proto',
   'request_market_data_update.proto',
   'response_market_data_update.proto',
   'last_trade.proto',

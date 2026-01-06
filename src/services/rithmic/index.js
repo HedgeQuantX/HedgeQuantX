@@ -17,6 +17,7 @@ const {
   getPositions,
 } = require('./accounts');
 const { placeOrder, cancelOrder, getOrders, getOrderHistory, getOrderHistoryDates, getTradeHistoryFull, closePosition } = require('./orders');
+const { fillsToRoundTrips, calculateTradeStats } = require('./trades');
 const { getContracts, searchContracts } = require('./contracts');
 const { TIMEOUTS } = require('../../config/settings');
 const { logger } = require('../../utils/logger');
@@ -242,53 +243,50 @@ class RithmicService extends EventEmitter {
   async getUser() { return this.user; }
   
   /**
-   * Get trade history from Rithmic API
+   * Get trade history from Rithmic API as round-trips
    * @param {string} accountId - Optional account filter
    * @param {number} days - Number of days to look back (default 30)
    */
   async getTradeHistory(accountId, days = 30) {
-    // Fetch from API
+    // Fetch fills from API
     const result = await getTradeHistoryFull(this, days);
     
     if (!result.success) {
       return { success: false, trades: [] };
     }
     
-    let trades = result.trades || [];
+    let fills = result.trades || [];
     
     // Filter by account if specified
     if (accountId) {
-      trades = trades.filter(t => t.accountId === accountId);
+      fills = fills.filter(t => t.accountId === accountId);
     }
     
-    // Add timestamp from fillDate/fillTime if not present
-    trades = trades.map(t => ({
-      ...t,
-      timestamp: t.timestamp || this._parseDateTime(t.fillDate, t.fillTime),
-    }));
+    // Convert fills to round-trips with P&L
+    const roundTrips = fillsToRoundTrips(fills);
     
-    // Sort by timestamp descending (newest first)
-    trades.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-    
-    return { success: true, trades };
+    return { success: true, trades: roundTrips };
   }
   
   /**
-   * Parse Rithmic date/time to timestamp
-   * @private
+   * Get raw fills (not matched to round-trips)
+   * @param {string} accountId - Optional account filter
+   * @param {number} days - Number of days to look back (default 30)
    */
-  _parseDateTime(dateStr, timeStr) {
-    if (!dateStr) return Date.now();
-    try {
-      // dateStr format: YYYYMMDD, timeStr format: HH:MM:SS
-      const year = dateStr.slice(0, 4);
-      const month = dateStr.slice(4, 6);
-      const day = dateStr.slice(6, 8);
-      const time = timeStr || '00:00:00';
-      return new Date(`${year}-${month}-${day}T${time}Z`).getTime();
-    } catch (e) {
-      return Date.now();
+  async getRawFills(accountId, days = 30) {
+    const result = await getTradeHistoryFull(this, days);
+    
+    if (!result.success) {
+      return { success: false, fills: [] };
     }
+    
+    let fills = result.trades || [];
+    
+    if (accountId) {
+      fills = fills.filter(t => t.accountId === accountId);
+    }
+    
+    return { success: true, fills };
   }
   
   /**
@@ -297,54 +295,12 @@ class RithmicService extends EventEmitter {
   async getLifetimeStats(accountId) {
     const { trades } = await this.getTradeHistory(accountId, 365);
     
-    if (trades.length === 0) {
+    if (!trades || trades.length === 0) {
       return { success: true, stats: null };
     }
     
-    // Calculate stats from trades
-    let totalTrades = trades.length;
-    let winningTrades = 0;
-    let losingTrades = 0;
-    let totalProfit = 0;
-    let totalLoss = 0;
-    let longTrades = 0;
-    let shortTrades = 0;
-    let totalVolume = 0;
-    
-    // Group fills by basketId to calculate P&L per trade
-    const tradeGroups = new Map();
-    for (const trade of trades) {
-      const key = trade.basketId || trade.id;
-      if (!tradeGroups.has(key)) {
-        tradeGroups.set(key, []);
-      }
-      tradeGroups.get(key).push(trade);
-    }
-    
-    for (const [, fills] of tradeGroups) {
-      const firstFill = fills[0];
-      totalVolume += fills.reduce((sum, f) => sum + f.size, 0);
-      
-      if (firstFill.side === 1) longTrades++;
-      else if (firstFill.side === 2) shortTrades++;
-      
-      // P&L calculation requires entry/exit matching which needs position tracking
-      // For now, count trades
-      totalTrades = tradeGroups.size;
-    }
-    
-    const stats = {
-      totalTrades,
-      winningTrades,
-      losingTrades,
-      winRate: totalTrades > 0 ? ((winningTrades / totalTrades) * 100).toFixed(2) : 0,
-      totalProfit,
-      totalLoss,
-      netPnL: totalProfit - totalLoss,
-      longTrades,
-      shortTrades,
-      totalVolume,
-    };
+    // Calculate stats from round-trips
+    const stats = calculateTradeStats(trades);
     
     return { success: true, stats };
   }

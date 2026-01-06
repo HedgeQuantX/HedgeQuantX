@@ -70,8 +70,8 @@ const rithmicMenu = async () => {
     console.log(chalk.cyan('║') + line + ' '.repeat(Math.max(0, innerWidth - lineLen)) + chalk.cyan('║'));
   }
   
-  console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
-  console.log(chalk.cyan('║') + '  ' + chalk.red('[X] Back') + ' '.repeat(innerWidth - 10) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '─'.repeat(innerWidth) + '╣'));
+  console.log(chalk.cyan('║') + chalk.red(centerText('[X] Exit', innerWidth)) + chalk.cyan('║'));
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
 
   const input = await prompts.textInput(chalk.cyan('Select number (or X):'));

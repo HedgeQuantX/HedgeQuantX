@@ -10,7 +10,7 @@ const PROPFIRMS = {
   apex_rithmic: {
     id: 'rithmic-apex',
     name: 'Apex',
-    displayName: 'Apex (Rithmic)',
+    displayName: 'Apex',
     platform: 'Rithmic',
     rithmicSystem: 'Apex',
     wsEndpoint: 'wss://ritpa11120.11.rithmic.com:443',
@@ -34,7 +34,7 @@ const PROPFIRMS = {
   bulenox_rithmic: {
     id: 'rithmic-bulenox',
     name: 'Bulenox',
-    displayName: 'Bulenox (Rithmic)',
+    displayName: 'Bulenox',
     platform: 'Rithmic',
     rithmicSystem: 'Bulenox',
     wsEndpoint: 'wss://ritpa11120.11.rithmic.com:443'
@@ -138,11 +138,23 @@ const PROPFIRMS = {
 };
 
 /**
- * PropFirm choices for menus
+ * PropFirm choices for menus (Apex first, 4PropTrader/10XFutures last, then alphabetical)
  */
 const PROPFIRM_CHOICES = Object.entries(PROPFIRMS)
   .map(([key, val]) => ({ name: val.displayName, value: key }))
-  .sort((a, b) => a.name.localeCompare(b.name));
+  .sort((a, b) => {
+    // Apex always first
+    if (a.name === 'Apex') return -1;
+    if (b.name === 'Apex') return 1;
+    // 4PropTrader and 10XFutures always last
+    const lastItems = ['4PropTrader', '10XFutures'];
+    const aIsLast = lastItems.includes(a.name);
+    const bIsLast = lastItems.includes(b.name);
+    if (aIsLast && !bIsLast) return 1;
+    if (!aIsLast && bIsLast) return -1;
+    // Then alphabetical
+    return a.name.localeCompare(b.name);
+  });
 
 /**
  * Gets a PropFirm by key

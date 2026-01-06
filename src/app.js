@@ -20,6 +20,7 @@ const { algoTradingMenu } = require('./pages/algo');
 
 // Menus
 const { rithmicMenu, dashboardMenu, handleUpdate } = require('./menus');
+const { PROPFIRM_CHOICES } = require('./config');
 
 /** @type {Object|null} */
 let currentService = null;
@@ -177,29 +178,94 @@ const run = async () => {
         await banner();
 
         if (!connections.isConnected()) {
-          // Not connected - show Rithmic menu directly
+          // Not connected - show propfirm selection directly
           const boxWidth = getLogoWidth();
           const innerWidth = boxWidth - 2;
+          const numCols = 3;
+          
+          const propfirms = PROPFIRM_CHOICES;
+          const numbered = propfirms.map((pf, i) => ({ num: i + 1, key: pf.value, name: pf.name }));
+          
+          // Find max name length for alignment
+          const maxNameLen = Math.max(...numbered.map(n => n.name.length));
+          const colWidth = 4 + 1 + maxNameLen + 2; // [##] + space + name + gap
+          const totalContentWidth = numCols * colWidth;
+          const leftMargin = Math.max(2, Math.floor((innerWidth - totalContentWidth) / 2));
           
           console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
-          console.log(chalk.cyan('║') + chalk.white.bold(centerText('CONNECT TO PROPFIRM', innerWidth)) + chalk.cyan('║'));
-          console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
-          console.log(chalk.cyan('║') + '  ' + chalk.cyan('[1] Connect') + ' '.repeat(innerWidth - 14) + chalk.cyan('║'));
-          console.log(chalk.cyan('║') + '  ' + chalk.red('[X] Exit') + ' '.repeat(innerWidth - 11) + chalk.cyan('║'));
+          console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PROPFIRM', innerWidth)) + chalk.cyan('║'));
+          console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
+          
+          const rows = Math.ceil(numbered.length / numCols);
+          for (let row = 0; row < rows; row++) {
+            let lineParts = [];
+            for (let col = 0; col < numCols; col++) {
+              const idx = row + col * rows;
+              if (idx < numbered.length) {
+                const item = numbered[idx];
+                const numStr = item.num.toString().padStart(2, ' ');
+                const namePadded = item.name.padEnd(maxNameLen);
+                lineParts.push({ num: `[${numStr}]`, name: namePadded });
+              } else {
+                lineParts.push(null);
+              }
+            }
+            
+            let line = ' '.repeat(leftMargin);
+            for (let i = 0; i < lineParts.length; i++) {
+              if (lineParts[i]) {
+                line += chalk.cyan(lineParts[i].num) + ' ' + chalk.white(lineParts[i].name);
+              } else {
+                line += ' '.repeat(4 + 1 + maxNameLen);
+              }
+              if (i < lineParts.length - 1) line += '  ';
+            }
+            
+            const lineLen = line.replace(/\x1b\[[0-9;]*m/g, '').length;
+            const rightPad = Math.max(0, innerWidth - lineLen);
+            console.log(chalk.cyan('║') + line + ' '.repeat(rightPad) + chalk.cyan('║'));
+          }
+          
+          console.log(chalk.cyan('╠' + '─'.repeat(innerWidth) + '╣'));
+          console.log(chalk.cyan('║') + chalk.red(centerText('[X] Exit', innerWidth)) + chalk.cyan('║'));
           console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
           
-          const input = await prompts.textInput(chalk.cyan('Select (1/X):'));
+          const input = await prompts.textInput(chalk.cyan('Select number (or X):'));
           
           if (!input || input.toLowerCase() === 'x') {
             console.log(chalk.gray('Goodbye!'));
             process.exit(0);
           }
           
-          if (input === '1') {
-            const service = await rithmicMenu();
-            if (service) {
-              currentService = service;
-              await refreshStats();
+          const action = parseInt(input);
+          if (!isNaN(action) && action >= 1 && action <= numbered.length) {
+            const selectedPropfirm = numbered[action - 1];
+            const { loginPrompt } = require('./menus/connect');
+            const credentials = await loginPrompt(selectedPropfirm.name);
+            
+            if (credentials) {
+              const spinner = ora({ text: 'Connecting to Rithmic...', color: 'yellow' }).start();
+              try {
+                const { RithmicService } = require('./services/rithmic');
+                const service = new RithmicService(selectedPropfirm.key);
+                const result = await service.login(credentials.username, credentials.password);
+                
+                if (result.success) {
+                  spinner.text = 'Fetching accounts...';
+                  const accResult = await service.getTradingAccounts();
+                  connections.add('rithmic', service, service.propfirm.name);
+                  spinner.succeed(`Connected to ${service.propfirm.name} (${accResult.accounts?.length || 0} accounts)`);
+                  currentService = service;
+                  await refreshStats();
+                  await new Promise(r => setTimeout(r, 1500));
+                } else {
+                  spinner.fail(result.error || 'Authentication failed');
+                  await new Promise(r => setTimeout(r, 2000));
+                }
+              } catch (error) {
+                spinner.fail(`Connection error: ${error.message}`);
+                await new Promise(r => setTimeout(r, 2000));
+              }
             }
           }
         } else {

@@ -100,17 +100,25 @@ const aggregateStats = (activeAccounts, allTrades) => {
     
     for (const trade of allTrades) {
       const pnl = trade.profitAndLoss || trade.pnl || 0;
-      const size = trade.size || trade.quantity || 1;
+      const size = trade.size || trade.fillSize || trade.quantity || 1;
+      // Rithmic: 1=BUY, 2=SELL. Other APIs: 0=BUY, 1=SELL
       const side = trade.side;
+      const isBuy = side === 0 || side === 1; // 0 or 1 = BUY depending on API
+      const isSell = side === 2 || (side === 1 && trade.connectionType !== 'rithmic'); // 2 = SELL for Rithmic
       
       stats.totalVolume += Math.abs(size);
       
-      if (side === 0) {
+      // For Rithmic: 1=BUY (long), 2=SELL (short)
+      if (side === 1) {
         stats.longTrades++;
         if (pnl > 0) stats.longWins++;
-      } else if (side === 1) {
+      } else if (side === 2) {
         stats.shortTrades++;
         if (pnl > 0) stats.shortWins++;
+      } else if (side === 0) {
+        // Other APIs: 0=BUY
+        stats.longTrades++;
+        if (pnl > 0) stats.longWins++;
       }
       
       if (pnl > 0) {

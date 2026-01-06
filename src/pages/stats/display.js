@@ -100,7 +100,7 @@ const renderQuantMetrics = (data) => {
 };
 
 /**
- * Render trades history section
+ * Render trades history section (round-trips)
  */
 const renderTradesHistory = (data) => {
   const { allTrades } = data;
@@ -108,60 +108,73 @@ const renderTradesHistory = (data) => {
   const innerWidth = boxWidth - 2;
   
   console.log();
-  drawBoxHeader('TRADES HISTORY', boxWidth);
+  drawBoxHeader('TRADES HISTORY (Round-Trips)', boxWidth);
   
   const extractSymbol = (contractId) => {
     if (!contractId) return 'N/A';
-    if (contractId.length <= 10) return contractId;
-    return contractId.substring(0, 10);
+    if (contractId.length <= 8) return contractId;
+    return contractId.substring(0, 8);
   };
   
   if (allTrades.length > 0) {
-    const colTime = 10;
-    const colSymbol = 12;
-    const colPrice = 12;
-    const colPnl = 12;
+    const colSymbol = 9;
     const colSide = 6;
-    const separators = 15;
-    const fixedWidth = colTime + colSymbol + colPrice + colPnl + colSide + separators;
-    const colAccount = Math.max(10, innerWidth - fixedWidth);
+    const colQty = 4;
+    const colEntry = 11;
+    const colExit = 11;
+    const colPnl = 10;
+    const separators = 18;
+    const fixedWidth = colSymbol + colSide + colQty + colEntry + colExit + colPnl + separators;
+    const colDate = Math.max(10, innerWidth - fixedWidth);
     
-    const header = ` ${'Time'.padEnd(colTime)}| ${'Symbol'.padEnd(colSymbol)}| ${'Price'.padEnd(colPrice)}| ${'P&L'.padEnd(colPnl)}| ${'Side'.padEnd(colSide)}| ${'Account'.padEnd(colAccount - 2)}`;
+    const header = ` ${'Symbol'.padEnd(colSymbol)}| ${'Side'.padEnd(colSide)}| ${'Qty'.padEnd(colQty)}| ${'Entry'.padEnd(colEntry)}| ${'Exit'.padEnd(colExit)}| ${'P&L'.padEnd(colPnl)}| ${'Date'.padEnd(colDate - 2)}`;
     console.log(chalk.cyan('\u2551') + chalk.white(header) + chalk.cyan('\u2551'));
     console.log(chalk.cyan('\u2551') + chalk.gray('\u2500'.repeat(innerWidth)) + chalk.cyan('\u2551'));
     
-    const recentTrades = allTrades.slice(-10).reverse();
+    // Show most recent trades first (already sorted by exitTime desc)
+    const recentTrades = allTrades.slice(0, 10);
     
     for (const trade of recentTrades) {
-      const timestamp = trade.creationTimestamp || trade.timestamp;
-      const time = timestamp ? new Date(timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
-      const symbol = extractSymbol(trade.contractId || trade.symbol);
-      const price = (trade.price || 0).toFixed(2);
-      const pnl = trade.profitAndLoss || trade.pnl || 0;
+      const symbol = extractSymbol(trade.symbol);
+      // Round-trip: side=1 means Long (BUY then SELL), side=2 means Short (SELL then BUY)
+      const side = trade.side === 1 ? 'LONG' : trade.side === 2 ? 'SHORT' : 'N/A';
+      const qty = String(trade.quantity || 1);
+      const entry = (trade.entryPrice || 0).toFixed(2);
+      const exit = (trade.exitPrice || 0).toFixed(2);
+      const pnl = trade.pnl || trade.profitAndLoss || 0;
       const pnlText = pnl >= 0 ? `+$${pnl.toFixed(0)}` : `-$${Math.abs(pnl).toFixed(0)}`;
-      const side = trade.side === 0 ? 'BUY' : trade.side === 1 ? 'SELL' : 'N/A';
-      const accountName = (trade.accountName || 'N/A').substring(0, colAccount - 3);
       
-      const timeStr = time.padEnd(colTime);
+      // Format date from exitDate (YYYYMMDD) or exitTime
+      let dateStr = '--/--';
+      if (trade.exitDate) {
+        const d = trade.exitDate;
+        dateStr = `${d.slice(4,6)}/${d.slice(6,8)}`;
+      } else if (trade.exitTime) {
+        const dt = new Date(trade.exitTime);
+        dateStr = `${(dt.getMonth()+1).toString().padStart(2,'0')}/${dt.getDate().toString().padStart(2,'0')}`;
+      }
+      
       const symbolStr = symbol.padEnd(colSymbol);
-      const priceStr = price.padEnd(colPrice);
-      const pnlStr = pnlText.padEnd(colPnl);
       const sideStr = side.padEnd(colSide);
-      const accountStr = accountName.padEnd(colAccount - 2);
+      const qtyStr = qty.padEnd(colQty);
+      const entryStr = entry.padEnd(colEntry);
+      const exitStr = exit.padEnd(colExit);
+      const pnlStr = pnlText.padEnd(colPnl);
+      const dateStrPad = dateStr.padEnd(colDate - 2);
       
       const pnlColored = pnl >= 0 ? chalk.green(pnlStr) : chalk.red(pnlStr);
-      const sideColored = trade.side === 0 ? chalk.green(sideStr) : chalk.red(sideStr);
+      const sideColored = trade.side === 1 ? chalk.green(sideStr) : chalk.red(sideStr);
       
-      const row = ` ${timeStr}| ${symbolStr}| ${priceStr}| ${pnlColored}| ${sideColored}| ${accountStr}`;
+      const row = ` ${symbolStr}| ${sideColored}| ${qtyStr}| ${entryStr}| ${exitStr}| ${pnlColored}| ${dateStrPad}`;
       console.log(chalk.cyan('\u2551') + row + chalk.cyan('\u2551'));
     }
     
     if (allTrades.length > 10) {
-      const moreMsg = `  ... and ${allTrades.length - 10} more trades`;
+      const moreMsg = `  ... and ${allTrades.length - 10} more round-trips`;
       console.log(chalk.cyan('\u2551') + moreMsg.padEnd(innerWidth) + chalk.cyan('\u2551'));
     }
   } else {
-    const msg = '  No trades found';
+    const msg = '  No round-trip trades found';
     console.log(chalk.cyan('\u2551') + chalk.gray(msg.padEnd(innerWidth)) + chalk.cyan('\u2551'));
   }
   

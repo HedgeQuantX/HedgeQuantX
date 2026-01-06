@@ -5,6 +5,9 @@
 
 const { REQ } = require('./constants');
 
+// Debug mode
+const DEBUG = process.env.HQX_DEBUG === '1';
+
 /**
  * Place order via ORDER_PLANT
  * @param {RithmicService} service - The Rithmic service instance
@@ -120,13 +123,16 @@ const getOrders = async (service) => {
 
 /**
  * Get available order history dates
+ * RequestShowOrderHistoryDates (318) does NOT require account_id
  * @param {RithmicService} service - The Rithmic service instance
  * @returns {Promise<{success: boolean, dates: string[]}>}
  */
 const getOrderHistoryDates = async (service) => {
-  if (!service.orderConn || !service.loginInfo || service.accounts.length === 0) {
+  if (!service.orderConn || !service.loginInfo) {
     return { success: false, dates: [] };
   }
+
+  const { proto } = require('./protobuf');
 
   return new Promise((resolve) => {
     const dates = [];
@@ -136,19 +142,30 @@ const getOrderHistoryDates = async (service) => {
     }, 5000);
 
     const handler = (msg) => {
+      // msg contains { templateId, data }
       if (msg.templateId === 319) {
-        // ResponseShowOrderHistoryDates returns dates
-        if (msg.date) {
-          if (Array.isArray(msg.date)) {
-            dates.push(...msg.date);
-          } else {
-            dates.push(msg.date);
+        try {
+          const res = proto.decode('ResponseShowOrderHistoryDates', msg.data);
+          DEBUG && console.log('[OrderHistory] 319 response:', JSON.stringify(res));
+          
+          // Dates come as repeated string field
+          if (res.date) {
+            const dateList = Array.isArray(res.date) ? res.date : [res.date];
+            for (const d of dateList) {
+              if (d && !dates.includes(d)) {
+                dates.push(d);
+              }
+            }
           }
-        }
-        if (msg.rpCode && msg.rpCode[0] === '0') {
-          clearTimeout(timeout);
-          service.orderConn.removeListener('message', handler);
-          resolve({ success: true, dates });
+          
+          // Check for completion (rpCode = '0')
+          if (res.rpCode && res.rpCode.length > 0 && res.rpCode[0] === '0') {
+            clearTimeout(timeout);
+            service.orderConn.removeListener('message', handler);
+            resolve({ success: true, dates });
+          }
+        } catch (e) {
+          DEBUG && console.log('[OrderHistory] Error decoding 319:', e.message);
         }
       }
     };
@@ -156,16 +173,12 @@ const getOrderHistoryDates = async (service) => {
     service.orderConn.on('message', handler);
 
     try {
-      // Send for each account
-      for (const acc of service.accounts) {
-        service.orderConn.send('RequestShowOrderHistoryDates', {
-          templateId: REQ.SHOW_ORDER_HISTORY_DATES,
-          userMsg: ['HQX'],
-          fcmId: acc.fcmId || service.loginInfo.fcmId,
-          ibId: acc.ibId || service.loginInfo.ibId,
-          accountId: acc.accountId,
-        });
-      }
+      // Request 318 does NOT need account_id - just template_id and user_msg
+      service.orderConn.send('RequestShowOrderHistoryDates', {
+        templateId: REQ.SHOW_ORDER_HISTORY_DATES,
+        userMsg: ['HQX'],
+      });
+      DEBUG && console.log('[OrderHistory] Sent request 318 (ShowOrderHistoryDates)');
     } catch (e) {
       clearTimeout(timeout);
       service.orderConn.removeListener('message', handler);
@@ -176,86 +189,103 @@ const getOrderHistoryDates = async (service) => {
 
 /**
  * Get order history for a specific date using show_order_history_summary
+ * RequestShowOrderHistorySummary (324) returns ExchangeOrderNotification (352) with is_snapshot=true
  * @param {RithmicService} service - The Rithmic service instance
  * @param {string} date - Date in YYYYMMDD format
  * @returns {Promise<{success: boolean, orders: Array}>}
  */
 const getOrderHistory = async (service, date) => {
-  if (!service.orderConn || !service.loginInfo) {
+  if (!service.orderConn || !service.loginInfo || service.accounts.length === 0) {
     return { success: true, orders: [] };
   }
 
+  const { proto } = require('./protobuf');
   const dateStr = date || new Date().toISOString().slice(0, 10).replace(/-/g, '');
   
   return new Promise((resolve) => {
     const orders = [];
-    let receivedEnd = false;
+    let receivedCount = 0;
+    const expectedAccounts = service.accounts.length;
+    const requestId = `HQX-${Date.now()}`;
     
     const timeout = setTimeout(() => {
-      service.removeListener('exchangeNotification', handler);
+      service.orderConn.removeListener('message', handler);
+      DEBUG && console.log(`[OrderHistory] Timeout. Got ${orders.length} orders`);
       resolve({ success: true, orders });
     }, 10000);
 
-    const handler = (notification) => {
-      // ExchangeOrderNotification with isSnapshot=true contains history
-      if (notification && notification.symbol) {
-        orders.push({
-          id: notification.fillId || notification.basketId || `${Date.now()}`,
-          accountId: notification.accountId,
-          symbol: notification.symbol,
-          exchange: notification.exchange || 'CME',
-          side: notification.transactionType, // 1=BUY, 2=SELL
-          quantity: parseInt(notification.quantity) || 0,
-          price: parseFloat(notification.price) || 0,
-          fillPrice: parseFloat(notification.fillPrice) || 0,
-          fillSize: parseInt(notification.fillSize) || 0,
-          fillTime: notification.fillTime,
-          fillDate: notification.fillDate,
-          avgFillPrice: parseFloat(notification.avgFillPrice) || 0,
-          totalFillSize: parseInt(notification.totalFillSize) || 0,
-          status: notification.status,
-          notifyType: notification.notifyType,
-          isSnapshot: notification.isSnapshot,
-          profitAndLoss: 0, // Will be calculated from fills
-          pnl: 0,
-        });
+    const handler = (msg) => {
+      // Response comes as template 352 (ExchangeOrderNotification) with is_snapshot=true
+      if (msg.templateId === 352) {
+        try {
+          const notification = proto.decode('ExchangeOrderNotification', msg.data);
+          
+          // Only process snapshot data (historical orders)
+          if (notification.isSnapshot) {
+            DEBUG && console.log('[OrderHistory] 352 snapshot:', notification.symbol, notification.notifyType);
+            
+            if (notification.symbol) {
+              orders.push({
+                id: notification.fillId || notification.basketId || `${Date.now()}-${orders.length}`,
+                accountId: notification.accountId,
+                symbol: notification.symbol,
+                exchange: notification.exchange || 'CME',
+                side: notification.transactionType, // 1=BUY, 2=SELL
+                quantity: parseInt(notification.quantity) || 0,
+                price: parseFloat(notification.price) || 0,
+                fillPrice: parseFloat(notification.fillPrice) || 0,
+                fillSize: parseInt(notification.fillSize) || 0,
+                fillTime: notification.fillTime,
+                fillDate: notification.fillDate,
+                avgFillPrice: parseFloat(notification.avgFillPrice) || 0,
+                totalFillSize: parseInt(notification.totalFillSize) || 0,
+                status: notification.status,
+                notifyType: notification.notifyType,
+                isSnapshot: true,
+              });
+            }
+          }
+        } catch (e) {
+          DEBUG && console.log('[OrderHistory] Error decoding 352:', e.message);
+        }
       }
       
-      // Check for end of snapshot (rpCode = '0')
-      if (notification && notification.rpCode && notification.rpCode[0] === '0') {
-        receivedEnd = true;
-        clearTimeout(timeout);
-        service.removeListener('exchangeNotification', handler);
-        resolve({ success: true, orders });
+      // Template 325 signals completion of order history summary
+      if (msg.templateId === 325) {
+        try {
+          const res = proto.decode('ResponseShowOrderHistorySummary', msg.data);
+          DEBUG && console.log('[OrderHistory] 325 response:', JSON.stringify(res));
+          receivedCount++;
+          
+          if (receivedCount >= expectedAccounts) {
+            clearTimeout(timeout);
+            service.orderConn.removeListener('message', handler);
+            resolve({ success: true, orders });
+          }
+        } catch (e) {
+          DEBUG && console.log('[OrderHistory] Error decoding 325:', e.message);
+        }
       }
     };
 
-    service.on('exchangeNotification', handler);
+    service.orderConn.on('message', handler);
 
     try {
-      // Use template 324 (RequestShowOrderHistorySummary) 
+      // Send request 324 for each account
       for (const acc of service.accounts) {
+        DEBUG && console.log(`[OrderHistory] Sending 324 for account ${acc.accountId}, date ${dateStr}`);
         service.orderConn.send('RequestShowOrderHistorySummary', {
           templateId: REQ.SHOW_ORDER_HISTORY,
-          userMsg: ['HQX'],
+          userMsg: [requestId],
           fcmId: acc.fcmId || service.loginInfo.fcmId,
           ibId: acc.ibId || service.loginInfo.ibId,
           accountId: acc.accountId,
           date: dateStr,
         });
       }
-      
-      // Wait for responses
-      setTimeout(() => {
-        if (!receivedEnd) {
-          clearTimeout(timeout);
-          service.removeListener('exchangeNotification', handler);
-          resolve({ success: true, orders });
-        }
-      }, 5000);
     } catch (e) {
       clearTimeout(timeout);
-      service.removeListener('exchangeNotification', handler);
+      service.orderConn.removeListener('message', handler);
       resolve({ success: false, error: e.message, orders: [] });
     }
   });
