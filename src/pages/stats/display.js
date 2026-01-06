@@ -214,8 +214,7 @@ const renderHQXScore = (data) => {
  * Render data source notice
  */
 const renderNotice = () => {
-  console.log();
-  console.log(chalk.gray('  Note: Rithmic API provides balance/P&L only. Trade history not available.'));
+  // No notice needed - all data comes from Rithmic API
 };
 
 module.exports = {

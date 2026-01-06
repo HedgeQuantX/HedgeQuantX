@@ -36,10 +36,10 @@ const createOrderHandler = (service) => {
         handleShowOrdersResponse(service, data);
         break;
       case STREAM.EXCHANGE_NOTIFICATION:
-        service.emit('exchangeNotification', data);
+        handleExchangeNotification(service, data);
         break;
       case STREAM.ORDER_NOTIFICATION:
-        service.emit('orderNotification', data);
+        handleOrderNotification(service, data);
         break;
     }
   };
@@ -208,6 +208,93 @@ const handleInstrumentPnLUpdate = (service, data) => {
     }
   } catch (e) {
     // Ignore decode errors
+  }
+};
+
+/**
+ * Handle exchange order notification (fills/trades)
+ * NotifyType: 5 = FILL
+ */
+const handleExchangeNotification = (service, data) => {
+  try {
+    const res = proto.decode('ExchangeOrderNotification', data);
+    debug('Exchange notification:', res.notifyType, res.symbol);
+    
+    // notifyType 5 = FILL (trade executed)
+    if (res.notifyType === 5 && res.fillPrice && res.fillSize) {
+      const trade = {
+        id: res.fillId || `${Date.now()}-${res.basketId}`,
+        accountId: res.accountId,
+        symbol: res.symbol,
+        exchange: res.exchange || 'CME',
+        side: res.transactionType, // 1=BUY, 2=SELL
+        price: parseFloat(res.fillPrice),
+        size: parseInt(res.fillSize),
+        fillTime: res.fillTime,
+        fillDate: res.fillDate,
+        basketId: res.basketId,
+        avgFillPrice: parseFloat(res.avgFillPrice || res.fillPrice),
+        totalFillSize: parseInt(res.totalFillSize || res.fillSize),
+        timestamp: Date.now(),
+        ssboe: res.ssboe,
+        usecs: res.usecs,
+      };
+      
+      debug('Trade (fill) captured:', trade.symbol, trade.side === 1 ? 'BUY' : 'SELL', trade.size, '@', trade.price);
+      
+      // Store in trades history
+      if (!service.trades) service.trades = [];
+      service.trades.push(trade);
+      
+      // Keep max 1000 trades in memory
+      if (service.trades.length > 1000) {
+        service.trades = service.trades.slice(-1000);
+      }
+      
+      service.emit('trade', trade);
+    }
+    
+    service.emit('exchangeNotification', res);
+  } catch (e) {
+    debug('Error decoding ExchangeOrderNotification:', e.message);
+  }
+};
+
+/**
+ * Handle Rithmic order notification
+ */
+const handleOrderNotification = (service, data) => {
+  try {
+    const res = proto.decode('RithmicOrderNotification', data);
+    debug('Order notification:', res.notifyType, res.symbol, res.status);
+    
+    // Track order status changes
+    if (res.basketId) {
+      const order = {
+        basketId: res.basketId,
+        accountId: res.accountId,
+        symbol: res.symbol,
+        exchange: res.exchange || 'CME',
+        side: res.transactionType,
+        quantity: res.quantity,
+        price: res.price,
+        status: res.status,
+        notifyType: res.notifyType,
+        avgFillPrice: res.avgFillPrice,
+        totalFillSize: res.totalFillSize,
+        totalUnfilledSize: res.totalUnfilledSize,
+        timestamp: Date.now(),
+      };
+      
+      service.emit('orderNotification', order);
+      
+      // If order is complete (notifyType 15), calculate P&L
+      if (res.notifyType === 15 && res.avgFillPrice) {
+        debug('Order complete:', res.basketId, 'avg fill:', res.avgFillPrice);
+      }
+    }
+  } catch (e) {
+    debug('Error decoding RithmicOrderNotification:', e.message);
   }
 };
 

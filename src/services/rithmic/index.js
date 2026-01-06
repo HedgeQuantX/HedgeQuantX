@@ -73,6 +73,9 @@ class RithmicService extends EventEmitter {
     // Cache
     this._contractsCache = null;
     this._contractsCacheTime = 0;
+    
+    // Trades history (captured from ExchangeOrderNotification fills)
+    this.trades = [];
   }
 
   // ==================== AUTH ====================
@@ -232,12 +235,121 @@ class RithmicService extends EventEmitter {
   async getContracts() { return getContracts(this); }
   async searchContracts(searchText) { return searchContracts(this, searchText); }
 
-  // ==================== STUBS ====================
+  // ==================== STATS & HISTORY ====================
 
   async getUser() { return this.user; }
-  async getLifetimeStats() { return { success: true, stats: null }; }
-  async getDailyStats() { return { success: true, stats: [] }; }
-  async getTradeHistory() { return { success: true, trades: [] }; }
+  
+  /**
+   * Get trade history from captured fills
+   * @param {string} accountId - Optional account filter
+   * @param {number} days - Number of days to look back (default 30)
+   */
+  async getTradeHistory(accountId, days = 30) {
+    const cutoff = Date.now() - (days * 24 * 60 * 60 * 1000);
+    let trades = this.trades.filter(t => t.timestamp >= cutoff);
+    
+    if (accountId) {
+      trades = trades.filter(t => t.accountId === accountId);
+    }
+    
+    // Sort by timestamp descending (newest first)
+    trades.sort((a, b) => b.timestamp - a.timestamp);
+    
+    return { success: true, trades };
+  }
+  
+  /**
+   * Get lifetime stats calculated from trade history
+   */
+  async getLifetimeStats(accountId) {
+    const { trades } = await this.getTradeHistory(accountId, 365);
+    
+    if (trades.length === 0) {
+      return { success: true, stats: null };
+    }
+    
+    // Calculate stats from trades
+    let totalTrades = trades.length;
+    let winningTrades = 0;
+    let losingTrades = 0;
+    let totalProfit = 0;
+    let totalLoss = 0;
+    let longTrades = 0;
+    let shortTrades = 0;
+    let totalVolume = 0;
+    
+    // Group fills by basketId to calculate P&L per trade
+    const tradeGroups = new Map();
+    for (const trade of trades) {
+      const key = trade.basketId || trade.id;
+      if (!tradeGroups.has(key)) {
+        tradeGroups.set(key, []);
+      }
+      tradeGroups.get(key).push(trade);
+    }
+    
+    for (const [, fills] of tradeGroups) {
+      const firstFill = fills[0];
+      totalVolume += fills.reduce((sum, f) => sum + f.size, 0);
+      
+      if (firstFill.side === 1) longTrades++;
+      else if (firstFill.side === 2) shortTrades++;
+      
+      // P&L calculation requires entry/exit matching which needs position tracking
+      // For now, count trades
+      totalTrades = tradeGroups.size;
+    }
+    
+    const stats = {
+      totalTrades,
+      winningTrades,
+      losingTrades,
+      winRate: totalTrades > 0 ? ((winningTrades / totalTrades) * 100).toFixed(2) : 0,
+      totalProfit,
+      totalLoss,
+      netPnL: totalProfit - totalLoss,
+      longTrades,
+      shortTrades,
+      totalVolume,
+    };
+    
+    return { success: true, stats };
+  }
+  
+  /**
+   * Get daily stats from trade history
+   */
+  async getDailyStats(accountId, days = 30) {
+    const { trades } = await this.getTradeHistory(accountId, days);
+    
+    // Group by date
+    const dailyStats = new Map();
+    
+    for (const trade of trades) {
+      const date = new Date(trade.timestamp).toISOString().slice(0, 10);
+      
+      if (!dailyStats.has(date)) {
+        dailyStats.set(date, {
+          date,
+          trades: 0,
+          volume: 0,
+          buys: 0,
+          sells: 0,
+        });
+      }
+      
+      const day = dailyStats.get(date);
+      day.trades++;
+      day.volume += trade.size;
+      if (trade.side === 1) day.buys++;
+      else if (trade.side === 2) day.sells++;
+    }
+    
+    // Convert to array and sort by date
+    const stats = Array.from(dailyStats.values()).sort((a, b) => b.date.localeCompare(a.date));
+    
+    return { success: true, stats };
+  }
 
   async getMarketStatus() {
     const status = this.checkMarketHours();
