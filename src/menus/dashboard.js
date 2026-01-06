@@ -51,18 +51,14 @@ const dashboardMenu = async (service) => {
     const balStr = statsInfo.balance !== null ? `$${statsInfo.balance.toLocaleString()}` : '--';
     const balColor = statsInfo.balance !== null ? chalk.green : chalk.gray;
     
-    let pnlDisplay, pnlColor;
-    if (statsInfo.pnl !== null) {
-      pnlColor = statsInfo.pnl >= 0 ? chalk.green : chalk.red;
-      pnlDisplay = `${statsInfo.pnl >= 0 ? '+' : ''}$${Math.abs(statsInfo.pnl).toLocaleString()}`;
-    } else {
-      pnlColor = chalk.gray;
-      pnlDisplay = '--';
-    }
+    // AI Agents status
+    const agentCount = statsInfo.agents || 0;
+    const agentDisplay = agentCount > 0 ? `${agentCount} connected` : 'disconnected';
+    const agentColor = agentCount > 0 ? chalk.green : chalk.red;
     
     // Yellow icons: ✔ for each stat
     const icon = chalk.yellow('✔ ');
-    const statsPlain = `✔ Connections: ${statsInfo.connections}    ✔ Accounts: ${statsInfo.accounts}    ✔ Balance: ${balStr}    ✔ P&L: ${pnlDisplay}`;
+    const statsPlain = `✔ Connections: ${statsInfo.connections}    ✔ Accounts: ${statsInfo.accounts}    ✔ Balance: ${balStr}    ✔ AI Agents: ${agentDisplay}`;
     const statsLeftPad = Math.floor((W - statsPlain.length) / 2);
     const statsRightPad = W - statsPlain.length - statsLeftPad;
     
@@ -70,19 +66,30 @@ const dashboardMenu = async (service) => {
       icon + chalk.white(`Connections: ${statsInfo.connections}`) + '    ' +
       icon + chalk.white(`Accounts: ${statsInfo.accounts}`) + '    ' +
       icon + chalk.white('Balance: ') + balColor(balStr) + '    ' +
-      icon + chalk.white('P&L: ') + pnlColor(pnlDisplay) +
+      icon + chalk.white('AI Agents: ') + agentColor(agentDisplay) +
       ' '.repeat(Math.max(0, statsRightPad)) + chalk.cyan('║'));
   }
   
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
-  // Menu in 2 columns
+  // Menu in 2 columns - centered
   const col1Width = Math.floor(W / 2);
+  const col2Width = W - col1Width;
+  
   const menuRow = (left, right) => {
     const leftPlain = left.replace(/\x1b\[[0-9;]*m/g, '');
     const rightPlain = right.replace(/\x1b\[[0-9;]*m/g, '');
-    const leftPadded = '  ' + left + ' '.repeat(Math.max(0, col1Width - leftPlain.length - 2));
-    const rightPadded = right + ' '.repeat(Math.max(0, W - col1Width - rightPlain.length));
+    
+    // Center left item in col1
+    const leftPadL = Math.floor((col1Width - leftPlain.length) / 2);
+    const leftPadR = col1Width - leftPlain.length - leftPadL;
+    const leftPadded = ' '.repeat(leftPadL) + left + ' '.repeat(leftPadR);
+    
+    // Center right item in col2
+    const rightPadL = Math.floor((col2Width - rightPlain.length) / 2);
+    const rightPadR = col2Width - rightPlain.length - rightPadL;
+    const rightPadded = ' '.repeat(rightPadL) + right + ' '.repeat(rightPadR);
+    
     console.log(chalk.cyan('║') + leftPadded + rightPadded + chalk.cyan('║'));
   };
   
