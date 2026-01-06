@@ -29,6 +29,108 @@ const hashAccountId = (str) => {
 };
 
 /**
+ * Fetch account RMS info (status, limits) from ORDER_PLANT
+ * @param {RithmicService} service - The Rithmic service instance
+ * @param {string} accountId - The account ID to fetch RMS info for
+ */
+const fetchAccountRmsInfo = async (service, accountId) => {
+  if (!service.orderConn || !service.loginInfo) {
+    debug('fetchAccountRmsInfo: no connection or loginInfo');
+    return null;
+  }
+
+  // Initialize map if needed
+  if (!service.accountRmsInfo) service.accountRmsInfo = new Map();
+
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      debug('fetchAccountRmsInfo: timeout for', accountId);
+      resolve(service.accountRmsInfo.get(accountId) || null);
+    }, 3000);
+
+    const onRmsInfo = (rmsInfo) => {
+      if (rmsInfo.accountId === accountId) {
+        debug('fetchAccountRmsInfo: received for', accountId);
+        clearTimeout(timeout);
+        service.removeListener('accountRmsInfoReceived', onRmsInfo);
+        resolve(rmsInfo);
+      }
+    };
+    service.on('accountRmsInfoReceived', onRmsInfo);
+
+    try {
+      debug('fetchAccountRmsInfo: sending RequestAccountRmsInfo for', accountId);
+      service.orderConn.send('RequestAccountRmsInfo', {
+        templateId: REQ.ACCOUNT_RMS,
+        userMsg: ['HQX'],
+        fcmId: service.loginInfo.fcmId,
+        ibId: service.loginInfo.ibId,
+        userType: 3, // USER_TYPE_TRADER
+      });
+    } catch (e) {
+      debug('fetchAccountRmsInfo: error', e.message);
+      clearTimeout(timeout);
+      service.removeListener('accountRmsInfoReceived', onRmsInfo);
+      resolve(null);
+    }
+  });
+};
+
+/**
+ * Fetch RMS info for all accounts
+ * @param {RithmicService} service - The Rithmic service instance
+ */
+const fetchAllAccountsRmsInfo = async (service) => {
+  if (!service.orderConn || !service.loginInfo || service.accounts.length === 0) {
+    return;
+  }
+
+  debug('fetchAllAccountsRmsInfo: fetching for', service.accounts.length, 'accounts');
+  
+  // Initialize map if needed
+  if (!service.accountRmsInfo) service.accountRmsInfo = new Map();
+
+  return new Promise((resolve) => {
+    let receivedCount = 0;
+    const expectedCount = service.accounts.length;
+    
+    const timeout = setTimeout(() => {
+      debug('fetchAllAccountsRmsInfo: timeout, received', receivedCount, 'of', expectedCount);
+      service.removeListener('accountRmsInfoReceived', onRmsInfo);
+      resolve();
+    }, 5000);
+
+    const onRmsInfo = (rmsInfo) => {
+      receivedCount++;
+      debug('fetchAllAccountsRmsInfo: received', receivedCount, 'of', expectedCount);
+      if (receivedCount >= expectedCount) {
+        clearTimeout(timeout);
+        service.removeListener('accountRmsInfoReceived', onRmsInfo);
+        resolve();
+      }
+    };
+    service.on('accountRmsInfoReceived', onRmsInfo);
+
+    try {
+      // Request RMS info - one request returns all accounts
+      debug('fetchAllAccountsRmsInfo: sending RequestAccountRmsInfo');
+      service.orderConn.send('RequestAccountRmsInfo', {
+        templateId: REQ.ACCOUNT_RMS,
+        userMsg: ['HQX'],
+        fcmId: service.loginInfo.fcmId,
+        ibId: service.loginInfo.ibId,
+        userType: 3, // USER_TYPE_TRADER
+      });
+    } catch (e) {
+      debug('fetchAllAccountsRmsInfo: error', e.message);
+      clearTimeout(timeout);
+      service.removeListener('accountRmsInfoReceived', onRmsInfo);
+      resolve();
+    }
+  });
+};
+
+/**
  * Fetch accounts from ORDER_PLANT
  * @param {RithmicService} service - The Rithmic service instance
  */
@@ -103,11 +205,21 @@ const getTradingAccounts = async (service) => {
     await requestPnLSnapshot(service);
   }
 
+  // Fetch RMS info (status, limits) for all accounts
+  if (service.orderConn && service.accounts.length > 0) {
+    debug('Fetching account RMS info...');
+    await fetchAllAccountsRmsInfo(service);
+  }
+
   let tradingAccounts = service.accounts.map((acc) => {
     // Get P&L data from accountPnL map (populated by PNL_PLANT messages)
     const pnlData = service.accountPnL.get(acc.accountId) || {};
     debug(`Account ${acc.accountId} pnlData:`, JSON.stringify(pnlData));
     debug(`  accountPnL map size:`, service.accountPnL.size);
+    
+    // Get RMS info (status) from accountRmsInfo map
+    const rmsInfo = service.accountRmsInfo?.get(acc.accountId) || {};
+    debug(`Account ${acc.accountId} rmsInfo:`, JSON.stringify(rmsInfo));
     
     // REAL DATA FROM RITHMIC ONLY - NO DEFAULTS
     const accountBalance = pnlData.accountBalance ? parseFloat(pnlData.accountBalance) : null;
@@ -124,7 +236,12 @@ const getTradingAccounts = async (service) => {
       profitAndLoss: dayPnL !== null ? dayPnL : (openPnL !== null || closedPnL !== null ? (openPnL || 0) + (closedPnL || 0) : null),
       openPnL: openPnL,
       todayPnL: closedPnL,
-      status: 0,
+      status: rmsInfo.status || null,  // Real status from API
+      algorithm: rmsInfo.algorithm || null,  // Trading algorithm/type
+      lossLimit: rmsInfo.lossLimit || null,
+      minAccountBalance: rmsInfo.minAccountBalance || null,
+      buyLimit: rmsInfo.buyLimit || null,
+      sellLimit: rmsInfo.sellLimit || null,
       platform: 'Rithmic',
       propfirm: service.propfirm.name,
     };
@@ -208,6 +325,8 @@ const getPositions = async (service) => {
 module.exports = {
   hashAccountId,
   fetchAccounts,
+  fetchAccountRmsInfo,
+  fetchAllAccountsRmsInfo,
   getTradingAccounts,
   requestPnLSnapshot,
   subscribePnLUpdates,

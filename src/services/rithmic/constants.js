@@ -165,6 +165,8 @@ const PROTO_FILES = [
   'response_product_codes.proto',
   'request_front_month_contract.proto',
   'response_front_month_contract.proto',
+  'request_account_rms_info.proto',
+  'response_account_rms_info.proto',
 ];
 
 // NO STATIC DATA - All contract/symbol info comes from Rithmic API

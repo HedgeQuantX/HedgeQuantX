@@ -116,14 +116,41 @@ const showAccounts = async (service) => {
       const pnlColor2 = pnl2 === null || pnl2 === undefined ? chalk.gray : (pnl2 >= 0 ? chalk.green : chalk.red);
       console.log(chalk.cyan('║') + fmtRow('P&L:', pnlColor1(pnlStr1), col1) + chalk.cyan('│') + (acc2 ? fmtRow('P&L:', pnlColor2(pnlStr2), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
-      // Status
-      const status1 = ACCOUNT_STATUS[acc1.status] || { text: 'Unknown', color: 'gray' };
-      const status2 = acc2 ? (ACCOUNT_STATUS[acc2.status] || { text: 'Unknown', color: 'gray' }) : null;
+      // Status - handle both string from API and numeric lookup
+      const getStatusDisplay = (status) => {
+        if (!status && status !== 0) return { text: '--', color: 'gray' };
+        if (typeof status === 'string') {
+          // Direct string from Rithmic API (e.g., "Active", "Disabled")
+          const lowerStatus = status.toLowerCase();
+          if (lowerStatus.includes('active') || lowerStatus.includes('open')) return { text: status, color: 'green' };
+          if (lowerStatus.includes('disabled') || lowerStatus.includes('closed')) return { text: status, color: 'red' };
+          if (lowerStatus.includes('halt')) return { text: status, color: 'red' };
+          return { text: status, color: 'yellow' };
+        }
+        return ACCOUNT_STATUS[status] || { text: 'Unknown', color: 'gray' };
+      };
+      const status1 = getStatusDisplay(acc1.status);
+      const status2 = acc2 ? getStatusDisplay(acc2.status) : null;
       console.log(chalk.cyan('║') + fmtRow('Status:', chalk[status1.color](status1.text), col1) + chalk.cyan('│') + (acc2 ? fmtRow('Status:', chalk[status2.color](status2.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
-      // Type
-      const type1 = ACCOUNT_TYPE[acc1.type] || { text: 'Unknown', color: 'white' };
-      const type2 = acc2 ? (ACCOUNT_TYPE[acc2.type] || { text: 'Unknown', color: 'white' }) : null;
+      // Type/Algorithm - handle both string from API and numeric lookup
+      const getTypeDisplay = (type, algorithm) => {
+        // Prefer algorithm from RMS info if available
+        const value = algorithm || type;
+        if (!value && value !== 0) return { text: '--', color: 'gray' };
+        if (typeof value === 'string') {
+          // Direct string from Rithmic API
+          const lowerValue = value.toLowerCase();
+          if (lowerValue.includes('eval')) return { text: value, color: 'yellow' };
+          if (lowerValue.includes('live') || lowerValue.includes('funded')) return { text: value, color: 'green' };
+          if (lowerValue.includes('sim') || lowerValue.includes('demo')) return { text: value, color: 'gray' };
+          if (lowerValue.includes('express')) return { text: value, color: 'magenta' };
+          return { text: value, color: 'cyan' };
+        }
+        return ACCOUNT_TYPE[value] || { text: 'Unknown', color: 'white' };
+      };
+      const type1 = getTypeDisplay(acc1.type, acc1.algorithm);
+      const type2 = acc2 ? getTypeDisplay(acc2.type, acc2.algorithm) : null;
       console.log(chalk.cyan('║') + fmtRow('Type:', chalk[type1.color](type1.text), col1) + chalk.cyan('│') + (acc2 ? fmtRow('Type:', chalk[type2.color](type2.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
       if (i + 2 < allAccounts.length) {

@@ -29,6 +29,10 @@ const createOrderHandler = (service) => {
         debug('Handling ACCOUNT_LIST (303)');
         handleAccountList(service, data);
         break;
+      case RES.ACCOUNT_RMS:
+        debug('Handling ACCOUNT_RMS (305)');
+        handleAccountRmsInfo(service, data);
+        break;
       case RES.TRADE_ROUTES:
         handleTradeRoutes(service, data);
         break;
@@ -208,6 +212,45 @@ const handleInstrumentPnLUpdate = (service, data) => {
     }
   } catch (e) {
     // Ignore decode errors
+  }
+};
+
+/**
+ * Handle account RMS info response (status, limits, etc.)
+ */
+const handleAccountRmsInfo = (service, data) => {
+  try {
+    const res = proto.decode('ResponseAccountRmsInfo', data);
+    debug('Decoded Account RMS Info:', JSON.stringify(res));
+    
+    if (res.accountId) {
+      const rmsInfo = {
+        accountId: res.accountId,
+        status: res.status || null,
+        currency: res.currency || null,
+        algorithm: res.algorithm || null,
+        lossLimit: res.lossLimit || null,
+        minAccountBalance: res.minAccountBalance || null,
+        minMarginBalance: res.minMarginBalance || null,
+        buyLimit: res.buyLimit || null,
+        sellLimit: res.sellLimit || null,
+        maxOrderQuantity: res.maxOrderQuantity || null,
+        autoLiquidate: res.autoLiquidate || null,
+        autoLiquidateThreshold: res.autoLiquidateThreshold || null,
+      };
+      debug('Account RMS Info for', res.accountId, ':', rmsInfo);
+      
+      // Store RMS info in service
+      if (!service.accountRmsInfo) service.accountRmsInfo = new Map();
+      service.accountRmsInfo.set(res.accountId, rmsInfo);
+      
+      service.emit('accountRmsInfoReceived', rmsInfo);
+    } else if (res.rpCode?.[0] === '0') {
+      debug('Account RMS Info complete signal');
+      service.emit('accountRmsInfoComplete');
+    }
+  } catch (e) {
+    debug('Error decoding Account RMS Info:', e.message);
   }
 };
 
