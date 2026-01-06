@@ -60,9 +60,7 @@ const renderEquityCurve = (data) => {
     });
   } else {
     // No trade data message
-    const msg = connectionTypes.rithmic > 0 
-      ? '  No trade history (Rithmic does not provide trade history API)'
-      : '  No trade data available';
+    const msg = '  No trades found';
     console.log(chalk.cyan('\u2551') + chalk.gray(msg) + ' '.repeat(Math.max(0, chartInnerWidth - msg.length)) + chalk.cyan('\u2551'));
   }
   

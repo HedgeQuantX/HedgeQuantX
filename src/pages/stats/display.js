@@ -161,7 +161,7 @@ const renderTradesHistory = (data) => {
       console.log(chalk.cyan('\u2551') + moreMsg.padEnd(innerWidth) + chalk.cyan('\u2551'));
     }
   } else {
-    const msg = '  No trade history (Rithmic API limitation)';
+    const msg = '  No trades found';
     console.log(chalk.cyan('\u2551') + chalk.gray(msg.padEnd(innerWidth)) + chalk.cyan('\u2551'));
   }
   
