@@ -43,7 +43,7 @@ const dashboardMenu = async (service) => {
     console.log(makeLine(propfirmText, 'center'));
   }
   
-  // Stats bar with aligned columns
+  // Stats bar with centered columns
   const statsInfo = getCachedStats();
   if (statsInfo) {
     console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
@@ -56,14 +56,16 @@ const dashboardMenu = async (service) => {
     const agentDisplay = agentCount > 0 ? `${agentCount} connected` : 'disconnected';
     const agentColor = agentCount > 0 ? chalk.green : chalk.red;
     
-    // Fixed width columns for alignment (3 columns now)
+    // Fixed width columns for alignment (3 columns)
     const icon = chalk.yellow('✔ ');
     const colWidth = Math.floor(W / 3);
     
     const formatCol = (label, value, valueColor = chalk.white) => {
-      const text = `${label}: ${value}`;
-      const padding = colWidth - text.length - 2; // -2 for icon
-      return icon + chalk.white(label + ': ') + valueColor(value) + ' '.repeat(Math.max(0, padding));
+      const text = `✔ ${label}: ${value}`;
+      const textLen = text.length;
+      const padLeft = Math.floor((colWidth - textLen) / 2);
+      const padRight = colWidth - textLen - padLeft;
+      return ' '.repeat(Math.max(0, padLeft)) + icon + chalk.white(label + ': ') + valueColor(value) + ' '.repeat(Math.max(0, padRight));
     };
     
     const col1 = formatCol('Accounts', String(statsInfo.accounts));
@@ -72,11 +74,9 @@ const dashboardMenu = async (service) => {
     
     const statsLine = col1 + col2 + col3;
     const statsPlainLen = statsLine.replace(/\x1b\[[0-9;]*m/g, '').length;
-    const totalPad = W - statsPlainLen;
-    const leftPad = Math.floor(totalPad / 2);
-    const rightPad = totalPad - leftPad;
+    const extraPad = W - statsPlainLen;
     
-    console.log(chalk.cyan('║') + ' '.repeat(Math.max(0, leftPad)) + statsLine + ' '.repeat(Math.max(0, rightPad)) + chalk.cyan('║'));
+    console.log(chalk.cyan('║') + statsLine + ' '.repeat(Math.max(0, extraPad)) + chalk.cyan('║'));
   }
   
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
