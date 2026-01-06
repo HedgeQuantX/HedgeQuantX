@@ -53,7 +53,7 @@ const dashboardMenu = async (service) => {
     
     // AI Agents status
     const agentCount = statsInfo.agents || 0;
-    const agentDisplay = agentCount > 0 ? `${agentCount} connected` : 'disconnected';
+    const agentDisplay = agentCount > 0 ? 'ON' : 'OFF';
     const agentColor = agentCount > 0 ? chalk.green : chalk.red;
     
     // Fixed width columns for alignment (3 columns)
