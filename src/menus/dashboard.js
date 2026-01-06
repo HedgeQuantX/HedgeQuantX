@@ -43,7 +43,7 @@ const dashboardMenu = async (service) => {
     console.log(makeLine(propfirmText, 'center'));
   }
   
-  // Stats bar with yellow icons
+  // Stats bar with aligned columns
   const statsInfo = getCachedStats();
   if (statsInfo) {
     console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
@@ -56,18 +56,27 @@ const dashboardMenu = async (service) => {
     const agentDisplay = agentCount > 0 ? `${agentCount} connected` : 'disconnected';
     const agentColor = agentCount > 0 ? chalk.green : chalk.red;
     
-    // Yellow icons: ✔ for each stat
+    // Fixed width columns for alignment (3 columns now)
     const icon = chalk.yellow('✔ ');
-    const statsPlain = `✔ Connections: ${statsInfo.connections}    ✔ Accounts: ${statsInfo.accounts}    ✔ Balance: ${balStr}    ✔ AI Agents: ${agentDisplay}`;
-    const statsLeftPad = Math.floor((W - statsPlain.length) / 2);
-    const statsRightPad = W - statsPlain.length - statsLeftPad;
+    const colWidth = Math.floor(W / 3);
     
-    console.log(chalk.cyan('║') + ' '.repeat(statsLeftPad) +
-      icon + chalk.white(`Connections: ${statsInfo.connections}`) + '    ' +
-      icon + chalk.white(`Accounts: ${statsInfo.accounts}`) + '    ' +
-      icon + chalk.white('Balance: ') + balColor(balStr) + '    ' +
-      icon + chalk.white('AI Agents: ') + agentColor(agentDisplay) +
-      ' '.repeat(Math.max(0, statsRightPad)) + chalk.cyan('║'));
+    const formatCol = (label, value, valueColor = chalk.white) => {
+      const text = `${label}: ${value}`;
+      const padding = colWidth - text.length - 2; // -2 for icon
+      return icon + chalk.white(label + ': ') + valueColor(value) + ' '.repeat(Math.max(0, padding));
+    };
+    
+    const col1 = formatCol('Accounts', String(statsInfo.accounts));
+    const col2 = formatCol('Balance', balStr, balColor);
+    const col3 = formatCol('AI Agents', agentDisplay, agentColor);
+    
+    const statsLine = col1 + col2 + col3;
+    const statsPlainLen = statsLine.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const totalPad = W - statsPlainLen;
+    const leftPad = Math.floor(totalPad / 2);
+    const rightPad = totalPad - leftPad;
+    
+    console.log(chalk.cyan('║') + ' '.repeat(Math.max(0, leftPad)) + statsLine + ' '.repeat(Math.max(0, rightPad)) + chalk.cyan('║'));
   }
   
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
