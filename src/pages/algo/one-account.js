@@ -101,12 +101,12 @@ const selectSymbol = async (service, account) => {
   const popularPrefixes = ['ES', 'NQ', 'MES', 'MNQ', 'M2K', 'RTY', 'YM', 'MYM', 'NKD', 'GC', 'SI', 'CL'];
   
   contracts.sort((a, b) => {
-    const nameA = a.name || '';
-    const nameB = b.name || '';
+    const baseA = a.baseSymbol || a.symbol || '';
+    const baseB = b.baseSymbol || b.symbol || '';
     
-    // Check if names start with popular prefixes
-    const idxA = popularPrefixes.findIndex(p => nameA.startsWith(p));
-    const idxB = popularPrefixes.findIndex(p => nameB.startsWith(p));
+    // Check if baseSymbol matches popular prefixes
+    const idxA = popularPrefixes.findIndex(p => baseA === p || baseA.startsWith(p));
+    const idxB = popularPrefixes.findIndex(p => baseB === p || baseB.startsWith(p));
     
     // Both are popular - sort by popularity order
     if (idxA !== -1 && idxB !== -1) return idxA - idxB;
@@ -114,15 +114,15 @@ const selectSymbol = async (service, account) => {
     if (idxA !== -1) return -1;
     // Only B is popular - B first
     if (idxB !== -1) return 1;
-    // Neither - alphabetical
-    return nameA.localeCompare(nameB);
+    // Neither - alphabetical by baseSymbol
+    return baseA.localeCompare(baseB);
   });
   
   spinner.succeed(`Found ${contracts.length} contracts`);
   
-  // Display sorted contracts from API
+  // Display sorted contracts from API: symbol - name (exchange)
   const options = contracts.map(c => ({
-    label: `${c.name} - ${c.description}`,
+    label: `${c.symbol} - ${c.name} (${c.exchange})`,
     value: c
   }));
   

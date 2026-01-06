@@ -219,8 +219,8 @@ const selectSymbol = async (service) => {
         });
       }
 
-      // Use RAW API fields: name (symbol), description (full name), exchange
-      const label = `  ${c.name} - ${c.description} (${c.exchange})`;
+      // Use RAW API fields: symbol (trading symbol), name (product name), exchange
+      const label = `  ${c.symbol} - ${c.name} (${c.exchange})`;
       options.push({ label, value: c });
     }
 
