@@ -81,30 +81,47 @@ const dashboardMenu = async (service) => {
   
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
-  // Menu in 2 columns - centered
+  // Menu in 2 columns - aligned
   const col1Width = Math.floor(W / 2);
   const col2Width = W - col1Width;
   
-  const menuRow = (left, right) => {
-    const leftPlain = left.replace(/\x1b\[[0-9;]*m/g, '');
-    const rightPlain = right.replace(/\x1b\[[0-9;]*m/g, '');
+  // Find max width for alignment
+  const menuItems = [
+    { left: '[1] View Accounts', right: '[2] View Stats' },
+    { left: '[+] Add Prop-Account', right: '[A] Algo-Trading' },
+    { left: '[U] Update HQX', right: '[X] Disconnect' },
+  ];
+  
+  const maxLeftLen = Math.max(...menuItems.map(m => m.left.length));
+  const maxRightLen = Math.max(...menuItems.map(m => m.right.length));
+  
+  const menuRow = (left, right, leftColor, rightColor) => {
+    const leftPlain = left;
+    const rightPlain = right;
     
-    // Center left item in col1
-    const leftPadL = Math.floor((col1Width - leftPlain.length) / 2);
-    const leftPadR = col1Width - leftPlain.length - leftPadL;
-    const leftPadded = ' '.repeat(leftPadL) + left + ' '.repeat(leftPadR);
+    // Pad left item to max width, then center in column
+    const leftPadded = leftPlain.padEnd(maxLeftLen);
+    const leftTotalPad = col1Width - maxLeftLen;
+    const leftPadL = Math.floor(leftTotalPad / 2);
+    const leftPadR = leftTotalPad - leftPadL;
     
-    // Center right item in col2
-    const rightPadL = Math.floor((col2Width - rightPlain.length) / 2);
-    const rightPadR = col2Width - rightPlain.length - rightPadL;
-    const rightPadded = ' '.repeat(rightPadL) + right + ' '.repeat(rightPadR);
+    // Pad right item to max width, then center in column
+    const rightPadded = rightPlain.padEnd(maxRightLen);
+    const rightTotalPad = col2Width - maxRightLen;
+    const rightPadL = Math.floor(rightTotalPad / 2);
+    const rightPadR = rightTotalPad - rightPadL;
     
-    console.log(chalk.cyan('║') + leftPadded + rightPadded + chalk.cyan('║'));
+    console.log(
+      chalk.cyan('║') + 
+      ' '.repeat(leftPadL) + leftColor(leftPadded) + ' '.repeat(leftPadR) +
+      ' '.repeat(rightPadL) + rightColor(rightPadded) + ' '.repeat(rightPadR) +
+      chalk.cyan('║')
+    );
   };
   
-  menuRow(chalk.cyan('[1] View Accounts'), chalk.cyan('[2] View Stats'));
-  menuRow(chalk.cyan('[+] Add Prop-Account'), chalk.magenta('[A] Algo-Trading'));
-  menuRow(chalk.yellow('[U] Update HQX'), chalk.red('[X] Disconnect'));
+  menuRow('[1] View Accounts', '[2] View Stats', chalk.cyan, chalk.cyan);
+  menuRow('[+] Add Prop-Account', '[A] Algo-Trading', chalk.cyan, chalk.magenta);
+  menuRow('[U] Update HQX', '[X] Disconnect', chalk.yellow, chalk.red);
   
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
   
