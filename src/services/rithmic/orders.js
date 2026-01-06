@@ -119,9 +119,57 @@ const getOrders = async (service) => {
 };
 
 /**
- * Get order history
+ * Get available order history dates
+ * @param {RithmicService} service - The Rithmic service instance
+ * @returns {Promise<{success: boolean, dates: string[]}>}
+ */
+const getOrderHistoryDates = async (service) => {
+  if (!service.orderConn || !service.loginInfo) {
+    return { success: false, dates: [] };
+  }
+
+  return new Promise((resolve) => {
+    const dates = [];
+    const timeout = setTimeout(() => {
+      resolve({ success: true, dates });
+    }, 5000);
+
+    const handler = (msg) => {
+      if (msg.templateId === 319 && msg.date) {
+        // ResponseShowOrderHistoryDates returns dates array
+        if (Array.isArray(msg.date)) {
+          dates.push(...msg.date);
+        } else {
+          dates.push(msg.date);
+        }
+      }
+      if (msg.templateId === 319 && msg.rpCode && msg.rpCode[0] === '0') {
+        clearTimeout(timeout);
+        service.orderConn.removeListener('message', handler);
+        resolve({ success: true, dates });
+      }
+    };
+
+    service.orderConn.on('message', handler);
+
+    try {
+      service.orderConn.send('RequestShowOrderHistoryDates', {
+        templateId: REQ.SHOW_ORDER_HISTORY_DATES,
+        userMsg: ['HQX'],
+      });
+    } catch (e) {
+      clearTimeout(timeout);
+      service.orderConn.removeListener('message', handler);
+      resolve({ success: false, error: e.message, dates: [] });
+    }
+  });
+};
+
+/**
+ * Get order history for a specific date
  * @param {RithmicService} service - The Rithmic service instance
  * @param {string} date - Date in YYYYMMDD format
+ * @returns {Promise<{success: boolean, orders: Array}>}
  */
 const getOrderHistory = async (service, date) => {
   if (!service.orderConn || !service.loginInfo) {
@@ -133,12 +181,46 @@ const getOrderHistory = async (service, date) => {
   return new Promise((resolve) => {
     const orders = [];
     const timeout = setTimeout(() => {
+      service.orderConn.removeListener('message', handler);
       resolve({ success: true, orders });
-    }, 3000);
+    }, 10000);
+
+    const handler = (msg) => {
+      // ExchangeOrderNotification (352) contains order/fill details
+      if (msg.templateId === 352 && msg.data) {
+        try {
+          const notification = service.orderConn.proto.decode('ExchangeOrderNotification', msg.data);
+          if (notification && notification.symbol) {
+            orders.push({
+              id: notification.fillId || notification.basketId || `${Date.now()}`,
+              accountId: notification.accountId,
+              symbol: notification.symbol,
+              exchange: notification.exchange || 'CME',
+              side: notification.transactionType, // 1=BUY, 2=SELL
+              quantity: notification.quantity,
+              price: notification.price,
+              fillPrice: notification.fillPrice,
+              fillSize: notification.fillSize,
+              fillTime: notification.fillTime,
+              fillDate: notification.fillDate,
+              avgFillPrice: notification.avgFillPrice,
+              totalFillSize: notification.totalFillSize,
+              status: notification.status,
+              notifyType: notification.notifyType,
+              isSnapshot: notification.isSnapshot,
+            });
+          }
+        } catch (e) {
+          // Ignore decode errors
+        }
+      }
+    };
+
+    service.orderConn.on('message', handler);
 
     try {
       for (const acc of service.accounts) {
-        service.orderConn.send('RequestShowOrderHistorySummary', {
+        service.orderConn.send('RequestShowOrderHistory', {
           templateId: REQ.SHOW_ORDER_HISTORY,
           userMsg: ['HQX'],
           fcmId: acc.fcmId || service.loginInfo.fcmId,
@@ -148,15 +230,51 @@ const getOrderHistory = async (service, date) => {
         });
       }
       
+      // Wait for responses
       setTimeout(() => {
         clearTimeout(timeout);
+        service.orderConn.removeListener('message', handler);
         resolve({ success: true, orders });
-      }, 2000);
+      }, 5000);
     } catch (e) {
       clearTimeout(timeout);
+      service.orderConn.removeListener('message', handler);
       resolve({ success: false, error: e.message, orders: [] });
     }
   });
+};
+
+/**
+ * Get full trade history for multiple dates
+ * @param {RithmicService} service - The Rithmic service instance
+ * @param {number} days - Number of days to fetch (default 30)
+ * @returns {Promise<{success: boolean, trades: Array}>}
+ */
+const getTradeHistoryFull = async (service, days = 30) => {
+  if (!service.orderConn || !service.loginInfo) {
+    return { success: false, trades: [] };
+  }
+
+  // Get available dates
+  const { dates } = await getOrderHistoryDates(service);
+  if (!dates || dates.length === 0) {
+    return { success: true, trades: [] };
+  }
+
+  // Sort dates descending and limit to requested days
+  const sortedDates = dates.sort((a, b) => b.localeCompare(a)).slice(0, days);
+  
+  const allTrades = [];
+  
+  // Fetch history for each date
+  for (const date of sortedDates) {
+    const { orders } = await getOrderHistory(service, date);
+    // Filter only fills (notifyType 5)
+    const fills = orders.filter(o => o.notifyType === 5 || o.fillPrice);
+    allTrades.push(...fills);
+  }
+
+  return { success: true, trades: allTrades };
 };
 
 /**
@@ -188,5 +306,7 @@ module.exports = {
   cancelOrder,
   getOrders,
   getOrderHistory,
+  getOrderHistoryDates,
+  getTradeHistoryFull,
   closePosition
 };

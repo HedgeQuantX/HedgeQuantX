@@ -16,7 +16,7 @@ const {
   subscribePnLUpdates,
   getPositions,
 } = require('./accounts');
-const { placeOrder, cancelOrder, getOrders, getOrderHistory, closePosition } = require('./orders');
+const { placeOrder, cancelOrder, getOrders, getOrderHistory, getOrderHistoryDates, getTradeHistoryFull, closePosition } = require('./orders');
 const { getContracts, searchContracts } = require('./contracts');
 const { TIMEOUTS } = require('../../config/settings');
 const { logger } = require('../../utils/logger');
@@ -229,6 +229,8 @@ class RithmicService extends EventEmitter {
   async getPositions() { return getPositions(this); }
   async getOrders() { return getOrders(this); }
   async getOrderHistory(date) { return getOrderHistory(this, date); }
+  async getOrderHistoryDates() { return getOrderHistoryDates(this); }
+  async getTradeHistoryFull(days) { return getTradeHistoryFull(this, days); }
   async placeOrder(orderData) { return placeOrder(this, orderData); }
   async cancelOrder(orderId) { return cancelOrder(this, orderId); }
   async closePosition(accountId, symbol) { return closePosition(this, accountId, symbol); }
@@ -240,22 +242,53 @@ class RithmicService extends EventEmitter {
   async getUser() { return this.user; }
   
   /**
-   * Get trade history from captured fills
+   * Get trade history from Rithmic API
    * @param {string} accountId - Optional account filter
    * @param {number} days - Number of days to look back (default 30)
    */
   async getTradeHistory(accountId, days = 30) {
-    const cutoff = Date.now() - (days * 24 * 60 * 60 * 1000);
-    let trades = this.trades.filter(t => t.timestamp >= cutoff);
+    // Fetch from API
+    const result = await getTradeHistoryFull(this, days);
     
+    if (!result.success) {
+      return { success: false, trades: [] };
+    }
+    
+    let trades = result.trades || [];
+    
+    // Filter by account if specified
     if (accountId) {
       trades = trades.filter(t => t.accountId === accountId);
     }
     
+    // Add timestamp from fillDate/fillTime if not present
+    trades = trades.map(t => ({
+      ...t,
+      timestamp: t.timestamp || this._parseDateTime(t.fillDate, t.fillTime),
+    }));
+    
     // Sort by timestamp descending (newest first)
-    trades.sort((a, b) => b.timestamp - a.timestamp);
+    trades.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     
     return { success: true, trades };
+  }
+  
+  /**
+   * Parse Rithmic date/time to timestamp
+   * @private
+   */
+  _parseDateTime(dateStr, timeStr) {
+    if (!dateStr) return Date.now();
+    try {
+      // dateStr format: YYYYMMDD, timeStr format: HH:MM:SS
+      const year = dateStr.slice(0, 4);
+      const month = dateStr.slice(4, 6);
+      const day = dateStr.slice(6, 8);
+      const time = timeStr || '00:00:00';
+      return new Date(`${year}-${month}-${day}T${time}Z`).getTime();
+    } catch (e) {
+      return Date.now();
+    }
   }
   
   /**
