@@ -222,10 +222,19 @@ const getTradingAccounts = async (service) => {
     debug(`Account ${acc.accountId} rmsInfo:`, JSON.stringify(rmsInfo));
     
     // REAL DATA FROM RITHMIC ONLY - NO DEFAULTS
-    const accountBalance = pnlData.accountBalance ? parseFloat(pnlData.accountBalance) : null;
-    const openPnL = pnlData.openPositionPnl ? parseFloat(pnlData.openPositionPnl) : null;
-    const closedPnL = pnlData.closedPositionPnl ? parseFloat(pnlData.closedPositionPnl) : null;
-    const dayPnL = pnlData.dayPnl ? parseFloat(pnlData.dayPnl) : null;
+    // Use !== undefined to handle 0 values correctly
+    const accountBalance = pnlData.accountBalance !== undefined ? parseFloat(pnlData.accountBalance) : null;
+    const openPnL = pnlData.openPositionPnl !== undefined ? parseFloat(pnlData.openPositionPnl) : null;
+    const closedPnL = pnlData.closedPositionPnl !== undefined ? parseFloat(pnlData.closedPositionPnl) : null;
+    const dayPnL = pnlData.dayPnl !== undefined ? parseFloat(pnlData.dayPnl) : null;
+
+    // Calculate P&L: prefer dayPnl, fallback to open+closed
+    let profitAndLoss = null;
+    if (dayPnL !== null) {
+      profitAndLoss = dayPnL;
+    } else if (openPnL !== null || closedPnL !== null) {
+      profitAndLoss = (openPnL || 0) + (closedPnL || 0);
+    }
 
     return {
       accountId: hashAccountId(acc.accountId),
@@ -233,11 +242,17 @@ const getTradingAccounts = async (service) => {
       accountName: acc.accountId,  // Never expose real name - only account ID
       name: acc.accountId,         // Never expose real name - only account ID
       balance: accountBalance,
-      profitAndLoss: dayPnL !== null ? dayPnL : (openPnL !== null || closedPnL !== null ? (openPnL || 0) + (closedPnL || 0) : null),
+      profitAndLoss: profitAndLoss,
       openPnL: openPnL,
       todayPnL: closedPnL,
-      status: rmsInfo.status || null,  // Real status from API
-      algorithm: rmsInfo.algorithm || null,  // Trading algorithm/type
+      // Status/Type: Rithmic API doesn't provide user-friendly values
+      // "admin only" and "Max Loss" are RMS internal values, not account status
+      // Set to null to show "--" in UI (per RULES.md - no fake data)
+      status: null,
+      type: null,
+      // Keep RMS data for reference
+      rmsStatus: rmsInfo.status || null,
+      rmsAlgorithm: rmsInfo.algorithm || null,
       lossLimit: rmsInfo.lossLimit || null,
       minAccountBalance: rmsInfo.minAccountBalance || null,
       buyLimit: rmsInfo.buyLimit || null,
