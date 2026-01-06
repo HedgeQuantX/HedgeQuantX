@@ -1,13 +1,22 @@
 /**
  * @fileoverview Services module exports
  * @module services
+ * 
+ * Rithmic-only service hub
  */
 
-const { ProjectXService } = require('./projectx/index');
+const { RithmicService } = require('./rithmic/index');
+const { HQXServerService } = require('./hqx-server/index');
 const { storage, connections } = require('./session');
 
 module.exports = {
-  ProjectXService,
+  // Platform Service (Rithmic only)
+  RithmicService,
+  
+  // HQX Algo Server
+  HQXServerService,
+  
+  // Session Management
   storage,
-  connections
+  connections,
 };

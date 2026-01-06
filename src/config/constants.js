@@ -1,8 +1,8 @@
 /**
- * Application Constants
+ * Application Constants - Rithmic Only
  */
 
-// Account Status Codes (ProjectX UserAPI)
+// Account Status Codes
 const ACCOUNT_STATUS = {
   0: { text: 'Active', color: 'green' },
   1: { text: 'End Of Day', color: 'cyan' },
@@ -16,7 +16,7 @@ const ACCOUNT_STATUS = {
   9: { text: 'Passed', color: 'green' }
 };
 
-// Account Types (ProjectX UserAPI)
+// Account Types
 const ACCOUNT_TYPE = {
   0: { text: 'Practice', color: 'blue' },
   1: { text: 'Evaluation', color: 'yellow' },
@@ -49,9 +49,7 @@ const ORDER_SIDE = {
   1: { text: 'Sell', color: 'red' }
 };
 
-// NO STATIC CONTRACT DATA - All symbols/contracts come from API
-// - ProjectX: GET /api/Contract/available
-// - Rithmic: TICKER_PLANT RequestProductCodes + RequestFrontMonthContract
+// All symbols/contracts come from Rithmic API (TICKER_PLANT)
 
 module.exports = {
   ACCOUNT_STATUS,

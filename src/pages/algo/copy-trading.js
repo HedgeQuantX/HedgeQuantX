@@ -10,7 +10,7 @@ const readline = require('readline');
 const { connections } = require('../../services');
 const { AlgoUI, renderSessionSummary } = require('./ui');
 const { logger, prompts } = require('../../utils');
-const { checkMarketHours } = require('../../services/projectx/market');
+const { checkMarketHours } = require('../../services/rithmic/market');
 
 const log = logger.scope('CopyTrading');
 
@@ -185,7 +185,7 @@ const selectSymbol = async (service) => {
   const spinner = ora({ text: 'Loading symbols...', color: 'yellow' }).start();
 
   try {
-    // Try ProjectX API first for consistency
+    // Try Rithmic API first for consistency
     let contracts = await getContractsFromAPI();
 
     // Fallback to service
@@ -236,15 +236,15 @@ const selectSymbol = async (service) => {
 };
 
 /**
- * Get contracts from ProjectX API - RAW data only
+ * Get contracts from Rithmic API - RAW data only
  * @returns {Promise<Array|null>}
  */
 const getContractsFromAPI = async () => {
   const allConns = connections.getAll();
-  const projectxConn = allConns.find(c => c.type === 'projectx');
+  const rithmicConn = allConns.find(c => c.type === 'rithmic');
 
-  if (projectxConn && typeof projectxConn.service.getContracts === 'function') {
-    const result = await projectxConn.service.getContracts();
+  if (rithmicConn && typeof rithmicConn.service.getContracts === 'function') {
+    const result = await rithmicConn.service.getContracts();
     if (result.success && result.contracts?.length > 0) {
       // Return RAW API data - no mapping
       return result.contracts;
@@ -282,7 +282,7 @@ const launchCopyTrading = async (config) => {
     losses: 0,
     latency: 0,
     connected: false,
-    platform: lead.account.platform || 'ProjectX',
+    platform: lead.account.platform || 'Rithmic',
   };
 
   let running = true;

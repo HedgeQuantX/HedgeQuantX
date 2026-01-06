@@ -9,7 +9,7 @@ const readline = require('readline');
 const { connections } = require('../../services');
 const { AlgoUI, renderSessionSummary } = require('./ui');
 const { prompts } = require('../../utils');
-const { checkMarketHours } = require('../../services/projectx/market');
+const { checkMarketHours } = require('../../services/rithmic/market');
 
 // Strategy & Market Data
 const { M1 } = require('../../lib/m/s1');
@@ -54,7 +54,7 @@ const oneAccountMenu = async (service) => {
   
   // Select account - display RAW API fields
   const options = activeAccounts.map(acc => {
-    // Use what API returns: accountName for ProjectX, rithmicAccountId for Rithmic
+    // Use what API returns: rithmicAccountId or accountName for Rithmic
     const name = acc.accountName || acc.rithmicAccountId || acc.accountId;
     const balance = acc.balance !== null && acc.balance !== undefined 
       ? ` - $${acc.balance.toLocaleString()}` 
@@ -171,7 +171,7 @@ const launchAlgo = async (service, account, contract, config) => {
     : 'HQX *****';
   const symbolName = contract.name;
   const contractId = contract.id;
-  const connectionType = account.platform || 'ProjectX';
+  const connectionType = account.platform || 'Rithmic';
   const tickSize = contract.tickSize || 0.25;
   
   const ui = new AlgoUI({ subtitle: 'HQX Ultra Scalping', mode: 'one-account' });

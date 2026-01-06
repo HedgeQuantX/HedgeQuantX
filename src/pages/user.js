@@ -77,7 +77,7 @@ const showUserInfo = async (service) => {
       console.log(chalk.cyan('║') + fmtRow('Email:', chalk.white(email), col1) + chalk.cyan('│') + fmtRow('Accounts:', chalk.cyan(String(accountCount)), col2) + chalk.cyan('║'));
 
       const userId = userInfo.userId || userInfo.id || 'N/A';
-      const platform = service?.propfirm?.name || 'ProjectX';
+      const platform = service?.propfirm?.name || 'Rithmic';
       console.log(chalk.cyan('║') + fmtRow('User ID:', chalk.gray(String(userId)), col1) + chalk.cyan('│') + fmtRow('Platform:', chalk.magenta(platform), col2) + chalk.cyan('║'));
 
       const firstName = userInfo.firstName || '';

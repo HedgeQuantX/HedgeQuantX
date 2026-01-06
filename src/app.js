@@ -1,5 +1,5 @@
 /**
- * @fileoverview Main application router
+ * @fileoverview Main application router - Rithmic Only
  * @module app
  */
 
@@ -19,23 +19,13 @@ const { showAccounts } = require('./pages/accounts');
 const { algoTradingMenu } = require('./pages/algo');
 
 // Menus
-const {
-  projectXMenu,
-  rithmicMenu,
-  tradovateMenu,
-  addPropAccountMenu,
-  dashboardMenu,
-  handleUpdate,
-} = require('./menus');
+const { rithmicMenu, dashboardMenu, handleUpdate } = require('./menus');
 
 /** @type {Object|null} */
 let currentService = null;
 
 // ==================== TERMINAL ====================
 
-/**
- * Restore terminal state
- */
 const restoreTerminal = () => {
   try {
     process.stdout.write('\x1B[?1049l');
@@ -49,7 +39,6 @@ const restoreTerminal = () => {
   }
 };
 
-// Signal handlers
 process.on('exit', restoreTerminal);
 process.on('SIGINT', () => { restoreTerminal(); process.exit(0); });
 process.on('SIGTERM', () => { restoreTerminal(); process.exit(0); });
@@ -70,9 +59,6 @@ process.on('unhandledRejection', (reason) => {
 
 // ==================== STATS ====================
 
-/**
- * Refresh cached stats from all connections
- */
 const refreshStats = async () => {
   if (connections.count() === 0) {
     clearCachedStats();
@@ -113,9 +99,6 @@ const refreshStats = async () => {
 
 // ==================== BANNER ====================
 
-/**
- * Display application banner
- */
 const banner = async () => {
   console.clear();
   
@@ -127,7 +110,6 @@ const banner = async () => {
 
   console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
 
-  // Logo
   const logoLines = isMobile ? getMobileLogo() : getFullLogo();
   
   for (const [hq, x] of logoLines) {
@@ -144,10 +126,6 @@ const banner = async () => {
   console.log(chalk.cyan('║') + chalk.white(centerText(tagline, innerWidth)) + chalk.cyan('║'));
 };
 
-/**
- * Get full logo lines
- * @returns {Array<[string, string]>}
- */
 const getFullLogo = () => [
   ['██╗  ██╗███████╗██████╗  ██████╗ ███████╗ ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗', '██╗  ██╗'],
   ['██║  ██║██╔════╝██╔══██╗██╔════╝ ██╔════╝██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝', '╚██╗██╔╝'],
@@ -157,10 +135,6 @@ const getFullLogo = () => [
   ['╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ', '╚═╝  ╚═╝'],
 ];
 
-/**
- * Get mobile logo lines
- * @returns {Array<[string, string]>}
- */
 const getMobileLogo = () => [
   ['██╗  ██╗ ██████╗ ', '██╗  ██╗'],
   ['██║  ██║██╔═══██╗', '╚██╗██╔╝'],
@@ -170,9 +144,6 @@ const getMobileLogo = () => [
   ['╚═╝  ╚═╝ ╚══▀▀═╝ ', '╚═╝  ╚═╝'],
 ];
 
-/**
- * Display banner with closing border
- */
 const bannerClosed = async () => {
   await banner();
   const termWidth = process.stdout.columns || 100;
@@ -180,45 +151,8 @@ const bannerClosed = async () => {
   console.log(chalk.cyan('╚' + '═'.repeat(boxWidth - 2) + '╝'));
 };
 
-// ==================== MENUS ====================
-
-/**
- * Main menu (platform selection)
- * @returns {Promise<string>}
- */
-const mainMenu = async () => {
-  const boxWidth = getLogoWidth();
-  const innerWidth = boxWidth - 2;
-  const col1Width = Math.floor(innerWidth / 2);
-
-  const menuRow = (left, right) => {
-    const leftPlain = left.replace(/\x1b\[[0-9;]*m/g, '');
-    const rightPlain = right ? right.replace(/\x1b\[[0-9;]*m/g, '') : '';
-    const leftPadded = '  ' + left + ' '.repeat(Math.max(0, col1Width - leftPlain.length - 2));
-    const rightPadded = (right || '') + ' '.repeat(Math.max(0, innerWidth - col1Width - rightPlain.length));
-    console.log(chalk.cyan('║') + leftPadded + rightPadded + chalk.cyan('║'));
-  };
-
-  console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
-  console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PLATFORM', innerWidth)) + chalk.cyan('║'));
-  console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
-
-  menuRow(chalk.cyan('[1] ProjectX'), chalk.cyan('[2] Rithmic'));
-  menuRow(chalk.cyan('[3] Tradovate'), chalk.red('[X] Exit'));
-
-  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
-
-  const input = await prompts.textInput(chalk.cyan('Select (1/2/3/X)'));
-
-  const actions = { '1': 'projectx', '2': 'rithmic', '3': 'tradovate', 'x': 'exit' };
-  return actions[(input || '').toLowerCase()] || 'exit';
-};
-
 // ==================== MAIN LOOP ====================
 
-/**
- * Main application loop
- */
 const run = async () => {
   try {
     log.info('Starting HQX CLI');
@@ -243,24 +177,33 @@ const run = async () => {
         await banner();
 
         if (!connections.isConnected()) {
-          const choice = await mainMenu();
-
-          if (choice === 'exit') {
+          // Not connected - show Rithmic menu directly
+          const boxWidth = getLogoWidth();
+          const innerWidth = boxWidth - 2;
+          
+          console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+          console.log(chalk.cyan('║') + chalk.white.bold(centerText('CONNECT TO PROPFIRM', innerWidth)) + chalk.cyan('║'));
+          console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+          console.log(chalk.cyan('║') + '  ' + chalk.cyan('[1] Connect') + ' '.repeat(innerWidth - 14) + chalk.cyan('║'));
+          console.log(chalk.cyan('║') + '  ' + chalk.red('[X] Exit') + ' '.repeat(innerWidth - 11) + chalk.cyan('║'));
+          console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
+          
+          const input = await prompts.textInput(chalk.cyan('Select (1/X):'));
+          
+          if (!input || input.toLowerCase() === 'x') {
             console.log(chalk.gray('Goodbye!'));
             process.exit(0);
           }
-
-          let service = null;
-          if (choice === 'projectx') service = await projectXMenu();
-          else if (choice === 'rithmic') service = await rithmicMenu();
-          else if (choice === 'tradovate') service = await tradovateMenu();
-
-          if (service) {
-            currentService = service;
-            await refreshStats();
+          
+          if (input === '1') {
+            const service = await rithmicMenu();
+            if (service) {
+              currentService = service;
+              await refreshStats();
+            }
           }
         } else {
-          // Refresh stats before showing dashboard
+          // Connected - show dashboard
           await refreshStats();
           
           const action = await dashboardMenu(currentService);
@@ -275,11 +218,7 @@ const run = async () => {
               break;
 
             case 'add_prop_account': {
-              const platformChoice = await addPropAccountMenu();
-              let newService = null;
-              if (platformChoice === 'projectx') newService = await projectXMenu();
-              else if (platformChoice === 'rithmic') newService = await rithmicMenu();
-              else if (platformChoice === 'tradovate') newService = await tradovateMenu();
+              const newService = await rithmicMenu();
               if (newService) {
                 currentService = newService;
                 await refreshStats();
@@ -320,4 +259,4 @@ const run = async () => {
   }
 };
 
-module.exports = { run, banner, mainMenu, dashboardMenu };
+module.exports = { run, banner, dashboardMenu };

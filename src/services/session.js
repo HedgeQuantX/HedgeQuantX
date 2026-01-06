@@ -1,5 +1,5 @@
 /**
- * @fileoverview Secure session management with encryption
+ * @fileoverview Secure session management - Rithmic Only
  * @module services/session
  */
 
@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { encrypt, decrypt, maskSensitive, secureWipe } = require('../security/encryption');
+const { encrypt, decrypt, maskSensitive } = require('../security/encryption');
 const { SECURITY } = require('../config/settings');
 const { logger } = require('../utils/logger');
 
@@ -20,10 +20,6 @@ const SESSION_FILE = path.join(SESSION_DIR, SECURITY.SESSION_FILE);
  * Secure session storage with AES-256-GCM encryption
  */
 const storage = {
-  /**
-   * Ensures the session directory exists with proper permissions
-   * @private
-   */
   _ensureDir() {
     if (!fs.existsSync(SESSION_DIR)) {
       fs.mkdirSync(SESSION_DIR, { recursive: true, mode: SECURITY.DIR_PERMISSIONS });
@@ -31,11 +27,6 @@ const storage = {
     }
   },
 
-  /**
-   * Saves sessions with encryption
-   * @param {Array} sessions - Sessions to save
-   * @returns {boolean} Success status
-   */
   save(sessions) {
     try {
       this._ensureDir();
@@ -50,10 +41,6 @@ const storage = {
     }
   },
 
-  /**
-   * Loads and decrypts sessions
-   * @returns {Array} Decrypted sessions or empty array
-   */
   load() {
     try {
       if (!fs.existsSync(SESSION_FILE)) {
@@ -79,14 +66,9 @@ const storage = {
     }
   },
 
-  /**
-   * Securely clears session data
-   * @returns {boolean} Success status
-   */
   clear() {
     try {
       if (fs.existsSync(SESSION_FILE)) {
-        // Overwrite with random data before deleting
         const size = fs.statSync(SESSION_FILE).size;
         if (size > 0) {
           fs.writeFileSync(SESSION_FILE, crypto.randomBytes(size));
@@ -102,70 +84,44 @@ const storage = {
   },
 };
 
-// Lazy load services to avoid circular dependencies
-let ProjectXService, RithmicService, TradovateService;
+// Lazy load RithmicService to avoid circular dependencies
+let RithmicService;
 const loadServices = () => {
-  if (!ProjectXService) {
-    ({ ProjectXService } = require('./projectx'));
+  if (!RithmicService) {
     ({ RithmicService } = require('./rithmic'));
-    ({ TradovateService } = require('./tradovate'));
   }
 };
 
 /**
- * Multi-connection manager with secure token handling
+ * Multi-connection manager (Rithmic only)
  */
 const connections = {
-  /** @type {Array<{type: string, service: Object, propfirm: string, propfirmKey: string, token: string, connectedAt: Date}>} */
+  /** @type {Array<{type: string, service: Object, propfirm: string, propfirmKey: string, connectedAt: Date}>} */
   services: [],
 
-  /**
-   * Adds a new connection
-   * @param {string} type - Connection type (projectx, rithmic, tradovate)
-   * @param {Object} service - Service instance
-   * @param {string} [propfirm] - PropFirm name
-   * @param {string} [token] - Auth token
-   */
-  add(type, service, propfirm = null, token = null) {
+  add(type, service, propfirm = null) {
     this.services.push({
       type,
       service,
       propfirm,
       propfirmKey: service.propfirmKey,
-      token: token || service.token,
       connectedAt: new Date(),
     });
     this.saveToStorage();
     log.info('Connection added', { type, propfirm: propfirm || type });
   },
 
-  /**
-   * Saves all sessions to encrypted storage
-   */
   saveToStorage() {
-    const sessions = this.services.map(conn => {
-      const session = {
-        type: conn.type,
-        propfirm: conn.propfirm,
-        propfirmKey: conn.service.propfirmKey || conn.propfirmKey,
-      };
-      
-      if (conn.type === 'projectx') {
-        session.token = conn.service.token || conn.token;
-      } else if (conn.type === 'rithmic' || conn.type === 'tradovate') {
-        session.credentials = conn.service.credentials;
-      }
-      
-      return session;
-    });
+    const sessions = this.services.map(conn => ({
+      type: conn.type,
+      propfirm: conn.propfirm,
+      propfirmKey: conn.service.propfirmKey || conn.propfirmKey,
+      credentials: conn.service.credentials,
+    }));
     
     storage.save(sessions);
   },
 
-  /**
-   * Restores sessions from encrypted storage
-   * @returns {Promise<boolean>} True if sessions were restored
-   */
   async restoreFromStorage() {
     loadServices();
     const sessions = storage.load();
@@ -187,30 +143,11 @@ const connections = {
     return this.services.length > 0;
   },
 
-  /**
-   * Restores a single session
-   * @private
-   */
   async _restoreSession(session) {
     const { type, propfirm, propfirmKey } = session;
     
-    if (type === 'projectx' && session.token) {
-      const service = new ProjectXService(propfirmKey || 'topstep');
-      service.token = session.token;
-      
-      const userResult = await service.getUser();
-      if (userResult.success) {
-        this.services.push({
-          type,
-          service,
-          propfirm,
-          propfirmKey,
-          token: session.token,
-          connectedAt: new Date(),
-        });
-        log.debug('ProjectX session restored');
-      }
-    } else if (type === 'rithmic' && session.credentials) {
+    // Only restore Rithmic sessions
+    if (type === 'rithmic' && session.credentials) {
       const service = new RithmicService(propfirmKey || 'apex_rithmic');
       const result = await service.login(session.credentials.username, session.credentials.password);
       
@@ -224,41 +161,22 @@ const connections = {
         });
         log.debug('Rithmic session restored');
       }
-    } else if (type === 'tradovate' && session.credentials) {
-      const service = new TradovateService(propfirmKey || 'tradovate');
-      const result = await service.login(session.credentials.username, session.credentials.password);
-      
-      if (result.success) {
-        this.services.push({
-          type,
-          service,
-          propfirm,
-          propfirmKey,
-          connectedAt: new Date(),
-        });
-        log.debug('Tradovate session restored');
-      }
     }
   },
 
-  /**
-   * Removes a connection by index
-   * @param {number} index - Connection index
-   */
   remove(index) {
     if (index < 0 || index >= this.services.length) return;
     
     const conn = this.services[index];
     
-    if (conn.service?.logout) {
+    if (conn.service?.disconnect) {
       try {
-        conn.service.logout();
+        conn.service.disconnect();
       } catch (err) {
-        log.warn('Logout failed', { error: err.message });
+        log.warn('Disconnect failed', { error: err.message });
       }
     }
     
-    // Clear credentials from memory
     if (conn.service?.credentials) {
       conn.service.credentials = null;
     }
@@ -268,35 +186,18 @@ const connections = {
     log.info('Connection removed', { type: conn.type });
   },
 
-  /**
-   * Gets all connections
-   * @returns {Array}
-   */
   getAll() {
     return this.services;
   },
 
-  /**
-   * Gets connections by type
-   * @param {string} type - Connection type
-   * @returns {Array}
-   */
   getByType(type) {
     return this.services.filter(c => c.type === type);
   },
 
-  /**
-   * Gets connection count
-   * @returns {number}
-   */
   count() {
     return this.services.length;
   },
 
-  /**
-   * Gets all accounts from all connections
-   * @returns {Promise<Array>}
-   */
   async getAllAccounts() {
     const allAccounts = [];
     
@@ -322,11 +223,6 @@ const connections = {
     return allAccounts;
   },
 
-  /**
-   * Gets the service for a specific account
-   * @param {string|number} accountId - Account ID
-   * @returns {Object|null}
-   */
   getServiceForAccount(accountId) {
     for (const conn of this.services) {
       if (!conn.service?.accounts) continue;
@@ -342,27 +238,16 @@ const connections = {
     return null;
   },
 
-  /**
-   * Checks if any connection is active
-   * @returns {boolean}
-   */
   isConnected() {
     return this.services.length > 0;
   },
 
-  /**
-   * Disconnects all connections and clears sessions
-   */
   disconnectAll() {
     for (const conn of this.services) {
       try {
-        if (conn.service?.logout) {
-          conn.service.logout();
-        }
         if (conn.service?.disconnect) {
           conn.service.disconnect();
         }
-        // Clear credentials
         if (conn.service?.credentials) {
           conn.service.credentials = null;
         }
@@ -376,15 +261,10 @@ const connections = {
     log.info('All connections disconnected');
   },
 
-  /**
-   * Gets masked connection info for logging
-   * @returns {Array}
-   */
   getInfo() {
     return this.services.map(conn => ({
       type: conn.type,
       propfirm: conn.propfirm,
-      token: maskSensitive(conn.token),
       connectedAt: conn.connectedAt,
     }));
   },

@@ -1,14 +1,13 @@
 /**
- * Connection Menus - PropFirm platform selection and login
+ * Connection Menus - Rithmic Only
  */
 
 const chalk = require('chalk');
 const ora = require('ora');
 
-const { ProjectXService, connections } = require('../services');
+const { connections } = require('../services');
 const { RithmicService } = require('../services/rithmic');
-const { TradovateService } = require('../services/tradovate');
-const { getPropFirmsByPlatform } = require('../config');
+const { PROPFIRM_CHOICES } = require('../config');
 const { getLogoWidth, centerText, prepareStdin } = require('../ui');
 const { validateUsername, validatePassword } = require('../security');
 const { prompts } = require('../utils');
@@ -36,87 +35,20 @@ const loginPrompt = async (propfirmName) => {
 };
 
 /**
- * ProjectX menu
- */
-const projectXMenu = async () => {
-  const propfirms = getPropFirmsByPlatform('ProjectX');
-  const boxWidth = getLogoWidth();
-  const W = boxWidth - 2;
-  const col1Width = Math.floor(W / 2);
-  
-  const numbered = propfirms.map((pf, i) => ({ num: i + 1, key: pf.key, name: pf.displayName }));
-  
-  console.log();
-  console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
-  console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PROPFIRM (ProjectX)', W)) + chalk.cyan('║'));
-  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
-  
-  const menuRow = (left, right) => {
-    const leftPlain = left ? left.replace(/\x1b\[[0-9;]*m/g, '') : '';
-    const rightPlain = right ? right.replace(/\x1b\[[0-9;]*m/g, '') : '';
-    const leftPadded = '  ' + (left || '') + ' '.repeat(Math.max(0, col1Width - leftPlain.length - 2));
-    const rightPadded = (right || '') + ' '.repeat(Math.max(0, W - col1Width - rightPlain.length));
-    console.log(chalk.cyan('║') + leftPadded + rightPadded + chalk.cyan('║'));
-  };
-  
-  for (let i = 0; i < numbered.length; i += 2) {
-    const left = numbered[i];
-    const right = numbered[i + 1];
-    const leftText = chalk.cyan(`[${left.num.toString().padStart(2, ' ')}]`) + ' ' + chalk.white(left.name);
-    const rightText = right ? chalk.cyan(`[${right.num.toString().padStart(2, ' ')}]`) + ' ' + chalk.white(right.name) : '';
-    menuRow(leftText, rightText);
-  }
-  
-  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
-  console.log(chalk.cyan('║') + '  ' + chalk.red('[X] Back') + ' '.repeat(W - 10) + chalk.cyan('║'));
-  console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
-
-  const input = await prompts.textInput(chalk.cyan('Select number (or X):'));
-  if (!input || input.toLowerCase() === 'x') return null;
-  
-  const action = parseInt(input);
-  if (isNaN(action) || action < 1 || action > numbered.length) return null;
-  
-  const selectedPropfirm = numbered[action - 1];
-  const credentials = await loginPrompt(selectedPropfirm.name);
-  if (!credentials) return null;
-
-  const spinner = ora({ text: 'Authenticating...', color: 'yellow' }).start();
-
-  try {
-    const service = new ProjectXService(selectedPropfirm.key);
-    const result = await service.login(credentials.username, credentials.password);
-
-    if (result.success) {
-      await service.getUser();
-      connections.add('projectx', service, service.propfirm.name);
-      spinner.succeed(`Connected to ${service.propfirm.name}`);
-      return service;
-    } else {
-      spinner.fail(result.error || 'Authentication failed');
-      return null;
-    }
-  } catch (error) {
-    spinner.fail(error.message);
-    return null;
-  }
-};
-
-/**
- * Rithmic menu
+ * Rithmic menu - Main connection menu
  */
 const rithmicMenu = async () => {
-  const propfirms = getPropFirmsByPlatform('Rithmic');
+  const propfirms = PROPFIRM_CHOICES;
   const boxWidth = getLogoWidth();
   const innerWidth = boxWidth - 2;
   const numCols = 3;
   const colWidth = Math.floor(innerWidth / numCols);
   
-  const numbered = propfirms.map((pf, i) => ({ num: i + 1, key: pf.key, name: pf.displayName, systemName: pf.rithmicSystem }));
+  const numbered = propfirms.map((pf, i) => ({ num: i + 1, key: pf.value, name: pf.name }));
   
   console.log();
   console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
-  console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PROPFIRM (RITHMIC)', innerWidth)) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PROPFIRM', innerWidth)) + chalk.cyan('║'));
   console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
   
   const rows = Math.ceil(numbered.length / numCols);
@@ -177,98 +109,4 @@ const rithmicMenu = async () => {
   }
 };
 
-/**
- * Tradovate menu
- */
-const tradovateMenu = async () => {
-  const propfirms = getPropFirmsByPlatform('Tradovate');
-  const boxWidth = getLogoWidth();
-  const innerWidth = boxWidth - 2;
-  
-  const numbered = propfirms.map((pf, i) => ({ num: i + 1, key: pf.key, name: pf.displayName }));
-  
-  console.log();
-  console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
-  console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PROPFIRM (TRADOVATE)', innerWidth)) + chalk.cyan('║'));
-  console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
-  
-  for (const item of numbered) {
-    const numStr = item.num.toString().padStart(2, ' ');
-    const text = '  ' + chalk.cyan(`[${numStr}]`) + ' ' + chalk.white(item.name);
-    const textLen = 4 + 1 + item.name.length + 2;
-    console.log(chalk.cyan('║') + text + ' '.repeat(innerWidth - textLen) + chalk.cyan('║'));
-  }
-  
-  console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
-  console.log(chalk.cyan('║') + '  ' + chalk.red('[X] Back') + ' '.repeat(innerWidth - 10) + chalk.cyan('║'));
-  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
-
-  const input = await prompts.textInput(chalk.cyan('Select number (or X):'));
-  if (!input || input.toLowerCase() === 'x') return null;
-  
-  const action = parseInt(input);
-  if (isNaN(action) || action < 1 || action > numbered.length) return null;
-  
-  const selectedPropfirm = numbered[action - 1];
-  const credentials = await loginPrompt(selectedPropfirm.name);
-  if (!credentials) return null;
-
-  const spinner = ora({ text: 'Connecting to Tradovate...', color: 'yellow' }).start();
-
-  try {
-    const service = new TradovateService(selectedPropfirm.key);
-    const result = await service.login(credentials.username, credentials.password);
-
-    if (result.success) {
-      spinner.text = 'Fetching accounts...';
-      await service.getTradingAccounts();
-      connections.add('tradovate', service, service.propfirm.name);
-      spinner.succeed(`Connected to ${service.propfirm.name}`);
-      return service;
-    } else {
-      spinner.fail(result.error || 'Authentication failed');
-      return null;
-    }
-  } catch (error) {
-    spinner.fail(error.message);
-    return null;
-  }
-};
-
-/**
- * Add Prop Account menu
- */
-const addPropAccountMenu = async () => {
-  const boxWidth = getLogoWidth();
-  const W = boxWidth - 2;
-  const col1Width = Math.floor(W / 2);
-  
-  console.log();
-  console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
-  console.log(chalk.cyan('║') + chalk.white.bold(centerText('ADD PROP ACCOUNT', W)) + chalk.cyan('║'));
-  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
-  
-  const menuRow = (left, right) => {
-    const leftPlain = left.replace(/\x1b\[[0-9;]*m/g, '');
-    const rightPlain = right.replace(/\x1b\[[0-9;]*m/g, '');
-    const leftPadded = '  ' + left + ' '.repeat(Math.max(0, col1Width - leftPlain.length - 2));
-    const rightPadded = right + ' '.repeat(Math.max(0, W - col1Width - rightPlain.length));
-    console.log(chalk.cyan('║') + leftPadded + rightPadded + chalk.cyan('║'));
-  };
-  
-  menuRow(chalk.cyan('[1] ProjectX'), chalk.cyan('[2] Rithmic'));
-  menuRow(chalk.cyan('[3] Tradovate'), chalk.red('[X] Back'));
-  
-  console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
-
-  const input = await prompts.textInput(chalk.cyan('Select (1/2/3/X):'));
-  if (!input || input.toLowerCase() === 'x') return null;
-  
-  const num = parseInt(input);
-  if (num === 1) return 'projectx';
-  if (num === 2) return 'rithmic';
-  if (num === 3) return 'tradovate';
-  return null;
-};
-
-module.exports = { loginPrompt, projectXMenu, rithmicMenu, tradovateMenu, addPropAccountMenu };
+module.exports = { loginPrompt, rithmicMenu };

@@ -15,11 +15,10 @@ const {
   requestPnLSnapshot,
   subscribePnLUpdates,
   getPositions,
-  hashAccountId,
 } = require('./accounts');
 const { placeOrder, cancelOrder, getOrders, getOrderHistory, closePosition } = require('./orders');
-const { decodeFrontMonthContract } = require('./protobuf');
-const { TIMEOUTS, CACHE } = require('../../config/settings');
+const { getContracts, searchContracts } = require('./contracts');
+const { TIMEOUTS } = require('../../config/settings');
 const { logger } = require('../../utils/logger');
 
 const log = logger.scope('Rithmic');
@@ -48,9 +47,6 @@ const PROPFIRM_CONFIGS = {
  * Rithmic Service for prop firm trading
  */
 class RithmicService extends EventEmitter {
-  /**
-   * @param {string} propfirmKey - PropFirm identifier
-   */
   constructor(propfirmKey) {
     super();
     this.propfirmKey = propfirmKey;
@@ -81,12 +77,6 @@ class RithmicService extends EventEmitter {
 
   // ==================== AUTH ====================
 
-  /**
-   * Login to Rithmic
-   * @param {string} username - Username
-   * @param {string} password - Password
-   * @returns {Promise<{success: boolean, user?: Object, accounts?: Array, error?: string}>}
-   */
   async login(username, password) {
     try {
       this.orderConn = new RithmicConnection();
@@ -113,7 +103,6 @@ class RithmicService extends EventEmitter {
           this.loginInfo = data;
           this.user = { userName: username, fcmId: data.fcmId, ibId: data.ibId };
           
-          // Fetch accounts
           try {
             await fetchAccounts(this);
             log.debug('Fetched accounts', { count: this.accounts.length });
@@ -121,10 +110,8 @@ class RithmicService extends EventEmitter {
             log.warn('Failed to fetch accounts', { error: err.message });
           }
           
-          // Store credentials for reconnection
           this.credentials = { username, password };
           
-          // Connect to PNL_PLANT
           try {
             const pnlConnected = await this.connectPnL(username, password);
             if (pnlConnected && this.pnlConn) {
@@ -155,12 +142,6 @@ class RithmicService extends EventEmitter {
     }
   }
 
-  /**
-   * Connect to PNL_PLANT for balance data
-   * @param {string} username - Username
-   * @param {string} password - Password
-   * @returns {Promise<boolean>}
-   */
   async connectPnL(username, password) {
     try {
       this.pnlConn = new RithmicConnection();
@@ -199,12 +180,6 @@ class RithmicService extends EventEmitter {
     }
   }
 
-  /**
-   * Connect to TICKER_PLANT for symbol lookup
-   * @param {string} username - Username
-   * @param {string} password - Password
-   * @returns {Promise<boolean>}
-   */
   async connectTicker(username, password) {
     try {
       this.tickerConn = new RithmicConnection();
@@ -254,6 +229,8 @@ class RithmicService extends EventEmitter {
   async placeOrder(orderData) { return placeOrder(this, orderData); }
   async cancelOrder(orderId) { return cancelOrder(this, orderId); }
   async closePosition(accountId, symbol) { return closePosition(this, accountId, symbol); }
+  async getContracts() { return getContracts(this); }
+  async searchContracts(searchText) { return searchContracts(this, searchText); }
 
   // ==================== STUBS ====================
 
@@ -278,221 +255,6 @@ class RithmicService extends EventEmitter {
       systemName: this.propfirm.systemName,
       gateway: this.propfirm.gateway || RITHMIC_ENDPOINTS.CHICAGO,
     };
-  }
-
-  // ==================== CONTRACTS ====================
-
-  /**
-   * Get all available contracts from Rithmic API
-   * @returns {Promise<{success: boolean, contracts: Array, source?: string, error?: string}>}
-   */
-  async getContracts() {
-    // Check cache
-    if (this._contractsCache && Date.now() - this._contractsCacheTime < CACHE.CONTRACTS_TTL) {
-      return { success: true, contracts: this._contractsCache, source: 'cache' };
-    }
-
-    if (!this.credentials) {
-      return { success: false, error: 'Not logged in' };
-    }
-
-    try {
-      // Connect to TICKER_PLANT if needed
-      if (!this.tickerConn) {
-        const connected = await this.connectTicker(this.credentials.username, this.credentials.password);
-        if (!connected) {
-          return { success: false, error: 'Failed to connect to TICKER_PLANT' };
-        }
-      }
-
-      this.tickerConn.setMaxListeners(5000);
-
-      log.debug('Fetching contracts from Rithmic API');
-      const contracts = await this._fetchAllFrontMonths();
-
-      if (!contracts.length) {
-        return { success: false, error: 'No tradeable contracts found' };
-      }
-
-      // Cache results
-      this._contractsCache = contracts;
-      this._contractsCacheTime = Date.now();
-
-      return { success: true, contracts, source: 'api' };
-    } catch (err) {
-      log.error('getContracts error', { error: err.message });
-      return { success: false, error: err.message };
-    }
-  }
-
-  /**
-   * Search contracts
-   * @param {string} searchText - Search text
-   * @returns {Promise<Array>}
-   */
-  async searchContracts(searchText) {
-    const result = await this.getContracts();
-    if (!searchText || !result.success) return result.contracts || [];
-    
-    const search = searchText.toUpperCase();
-    return result.contracts.filter(c =>
-      c.symbol.toUpperCase().includes(search) ||
-      c.name.toUpperCase().includes(search)
-    );
-  }
-
-  /**
-   * Fetch all front month contracts from API
-   * @private
-   */
-  async _fetchAllFrontMonths() {
-    if (!this.tickerConn) {
-      throw new Error('TICKER_PLANT not connected');
-    }
-
-    return new Promise((resolve) => {
-      const contracts = new Map();
-      const productsToCheck = new Map();
-
-      // Handler for ProductCodes responses
-      const productHandler = (msg) => {
-        if (msg.templateId !== 112) return;
-        
-        const decoded = this._decodeProductCodes(msg.data);
-        if (!decoded.productCode || !decoded.exchange) return;
-        
-        const validExchanges = ['CME', 'CBOT', 'NYMEX', 'COMEX', 'NYBOT', 'CFE'];
-        if (!validExchanges.includes(decoded.exchange)) return;
-        
-        const name = (decoded.productName || '').toLowerCase();
-        if (name.includes('option') || name.includes('swap') || name.includes('spread')) return;
-        
-        const key = `${decoded.productCode}:${decoded.exchange}`;
-        if (!productsToCheck.has(key)) {
-          productsToCheck.set(key, {
-            productCode: decoded.productCode,
-            productName: decoded.productName || decoded.productCode,
-            exchange: decoded.exchange,
-          });
-        }
-      };
-
-      // Handler for FrontMonth responses
-      const frontMonthHandler = (msg) => {
-        if (msg.templateId !== 114) return;
-        
-        const decoded = decodeFrontMonthContract(msg.data);
-        if (decoded.rpCode[0] === '0' && decoded.tradingSymbol) {
-          contracts.set(decoded.userMsg, {
-            symbol: decoded.tradingSymbol,
-            baseSymbol: decoded.userMsg,
-            exchange: decoded.exchange,
-          });
-        }
-      };
-
-      this.tickerConn.on('message', productHandler);
-      this.tickerConn.on('message', frontMonthHandler);
-
-      // Request all product codes
-      this.tickerConn.send('RequestProductCodes', {
-        templateId: 111,
-        userMsg: ['get-products'],
-      });
-
-      // After timeout, request front months
-      setTimeout(() => {
-        this.tickerConn.removeListener('message', productHandler);
-        log.debug('Collected products', { count: productsToCheck.size });
-
-        for (const product of productsToCheck.values()) {
-          this.tickerConn.send('RequestFrontMonthContract', {
-            templateId: 113,
-            userMsg: [product.productCode],
-            symbol: product.productCode,
-            exchange: product.exchange,
-          });
-        }
-
-        // Collect results after timeout
-        setTimeout(() => {
-          this.tickerConn.removeListener('message', frontMonthHandler);
-
-          const results = [];
-          for (const [baseSymbol, contract] of contracts) {
-            const productKey = `${baseSymbol}:${contract.exchange}`;
-            const product = productsToCheck.get(productKey);
-
-            // 100% API data - no static symbol info
-            results.push({
-              symbol: contract.symbol,
-              baseSymbol,
-              name: product?.productName || baseSymbol,
-              exchange: contract.exchange,
-              // All other data comes from API at runtime
-            });
-          }
-
-          // Sort alphabetically by base symbol
-          results.sort((a, b) => a.baseSymbol.localeCompare(b.baseSymbol));
-
-          log.debug('Got contracts from API', { count: results.length });
-          resolve(results);
-        }, TIMEOUTS.RITHMIC_PRODUCTS);
-      }, TIMEOUTS.RITHMIC_CONTRACTS);
-    });
-  }
-
-  /**
-   * Decode ProductCodes response
-   * @private
-   */
-  _decodeProductCodes(buffer) {
-    const result = {};
-    let offset = 0;
-
-    const readVarint = (buf, off) => {
-      let value = 0;
-      let shift = 0;
-      while (off < buf.length) {
-        const byte = buf[off++];
-        value |= (byte & 0x7F) << shift;
-        if (!(byte & 0x80)) break;
-        shift += 7;
-      }
-      return [value, off];
-    };
-
-    const readString = (buf, off) => {
-      const [len, newOff] = readVarint(buf, off);
-      return [buf.slice(newOff, newOff + len).toString('utf8'), newOff + len];
-    };
-
-    while (offset < buffer.length) {
-      try {
-        const [tag, tagOff] = readVarint(buffer, offset);
-        const wireType = tag & 0x7;
-        const fieldNumber = tag >>> 3;
-        offset = tagOff;
-
-        if (wireType === 0) {
-          const [, newOff] = readVarint(buffer, offset);
-          offset = newOff;
-        } else if (wireType === 2) {
-          const [val, newOff] = readString(buffer, offset);
-          offset = newOff;
-          if (fieldNumber === 110101) result.exchange = val;
-          if (fieldNumber === 100749) result.productCode = val;
-          if (fieldNumber === 100003) result.productName = val;
-        } else {
-          break;
-        }
-      } catch {
-        break;
-      }
-    }
-
-    return result;
   }
 
   // ==================== MARKET HOURS ====================
@@ -520,9 +282,6 @@ class RithmicService extends EventEmitter {
 
   // ==================== CLEANUP ====================
 
-  /**
-   * Disconnect all connections
-   */
   async disconnect() {
     const connections = [this.orderConn, this.pnlConn, this.tickerConn];
     

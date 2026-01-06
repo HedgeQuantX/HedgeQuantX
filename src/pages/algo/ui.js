@@ -198,7 +198,7 @@ class AlgoUI {
     this._line(chalk.cyan(GM));
     
     // Row 5: Connection | Propfirm
-    const connection = stats.platform || 'ProjectX';
+    const connection = stats.platform || 'Rithmic';
     const r5c1 = buildCell('Connection', connection, chalk.white, colL);
     const r5c2 = buildCell('Propfirm', stats.propfirm || 'N/A', chalk.cyan, colR);
     row(r5c1.padded, r5c2.padded);
