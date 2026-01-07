@@ -30,8 +30,8 @@ const dashboardMenu = async (service) => {
     return chalk.cyan('║') + content + ' '.repeat(Math.max(0, padding)) + chalk.cyan('║');
   };
   
-  // New box for dashboard menu
-  console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
+  // Continue from banner (connected rectangle)
+  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   console.log(makeLine(chalk.yellow.bold('Welcome, HQX Trader!'), 'center'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   

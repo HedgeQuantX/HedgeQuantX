@@ -126,7 +126,16 @@ const banner = async () => {
   
   const tagline = isMobile ? `HQX v${version}` : `Prop Futures Algo Trading  v${version}`;
   console.log(chalk.cyan('║') + chalk.white(centerText(tagline, innerWidth)) + chalk.cyan('║'));
-  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
+};
+
+/**
+ * Display banner with closed bottom (standalone)
+ */
+const bannerClosed = async () => {
+  await banner();
+  const termWidth = process.stdout.columns || 100;
+  const boxWidth = termWidth < 60 ? Math.max(termWidth - 2, 40) : Math.max(getLogoWidth(), 98);
+  console.log(chalk.cyan('╚' + '═'.repeat(boxWidth - 2) + '╝'));
 };
 
 const getFullLogo = () => [
@@ -187,7 +196,8 @@ const run = async () => {
           const totalContentWidth = numCols * colWidth;
           const leftMargin = Math.max(2, Math.floor((innerWidth - totalContentWidth) / 2));
           
-          console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
+          // Continue from banner (connected rectangle)
+          console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
           console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PROPFIRM', innerWidth)) + chalk.cyan('║'));
           console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
           
