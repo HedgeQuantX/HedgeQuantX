@@ -161,19 +161,21 @@ const getMobileLogo = () => [
 const run = async () => {
   try {
     log.info('Starting HQX CLI');
-    await bannerClosed();
-
-    // Restore session
-    const spinner = ora({ text: 'Restoring session...', color: 'yellow' }).start();
+    
+    // First launch - show banner with loading spinner
+    await banner();
+    const boxWidth = getLogoWidth();
+    const innerWidth = boxWidth - 2;
+    console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+    
+    const spinner = ora({ text: ' Loading...', color: 'yellow' }).start();
     const restored = await connections.restoreFromStorage();
 
     if (restored) {
-      spinner.succeed('Session restored');
       currentService = connections.getAll()[0].service;
       await refreshStats();
-    } else {
-      spinner.info('No active session');
     }
+    spinner.stop();
 
     // Main loop
     while (true) {
