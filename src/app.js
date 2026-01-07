@@ -17,6 +17,7 @@ const log = logger.scope('App');
 const { showStats } = require('./pages/stats');
 const { showAccounts } = require('./pages/accounts');
 const { algoTradingMenu } = require('./pages/algo');
+const { aiAgentsMenu, getActiveAgentCount } = require('./pages/ai-agents');
 
 // Menus
 const { rithmicMenu, dashboardMenu, handleUpdate } = require('./menus');
@@ -296,9 +297,7 @@ const run = async () => {
               break;
 
             case 'aiagents':
-              console.log(chalk.yellow('\n  AI Agents - Coming soon!'));
-              console.log(chalk.gray('  Configure AI trading agents for automated strategies.'));
-              await prompts.waitForEnter();
+              await aiAgentsMenu();
               break;
 
             case 'update':
