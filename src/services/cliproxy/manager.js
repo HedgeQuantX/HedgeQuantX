@@ -28,24 +28,47 @@ const DEFAULT_PORT = 8317;
 const CALLBACK_PORT = 54545;
 
 /**
- * Detect if running in headless/VPS environment (no display)
+ * Detect if running in headless/VPS environment (no browser access)
  * @returns {boolean}
  */
 const isHeadless = () => {
-  // Check for common display environment variables
-  if (process.env.DISPLAY) return false;
-  if (process.env.WAYLAND_DISPLAY) return false;
-  
-  // Check if running via SSH
-  if (process.env.SSH_CLIENT || process.env.SSH_TTY || process.env.SSH_CONNECTION) return true;
-  
-  // Check platform-specific indicators
-  if (process.platform === 'linux') {
-    // No DISPLAY usually means headless on Linux
+  // 1. SSH connection = definitely VPS/remote
+  if (process.env.SSH_CLIENT || process.env.SSH_TTY || process.env.SSH_CONNECTION) {
     return true;
   }
   
-  // macOS/Windows usually have a display
+  // 2. Docker/container environment
+  if (process.env.DOCKER_CONTAINER || process.env.KUBERNETES_SERVICE_HOST) {
+    return true;
+  }
+  
+  // 3. Common CI/CD environments
+  if (process.env.CI || process.env.GITHUB_ACTIONS || process.env.GITLAB_CI) {
+    return true;
+  }
+  
+  // 4. Check for display on Linux
+  if (process.platform === 'linux') {
+    // Has display = local with GUI
+    if (process.env.DISPLAY || process.env.WAYLAND_DISPLAY) {
+      return false;
+    }
+    // No display on Linux = likely headless/VPS
+    return true;
+  }
+  
+  // 5. macOS - check if running in terminal with GUI access
+  if (process.platform === 'darwin') {
+    // macOS always has GUI unless SSH (checked above)
+    return false;
+  }
+  
+  // 6. Windows - usually has GUI
+  if (process.platform === 'win32') {
+    return false;
+  }
+  
+  // Default: assume local
   return false;
 };
 
