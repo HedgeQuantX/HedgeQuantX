@@ -141,8 +141,10 @@ const banner = async (withLoading = false) => {
     const loadingPad = innerWidth - loadingText.length;
     console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
     console.log(chalk.cyan('║') + chalk.yellow(loadingText) + ' '.repeat(loadingPad) + chalk.cyan('║'));
-    console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
   }
+  
+  // ALWAYS close the banner
+  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
 };
 
 const getFullLogo = () => [
