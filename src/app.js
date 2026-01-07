@@ -42,7 +42,15 @@ const restoreTerminal = () => {
 };
 
 process.on('exit', restoreTerminal);
-process.on('SIGINT', () => { restoreTerminal(); process.exit(0); });
+process.on('SIGINT', () => { 
+  restoreTerminal();
+  // Draw bottom border before exit
+  const termWidth = process.stdout.columns || 100;
+  const boxWidth = termWidth < 60 ? Math.max(termWidth - 2, 40) : Math.max(getLogoWidth(), 98);
+  console.log(chalk.cyan('\n╚' + '═'.repeat(boxWidth - 2) + '╝'));
+  console.log(chalk.gray('GOODBYE!'));
+  process.exit(0);
+});
 process.on('SIGTERM', () => { restoreTerminal(); process.exit(0); });
 
 process.on('uncaughtException', (err) => {
@@ -162,20 +170,26 @@ const run = async () => {
   try {
     log.info('Starting HQX CLI');
     
-    // First launch - show banner with loading spinner
+    // First launch - show banner with loading
     await banner();
     const boxWidth = getLogoWidth();
     const innerWidth = boxWidth - 2;
-    console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
     
-    const spinner = ora({ text: ' Loading...', color: 'yellow' }).start();
+    // Show loading inside the box
+    console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+    const loadingText = '  LOADING DASHBOARD...';
+    const loadingPad = innerWidth - loadingText.length;
+    process.stdout.write(chalk.cyan('║') + chalk.yellow(loadingText) + ' '.repeat(loadingPad) + chalk.cyan('║'));
+    
     const restored = await connections.restoreFromStorage();
 
     if (restored) {
       currentService = connections.getAll()[0].service;
       await refreshStats();
     }
-    spinner.stop();
+    
+    // Clear loading line
+    process.stdout.write('\r' + ' '.repeat(boxWidth + 2) + '\r');
 
     // Main loop
     while (true) {
@@ -234,13 +248,13 @@ const run = async () => {
           }
           
           console.log(chalk.cyan('╠' + '─'.repeat(innerWidth) + '╣'));
-          console.log(chalk.cyan('║') + chalk.red(centerText('[X] Exit', innerWidth)) + chalk.cyan('║'));
+          console.log(chalk.cyan('║') + chalk.red(centerText('[X] EXIT', innerWidth)) + chalk.cyan('║'));
           console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
           
-          const input = await prompts.textInput(chalk.cyan('Select number (or X):'));
+          const input = await prompts.textInput(chalk.cyan('SELECT (1-' + numbered.length + '/X): '));
           
           if (!input || input.toLowerCase() === 'x') {
-            console.log(chalk.gray('Goodbye!'));
+            console.log(chalk.gray('GOODBYE!'));
             process.exit(0);
           }
           

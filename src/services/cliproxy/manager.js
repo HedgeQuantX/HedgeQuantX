@@ -8,11 +8,9 @@
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
-const https = require('https');
 const http = require('http');
 const { spawn } = require('child_process');
-const { createGunzip } = require('zlib');
-const tar = require('tar');
+const { downloadFile, extractTarGz, extractZip } = require('./installer');
 
 // CLIProxyAPI version and download URLs
 const CLIPROXY_VERSION = '6.6.88';
@@ -27,6 +25,29 @@ const AUTH_DIR = path.join(INSTALL_DIR, 'auths');
 
 // Default port
 const DEFAULT_PORT = 8317;
+const CALLBACK_PORT = 54545;
+
+/**
+ * Detect if running in headless/VPS environment (no display)
+ * @returns {boolean}
+ */
+const isHeadless = () => {
+  // Check for common display environment variables
+  if (process.env.DISPLAY) return false;
+  if (process.env.WAYLAND_DISPLAY) return false;
+  
+  // Check if running via SSH
+  if (process.env.SSH_CLIENT || process.env.SSH_TTY || process.env.SSH_CONNECTION) return true;
+  
+  // Check platform-specific indicators
+  if (process.platform === 'linux') {
+    // No DISPLAY usually means headless on Linux
+    return true;
+  }
+  
+  // macOS/Windows usually have a display
+  return false;
+};
 
 /**
  * Get download URL for current platform
@@ -73,101 +94,6 @@ const isInstalled = () => {
   return fs.existsSync(BINARY_PATH);
 };
 
-/**
- * Download file from URL
- * @param {string} url - URL to download
- * @param {string} destPath - Destination path
- * @param {Function} onProgress - Progress callback (percent)
- * @returns {Promise<boolean>}
- */
-const downloadFile = (url, destPath, onProgress = null) => {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(destPath);
-    
-    const request = (url.startsWith('https') ? https : http).get(url, (response) => {
-      // Handle redirects
-      if (response.statusCode === 302 || response.statusCode === 301) {
-        file.close();
-        fs.unlinkSync(destPath);
-        return downloadFile(response.headers.location, destPath, onProgress)
-          .then(resolve)
-          .catch(reject);
-      }
-      
-      if (response.statusCode !== 200) {
-        file.close();
-        fs.unlinkSync(destPath);
-        return reject(new Error(`HTTP ${response.statusCode}`));
-      }
-      
-      const totalSize = parseInt(response.headers['content-length'], 10);
-      let downloadedSize = 0;
-      
-      response.on('data', (chunk) => {
-        downloadedSize += chunk.length;
-        if (onProgress && totalSize) {
-          onProgress(Math.round((downloadedSize / totalSize) * 100));
-        }
-      });
-      
-      response.pipe(file);
-      
-      file.on('finish', () => {
-        file.close();
-        resolve(true);
-      });
-    });
-    
-    request.on('error', (err) => {
-      file.close();
-      if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
-      reject(err);
-    });
-    
-    request.setTimeout(120000, () => {
-      request.destroy();
-      reject(new Error('Download timeout'));
-    });
-  });
-};
-
-/**
- * Extract tar.gz file
- * @param {string} archivePath - Path to archive
- * @param {string} destDir - Destination directory
- * @returns {Promise<boolean>}
- */
-const extractTarGz = (archivePath, destDir) => {
-  return new Promise((resolve, reject) => {
-    fs.createReadStream(archivePath)
-      .pipe(createGunzip())
-      .pipe(tar.extract({ cwd: destDir }))
-      .on('finish', () => resolve(true))
-      .on('error', reject);
-  });
-};
-
-/**
- * Extract zip file (Windows)
- * @param {string} archivePath - Path to archive
- * @param {string} destDir - Destination directory
- * @returns {Promise<boolean>}
- */
-const extractZip = async (archivePath, destDir) => {
-  const { execSync } = require('child_process');
-  
-  if (process.platform === 'win32') {
-    // Use PowerShell on Windows
-    execSync(`powershell -Command "Expand-Archive -Path '${archivePath}' -DestinationPath '${destDir}' -Force"`, {
-      stdio: 'ignore'
-    });
-  } else {
-    // Use unzip on Unix
-    execSync(`unzip -o "${archivePath}" -d "${destDir}"`, { stdio: 'ignore' });
-  }
-  
-  return true;
-};
 
 /**
  * Install CLIProxyAPI
@@ -388,7 +314,7 @@ const ensureRunning = async (onProgress = null) => {
 /**
  * Get OAuth login URL for a provider
  * @param {string} provider - Provider ID (anthropic, openai, google, etc.)
- * @returns {Promise<Object>} { success, url, childProcess, error }
+ * @returns {Promise<Object>} { success, url, childProcess, isHeadless, error }
  */
 const getLoginUrl = async (provider) => {
   const providerFlags = {
@@ -400,8 +326,10 @@ const getLoginUrl = async (provider) => {
   
   const flag = providerFlags[provider];
   if (!flag) {
-    return { success: false, url: null, childProcess: null, error: 'Provider not supported for OAuth' };
+    return { success: false, url: null, childProcess: null, isHeadless: false, error: 'Provider not supported for OAuth' };
   }
+  
+  const headless = isHeadless();
   
   // For headless/VPS, use -no-browser flag
   return new Promise((resolve) => {
@@ -419,7 +347,7 @@ const getLoginUrl = async (provider) => {
       if (urlMatch) {
         resolved = true;
         // Return child process so caller can wait for auth completion
-        resolve({ success: true, url: urlMatch[0], childProcess: child, error: null });
+        resolve({ success: true, url: urlMatch[0], childProcess: child, isHeadless: headless, error: null });
       }
     };
     
@@ -436,16 +364,62 @@ const getLoginUrl = async (provider) => {
     child.on('error', (err) => {
       if (!resolved) {
         resolved = true;
-        resolve({ success: false, url: null, childProcess: null, error: err.message });
+        resolve({ success: false, url: null, childProcess: null, isHeadless: headless, error: err.message });
       }
     });
     
     child.on('close', (code) => {
       if (!resolved) {
         resolved = true;
-        resolve({ success: false, url: null, childProcess: null, error: `Process exited with code ${code}` });
+        resolve({ success: false, url: null, childProcess: null, isHeadless: headless, error: `Process exited with code ${code}` });
       }
     });
+  });
+};
+
+/**
+ * Process OAuth callback URL manually (for VPS/headless)
+ * The callback URL looks like: http://localhost:54545/callback?code=xxx&state=yyy
+ * We need to forward this to the waiting CLIProxyAPI process
+ * @param {string} callbackUrl - The callback URL from the browser
+ * @returns {Promise<Object>} { success, error }
+ */
+const processCallback = (callbackUrl) => {
+  return new Promise((resolve) => {
+    try {
+      // Parse the callback URL
+      const url = new URL(callbackUrl);
+      const params = url.searchParams;
+      
+      // Extract query string to forward
+      const queryString = url.search;
+      
+      // Make request to local callback endpoint
+      const callbackPath = `/callback${queryString}`;
+      
+      const req = http.get(`http://127.0.0.1:${CALLBACK_PORT}${callbackPath}`, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          if (res.statusCode === 200 || res.statusCode === 302) {
+            resolve({ success: true, error: null });
+          } else {
+            resolve({ success: false, error: `Callback returned ${res.statusCode}: ${data}` });
+          }
+        });
+      });
+      
+      req.on('error', (err) => {
+        resolve({ success: false, error: `Callback error: ${err.message}` });
+      });
+      
+      req.setTimeout(10000, () => {
+        req.destroy();
+        resolve({ success: false, error: 'Callback timeout' });
+      });
+    } catch (err) {
+      resolve({ success: false, error: `Invalid URL: ${err.message}` });
+    }
   });
 };
 
@@ -455,12 +429,15 @@ module.exports = {
   BINARY_PATH,
   AUTH_DIR,
   DEFAULT_PORT,
+  CALLBACK_PORT,
   getDownloadUrl,
   isInstalled,
+  isHeadless,
   install,
   isRunning,
   start,
   stop,
   ensureRunning,
-  getLoginUrl
+  getLoginUrl,
+  processCallback
 };

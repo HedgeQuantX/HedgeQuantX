@@ -66,7 +66,7 @@ const selectModelFromList = async (provider, models, boxWidth) => {
     clearWithBanner();
     drawModelsTable(provider, models, boxWidth);
     
-    const input = await prompts.textInput(chalk.cyan('Select model: '));
+    const input = await prompts.textInput(chalk.cyan('SELECT MODEL: '));
     const choice = (input || '').toLowerCase().trim();
     
     if (choice === 'b' || choice === '') return null;
@@ -74,7 +74,7 @@ const selectModelFromList = async (provider, models, boxWidth) => {
     const num = parseInt(choice);
     if (!isNaN(num) && num >= 1 && num <= models.length) return models[num - 1];
     
-    console.log(chalk.red('  Invalid option.'));
+    console.log(chalk.red('  INVALID OPTION'));
     await new Promise(r => setTimeout(r, 1000));
   }
 };
@@ -82,16 +82,16 @@ const selectModelFromList = async (provider, models, boxWidth) => {
 /** Select a model for a provider (fetches from API) */
 const selectModel = async (provider, apiKey) => {
   const boxWidth = getLogoWidth();
-  const spinner = ora({ text: 'Fetching models from API...', color: 'yellow' }).start();
+  const spinner = ora({ text: 'FETCHING MODELS FROM API...', color: 'yellow' }).start();
   const result = await fetchModelsFromApi(provider.id, apiKey);
   
   if (!result.success || result.models.length === 0) {
-    spinner.fail(result.error || 'No models available');
+    spinner.fail(result.error || 'NO MODELS AVAILABLE');
     await prompts.waitForEnter();
     return null;
   }
   
-  spinner.succeed(`Found ${result.models.length} models`);
+  spinner.succeed(`FOUND ${result.models.length} MODELS`);
   return selectModelFromList(provider, result.models, boxWidth);
 };
 
@@ -110,47 +110,47 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
   
   // Check if CLIProxyAPI is installed
   if (!cliproxy.isInstalled()) {
-    console.log(chalk.yellow('  CLIProxyAPI not installed. Installing...'));
-    const spinner = ora({ text: 'Downloading CLIProxyAPI...', color: 'yellow' }).start();
+    console.log(chalk.yellow('  CLIPROXYAPI NOT INSTALLED. INSTALLING...'));
+    const spinner = ora({ text: 'DOWNLOADING CLIPROXYAPI...', color: 'yellow' }).start();
     
     const installResult = await cliproxy.install((msg, percent) => {
-      spinner.text = `${msg} ${percent}%`;
+      spinner.text = `${msg.toUpperCase()} ${percent}%`;
     });
     
     if (!installResult.success) {
-      spinner.fail(`Installation failed: ${installResult.error}`);
+      spinner.fail(`INSTALLATION FAILED: ${installResult.error.toUpperCase()}`);
       await prompts.waitForEnter();
       return false;
     }
-    spinner.succeed('CLIProxyAPI installed');
+    spinner.succeed('CLIPROXYAPI INSTALLED');
   }
   
   // Check if running, start if not
   let status = await cliproxy.isRunning();
   if (!status.running) {
-    const spinner = ora({ text: 'Starting CLIProxyAPI...', color: 'yellow' }).start();
+    const spinner = ora({ text: 'STARTING CLIPROXYAPI...', color: 'yellow' }).start();
     const startResult = await cliproxy.start();
     
     if (!startResult.success) {
-      spinner.fail(`Failed to start: ${startResult.error}`);
+      spinner.fail(`FAILED TO START: ${startResult.error.toUpperCase()}`);
       await prompts.waitForEnter();
       return false;
     }
-    spinner.succeed('CLIProxyAPI started');
+    spinner.succeed('CLIPROXYAPI STARTED');
   } else {
-    console.log(chalk.green('  ✓ CLIProxyAPI is running'));
+    console.log(chalk.green('  ✓ CLIPROXYAPI IS RUNNING'));
   }
   
   // Check if provider supports OAuth
   const oauthProviders = ['anthropic', 'openai', 'google', 'qwen'];
   if (!oauthProviders.includes(provider.id)) {
     // Try to fetch models directly
-    console.log(chalk.gray(`  Checking available models for ${provider.name}...`));
+    console.log(chalk.gray(`  CHECKING AVAILABLE MODELS FOR ${provider.name.toUpperCase()}...`));
     const modelsResult = await cliproxy.fetchProviderModels(provider.id);
     
     if (!modelsResult.success || modelsResult.models.length === 0) {
-      console.log(chalk.red(`  No models available for ${provider.name}`));
-      console.log(chalk.gray('  This provider may require API key connection.'));
+      console.log(chalk.red(`  NO MODELS AVAILABLE FOR ${provider.name.toUpperCase()}`));
+      console.log(chalk.gray('  THIS PROVIDER MAY REQUIRE API KEY CONNECTION.'));
       await prompts.waitForEnter();
       return false;
     }
@@ -165,28 +165,68 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
     });
     
     if (saveConfig(config)) {
-      console.log(chalk.green(`\n  ✓ ${provider.name} connected via CLIProxy.`));
-      console.log(chalk.cyan(`    Model: ${selectedModel.name}`));
+      console.log(chalk.green(`\n  ✓ ${provider.name.toUpperCase()} CONNECTED VIA CLIPROXY`));
+      console.log(chalk.cyan(`    MODEL: ${selectedModel.name.toUpperCase()}`));
     }
     await prompts.waitForEnter();
     return true;
   }
   
   // OAuth flow - get login URL
-  console.log(chalk.cyan(`\n  Starting OAuth login for ${provider.name}...`));
+  console.log(chalk.cyan(`\n  STARTING OAUTH LOGIN FOR ${provider.name.toUpperCase()}...`));
   const loginResult = await cliproxy.getLoginUrl(provider.id);
   
   if (!loginResult.success) {
-    console.log(chalk.red(`  OAuth error: ${loginResult.error}`));
+    console.log(chalk.red(`  OAUTH ERROR: ${loginResult.error.toUpperCase()}`));
     await prompts.waitForEnter();
     return false;
   }
   
-  console.log(chalk.cyan('\n  Open this URL in your browser to authenticate:\n'));
+  console.log(chalk.cyan('\n  OPEN THIS URL IN YOUR BROWSER TO AUTHENTICATE:\n'));
   console.log(chalk.yellow(`  ${loginResult.url}\n`));
-  console.log(chalk.gray('  After authenticating, press Enter to continue...'));
   
-  await prompts.waitForEnter();
+  // Different flow for VPS/headless vs local
+  if (loginResult.isHeadless) {
+    console.log(chalk.magenta('  ══════════════════════════════════════════════════════'));
+    console.log(chalk.magenta('  VPS/SSH DETECTED - MANUAL CALLBACK REQUIRED'));
+    console.log(chalk.magenta('  ══════════════════════════════════════════════════════\n'));
+    console.log(chalk.white('  AFTER AUTHORIZING IN BROWSER, YOU WILL SEE A BLANK PAGE.'));
+    console.log(chalk.white('  COPY THE URL FROM BROWSER ADDRESS BAR (STARTS WITH LOCALHOST)'));
+    console.log(chalk.white('  AND PASTE IT BELOW:\n'));
+    
+    const callbackUrl = await prompts.textInput(chalk.cyan('  CALLBACK URL: '));
+    
+    if (!callbackUrl || !callbackUrl.includes('localhost')) {
+      console.log(chalk.red('\n  INVALID CALLBACK URL'));
+      if (loginResult.childProcess) loginResult.childProcess.kill();
+      await prompts.waitForEnter();
+      return false;
+    }
+    
+    // Process the callback
+    const spinner = ora({ text: 'PROCESSING CALLBACK...', color: 'yellow' }).start();
+    const callbackResult = await cliproxy.processCallback(callbackUrl.trim());
+    
+    if (!callbackResult.success) {
+      spinner.fail(`CALLBACK FAILED: ${callbackResult.error.toUpperCase()}`);
+      if (loginResult.childProcess) loginResult.childProcess.kill();
+      await prompts.waitForEnter();
+      return false;
+    }
+    
+    spinner.succeed('AUTHENTICATION SUCCESSFUL!');
+    
+    // Wait for CLIProxyAPI to process the token
+    await new Promise(r => setTimeout(r, 2000));
+  } else {
+    console.log(chalk.gray('  AFTER AUTHENTICATING, PRESS ENTER TO CONTINUE...'));
+    await prompts.waitForEnter();
+  }
+  
+  // Kill the login child process if still running
+  if (loginResult.childProcess) {
+    try { loginResult.childProcess.kill(); } catch (e) { /* ignore */ }
+  }
   
   // Try to fetch models after auth
   const modelsResult = await cliproxy.fetchProviderModels(provider.id);
@@ -200,8 +240,8 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
         modelName: selectedModel.name
       });
       if (saveConfig(config)) {
-        console.log(chalk.green(`\n  ✓ ${provider.name} connected via Paid Plan.`));
-        console.log(chalk.cyan(`    Model: ${selectedModel.name}`));
+        console.log(chalk.green(`\n  ✓ ${provider.name.toUpperCase()} CONNECTED VIA PAID PLAN`));
+        console.log(chalk.cyan(`    MODEL: ${selectedModel.name.toUpperCase()}`));
       }
     }
   } else {
@@ -209,10 +249,10 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
     activateProvider(config, provider.id, {
       connectionType: 'cliproxy',
       modelId: null,
-      modelName: 'Auto'
+      modelName: 'AUTO'
     });
     if (saveConfig(config)) {
-      console.log(chalk.green(`\n  ✓ ${provider.name} connected via Paid Plan.`));
+      console.log(chalk.green(`\n  ✓ ${provider.name.toUpperCase()} CONNECTED VIA PAID PLAN`));
     }
   }
   
@@ -223,19 +263,19 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
 /** Handle API Key connection */
 const handleApiKeyConnection = async (provider, config) => {
   clearWithBanner();
-  console.log(chalk.yellow(`\n  Enter your ${provider.name} API key:`));
-  console.log(chalk.gray('  (Press Enter to cancel)\n'));
+  console.log(chalk.yellow(`\n  ENTER YOUR ${provider.name.toUpperCase()} API KEY:`));
+  console.log(chalk.gray('  (PRESS ENTER TO CANCEL)\n'));
   
-  const apiKey = await prompts.textInput(chalk.cyan('  API Key: '), true);
+  const apiKey = await prompts.textInput(chalk.cyan('  API KEY: '), true);
   
   if (!apiKey || apiKey.trim() === '') {
-    console.log(chalk.gray('  Cancelled.'));
+    console.log(chalk.gray('  CANCELLED'));
     await prompts.waitForEnter();
     return false;
   }
   
   if (apiKey.length < 20) {
-    console.log(chalk.red('  Invalid API key format (too short).'));
+    console.log(chalk.red('  INVALID API KEY FORMAT (TOO SHORT)'));
     await prompts.waitForEnter();
     return false;
   }
@@ -251,10 +291,10 @@ const handleApiKeyConnection = async (provider, config) => {
   });
   
   if (saveConfig(config)) {
-    console.log(chalk.green(`\n  ✓ ${provider.name} connected via API Key.`));
-    console.log(chalk.cyan(`    Model: ${selectedModel.name}`));
+    console.log(chalk.green(`\n  ✓ ${provider.name.toUpperCase()} CONNECTED VIA API KEY`));
+    console.log(chalk.cyan(`    MODEL: ${selectedModel.name.toUpperCase()}`));
   } else {
-    console.log(chalk.red('\n  Failed to save config.'));
+    console.log(chalk.red('\n  FAILED TO SAVE CONFIG'));
   }
   await prompts.waitForEnter();
   return true;
@@ -268,7 +308,7 @@ const handleProviderConfig = async (provider, config) => {
     clearWithBanner();
     drawProviderWindow(provider, config, boxWidth);
     
-    const input = await prompts.textInput(chalk.cyan('Select option: '));
+    const input = await prompts.textInput(chalk.cyan('SELECT OPTION: '));
     const choice = (input || '').toLowerCase().trim();
     
     if (choice === 'b' || choice === '') break;
@@ -276,7 +316,7 @@ const handleProviderConfig = async (provider, config) => {
     if (choice === 'd' && config.providers[provider.id]) {
       config.providers[provider.id].active = false;
       saveConfig(config);
-      console.log(chalk.yellow(`\n  ${provider.name} disconnected.`));
+      console.log(chalk.yellow(`\n  ${provider.name.toUpperCase()} DISCONNECTED`));
       await prompts.waitForEnter();
       continue;
     }
@@ -320,17 +360,17 @@ const getActiveAgentCount = () => getActiveProvider() ? 1 : 0;
 /** Show CLIProxy status */
 const showCliProxyStatus = async () => {
   clearWithBanner();
-  console.log(chalk.yellow('\n  CLIProxyAPI Status\n'));
+  console.log(chalk.yellow('\n  CLIPROXYAPI STATUS\n'));
   
   const installed = cliproxy.isInstalled();
-  console.log(chalk.gray('  Installed: ') + (installed ? chalk.green('Yes') : chalk.red('No')));
+  console.log(chalk.gray('  INSTALLED: ') + (installed ? chalk.green('YES') : chalk.red('NO')));
   
   if (installed) {
     const status = await cliproxy.isRunning();
-    console.log(chalk.gray('  Running: ') + (status.running ? chalk.green('Yes') : chalk.red('No')));
-    console.log(chalk.gray('  Version: ') + chalk.cyan(cliproxy.CLIPROXY_VERSION));
-    console.log(chalk.gray('  Port: ') + chalk.cyan(cliproxy.DEFAULT_PORT));
-    console.log(chalk.gray('  Install dir: ') + chalk.cyan(cliproxy.INSTALL_DIR));
+    console.log(chalk.gray('  RUNNING: ') + (status.running ? chalk.green('YES') : chalk.red('NO')));
+    console.log(chalk.gray('  VERSION: ') + chalk.cyan(cliproxy.CLIPROXY_VERSION));
+    console.log(chalk.gray('  PORT: ') + chalk.cyan(cliproxy.DEFAULT_PORT));
+    console.log(chalk.gray('  INSTALL DIR: ') + chalk.cyan(cliproxy.INSTALL_DIR));
   }
   
   console.log();
@@ -345,10 +385,10 @@ const aiAgentsMenu = async () => {
   while (true) {
     clearWithBanner();
     const status = await cliproxy.isRunning();
-    const statusText = status.running ? `localhost:${cliproxy.DEFAULT_PORT}` : 'Not running';
+    const statusText = status.running ? `LOCALHOST:${cliproxy.DEFAULT_PORT}` : 'NOT RUNNING';
     drawProvidersTable(AI_PROVIDERS, config, boxWidth, statusText);
     
-    const input = await prompts.textInput(chalk.cyan('Select (1-8/S/B): '));
+    const input = await prompts.textInput(chalk.cyan('SELECT (1-8/S/B): '));
     const choice = (input || '').toLowerCase().trim();
     
     if (choice === 'b' || choice === '') break;
@@ -364,7 +404,7 @@ const aiAgentsMenu = async () => {
       continue;
     }
     
-    console.log(chalk.red('  Invalid option.'));
+    console.log(chalk.red('  INVALID OPTION'));
     await new Promise(r => setTimeout(r, 1000));
   }
 };

@@ -26,10 +26,10 @@ const {
 const { createBoxMenu } = require('./menu');
 
 /**
- * Display HQX Banner (without closing border)
- * Note: console.clear() is handled by app.js banner() to avoid terminal bugs
+ * Display HQX Banner (without closing border by default)
+ * @param {boolean} closed - If true, add bottom border
  */
-const displayBanner = () => {
+const displayBanner = (closed = false) => {
   const termWidth = process.stdout.columns || 100;
   const isMobile = termWidth < 60;
   const boxWidth = isMobile ? Math.max(termWidth - 2, 40) : Math.max(getLogoWidth(), 98);
@@ -72,6 +72,11 @@ const displayBanner = () => {
   console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
   const tagline = isMobile ? `HQX v${version}` : `Prop Futures Algo Trading  v${version}`;
   console.log(chalk.cyan('║') + chalk.white(centerText(tagline, innerWidth)) + chalk.cyan('║'));
+  
+  // Close the box if requested
+  if (closed) {
+    console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
+  }
 };
 
 /**
