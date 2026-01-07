@@ -15,7 +15,7 @@ const { getLogoWidth } = require('../ui');
 const { prompts } = require('../utils');
 const { fetchModelsFromApi } = require('./ai-models');
 const { drawProvidersTable, drawModelsTable, drawProviderWindow } = require('./ai-agents-ui');
-const { isCliProxyRunning, fetchModelsFromCliProxy, getOAuthUrl, checkOAuthStatus } = require('../services/cliproxy');
+const { isCliProxyRunning, fetchModelsFromCliProxy, getOAuthUrl, checkOAuthStatus, getCliProxyUrl, setCliProxyUrl, DEFAULT_CLIPROXY_URL } = require('../services/cliproxy');
 
 // Config file path
 const CONFIG_DIR = path.join(os.homedir(), '.hqx');
@@ -101,18 +101,63 @@ const activateProvider = (config, providerId, data) => {
 /** Handle CLIProxy connection */
 const handleCliProxyConnection = async (provider, config, boxWidth) => {
   console.log();
-  const spinner = ora({ text: 'Checking CLIProxy status...', color: 'yellow' }).start();
-  const proxyStatus = await isCliProxyRunning();
+  const currentUrl = getCliProxyUrl();
+  const spinner = ora({ text: `Checking CLIProxy at ${currentUrl}...`, color: 'yellow' }).start();
+  let proxyStatus = await isCliProxyRunning();
   
   if (!proxyStatus.running) {
-    spinner.fail('CLIProxy is not running');
-    console.log(chalk.yellow('\n  CLIProxy must be running on localhost:8317'));
-    console.log(chalk.gray('  Install: https://help.router-for.me\n'));
-    await prompts.waitForEnter();
-    return false;
+    spinner.fail(`CLIProxy not reachable at ${currentUrl}`);
+    console.log();
+    console.log(chalk.yellow('  CLIProxy Options:'));
+    console.log(chalk.gray('  [1] Local  - localhost:8317 (default)'));
+    console.log(chalk.gray('  [2] Remote - Enter custom URL (e.g., http://your-pc-ip:8317)'));
+    console.log(chalk.gray('  [B] Back'));
+    console.log();
+    
+    const urlChoice = await prompts.textInput(chalk.cyan('  Select option: '));
+    
+    if (!urlChoice || urlChoice.toLowerCase() === 'b') {
+      return false;
+    }
+    
+    let newUrl = null;
+    if (urlChoice === '1') {
+      newUrl = DEFAULT_CLIPROXY_URL;
+    } else if (urlChoice === '2') {
+      console.log(chalk.gray('\n  Enter CLIProxy URL (e.g., http://192.168.1.100:8317):'));
+      const customUrl = await prompts.textInput(chalk.cyan('  URL: '));
+      if (!customUrl || customUrl.trim() === '') {
+        console.log(chalk.gray('  Cancelled.'));
+        await prompts.waitForEnter();
+        return false;
+      }
+      newUrl = customUrl.trim();
+      // Add http:// if missing
+      if (!newUrl.startsWith('http://') && !newUrl.startsWith('https://')) {
+        newUrl = 'http://' + newUrl;
+      }
+    }
+    
+    if (newUrl) {
+      const testSpinner = ora({ text: `Testing connection to ${newUrl}...`, color: 'yellow' }).start();
+      proxyStatus = await isCliProxyRunning(newUrl);
+      
+      if (!proxyStatus.running) {
+        testSpinner.fail(`Cannot connect to ${newUrl}`);
+        console.log(chalk.gray(`  Error: ${proxyStatus.error || 'Connection failed'}`));
+        console.log(chalk.yellow('\n  Make sure CLIProxy is running and accessible.'));
+        await prompts.waitForEnter();
+        return false;
+      }
+      
+      testSpinner.succeed(`Connected to CLIProxy at ${newUrl}`);
+      setCliProxyUrl(newUrl);
+    } else {
+      return false;
+    }
+  } else {
+    spinner.succeed(`CLIProxy connected at ${currentUrl}`);
   }
-  
-  spinner.succeed('CLIProxy is running');
   const oauthResult = await getOAuthUrl(provider.id);
   
   if (!oauthResult.success) {
@@ -303,6 +348,66 @@ const getActiveProvider = () => {
 /** Count active AI agents */
 const getActiveAgentCount = () => getActiveProvider() ? 1 : 0;
 
+/** Configure CLIProxy URL */
+const configureCliProxyUrl = async () => {
+  const currentUrl = getCliProxyUrl();
+  console.clear();
+  console.log(chalk.yellow('\n  Configure CLIProxy URL\n'));
+  console.log(chalk.gray(`  Current: ${currentUrl}`));
+  console.log();
+  console.log(chalk.white('  [1] Local  - localhost:8317 (default)'));
+  console.log(chalk.white('  [2] Remote - Enter custom URL'));
+  console.log(chalk.white('  [B] Back'));
+  console.log();
+  
+  const choice = await prompts.textInput(chalk.cyan('  Select option: '));
+  
+  if (!choice || choice.toLowerCase() === 'b') return;
+  
+  if (choice === '1') {
+    setCliProxyUrl(DEFAULT_CLIPROXY_URL);
+    console.log(chalk.green(`\n  ✓ CLIProxy URL set to ${DEFAULT_CLIPROXY_URL}`));
+    await prompts.waitForEnter();
+    return;
+  }
+  
+  if (choice === '2') {
+    console.log(chalk.gray('\n  Enter CLIProxy URL (e.g., http://192.168.1.100:8317):'));
+    const customUrl = await prompts.textInput(chalk.cyan('  URL: '));
+    
+    if (!customUrl || customUrl.trim() === '') {
+      console.log(chalk.gray('  Cancelled.'));
+      await prompts.waitForEnter();
+      return;
+    }
+    
+    let newUrl = customUrl.trim();
+    if (!newUrl.startsWith('http://') && !newUrl.startsWith('https://')) {
+      newUrl = 'http://' + newUrl;
+    }
+    
+    // Test connection
+    const spinner = ora({ text: `Testing connection to ${newUrl}...`, color: 'yellow' }).start();
+    const status = await isCliProxyRunning(newUrl);
+    
+    if (status.running) {
+      spinner.succeed(`Connected to ${newUrl}`);
+      setCliProxyUrl(newUrl);
+      console.log(chalk.green(`\n  ✓ CLIProxy URL saved.`));
+    } else {
+      spinner.warn(`Cannot connect to ${newUrl}`);
+      console.log(chalk.gray(`  Error: ${status.error || 'Connection failed'}`));
+      console.log(chalk.yellow('\n  Save anyway? (URL will be used when CLIProxy is available)'));
+      const save = await prompts.textInput(chalk.cyan('  Save? (y/N): '));
+      if (save && save.toLowerCase() === 'y') {
+        setCliProxyUrl(newUrl);
+        console.log(chalk.green('  ✓ URL saved.'));
+      }
+    }
+    await prompts.waitForEnter();
+  }
+};
+
 /** Main AI Agents menu */
 const aiAgentsMenu = async () => {
   let config = loadConfig();
@@ -310,12 +415,18 @@ const aiAgentsMenu = async () => {
   
   while (true) {
     console.clear();
-    drawProvidersTable(AI_PROVIDERS, config, boxWidth);
+    const cliproxyUrl = getCliProxyUrl();
+    drawProvidersTable(AI_PROVIDERS, config, boxWidth, cliproxyUrl);
     
-    const input = await prompts.textInput(chalk.cyan('Select provider: '));
+    const input = await prompts.textInput(chalk.cyan('Select (1-8/C/B): '));
     const choice = (input || '').toLowerCase().trim();
     
     if (choice === 'b' || choice === '') break;
+    
+    if (choice === 'c') {
+      await configureCliProxyUrl();
+      continue;
+    }
     
     const num = parseInt(choice);
     if (!isNaN(num) && num >= 1 && num <= AI_PROVIDERS.length) {

@@ -60,14 +60,40 @@ const draw2ColTable = (title, titleColor, items, backText, W) => {
  * @param {Array} providers - List of AI providers
  * @param {Object} config - Current config
  * @param {number} boxWidth - Box width
+ * @param {string} cliproxyUrl - Current CLIProxy URL (optional)
  */
-const drawProvidersTable = (providers, config, boxWidth) => {
+const drawProvidersTable = (providers, config, boxWidth, cliproxyUrl = null) => {
   const W = boxWidth - 2;
+  
+  console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
+  console.log(chalk.cyan('║') + chalk.yellow.bold(centerText('AI AGENTS CONFIGURATION', W)) + chalk.cyan('║'));
+  
+  // Show CLIProxy URL if provided
+  if (cliproxyUrl) {
+    console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
+    const proxyText = chalk.gray('CLIProxy: ') + chalk.cyan(cliproxyUrl);
+    console.log(chalk.cyan('║') + centerText(proxyText, W) + chalk.cyan('║'));
+  }
+  
+  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
+  
   const items = providers.map((p, i) => {
     const status = config.providers[p.id]?.active ? chalk.green(' ●') : '';
     return chalk.cyan(`[${i + 1}]`) + ' ' + chalk[p.color](p.name) + status;
   });
-  draw2ColTable('AI AGENTS CONFIGURATION', chalk.yellow.bold, items, '[B] Back to Menu', W);
+  
+  const rows = Math.ceil(items.length / 2);
+  for (let row = 0; row < rows; row++) {
+    const left = items[row];
+    const right = items[row + rows];
+    draw2ColRow(left || '', right || '', W);
+  }
+  
+  console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
+  console.log(chalk.cyan('║') + chalk.gray(centerText('[C] Configure CLIProxy URL', W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
+  console.log(chalk.cyan('║') + chalk.red(centerText('[B] Back to Menu', W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
 };
 
 /**

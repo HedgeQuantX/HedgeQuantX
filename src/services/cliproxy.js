@@ -1,16 +1,61 @@
 /**
  * CLIProxy Service
  * 
- * Connects to CLIProxyAPI (localhost:8317) for AI provider access
+ * Connects to CLIProxyAPI for AI provider access
  * via paid plans (Claude Pro, ChatGPT Plus, etc.)
  * 
+ * Supports both local (localhost:8317) and remote connections.
  * Docs: https://help.router-for.me
  */
 
 const http = require('http');
+const https = require('https');
+const os = require('os');
+const path = require('path');
+const fs = require('fs');
 
-// CLIProxy default endpoint
-const CLIPROXY_BASE = 'http://localhost:8317';
+// Config file path (same as ai-agents)
+const CONFIG_DIR = path.join(os.homedir(), '.hqx');
+const CONFIG_FILE = path.join(CONFIG_DIR, 'ai-config.json');
+
+// Default CLIProxy endpoint
+const DEFAULT_CLIPROXY_URL = 'http://localhost:8317';
+
+/**
+ * Get CLIProxy URL from config or default
+ * @returns {string} CLIProxy base URL
+ */
+const getCliProxyUrl = () => {
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+      if (config.cliproxyUrl && config.cliproxyUrl.trim()) {
+        return config.cliproxyUrl.trim();
+      }
+    }
+  } catch (error) { /* ignore */ }
+  return DEFAULT_CLIPROXY_URL;
+};
+
+/**
+ * Set CLIProxy URL in config
+ * @param {string} url - CLIProxy URL
+ * @returns {boolean} Success status
+ */
+const setCliProxyUrl = (url) => {
+  try {
+    let config = { providers: {} };
+    if (fs.existsSync(CONFIG_FILE)) {
+      config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    }
+    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    config.cliproxyUrl = url;
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
 
 /**
  * Make HTTP request to CLIProxy
@@ -18,24 +63,30 @@ const CLIPROXY_BASE = 'http://localhost:8317';
  * @param {string} method - HTTP method
  * @param {Object} headers - Request headers
  * @param {number} timeout - Timeout in ms (default 60000 per RULES.md #15)
+ * @param {string} baseUrl - Optional base URL override
  * @returns {Promise<Object>} { success, data, error }
  */
-const fetchCliProxy = (path, method = 'GET', headers = {}, timeout = 60000) => {
+const fetchCliProxy = (path, method = 'GET', headers = {}, timeout = 60000, baseUrl = null) => {
   return new Promise((resolve) => {
-    const url = new URL(path, CLIPROXY_BASE);
+    const base = baseUrl || getCliProxyUrl();
+    const url = new URL(path, base);
+    const isHttps = url.protocol === 'https:';
+    const httpModule = isHttps ? https : http;
+    
     const options = {
       hostname: url.hostname,
-      port: url.port || 8317,
+      port: url.port || (isHttps ? 443 : 8317),
       path: url.pathname + url.search,
       method,
       headers: {
         'Content-Type': 'application/json',
         ...headers
       },
-      timeout
+      timeout,
+      rejectUnauthorized: false // Allow self-signed certs for remote
     };
 
-    const req = http.request(options, (res) => {
+    const req = httpModule.request(options, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
@@ -53,7 +104,7 @@ const fetchCliProxy = (path, method = 'GET', headers = {}, timeout = 60000) => {
 
     req.on('error', (error) => {
       if (error.code === 'ECONNREFUSED') {
-        resolve({ success: false, error: 'CLIProxy not running', data: null });
+        resolve({ success: false, error: 'CLIProxy not reachable', data: null });
       } else {
         resolve({ success: false, error: error.message, data: null });
       }
@@ -69,14 +120,17 @@ const fetchCliProxy = (path, method = 'GET', headers = {}, timeout = 60000) => {
 };
 
 /**
- * Check if CLIProxy is running
- * @returns {Promise<Object>} { running, error }
+ * Check if CLIProxy is running/reachable
+ * @param {string} url - Optional URL to test (uses config if not provided)
+ * @returns {Promise<Object>} { running, error, url }
  */
-const isCliProxyRunning = async () => {
-  const result = await fetchCliProxy('/v1/models', 'GET', {}, 5000);
+const isCliProxyRunning = async (url = null) => {
+  const testUrl = url || getCliProxyUrl();
+  const result = await fetchCliProxy('/v1/models', 'GET', {}, 5000, testUrl);
   return { 
     running: result.success, 
-    error: result.success ? null : result.error 
+    error: result.success ? null : result.error,
+    url: testUrl
   };
 };
 
@@ -189,7 +243,9 @@ const getAuthFiles = async () => {
 };
 
 module.exports = {
-  CLIPROXY_BASE,
+  DEFAULT_CLIPROXY_URL,
+  getCliProxyUrl,
+  setCliProxyUrl,
   isCliProxyRunning,
   fetchModelsFromCliProxy,
   getOAuthUrl,
