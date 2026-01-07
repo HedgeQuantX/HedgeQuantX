@@ -17,10 +17,10 @@ const { fetchModelsFromApi } = require('./ai-models');
 const { drawProvidersTable, drawModelsTable, drawProviderWindow } = require('./ai-agents-ui');
 const cliproxy = require('../services/cliproxy');
 
-/** Clear screen and show banner */
+/** Clear screen and show banner (closed) */
 const clearWithBanner = () => {
   console.clear();
-  displayBanner();
+  displayBanner(true);  // Always close the banner
 };
 
 // Config file path
