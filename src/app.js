@@ -109,7 +109,7 @@ const refreshStats = async () => {
 
 // ==================== BANNER ====================
 
-const banner = async (withLoading = false) => {
+const banner = async () => {
   console.clear();
   
   const termWidth = process.stdout.columns || 100;
@@ -134,14 +134,6 @@ const banner = async (withLoading = false) => {
   
   const tagline = isMobile ? `HQX V${version}` : `PROP FUTURES ALGO TRADING  V${version}`;
   console.log(chalk.cyan('║') + chalk.white(centerText(tagline, innerWidth)) + chalk.cyan('║'));
-  
-  // Show loading message if requested
-  if (withLoading) {
-    const loadingText = '  LOADING DASHBOARD...';
-    const loadingPad = innerWidth - loadingText.length;
-    console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
-    console.log(chalk.cyan('║') + chalk.yellow(loadingText) + ' '.repeat(loadingPad) + chalk.cyan('║'));
-  }
   
   // ALWAYS close the banner
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
@@ -171,15 +163,22 @@ const run = async () => {
   try {
     log.info('Starting HQX CLI');
     
-    // First launch - show banner with loading (closed box)
-    await banner(true);
+    // First launch - show banner then spinner
+    await banner();
+    
+    const spinner = ora({ text: 'LOADING DASHBOARD...', color: 'yellow' }).start();
     
     const restored = await connections.restoreFromStorage();
 
     if (restored) {
       currentService = connections.getAll()[0].service;
       await refreshStats();
+      spinner.succeed('SESSION RESTORED');
+    } else {
+      spinner.stop();
     }
+    
+    await new Promise(r => setTimeout(r, 500));
 
     // Main loop
     while (true) {
