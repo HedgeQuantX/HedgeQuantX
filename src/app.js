@@ -161,7 +161,7 @@ const getMobileLogo = () => [
 const run = async () => {
   try {
     log.info('Starting HQX CLI');
-    await banner();
+    await bannerClosed();
 
     // Restore session
     const spinner = ora({ text: 'Restoring session...', color: 'yellow' }).start();
