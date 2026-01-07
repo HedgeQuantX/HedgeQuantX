@@ -253,23 +253,23 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
   let foundModels = false;
   for (let i = 0; i < 15; i++) {
     await new Promise(r => setTimeout(r, 2000));
-    restartSpinner.text = `LOADING MODELS (${i + 1}/15)...`;
+    restartSpinner.text = `WAITING FOR MODELS... (${(i + 1) * 2}S)`;
     
     const status = await cliproxy.isRunning();
     if (status.running) {
       // Check if models are available (tokens loaded)
       modelsResult = await cliproxy.fetchProviderModels(provider.id);
       if (modelsResult.success && modelsResult.models.length > 0) {
-        restartSpinner.succeed(`CLIPROXYAPI READY - ${modelsResult.models.length} MODELS FOUND`);
+        restartSpinner.succeed(`${modelsResult.models.length} MODELS AVAILABLE`);
         foundModels = true;
         break;
       }
     }
   }
   
-  // Stop spinner if still running (no models found after 15 tries)
+  // Stop spinner if still running (no models found after 30s)
   if (!foundModels) {
-    restartSpinner.warn('NO MODELS FOUND - USING AUTO MODE');
+    restartSpinner.warn('MODELS NOT LOADED - USING AUTO MODE');
   }
   
   // Show model selection or fallback to auto
