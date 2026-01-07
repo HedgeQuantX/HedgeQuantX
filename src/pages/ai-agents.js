@@ -227,9 +227,6 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
       return false;
     }
     
-    // Wait for token to be saved
-    await new Promise(r => setTimeout(r, 3000));
-    
   } else {
     console.log(chalk.gray('  AFTER AUTHENTICATING, PRESS ENTER TO CONTINUE...'));
     await prompts.waitForEnter();
@@ -240,40 +237,10 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
     try { loginResult.childProcess.kill(); } catch (e) { /* ignore */ }
   }
   
-  // Restart CLIProxyAPI to load new tokens
-  const restartSpinner = ora({ text: 'RESTARTING CLIPROXYAPI...', color: 'yellow' }).start();
-  await cliproxy.stop();
-  await new Promise(r => setTimeout(r, 2000));
-  await cliproxy.start();
+  // Fetch models directly from CLIProxy
+  const modelsResult = await cliproxy.fetchProviderModels(provider.id);
   
-  // Wait for CLIProxyAPI to be fully ready with models loaded
-  restartSpinner.text = 'WAITING FOR CLIPROXYAPI TO LOAD TOKENS...';
-  let modelsResult = { success: false, models: [] };
-  
-  let foundModels = false;
-  for (let i = 0; i < 15; i++) {
-    await new Promise(r => setTimeout(r, 2000));
-    restartSpinner.text = `WAITING FOR MODELS... (${(i + 1) * 2}S)`;
-    
-    const status = await cliproxy.isRunning();
-    if (status.running) {
-      // Check if models are available (tokens loaded)
-      modelsResult = await cliproxy.fetchProviderModels(provider.id);
-      if (modelsResult.success && modelsResult.models.length > 0) {
-        restartSpinner.succeed(`${modelsResult.models.length} MODELS AVAILABLE`);
-        foundModels = true;
-        break;
-      }
-    }
-  }
-  
-  // Stop spinner if still running (no models found after 30s)
-  if (!foundModels) {
-    restartSpinner.warn('MODELS NOT LOADED - USING AUTO MODE');
-  }
-  
-  // Show model selection or fallback to auto
-  if (foundModels && modelsResult.models.length > 0) {
+  if (modelsResult.success && modelsResult.models.length > 0) {
     const selectedModel = await selectModelFromList(provider, modelsResult.models, boxWidth);
     if (selectedModel) {
       activateProvider(config, provider.id, {
@@ -281,25 +248,22 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
         modelId: selectedModel.id,
         modelName: selectedModel.name
       });
-      if (saveConfig(config)) {
-        console.log(chalk.green(`\n  ✓ ${provider.name.toUpperCase()} CONNECTED VIA PAID PLAN`));
-        console.log(chalk.cyan(`    MODEL: ${selectedModel.name.toUpperCase()}`));
-      }
+      saveConfig(config);
+      console.log(chalk.green(`\n  ✓ ${provider.name.toUpperCase()} CONNECTED`));
+      console.log(chalk.cyan(`    MODEL: ${selectedModel.name.toUpperCase()}`));
       await prompts.waitForEnter();
       return true;
     }
   }
   
-  // No models or user cancelled - use auto mode
+  // No models available - use auto mode
   activateProvider(config, provider.id, {
     connectionType: 'cliproxy',
     modelId: null,
     modelName: 'AUTO'
   });
-  if (saveConfig(config)) {
-    console.log(chalk.green(`\n  ✓ ${provider.name.toUpperCase()} CONNECTED VIA PAID PLAN (AUTO MODE)`));
-  }
-  
+  saveConfig(config);
+  console.log(chalk.green(`\n  ✓ ${provider.name.toUpperCase()} CONNECTED (AUTO MODE)`));
   await prompts.waitForEnter();
   return true;
 };
