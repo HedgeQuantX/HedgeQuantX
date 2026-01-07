@@ -185,9 +185,10 @@ const run = async () => {
     while (true) {
       try {
         prepareStdin();
-        await banner();
 
         if (!connections.isConnected()) {
+          // Not connected - show banner + propfirm selection
+          await banner();
           // Not connected - show propfirm selection directly
           const boxWidth = getLogoWidth();
           const innerWidth = boxWidth - 2;
@@ -202,8 +203,8 @@ const run = async () => {
           const totalContentWidth = numCols * colWidth;
           const leftMargin = Math.max(2, Math.floor((innerWidth - totalContentWidth) / 2));
           
-          // Continue from banner (connected rectangle)
-          console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+          // New rectangle (banner is always closed)
+          console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
           console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PROPFIRM', innerWidth)) + chalk.cyan('║'));
           console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
           
@@ -255,26 +256,26 @@ const run = async () => {
             const credentials = await loginPrompt(selectedPropfirm.name);
             
             if (credentials) {
-              const spinner = ora({ text: 'Connecting to Rithmic...', color: 'yellow' }).start();
+              const spinner = ora({ text: 'CONNECTING TO RITHMIC...', color: 'yellow' }).start();
               try {
                 const { RithmicService } = require('./services/rithmic');
                 const service = new RithmicService(selectedPropfirm.key);
                 const result = await service.login(credentials.username, credentials.password);
                 
                 if (result.success) {
-                  spinner.text = 'Fetching accounts...';
+                  spinner.text = 'FETCHING ACCOUNTS...';
                   const accResult = await service.getTradingAccounts();
                   connections.add('rithmic', service, service.propfirm.name);
-                  spinner.succeed(`Connected to ${service.propfirm.name} (${accResult.accounts?.length || 0} accounts)`);
+                  spinner.succeed(`CONNECTED TO ${service.propfirm.name.toUpperCase()} (${accResult.accounts?.length || 0} ACCOUNTS)`);
                   currentService = service;
                   await refreshStats();
                   await new Promise(r => setTimeout(r, 1500));
                 } else {
-                  spinner.fail(result.error || 'Authentication failed');
+                  spinner.fail((result.error || 'AUTHENTICATION FAILED').toUpperCase());
                   await new Promise(r => setTimeout(r, 2000));
                 }
               } catch (error) {
-                spinner.fail(`Connection error: ${error.message}`);
+                spinner.fail(`CONNECTION ERROR: ${error.message.toUpperCase()}`);
                 await new Promise(r => setTimeout(r, 2000));
               }
             }
@@ -307,7 +308,7 @@ const run = async () => {
               try {
                 await algoTradingMenu(currentService);
               } catch (err) {
-                console.log(chalk.red(`  Algo error: ${err.message}`));
+                console.log(chalk.red(`  ALGO ERROR: ${err.message.toUpperCase()}`));
                 prepareStdin();
               }
               break;
