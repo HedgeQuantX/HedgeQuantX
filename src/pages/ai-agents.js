@@ -17,10 +17,10 @@ const { fetchModelsFromApi } = require('./ai-models');
 const { drawProvidersTable, drawModelsTable, drawProviderWindow } = require('./ai-agents-ui');
 const cliproxy = require('../services/cliproxy');
 
-/** Clear screen and show banner (closed) */
+/** Clear screen and show banner (always closed) */
 const clearWithBanner = () => {
   console.clear();
-  displayBanner(true);  // Always close the banner
+  displayBanner();  // Banner always closed
 };
 
 // Config file path
@@ -241,15 +241,46 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
   }
   
   // Restart CLIProxyAPI to load new tokens
-  console.log(chalk.gray('  RESTARTING CLIPROXYAPI...'));
+  const restartSpinner = ora({ text: 'RESTARTING CLIPROXYAPI...', color: 'yellow' }).start();
   await cliproxy.stop();
-  await new Promise(r => setTimeout(r, 1000));
+  await new Promise(r => setTimeout(r, 1500));
   await cliproxy.start();
-  await new Promise(r => setTimeout(r, 2000));
   
-  // Try to fetch models after auth
+  // Wait for CLIProxyAPI to be fully ready (check health)
+  restartSpinner.text = 'WAITING FOR CLIPROXYAPI TO BE READY...';
+  let ready = false;
+  for (let i = 0; i < 10; i++) {
+    await new Promise(r => setTimeout(r, 1000));
+    const status = await cliproxy.isRunning();
+    if (status.running) {
+      // Try a simple fetch to verify it's responding
+      const test = await cliproxy.fetchModels();
+      if (test.success) {
+        ready = true;
+        break;
+      }
+    }
+    restartSpinner.text = `WAITING FOR CLIPROXYAPI (${i + 1}/10)...`;
+  }
+  
+  if (!ready) {
+    restartSpinner.warn('CLIPROXYAPI SLOW TO START - CONTINUING...');
+  } else {
+    restartSpinner.succeed('CLIPROXYAPI READY');
+  }
+  
+  // Fetch models (with retry for provider-specific)
   const modelSpinner = ora({ text: 'FETCHING AVAILABLE MODELS...', color: 'yellow' }).start();
-  const modelsResult = await cliproxy.fetchProviderModels(provider.id);
+  
+  let modelsResult = { success: false, models: [] };
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    modelsResult = await cliproxy.fetchProviderModels(provider.id);
+    if (modelsResult.success && modelsResult.models.length > 0) break;
+    if (attempt < 5) {
+      modelSpinner.text = `FETCHING MODELS (ATTEMPT ${attempt + 1}/5)...`;
+      await new Promise(r => setTimeout(r, 1500));
+    }
+  }
   
   if (modelsResult.success && modelsResult.models.length > 0) {
     modelSpinner.succeed(`FOUND ${modelsResult.models.length} MODELS`);

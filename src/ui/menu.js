@@ -48,7 +48,7 @@ const createBoxMenu = async (title, items, options = {}) => {
     });
     
     console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
-    console.log(chalk.cyan('║') + chalk.white(centerText(`Prop Futures Algo Trading  v${version}`, innerWidth)) + chalk.cyan('║'));
+    console.log(chalk.cyan('║') + chalk.white(centerText(`PROP FUTURES ALGO TRADING  V${version}`, innerWidth)) + chalk.cyan('║'));
     
     // Stats bar if provided
     if (options.statsLine) {
@@ -81,7 +81,7 @@ const createBoxMenu = async (title, items, options = {}) => {
         const isSelected = index === selectedIndex;
         const prefix = isSelected ? chalk.white('▸ ') : '  ';
         const color = item.disabled ? chalk.gray : (item.color || chalk.cyan);
-        const label = item.label + (item.disabled ? ' (Coming Soon)' : '');
+        const label = item.label.toUpperCase() + (item.disabled ? ' (COMING SOON)' : '');
         const text = prefix + color(label);
         const visLen = text.replace(/\x1b\[[0-9;]*m/g, '').length;
         const padding = innerWidth - visLen;
@@ -96,8 +96,8 @@ const createBoxMenu = async (title, items, options = {}) => {
     
     // Footer
     console.log(chalk.cyan('╠' + '─'.repeat(innerWidth) + '╣'));
-    const footerText = options.footerText || 'Use ↑↓ arrows to navigate, Enter to select';
-    console.log(chalk.cyan('║') + chalk.gray(centerText(footerText, innerWidth)) + chalk.cyan('║'));
+    const footerText = options.footerText || 'USE ↑↓ ARROWS TO NAVIGATE, ENTER TO SELECT';
+    console.log(chalk.cyan('║') + chalk.gray(centerText(footerText.toUpperCase(), innerWidth)) + chalk.cyan('║'));
     console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
   };
   

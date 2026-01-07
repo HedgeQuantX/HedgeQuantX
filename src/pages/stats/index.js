@@ -198,7 +198,7 @@ const showStats = async (service) => {
     
     spinner.succeed('Stats loaded');
     console.clear();
-    displayBanner(true);  // Closed banner
+    displayBanner();  // Banner always closed
     
     // Calculate stats from API data
     const stats = aggregateStats(activeAccounts, accountData.allTrades);

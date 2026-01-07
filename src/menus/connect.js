@@ -18,16 +18,16 @@ const { prompts } = require('../utils');
 const loginPrompt = async (propfirmName) => {
   prepareStdin();
   console.log();
-  console.log(chalk.cyan(`Connecting to ${propfirmName}...`));
+  console.log(chalk.cyan(`CONNECTING TO ${propfirmName.toUpperCase()}...`));
   console.log();
 
-  const username = await prompts.textInput('Username:', '', (input) => {
-    try { validateUsername(input); return undefined; } catch (e) { return e.message; }
+  const username = await prompts.textInput('USERNAME:', '', (input) => {
+    try { validateUsername(input); return undefined; } catch (e) { return e.message.toUpperCase(); }
   });
   if (!username) return null;
   
-  const pwd = await prompts.passwordInput('Password:', (input) => {
-    try { validatePassword(input); return undefined; } catch (e) { return e.message; }
+  const pwd = await prompts.passwordInput('PASSWORD:', (input) => {
+    try { validatePassword(input); return undefined; } catch (e) { return e.message.toUpperCase(); }
   });
   if (!pwd) return null;
 
@@ -71,10 +71,10 @@ const rithmicMenu = async () => {
   }
   
   console.log(chalk.cyan('╠' + '─'.repeat(innerWidth) + '╣'));
-  console.log(chalk.cyan('║') + chalk.red(centerText('[X] Exit', innerWidth)) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + chalk.red(centerText('[X] EXIT', innerWidth)) + chalk.cyan('║'));
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
 
-  const input = await prompts.textInput(chalk.cyan('Select number (or X):'));
+  const input = await prompts.textInput(chalk.cyan('SELECT NUMBER (OR X):'));
   if (!input || input.toLowerCase() === 'x') return null;
   
   const action = parseInt(input);
@@ -84,26 +84,26 @@ const rithmicMenu = async () => {
   const credentials = await loginPrompt(selectedPropfirm.name);
   if (!credentials) return null;
 
-  const spinner = ora({ text: 'Connecting to Rithmic...', color: 'yellow' }).start();
+  const spinner = ora({ text: 'CONNECTING TO RITHMIC...', color: 'yellow' }).start();
 
   try {
     const service = new RithmicService(selectedPropfirm.key);
     const result = await service.login(credentials.username, credentials.password);
 
     if (result.success) {
-      spinner.text = 'Fetching accounts...';
+      spinner.text = 'FETCHING ACCOUNTS...';
       const accResult = await service.getTradingAccounts();
       connections.add('rithmic', service, service.propfirm.name);
-      spinner.succeed(`Connected to ${service.propfirm.name} (${accResult.accounts?.length || 0} accounts)`);
+      spinner.succeed(`CONNECTED TO ${service.propfirm.name.toUpperCase()} (${accResult.accounts?.length || 0} ACCOUNTS)`);
       await new Promise(r => setTimeout(r, 1500));
       return service;
     } else {
-      spinner.fail(result.error || 'Authentication failed');
+      spinner.fail((result.error || 'AUTHENTICATION FAILED').toUpperCase());
       await new Promise(r => setTimeout(r, 2000));
       return null;
     }
   } catch (error) {
-    spinner.fail(`Connection error: ${error.message}`);
+    spinner.fail(`CONNECTION ERROR: ${error.message.toUpperCase()}`);
     await new Promise(r => setTimeout(r, 2000));
     return null;
   }

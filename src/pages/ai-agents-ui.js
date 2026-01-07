@@ -8,26 +8,27 @@ const chalk = require('chalk');
 const { centerText, visibleLength } = require('../ui');
 
 /**
- * Draw a 2-column row
+ * Draw a 2-column row with perfect alignment
  * @param {string} leftText - Left column text
  * @param {string} rightText - Right column text
  * @param {number} W - Inner width
+ * @param {number} padding - Left padding for each column (default 3)
  */
-const draw2ColRow = (leftText, rightText, W) => {
-  const col1Width = Math.floor(W / 2);
-  const col2Width = W - col1Width;
+const draw2ColRow = (leftText, rightText, W, padding = 3) => {
+  const colWidth = Math.floor(W / 2);
   const leftLen = visibleLength(leftText);
-  const leftPad = col1Width - leftLen;
-  const leftPadL = Math.floor(leftPad / 2);
   const rightLen = visibleLength(rightText || '');
-  const rightPad = col2Width - rightLen;
-  const rightPadL = Math.floor(rightPad / 2);
-  console.log(
-    chalk.cyan('║') +
-    ' '.repeat(leftPadL) + leftText + ' '.repeat(leftPad - leftPadL) +
-    ' '.repeat(rightPadL) + (rightText || '') + ' '.repeat(rightPad - rightPadL) +
-    chalk.cyan('║')
-  );
+  
+  // Left column: padding + text + fill to colWidth
+  const leftFill = colWidth - padding - leftLen;
+  const leftCol = ' '.repeat(padding) + leftText + ' '.repeat(Math.max(0, leftFill));
+  
+  // Right column: padding + text + fill to remaining width
+  const rightColWidth = W - colWidth;
+  const rightFill = rightColWidth - padding - rightLen;
+  const rightCol = ' '.repeat(padding) + (rightText || '') + ' '.repeat(Math.max(0, rightFill));
+  
+  console.log(chalk.cyan('║') + leftCol + rightCol + chalk.cyan('║'));
 };
 
 /**
@@ -39,6 +40,7 @@ const draw2ColRow = (leftText, rightText, W) => {
  * @param {number} W - Inner width
  */
 const draw2ColTable = (title, titleColor, items, backText, W) => {
+  // New rectangle (banner is always closed)
   console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
   console.log(chalk.cyan('║') + titleColor(centerText(title, W)) + chalk.cyan('║'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
@@ -65,6 +67,7 @@ const draw2ColTable = (title, titleColor, items, backText, W) => {
 const drawProvidersTable = (providers, config, boxWidth, cliproxyUrl = null) => {
   const W = boxWidth - 2;
   
+  // New rectangle (banner is always closed)
   console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
   console.log(chalk.cyan('║') + chalk.yellow.bold(centerText('AI AGENTS CONFIGURATION', W)) + chalk.cyan('║'));
   
@@ -79,7 +82,7 @@ const drawProvidersTable = (providers, config, boxWidth, cliproxyUrl = null) => 
   
   const items = providers.map((p, i) => {
     const status = config.providers[p.id]?.active ? chalk.green(' ●') : '';
-    return chalk.cyan(`[${i + 1}]`) + ' ' + chalk[p.color](p.name) + status;
+    return chalk.cyan(`[${i + 1}]`) + ' ' + chalk[p.color](p.name.toUpperCase()) + status;
   });
   
   const rows = Math.ceil(items.length / 2);
@@ -90,9 +93,9 @@ const drawProvidersTable = (providers, config, boxWidth, cliproxyUrl = null) => 
   }
   
   console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
-  console.log(chalk.cyan('║') + chalk.gray(centerText('[S] CLIProxy Status', W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + chalk.gray(centerText('[S] CLIPROXY STATUS', W)) + chalk.cyan('║'));
   console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
-  console.log(chalk.cyan('║') + chalk.red(centerText('[B] Back to Menu', W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + chalk.red(centerText('[B] BACK TO MENU', W)) + chalk.cyan('║'));
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
 };
 
@@ -104,8 +107,8 @@ const drawProvidersTable = (providers, config, boxWidth, cliproxyUrl = null) => 
  */
 const drawModelsTable = (provider, models, boxWidth) => {
   const W = boxWidth - 2;
-  const items = models.map((m, i) => chalk.cyan(`[${i + 1}]`) + ' ' + chalk.white(m.name));
-  draw2ColTable(`${provider.name.toUpperCase()} - MODELS`, chalk[provider.color].bold, items, '[B] Back', W);
+  const items = models.map((m, i) => chalk.cyan(`[${i + 1}]`) + ' ' + chalk.white(m.name.toUpperCase()));
+  draw2ColTable(`${provider.name.toUpperCase()} - MODELS`, chalk[provider.color].bold, items, '[B] BACK', W);
 };
 
 /**
@@ -120,7 +123,7 @@ const drawProviderWindow = (provider, config, boxWidth) => {
   const col2Width = W - col1Width;
   const providerConfig = config.providers[provider.id] || {};
   
-  // Header
+  // New rectangle (banner is always closed)
   console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
   console.log(chalk.cyan('║') + chalk[provider.color].bold(centerText(provider.name.toUpperCase(), W)) + chalk.cyan('║'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
@@ -129,10 +132,10 @@ const drawProviderWindow = (provider, config, boxWidth) => {
   console.log(chalk.cyan('║') + ' '.repeat(W) + chalk.cyan('║'));
   
   // Options in 2 columns
-  const opt1Title = '[1] Connect via Paid Plan';
-  const opt1Desc = 'Uses CLIProxy - No API key needed';
-  const opt2Title = '[2] Connect via API Key';
-  const opt2Desc = 'Enter your own API key';
+  const opt1Title = '[1] CONNECT VIA PAID PLAN';
+  const opt1Desc = 'USES CLIPROXY - NO API KEY NEEDED';
+  const opt2Title = '[2] CONNECT VIA API KEY';
+  const opt2Desc = 'ENTER YOUR OWN API KEY';
   
   // Row 1: Titles
   const left1 = chalk.green(opt1Title);
@@ -180,11 +183,11 @@ const drawProviderWindow = (provider, config, boxWidth) => {
   
   let statusText = '';
   if (providerConfig.active) {
-    const connType = providerConfig.connectionType === 'cliproxy' ? 'CLIProxy' : 'API Key';
-    const modelName = providerConfig.modelName || 'N/A';
-    statusText = chalk.green('● ACTIVE') + chalk.gray('  Model: ') + chalk.yellow(modelName) + chalk.gray('  via ') + chalk.cyan(connType);
+    const connType = providerConfig.connectionType === 'cliproxy' ? 'CLIPROXY' : 'API KEY';
+    const modelName = (providerConfig.modelName || 'N/A').toUpperCase();
+    statusText = chalk.green('● ACTIVE') + chalk.gray('  MODEL: ') + chalk.yellow(modelName) + chalk.gray('  VIA ') + chalk.cyan(connType);
   } else if (providerConfig.apiKey || providerConfig.connectionType) {
-    statusText = chalk.yellow('● CONFIGURED') + chalk.gray(' (not active)');
+    statusText = chalk.yellow('● CONFIGURED') + chalk.gray(' (NOT ACTIVE)');
   } else {
     statusText = chalk.gray('○ NOT CONFIGURED');
   }
@@ -193,12 +196,12 @@ const drawProviderWindow = (provider, config, boxWidth) => {
   // Disconnect option if active
   if (providerConfig.active) {
     console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
-    console.log(chalk.cyan('║') + chalk.red(centerText('[D] Disconnect', W)) + chalk.cyan('║'));
+    console.log(chalk.cyan('║') + chalk.red(centerText('[D] DISCONNECT', W)) + chalk.cyan('║'));
   }
   
   // Back
   console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
-  console.log(chalk.cyan('║') + chalk.red(centerText('[B] Back', W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + chalk.red(centerText('[B] BACK', W)) + chalk.cyan('║'));
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
 };
 

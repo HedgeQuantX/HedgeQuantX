@@ -127,9 +127,9 @@ class AlgoUI {
     
     // Separator + title
     this._line(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
-    this._line(chalk.cyan(BOX.V) + chalk.white(center(`Prop Futures Algo Trading  v${version}`, W)) + chalk.cyan(BOX.V));
+    this._line(chalk.cyan(BOX.V) + chalk.white(center(`PROP FUTURES ALGO TRADING  V${version}`, W)) + chalk.cyan(BOX.V));
     this._line(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
-    this._line(chalk.cyan(BOX.V) + chalk.yellow(center(this.config.subtitle || 'HQX Algo Trading', W)) + chalk.cyan(BOX.V));
+    this._line(chalk.cyan(BOX.V) + chalk.yellow(center((this.config.subtitle || 'HQX ALGO TRADING').toUpperCase(), W)) + chalk.cyan(BOX.V));
   }
 
   _drawStats(stats) {
@@ -293,7 +293,7 @@ class AlgoUI {
     const visible = logs.slice(-maxLogs).reverse();
     
     if (visible.length === 0) {
-      this._line(chalk.cyan(BOX.V) + chalk.gray(fitToWidth(' Awaiting market signals...', W)) + chalk.cyan(BOX.V));
+      this._line(chalk.cyan(BOX.V) + chalk.gray(fitToWidth(' AWAITING MARKET SIGNALS...', W)) + chalk.cyan(BOX.V));
       for (let i = 0; i < maxLogs - 1; i++) {
         this._line(chalk.cyan(BOX.V) + ' '.repeat(W) + chalk.cyan(BOX.V));
       }
@@ -355,11 +355,11 @@ const checkMarketStatus = () => {
   const ctHour = (utcHour - ctOffset + 24) % 24;
   const ctDay = utcHour < ctOffset ? (utcDay + 6) % 7 : utcDay;
 
-  if (ctDay === 6) return { isOpen: false, message: 'Market closed (Saturday)' };
-  if (ctDay === 0 && ctHour < 17) return { isOpen: false, message: 'Market opens Sunday 5:00 PM CT' };
-  if (ctDay === 5 && ctHour >= 16) return { isOpen: false, message: 'Market closed (Friday after 4PM CT)' };
-  if (ctHour === 16 && ctDay >= 1 && ctDay <= 4) return { isOpen: false, message: 'Daily maintenance' };
-  return { isOpen: true, message: 'Market OPEN' };
+  if (ctDay === 6) return { isOpen: false, message: 'MARKET CLOSED (SATURDAY)' };
+  if (ctDay === 0 && ctHour < 17) return { isOpen: false, message: 'MARKET OPENS SUNDAY 5:00 PM CT' };
+  if (ctDay === 5 && ctHour >= 16) return { isOpen: false, message: 'MARKET CLOSED (FRIDAY AFTER 4PM CT)' };
+  if (ctHour === 16 && ctDay >= 1 && ctDay <= 4) return { isOpen: false, message: 'DAILY MAINTENANCE' };
+  return { isOpen: true, message: 'MARKET OPEN' };
 };
 
 /**
@@ -387,9 +387,9 @@ const renderSessionSummary = (stats, stopReason) => {
   
   // Separator + title
   console.log(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
-  console.log(chalk.cyan(BOX.V) + chalk.white(center(`Prop Futures Algo Trading  v${version}`, W)) + chalk.cyan(BOX.V));
+  console.log(chalk.cyan(BOX.V) + chalk.white(center(`PROP FUTURES ALGO TRADING  V${version}`, W)) + chalk.cyan(BOX.V));
   console.log(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
-  console.log(chalk.cyan(BOX.V) + chalk.yellow(center('Session Summary', W)) + chalk.cyan(BOX.V));
+  console.log(chalk.cyan(BOX.V) + chalk.yellow(center('SESSION SUMMARY', W)) + chalk.cyan(BOX.V));
   
   // Grid separators
   const GT = BOX.ML + BOX.H.repeat(colL) + BOX.TM + BOX.H.repeat(colR) + BOX.MR;
@@ -410,18 +410,18 @@ const renderSessionSummary = (stats, stopReason) => {
   // Row 1: Stop Reason | Duration
   const duration = stats.duration || '--';
   const reasonColor = stopReason === 'target' ? chalk.green : stopReason === 'risk' ? chalk.red : chalk.yellow;
-  row('Stop Reason', (stopReason || 'manual').toUpperCase(), reasonColor, 'Duration', duration, chalk.white);
+  row('STOP REASON', (stopReason || 'MANUAL').toUpperCase(), reasonColor, 'DURATION', duration, chalk.white);
   
   console.log(chalk.cyan(GM));
   
   // Row 2: Trades | Win Rate
   const winRate = stats.trades > 0 ? ((stats.wins / stats.trades) * 100).toFixed(1) + '%' : '0%';
-  row('Trades', String(stats.trades || 0), chalk.white, 'Win Rate', winRate, stats.wins >= stats.losses ? chalk.green : chalk.red);
+  row('TRADES', String(stats.trades || 0), chalk.white, 'WIN RATE', winRate, stats.wins >= stats.losses ? chalk.green : chalk.red);
   
   console.log(chalk.cyan(GM));
   
   // Row 3: Wins | Losses
-  row('Wins', String(stats.wins || 0), chalk.green, 'Losses', String(stats.losses || 0), chalk.red);
+  row('WINS', String(stats.wins || 0), chalk.green, 'LOSSES', String(stats.losses || 0), chalk.red);
   
   console.log(chalk.cyan(GM));
   
@@ -430,7 +430,7 @@ const renderSessionSummary = (stats, stopReason) => {
   const pnlStr = `${pnl >= 0 ? '+' : ''}$${Math.abs(pnl).toFixed(2)}`;
   const pnlColor = pnl >= 0 ? chalk.green : chalk.red;
   const targetStr = `$${(stats.target || 0).toFixed(2)}`;
-  row('P&L', pnlStr, pnlColor, 'Target', targetStr, chalk.cyan);
+  row('P&L', pnlStr, pnlColor, 'TARGET', targetStr, chalk.cyan);
   
   // Bottom border
   console.log(chalk.cyan(BOX.BOT + BOX.H.repeat(W) + BOX.BR));

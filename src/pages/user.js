@@ -26,7 +26,7 @@ const showUserInfo = async (service) => {
 
   try {
     // Step 1: Get user info
-    spinner = ora({ text: 'Loading user info...', color: 'yellow' }).start();
+    spinner = ora({ text: 'LOADING USER INFO...', color: 'yellow' }).start();
     
     let userInfo = null;
     
@@ -39,10 +39,10 @@ const showUserInfo = async (service) => {
       } catch (e) {}
     }
     
-    spinner.succeed('User info loaded');
+    spinner.succeed('USER INFO LOADED');
 
     // Step 2: Get account count
-    spinner = ora({ text: 'Counting accounts...', color: 'yellow' }).start();
+    spinner = ora({ text: 'COUNTING ACCOUNTS...', color: 'yellow' }).start();
     
     let accountCount = 0;
     
@@ -58,14 +58,14 @@ const showUserInfo = async (service) => {
       } catch (e) {}
     }
     
-    spinner.succeed(`Found ${accountCount} account(s)`);
+    spinner.succeed(`FOUND ${accountCount} ACCOUNT(S)`);
     console.log();
 
     // Display
     drawBoxHeader('USER INFO', boxWidth);
 
     if (!userInfo) {
-      console.log(chalk.cyan('║') + padText(chalk.gray('  No user info available'), boxWidth - 2) + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + padText(chalk.gray('  NO USER INFO AVAILABLE'), boxWidth - 2) + chalk.cyan('║'));
     } else {
       draw2ColHeader('PROFILE', 'CONNECTIONS', boxWidth);
 
@@ -90,7 +90,7 @@ const showUserInfo = async (service) => {
     console.log();
 
   } catch (error) {
-    if (spinner) spinner.fail('Error: ' + error.message);
+    if (spinner) spinner.fail('ERROR: ' + error.message.toUpperCase());
   }
 
   await prompts.waitForEnter();

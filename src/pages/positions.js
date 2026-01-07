@@ -19,25 +19,25 @@ const showPositions = async (service) => {
 
   try {
     // Step 1: Get connections
-    spinner = ora({ text: 'Loading connections...', color: 'yellow' }).start();
+    spinner = ora({ text: 'LOADING CONNECTIONS...', color: 'yellow' }).start();
     
     const allConns = connections.count() > 0 
       ? connections.getAll() 
       : (service ? [{ service, propfirm: service.propfirm?.name || 'Unknown', type: 'single' }] : []);
     
     if (allConns.length === 0) {
-      spinner.fail('No connections found');
+      spinner.fail('NO CONNECTIONS FOUND');
       await prompts.waitForEnter();
       return;
     }
-    spinner.succeed(`Found ${allConns.length} connection(s)`);
+    spinner.succeed(`FOUND ${allConns.length} CONNECTION(S)`);
 
     // Step 2: Fetch accounts
     let allAccounts = [];
     
     for (const conn of allConns) {
       const propfirmName = conn.propfirm || conn.type || 'Unknown';
-      spinner = ora({ text: `Fetching accounts from ${propfirmName}...`, color: 'yellow' }).start();
+      spinner = ora({ text: `FETCHING ACCOUNTS FROM ${propfirmName.toUpperCase()}...`, color: 'yellow' }).start();
       
       try {
         const result = await conn.service.getTradingAccounts();
@@ -49,17 +49,17 @@ const showPositions = async (service) => {
               service: conn.service 
             });
           });
-          spinner.succeed(`${propfirmName}: ${result.accounts.length} account(s)`);
+          spinner.succeed(`${propfirmName.toUpperCase()}: ${result.accounts.length} ACCOUNT(S)`);
         } else {
-          spinner.warn(`${propfirmName}: No accounts`);
+          spinner.warn(`${propfirmName.toUpperCase()}: NO ACCOUNTS`);
         }
       } catch (e) {
-        spinner.fail(`${propfirmName}: Failed`);
+        spinner.fail(`${propfirmName.toUpperCase()}: FAILED`);
       }
     }
 
     if (allAccounts.length === 0) {
-      console.log(chalk.yellow('\n  No accounts found.'));
+      console.log(chalk.yellow('\n  NO ACCOUNTS FOUND.'));
       await prompts.waitForEnter();
       return;
     }
@@ -69,7 +69,7 @@ const showPositions = async (service) => {
     
     for (const account of allAccounts) {
       const accName = String(account.accountName || account.rithmicAccountId || account.accountId || 'Unknown').substring(0, 20);
-      spinner = ora({ text: `Fetching positions for ${accName}...`, color: 'yellow' }).start();
+      spinner = ora({ text: `FETCHING POSITIONS FOR ${accName.toUpperCase()}...`, color: 'yellow' }).start();
       
       try {
         const result = await account.service.getPositions(account.accountId);
@@ -81,26 +81,26 @@ const showPositions = async (service) => {
               propfirm: account.propfirm 
             });
           });
-          spinner.succeed(`${accName}: ${result.positions.length} position(s)`);
+          spinner.succeed(`${accName.toUpperCase()}: ${result.positions.length} POSITION(S)`);
         } else {
-          spinner.succeed(`${accName}: No positions`);
+          spinner.succeed(`${accName.toUpperCase()}: NO POSITIONS`);
         }
       } catch (e) {
-        spinner.fail(`${accName}: Failed to fetch positions`);
+        spinner.fail(`${accName.toUpperCase()}: FAILED TO FETCH POSITIONS`);
       }
     }
 
-    spinner = ora({ text: 'Preparing display...', color: 'yellow' }).start();
-    spinner.succeed(`Total: ${allPositions.length} position(s)`);
+    spinner = ora({ text: 'PREPARING DISPLAY...', color: 'yellow' }).start();
+    spinner.succeed(`TOTAL: ${allPositions.length} POSITION(S)`);
     console.log();
 
     // Display
     drawBoxHeader('OPEN POSITIONS', boxWidth);
 
     if (allPositions.length === 0) {
-      drawBoxRow(chalk.gray('  No open positions'), boxWidth);
+      drawBoxRow(chalk.gray('  NO OPEN POSITIONS'), boxWidth);
     } else {
-      const header = '  ' + 'Symbol'.padEnd(15) + 'Side'.padEnd(8) + 'Size'.padEnd(8) + 'Entry'.padEnd(12) + 'P&L'.padEnd(12) + 'Account';
+      const header = '  ' + 'SYMBOL'.padEnd(15) + 'SIDE'.padEnd(8) + 'SIZE'.padEnd(8) + 'ENTRY'.padEnd(12) + 'P&L'.padEnd(12) + 'ACCOUNT';
       drawBoxRow(chalk.white.bold(header), boxWidth);
       drawBoxSeparator(boxWidth);
 
@@ -131,7 +131,7 @@ const showPositions = async (service) => {
     console.log();
 
   } catch (error) {
-    if (spinner) spinner.fail('Error: ' + error.message);
+    if (spinner) spinner.fail('ERROR: ' + error.message.toUpperCase());
   }
 
   await prompts.waitForEnter();
