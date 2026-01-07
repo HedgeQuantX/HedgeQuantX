@@ -10,9 +10,10 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 
+const ora = require('ora');
 const { getLogoWidth, centerText, visibleLength } = require('../ui');
 const { prompts } = require('../utils');
-const { getModelsForProvider, getModelById } = require('./ai-models');
+const { fetchModelsFromApi } = require('./ai-models');
 
 // Config file path
 const CONFIG_DIR = path.join(os.homedir(), '.hqx');
@@ -135,17 +136,26 @@ const drawModelsTable = (provider, models, boxWidth) => {
 };
 
 /**
- * Select a model for a provider
+ * Select a model for a provider (fetches from API)
  * @param {Object} provider - Provider object
- * @returns {Object|null} Selected model or null if cancelled
+ * @param {string} apiKey - API key for fetching models
+ * @returns {Object|null} Selected model or null if cancelled/failed
  */
-const selectModel = async (provider) => {
+const selectModel = async (provider, apiKey) => {
   const boxWidth = getLogoWidth();
-  const models = getModelsForProvider(provider.id);
   
-  if (models.length === 0) {
+  // Fetch models from API
+  const spinner = ora({ text: 'Fetching models from API...', color: 'yellow' }).start();
+  const result = await fetchModelsFromApi(provider.id, apiKey);
+  
+  if (!result.success || result.models.length === 0) {
+    spinner.fail(result.error || 'No models available');
+    await prompts.waitForEnter();
     return null;
   }
+  
+  spinner.succeed(`Found ${result.models.length} models`);
+  const models = result.models;
   
   while (true) {
     console.clear();
@@ -294,9 +304,11 @@ const handleProviderConfig = async (provider, config) => {
     }
     
     if (choice === '1') {
-      // CLIProxy connection - select model first
-      const selectedModel = await selectModel(provider);
-      if (!selectedModel) continue;
+      // CLIProxy connection - models will be fetched via proxy
+      console.log();
+      console.log(chalk.cyan('  CLIProxy uses your paid plan subscription.'));
+      console.log(chalk.gray('  Model selection will be available after connecting.'));
+      console.log();
       
       // Deactivate all other providers
       Object.keys(config.providers).forEach(id => {
@@ -305,26 +317,22 @@ const handleProviderConfig = async (provider, config) => {
       
       if (!config.providers[provider.id]) config.providers[provider.id] = {};
       config.providers[provider.id].connectionType = 'cliproxy';
-      config.providers[provider.id].modelId = selectedModel.id;
-      config.providers[provider.id].modelName = selectedModel.name;
+      config.providers[provider.id].modelId = null;
+      config.providers[provider.id].modelName = 'N/A';
       config.providers[provider.id].active = true;
       config.providers[provider.id].configuredAt = new Date().toISOString();
       
       if (saveConfig(config)) {
-        console.log(chalk.green(`\n  ✓ ${provider.name} connected via CLIProxy.`));
-        console.log(chalk.cyan(`    Model: ${selectedModel.name}`));
+        console.log(chalk.green(`  ✓ ${provider.name} connected via CLIProxy.`));
       } else {
-        console.log(chalk.red('\n  Failed to save config.'));
+        console.log(chalk.red('  Failed to save config.'));
       }
       await prompts.waitForEnter();
       continue;
     }
     
     if (choice === '2') {
-      // API Key connection - select model first
-      const selectedModel = await selectModel(provider);
-      if (!selectedModel) continue;
-      
+      // API Key connection - get key first, then fetch models
       console.clear();
       console.log(chalk.yellow(`\n  Enter your ${provider.name} API key:`));
       console.log(chalk.gray('  (Press Enter to cancel)'));
@@ -343,6 +351,10 @@ const handleProviderConfig = async (provider, config) => {
         await prompts.waitForEnter();
         continue;
       }
+      
+      // Fetch models from API with the provided key
+      const selectedModel = await selectModel(provider, apiKey.trim());
+      if (!selectedModel) continue;
       
       // Deactivate all other providers
       Object.keys(config.providers).forEach(id => {
