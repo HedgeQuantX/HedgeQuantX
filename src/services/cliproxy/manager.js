@@ -256,6 +256,26 @@ const isRunning = async () => {
   });
 };
 
+// Config file path
+const CONFIG_PATH = path.join(INSTALL_DIR, 'config.yaml');
+
+/**
+ * Create config file if not exists
+ */
+const ensureConfig = () => {
+  if (fs.existsSync(CONFIG_PATH)) return;
+  
+  const config = `# HQX CLIProxyAPI Config
+host: "127.0.0.1"
+port: ${DEFAULT_PORT}
+auth-dir: "${AUTH_DIR}"
+debug: false
+api-keys:
+  - "hqx-internal-key"
+`;
+  fs.writeFileSync(CONFIG_PATH, config);
+};
+
 /**
  * Start CLIProxyAPI
  * @returns {Promise<Object>} { success, error, pid }
@@ -271,30 +291,42 @@ const start = async () => {
   }
   
   try {
-    const args = [
-      '--port', String(DEFAULT_PORT),
-      '--auth-dir', AUTH_DIR
-    ];
+    // Ensure config and auth dir exist
+    if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true });
+    ensureConfig();
+    
+    const args = ['-config', CONFIG_PATH];
+    
+    // Capture stderr for debugging
+    const logPath = path.join(INSTALL_DIR, 'cliproxy.log');
+    const logFd = fs.openSync(logPath, 'a');
     
     const child = spawn(BINARY_PATH, args, {
       detached: true,
-      stdio: 'ignore',
+      stdio: ['ignore', logFd, logFd],
       cwd: INSTALL_DIR
     });
     
     child.unref();
+    fs.closeSync(logFd);
     
     // Save PID
     fs.writeFileSync(PID_FILE, String(child.pid));
     
     // Wait for startup
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 3000));
     
     const runStatus = await isRunning();
     if (runStatus.running) {
       return { success: true, error: null, pid: child.pid };
     } else {
-      return { success: false, error: 'Failed to start CLIProxyAPI', pid: null };
+      // Read log for error details
+      let errorDetail = 'Failed to start CLIProxyAPI';
+      if (fs.existsSync(logPath)) {
+        const log = fs.readFileSync(logPath, 'utf8').slice(-500);
+        if (log) errorDetail += `: ${log.split('\n').pop()}`;
+      }
+      return { success: false, error: errorDetail, pid: null };
     }
   } catch (error) {
     return { success: false, error: error.message, pid: null };
