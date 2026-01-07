@@ -175,11 +175,12 @@ const run = async () => {
     const boxWidth = getLogoWidth();
     const innerWidth = boxWidth - 2;
     
-    // Show loading inside the box
-    console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+    // Show loading inside the box (no extra borders)
     const loadingText = '  LOADING DASHBOARD...';
     const loadingPad = innerWidth - loadingText.length;
-    process.stdout.write(chalk.cyan('║') + chalk.yellow(loadingText) + ' '.repeat(loadingPad) + chalk.cyan('║'));
+    console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+    console.log(chalk.cyan('║') + chalk.yellow(loadingText) + ' '.repeat(loadingPad) + chalk.cyan('║'));
+    console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
     
     const restored = await connections.restoreFromStorage();
 
@@ -187,9 +188,6 @@ const run = async () => {
       currentService = connections.getAll()[0].service;
       await refreshStats();
     }
-    
-    // Clear loading line
-    process.stdout.write('\r' + ' '.repeat(boxWidth + 2) + '\r');
 
     // Main loop
     while (true) {
