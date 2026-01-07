@@ -243,48 +243,30 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
   // Restart CLIProxyAPI to load new tokens
   const restartSpinner = ora({ text: 'RESTARTING CLIPROXYAPI...', color: 'yellow' }).start();
   await cliproxy.stop();
-  await new Promise(r => setTimeout(r, 1500));
+  await new Promise(r => setTimeout(r, 2000));
   await cliproxy.start();
   
-  // Wait for CLIProxyAPI to be fully ready (check health)
-  restartSpinner.text = 'WAITING FOR CLIPROXYAPI TO BE READY...';
-  let ready = false;
-  for (let i = 0; i < 10; i++) {
-    await new Promise(r => setTimeout(r, 1000));
+  // Wait for CLIProxyAPI to be fully ready with models loaded
+  restartSpinner.text = 'WAITING FOR CLIPROXYAPI TO LOAD TOKENS...';
+  let modelsResult = { success: false, models: [] };
+  
+  for (let i = 0; i < 15; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    restartSpinner.text = `LOADING MODELS (${i + 1}/15)...`;
+    
     const status = await cliproxy.isRunning();
     if (status.running) {
-      // Try a simple fetch to verify it's responding
-      const test = await cliproxy.fetchModels();
-      if (test.success) {
-        ready = true;
+      // Check if models are available (tokens loaded)
+      modelsResult = await cliproxy.fetchProviderModels(provider.id);
+      if (modelsResult.success && modelsResult.models.length > 0) {
+        restartSpinner.succeed(`CLIPROXYAPI READY - ${modelsResult.models.length} MODELS FOUND`);
         break;
       }
     }
-    restartSpinner.text = `WAITING FOR CLIPROXYAPI (${i + 1}/10)...`;
   }
   
-  if (!ready) {
-    restartSpinner.warn('CLIPROXYAPI SLOW TO START - CONTINUING...');
-  } else {
-    restartSpinner.succeed('CLIPROXYAPI READY');
-  }
-  
-  // Fetch models (with retry for provider-specific)
-  const modelSpinner = ora({ text: 'FETCHING AVAILABLE MODELS...', color: 'yellow' }).start();
-  
-  let modelsResult = { success: false, models: [] };
-  for (let attempt = 1; attempt <= 5; attempt++) {
-    modelsResult = await cliproxy.fetchProviderModels(provider.id);
-    if (modelsResult.success && modelsResult.models.length > 0) break;
-    if (attempt < 5) {
-      modelSpinner.text = `FETCHING MODELS (ATTEMPT ${attempt + 1}/5)...`;
-      await new Promise(r => setTimeout(r, 1500));
-    }
-  }
-  
+  // Show model selection or fallback to auto
   if (modelsResult.success && modelsResult.models.length > 0) {
-    modelSpinner.succeed(`FOUND ${modelsResult.models.length} MODELS`);
-    
     const selectedModel = await selectModelFromList(provider, modelsResult.models, boxWidth);
     if (selectedModel) {
       activateProvider(config, provider.id, {
@@ -298,7 +280,6 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
       }
     }
   } else {
-    modelSpinner.warn('NO MODELS FOUND - USING AUTO MODE');
     // No models but auth might have worked
     activateProvider(config, provider.id, {
       connectionType: 'cliproxy',
@@ -306,7 +287,7 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
       modelName: 'AUTO'
     });
     if (saveConfig(config)) {
-      console.log(chalk.green(`\n  ✓ ${provider.name.toUpperCase()} CONNECTED VIA PAID PLAN`));
+      console.log(chalk.green(`\n  ✓ ${provider.name.toUpperCase()} CONNECTED VIA PAID PLAN (AUTO MODE)`));
     }
   }
   
