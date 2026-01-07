@@ -250,6 +250,7 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
   restartSpinner.text = 'WAITING FOR CLIPROXYAPI TO LOAD TOKENS...';
   let modelsResult = { success: false, models: [] };
   
+  let foundModels = false;
   for (let i = 0; i < 15; i++) {
     await new Promise(r => setTimeout(r, 2000));
     restartSpinner.text = `LOADING MODELS (${i + 1}/15)...`;
@@ -260,13 +261,19 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
       modelsResult = await cliproxy.fetchProviderModels(provider.id);
       if (modelsResult.success && modelsResult.models.length > 0) {
         restartSpinner.succeed(`CLIPROXYAPI READY - ${modelsResult.models.length} MODELS FOUND`);
+        foundModels = true;
         break;
       }
     }
   }
   
+  // Stop spinner if still running (no models found after 15 tries)
+  if (!foundModels) {
+    restartSpinner.warn('NO MODELS FOUND - USING AUTO MODE');
+  }
+  
   // Show model selection or fallback to auto
-  if (modelsResult.success && modelsResult.models.length > 0) {
+  if (foundModels && modelsResult.models.length > 0) {
     const selectedModel = await selectModelFromList(provider, modelsResult.models, boxWidth);
     if (selectedModel) {
       activateProvider(config, provider.id, {
@@ -278,17 +285,19 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
         console.log(chalk.green(`\n  ✓ ${provider.name.toUpperCase()} CONNECTED VIA PAID PLAN`));
         console.log(chalk.cyan(`    MODEL: ${selectedModel.name.toUpperCase()}`));
       }
+      await prompts.waitForEnter();
+      return true;
     }
-  } else {
-    // No models but auth might have worked
-    activateProvider(config, provider.id, {
-      connectionType: 'cliproxy',
-      modelId: null,
-      modelName: 'AUTO'
-    });
-    if (saveConfig(config)) {
-      console.log(chalk.green(`\n  ✓ ${provider.name.toUpperCase()} CONNECTED VIA PAID PLAN (AUTO MODE)`));
-    }
+  }
+  
+  // No models or user cancelled - use auto mode
+  activateProvider(config, provider.id, {
+    connectionType: 'cliproxy',
+    modelId: null,
+    modelName: 'AUTO'
+  });
+  if (saveConfig(config)) {
+    console.log(chalk.green(`\n  ✓ ${provider.name.toUpperCase()} CONNECTED VIA PAID PLAN (AUTO MODE)`));
   }
   
   await prompts.waitForEnter();
