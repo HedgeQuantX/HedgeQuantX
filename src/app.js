@@ -173,12 +173,9 @@ const run = async () => {
     if (restored) {
       currentService = connections.getAll()[0].service;
       await refreshStats();
-      spinner.succeed('SESSION RESTORED');
-    } else {
-      spinner.stop();
     }
     
-    await new Promise(r => setTimeout(r, 500));
+    spinner.stop();
 
     // Main loop
     while (true) {
