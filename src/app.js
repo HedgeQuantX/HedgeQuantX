@@ -175,7 +175,7 @@ const run = async () => {
       await refreshStats();
     }
     
-    spinner.stop();
+    // Don't stop spinner here - dashboardMenu will clear the screen
 
     // Main loop
     while (true) {
