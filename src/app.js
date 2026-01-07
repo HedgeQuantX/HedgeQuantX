@@ -109,7 +109,7 @@ const refreshStats = async () => {
 
 // ==================== BANNER ====================
 
-const banner = async () => {
+const banner = async (withLoading = false) => {
   console.clear();
   
   const termWidth = process.stdout.columns || 100;
@@ -134,16 +134,15 @@ const banner = async () => {
   
   const tagline = isMobile ? `HQX v${version}` : `Prop Futures Algo Trading  v${version}`;
   console.log(chalk.cyan('║') + chalk.white(centerText(tagline, innerWidth)) + chalk.cyan('║'));
-};
-
-/**
- * Display banner with closed bottom (standalone)
- */
-const bannerClosed = async () => {
-  await banner();
-  const termWidth = process.stdout.columns || 100;
-  const boxWidth = termWidth < 60 ? Math.max(termWidth - 2, 40) : Math.max(getLogoWidth(), 98);
-  console.log(chalk.cyan('╚' + '═'.repeat(boxWidth - 2) + '╝'));
+  
+  // Show loading message if requested
+  if (withLoading) {
+    const loadingText = '  LOADING DASHBOARD...';
+    const loadingPad = innerWidth - loadingText.length;
+    console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+    console.log(chalk.cyan('║') + chalk.yellow(loadingText) + ' '.repeat(loadingPad) + chalk.cyan('║'));
+    console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
+  }
 };
 
 const getFullLogo = () => [
@@ -170,17 +169,8 @@ const run = async () => {
   try {
     log.info('Starting HQX CLI');
     
-    // First launch - show banner with loading
-    await banner();
-    const boxWidth = getLogoWidth();
-    const innerWidth = boxWidth - 2;
-    
-    // Show loading inside the box (no extra borders)
-    const loadingText = '  LOADING DASHBOARD...';
-    const loadingPad = innerWidth - loadingText.length;
-    console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
-    console.log(chalk.cyan('║') + chalk.yellow(loadingText) + ' '.repeat(loadingPad) + chalk.cyan('║'));
-    console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
+    // First launch - show banner with loading (closed box)
+    await banner(true);
     
     const restored = await connections.restoreFromStorage();
 
