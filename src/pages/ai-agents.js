@@ -12,6 +12,7 @@ const fs = require('fs');
 
 const { getLogoWidth, centerText, visibleLength } = require('../ui');
 const { prompts } = require('../utils');
+const { getModelsForProvider, getModelById } = require('./ai-models');
 
 // Config file path
 const CONFIG_DIR = path.join(os.homedir(), '.hqx');
@@ -63,7 +64,7 @@ const saveConfig = (config) => {
 };
 
 /**
- * Mask API key for display (show first 8 and last 4 chars)
+ * Mask API key for display
  * @param {string} key - API key
  * @returns {string} Masked key
  */
@@ -73,71 +74,98 @@ const maskKey = (key) => {
 };
 
 /**
- * Draw the main providers selection table (2 columns)
- * @param {Object} config - Current config
- * @param {number} boxWidth - Box width
+ * Draw a 2-column row
+ */
+const draw2ColRow = (leftText, rightText, W) => {
+  const col1Width = Math.floor(W / 2);
+  const col2Width = W - col1Width;
+  const leftLen = visibleLength(leftText);
+  const leftPad = col1Width - leftLen;
+  const leftPadL = Math.floor(leftPad / 2);
+  const rightLen = visibleLength(rightText || '');
+  const rightPad = col2Width - rightLen;
+  const rightPadL = Math.floor(rightPad / 2);
+  console.log(
+    chalk.cyan('║') +
+    ' '.repeat(leftPadL) + leftText + ' '.repeat(leftPad - leftPadL) +
+    ' '.repeat(rightPadL) + (rightText || '') + ' '.repeat(rightPad - rightPadL) +
+    chalk.cyan('║')
+  );
+};
+
+/**
+ * Draw 2-column table
+ */
+const draw2ColTable = (title, titleColor, items, backText, W) => {
+  console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
+  console.log(chalk.cyan('║') + titleColor(centerText(title, W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
+  
+  const rows = Math.ceil(items.length / 2);
+  for (let row = 0; row < rows; row++) {
+    const left = items[row];
+    const right = items[row + rows];
+    draw2ColRow(left || '', right || '', W);
+  }
+  
+  console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
+  console.log(chalk.cyan('║') + chalk.red(centerText(backText, W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
+};
+
+/**
+ * Draw providers table
  */
 const drawProvidersTable = (config, boxWidth) => {
   const W = boxWidth - 2;
-  const col1Width = Math.floor(W / 2);
-  const col2Width = W - col1Width;
+  const items = AI_PROVIDERS.map((p, i) => {
+    const status = config.providers[p.id]?.active ? chalk.green(' ●') : '';
+    return chalk.cyan(`[${i + 1}]`) + ' ' + chalk[p.color](p.name) + status;
+  });
+  draw2ColTable('AI AGENTS CONFIGURATION', chalk.yellow.bold, items, '[B] Back to Menu', W);
+};
+
+/**
+ * Draw models table
+ */
+const drawModelsTable = (provider, models, boxWidth) => {
+  const W = boxWidth - 2;
+  const items = models.map((m, i) => chalk.cyan(`[${i + 1}]`) + ' ' + chalk.white(m.name));
+  draw2ColTable(`${provider.name.toUpperCase()} - MODELS`, chalk[provider.color].bold, items, '[B] Back', W);
+};
+
+/**
+ * Select a model for a provider
+ * @param {Object} provider - Provider object
+ * @returns {Object|null} Selected model or null if cancelled
+ */
+const selectModel = async (provider) => {
+  const boxWidth = getLogoWidth();
+  const models = getModelsForProvider(provider.id);
   
-  // Header
-  console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
-  console.log(chalk.cyan('║') + chalk.yellow.bold(centerText('AI AGENTS CONFIGURATION', W)) + chalk.cyan('║'));
-  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
-  
-  // Calculate max name length for alignment
-  const maxNameLen = Math.max(...AI_PROVIDERS.map(p => p.name.length));
-  
-  // Provider rows (2 columns)
-  const rows = Math.ceil(AI_PROVIDERS.length / 2);
-  for (let row = 0; row < rows; row++) {
-    const leftIdx = row;
-    const rightIdx = row + rows;
-    
-    const leftProvider = AI_PROVIDERS[leftIdx];
-    const rightProvider = AI_PROVIDERS[rightIdx];
-    
-    // Left column
-    const leftNum = `[${leftIdx + 1}]`;
-    const leftName = leftProvider.name;
-    const leftConfig = config.providers[leftProvider.id] || {};
-    const leftStatus = leftConfig.active ? chalk.green('●') : '';
-    const leftText = chalk.cyan(leftNum) + ' ' + chalk[leftProvider.color](leftName) + ' ' + leftStatus;
-    const leftLen = visibleLength(leftText);
-    const leftPadTotal = col1Width - leftLen;
-    const leftPadL = Math.floor(leftPadTotal / 2);
-    const leftPadR = leftPadTotal - leftPadL;
-    
-    // Right column
-    let rightText = '';
-    let rightPadL = 0;
-    let rightPadR = col2Width;
-    if (rightProvider) {
-      const rightNum = `[${rightIdx + 1}]`;
-      const rightName = rightProvider.name;
-      const rightConfig = config.providers[rightProvider.id] || {};
-      const rightStatus = rightConfig.active ? chalk.green('●') : '';
-      rightText = chalk.cyan(rightNum) + ' ' + chalk[rightProvider.color](rightName) + ' ' + rightStatus;
-      const rightLen = visibleLength(rightText);
-      const rightPadTotal = col2Width - rightLen;
-      rightPadL = Math.floor(rightPadTotal / 2);
-      rightPadR = rightPadTotal - rightPadL;
-    }
-    
-    console.log(
-      chalk.cyan('║') +
-      ' '.repeat(leftPadL) + leftText + ' '.repeat(leftPadR) +
-      ' '.repeat(rightPadL) + rightText + ' '.repeat(rightPadR) +
-      chalk.cyan('║')
-    );
+  if (models.length === 0) {
+    return null;
   }
   
-  // Footer
-  console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
-  console.log(chalk.cyan('║') + chalk.red(centerText('[B] Back to Menu', W)) + chalk.cyan('║'));
-  console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
+  while (true) {
+    console.clear();
+    drawModelsTable(provider, models, boxWidth);
+    
+    const input = await prompts.textInput(chalk.cyan('Select model: '));
+    const choice = (input || '').toLowerCase().trim();
+    
+    if (choice === 'b' || choice === '') {
+      return null;
+    }
+    
+    const num = parseInt(choice);
+    if (!isNaN(num) && num >= 1 && num <= models.length) {
+      return models[num - 1];
+    }
+    
+    console.log(chalk.red('  Invalid option.'));
+    await new Promise(r => setTimeout(r, 1000));
+  }
 };
 
 /**
@@ -213,11 +241,8 @@ const drawProviderWindow = (provider, config, boxWidth) => {
   let statusText = '';
   if (providerConfig.active) {
     const connType = providerConfig.connectionType === 'cliproxy' ? 'CLIProxy' : 'API Key';
-    const keyDisplay = providerConfig.apiKey ? maskKey(providerConfig.apiKey) : 'N/A';
-    statusText = chalk.green('● ACTIVE') + chalk.gray(' via ') + chalk.cyan(connType);
-    if (providerConfig.connectionType === 'apikey' && providerConfig.apiKey) {
-      statusText += chalk.gray('  Key: ') + chalk.cyan(keyDisplay);
-    }
+    const modelName = providerConfig.modelName || 'N/A';
+    statusText = chalk.green('● ACTIVE') + chalk.gray('  Model: ') + chalk.yellow(modelName) + chalk.gray('  via ') + chalk.cyan(connType);
   } else if (providerConfig.apiKey || providerConfig.connectionType) {
     statusText = chalk.yellow('● CONFIGURED') + chalk.gray(' (not active)');
   } else {
@@ -269,11 +294,9 @@ const handleProviderConfig = async (provider, config) => {
     }
     
     if (choice === '1') {
-      // CLIProxy connection
-      console.log();
-      console.log(chalk.cyan('  Connecting via CLIProxy...'));
-      console.log(chalk.gray('  This uses your paid plan (Claude Pro, ChatGPT Plus, etc.)'));
-      console.log();
+      // CLIProxy connection - select model first
+      const selectedModel = await selectModel(provider);
+      if (!selectedModel) continue;
       
       // Deactivate all other providers
       Object.keys(config.providers).forEach(id => {
@@ -282,22 +305,28 @@ const handleProviderConfig = async (provider, config) => {
       
       if (!config.providers[provider.id]) config.providers[provider.id] = {};
       config.providers[provider.id].connectionType = 'cliproxy';
+      config.providers[provider.id].modelId = selectedModel.id;
+      config.providers[provider.id].modelName = selectedModel.name;
       config.providers[provider.id].active = true;
       config.providers[provider.id].configuredAt = new Date().toISOString();
       
       if (saveConfig(config)) {
-        console.log(chalk.green(`  ✓ ${provider.name} connected via CLIProxy.`));
+        console.log(chalk.green(`\n  ✓ ${provider.name} connected via CLIProxy.`));
+        console.log(chalk.cyan(`    Model: ${selectedModel.name}`));
       } else {
-        console.log(chalk.red('  Failed to save config.'));
+        console.log(chalk.red('\n  Failed to save config.'));
       }
       await prompts.waitForEnter();
       continue;
     }
     
     if (choice === '2') {
-      // API Key connection
-      console.log();
-      console.log(chalk.yellow(`  Enter your ${provider.name} API key:`));
+      // API Key connection - select model first
+      const selectedModel = await selectModel(provider);
+      if (!selectedModel) continue;
+      
+      console.clear();
+      console.log(chalk.yellow(`\n  Enter your ${provider.name} API key:`));
       console.log(chalk.gray('  (Press Enter to cancel)'));
       console.log();
       
@@ -323,13 +352,16 @@ const handleProviderConfig = async (provider, config) => {
       if (!config.providers[provider.id]) config.providers[provider.id] = {};
       config.providers[provider.id].connectionType = 'apikey';
       config.providers[provider.id].apiKey = apiKey.trim();
+      config.providers[provider.id].modelId = selectedModel.id;
+      config.providers[provider.id].modelName = selectedModel.name;
       config.providers[provider.id].active = true;
       config.providers[provider.id].configuredAt = new Date().toISOString();
       
       if (saveConfig(config)) {
-        console.log(chalk.green(`  ✓ ${provider.name} connected via API Key.`));
+        console.log(chalk.green(`\n  ✓ ${provider.name} connected via API Key.`));
+        console.log(chalk.cyan(`    Model: ${selectedModel.name}`));
       } else {
-        console.log(chalk.red('  Failed to save config.'));
+        console.log(chalk.red('\n  Failed to save config.'));
       }
       await prompts.waitForEnter();
       continue;
@@ -352,7 +384,9 @@ const getActiveProvider = () => {
         id: provider.id,
         name: provider.name,
         connectionType: providerConfig.connectionType,
-        apiKey: providerConfig.apiKey || null
+        apiKey: providerConfig.apiKey || null,
+        modelId: providerConfig.modelId || null,
+        modelName: providerConfig.modelName || null
       };
     }
   }
