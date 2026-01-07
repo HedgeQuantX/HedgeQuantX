@@ -392,26 +392,6 @@ const getActiveProvider = () => {
 /** Count active AI agents */
 const getActiveAgentCount = () => getActiveProvider() ? 1 : 0;
 
-/** Show CLIProxy status */
-const showCliProxyStatus = async () => {
-  clearWithBanner();
-  console.log(chalk.yellow('\n  CLIPROXYAPI STATUS\n'));
-  
-  const installed = cliproxy.isInstalled();
-  console.log(chalk.gray('  INSTALLED: ') + (installed ? chalk.green('YES') : chalk.red('NO')));
-  
-  if (installed) {
-    const status = await cliproxy.isRunning();
-    console.log(chalk.gray('  RUNNING: ') + (status.running ? chalk.green('YES') : chalk.red('NO')));
-    console.log(chalk.gray('  VERSION: ') + chalk.cyan(cliproxy.CLIPROXY_VERSION));
-    console.log(chalk.gray('  PORT: ') + chalk.cyan(cliproxy.DEFAULT_PORT));
-    console.log(chalk.gray('  INSTALL DIR: ') + chalk.cyan(cliproxy.INSTALL_DIR));
-  }
-  
-  console.log();
-  await prompts.waitForEnter();
-};
-
 /** Main AI Agents menu */
 const aiAgentsMenu = async () => {
   let config = loadConfig();
@@ -419,19 +399,12 @@ const aiAgentsMenu = async () => {
   
   while (true) {
     clearWithBanner();
-    const status = await cliproxy.isRunning();
-    const statusText = status.running ? `LOCALHOST:${cliproxy.DEFAULT_PORT}` : 'NOT RUNNING';
-    drawProvidersTable(AI_PROVIDERS, config, boxWidth, statusText);
+    drawProvidersTable(AI_PROVIDERS, config, boxWidth);
     
-    const input = await prompts.textInput(chalk.cyan('SELECT (1-8/S/B): '));
+    const input = await prompts.textInput(chalk.cyan('SELECT (1-8/B): '));
     const choice = (input || '').toLowerCase().trim();
     
     if (choice === 'b' || choice === '') break;
-    
-    if (choice === 's') {
-      await showCliProxyStatus();
-      continue;
-    }
     
     const num = parseInt(choice);
     if (!isNaN(num) && num >= 1 && num <= AI_PROVIDERS.length) {

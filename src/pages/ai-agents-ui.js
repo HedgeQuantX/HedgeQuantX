@@ -58,26 +58,44 @@ const draw2ColTable = (title, titleColor, items, backText, W) => {
 };
 
 /**
+ * Draw centered 2-column row
+ * @param {string} leftText - Left column text
+ * @param {string} rightText - Right column text
+ * @param {number} W - Inner width
+ */
+const draw2ColRowCentered = (leftText, rightText, W) => {
+  const colWidth = Math.floor(W / 2);
+  const leftLen = visibleLength(leftText);
+  const rightLen = visibleLength(rightText || '');
+  
+  // Center left text in left column
+  const leftPadTotal = colWidth - leftLen;
+  const leftPadL = Math.floor(leftPadTotal / 2);
+  const leftPadR = leftPadTotal - leftPadL;
+  const leftCol = ' '.repeat(Math.max(0, leftPadL)) + leftText + ' '.repeat(Math.max(0, leftPadR));
+  
+  // Center right text in right column
+  const rightColWidth = W - colWidth;
+  const rightPadTotal = rightColWidth - rightLen;
+  const rightPadL = Math.floor(rightPadTotal / 2);
+  const rightPadR = rightPadTotal - rightPadL;
+  const rightCol = ' '.repeat(Math.max(0, rightPadL)) + (rightText || '') + ' '.repeat(Math.max(0, rightPadR));
+  
+  console.log(chalk.cyan('║') + leftCol + rightCol + chalk.cyan('║'));
+};
+
+/**
  * Draw providers table
  * @param {Array} providers - List of AI providers
  * @param {Object} config - Current config
  * @param {number} boxWidth - Box width
- * @param {string} cliproxyUrl - Current CLIProxy URL (optional)
  */
-const drawProvidersTable = (providers, config, boxWidth, cliproxyUrl = null) => {
+const drawProvidersTable = (providers, config, boxWidth) => {
   const W = boxWidth - 2;
   
   // New rectangle (banner is always closed)
   console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
   console.log(chalk.cyan('║') + chalk.yellow.bold(centerText('AI AGENTS CONFIGURATION', W)) + chalk.cyan('║'));
-  
-  // Show CLIProxy URL if provided
-  if (cliproxyUrl) {
-    console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
-    const proxyText = chalk.gray('CLIProxy: ') + chalk.cyan(cliproxyUrl);
-    console.log(chalk.cyan('║') + centerText(proxyText, W) + chalk.cyan('║'));
-  }
-  
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
   const items = providers.map((p, i) => {
@@ -89,11 +107,9 @@ const drawProvidersTable = (providers, config, boxWidth, cliproxyUrl = null) => 
   for (let row = 0; row < rows; row++) {
     const left = items[row];
     const right = items[row + rows];
-    draw2ColRow(left || '', right || '', W);
+    draw2ColRowCentered(left || '', right || '', W);
   }
   
-  console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
-  console.log(chalk.cyan('║') + chalk.gray(centerText('[S] CLIPROXY STATUS', W)) + chalk.cyan('║'));
   console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
   console.log(chalk.cyan('║') + chalk.red(centerText('[B] BACK TO MENU', W)) + chalk.cyan('║'));
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
