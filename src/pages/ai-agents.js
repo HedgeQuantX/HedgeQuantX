@@ -237,8 +237,19 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
     try { loginResult.childProcess.kill(); } catch (e) { /* ignore */ }
   }
   
-  // Fetch models directly from CLIProxy
-  const modelsResult = await cliproxy.fetchProviderModels(provider.id);
+  // Fetch models from CLIProxy (retry a few times if needed)
+  let modelsResult = { success: false, models: [] };
+  const spinner = ora({ text: 'LOADING MODELS...', color: 'yellow' }).start();
+  
+  for (let i = 0; i < 5; i++) {
+    modelsResult = await cliproxy.fetchProviderModels(provider.id);
+    if (modelsResult.success && modelsResult.models.length > 0) {
+      spinner.stop();
+      break;
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  spinner.stop();
   
   if (modelsResult.success && modelsResult.models.length > 0) {
     const selectedModel = await selectModelFromList(provider, modelsResult.models, boxWidth);
@@ -254,18 +265,15 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
       await prompts.waitForEnter();
       return true;
     }
+    // User pressed B to go back - still save as connected but no model selected yet
+    return true;
   }
   
-  // No models available - use auto mode
-  activateProvider(config, provider.id, {
-    connectionType: 'cliproxy',
-    modelId: null,
-    modelName: 'AUTO'
-  });
-  saveConfig(config);
-  console.log(chalk.green(`\n  ✓ ${provider.name.toUpperCase()} CONNECTED (AUTO MODE)`));
+  // No models found - show error
+  console.log(chalk.red('\n  NO MODELS AVAILABLE'));
+  console.log(chalk.gray('  TRY RECONNECTING OR USE API KEY'));
   await prompts.waitForEnter();
-  return true;
+  return false;
 };
 
 /** Handle API Key connection */
