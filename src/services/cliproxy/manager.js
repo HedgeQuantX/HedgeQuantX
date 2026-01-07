@@ -243,10 +243,11 @@ const isRunning = async () => {
     }
   }
   
-  // Also check by trying to connect
+  // Also check by trying to connect (accept 200, 401, 403 as "running")
   return new Promise((resolve) => {
-    const req = http.get(`http://localhost:${DEFAULT_PORT}/v1/models`, (res) => {
-      resolve({ running: res.statusCode === 200, pid: null });
+    const req = http.get(`http://127.0.0.1:${DEFAULT_PORT}/v1/models`, (res) => {
+      const running = res.statusCode === 200 || res.statusCode === 401 || res.statusCode === 403;
+      resolve({ running, pid: null });
     });
     req.on('error', () => resolve({ running: false, pid: null }));
     req.setTimeout(2000, () => {

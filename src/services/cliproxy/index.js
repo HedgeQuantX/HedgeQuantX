@@ -23,6 +23,9 @@ const {
   getLoginUrl
 } = manager;
 
+// Internal API key (must match config.yaml)
+const API_KEY = 'hqx-internal-key';
+
 /**
  * Make HTTP request to local CLIProxyAPI
  * @param {string} path - API path
@@ -34,11 +37,14 @@ const {
 const fetchLocal = (path, method = 'GET', body = null, timeout = 60000) => {
   return new Promise((resolve) => {
     const options = {
-      hostname: 'localhost',
+      hostname: '127.0.0.1',
       port: DEFAULT_PORT,
       path,
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${API_KEY}`
+      },
       timeout
     };
 
