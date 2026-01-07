@@ -11,11 +11,17 @@ const path = require('path');
 const fs = require('fs');
 const ora = require('ora');
 
-const { getLogoWidth } = require('../ui');
+const { getLogoWidth, displayBanner } = require('../ui');
 const { prompts } = require('../utils');
 const { fetchModelsFromApi } = require('./ai-models');
 const { drawProvidersTable, drawModelsTable, drawProviderWindow } = require('./ai-agents-ui');
 const cliproxy = require('../services/cliproxy');
+
+/** Clear screen and show banner */
+const clearWithBanner = () => {
+  console.clear();
+  displayBanner();
+};
 
 // Config file path
 const CONFIG_DIR = path.join(os.homedir(), '.hqx');
@@ -57,7 +63,7 @@ const saveConfig = (config) => {
 /** Select a model from a pre-fetched list */
 const selectModelFromList = async (provider, models, boxWidth) => {
   while (true) {
-    console.clear();
+    clearWithBanner();
     drawModelsTable(provider, models, boxWidth);
     
     const input = await prompts.textInput(chalk.cyan('Select model: '));
@@ -216,7 +222,7 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
 
 /** Handle API Key connection */
 const handleApiKeyConnection = async (provider, config) => {
-  console.clear();
+  clearWithBanner();
   console.log(chalk.yellow(`\n  Enter your ${provider.name} API key:`));
   console.log(chalk.gray('  (Press Enter to cancel)\n'));
   
@@ -259,7 +265,7 @@ const handleProviderConfig = async (provider, config) => {
   const boxWidth = getLogoWidth();
   
   while (true) {
-    console.clear();
+    clearWithBanner();
     drawProviderWindow(provider, config, boxWidth);
     
     const input = await prompts.textInput(chalk.cyan('Select option: '));
@@ -313,7 +319,7 @@ const getActiveAgentCount = () => getActiveProvider() ? 1 : 0;
 
 /** Show CLIProxy status */
 const showCliProxyStatus = async () => {
-  console.clear();
+  clearWithBanner();
   console.log(chalk.yellow('\n  CLIProxyAPI Status\n'));
   
   const installed = cliproxy.isInstalled();
@@ -337,7 +343,7 @@ const aiAgentsMenu = async () => {
   const boxWidth = getLogoWidth();
   
   while (true) {
-    console.clear();
+    clearWithBanner();
     const status = await cliproxy.isRunning();
     const statusText = status.running ? `localhost:${cliproxy.DEFAULT_PORT}` : 'Not running';
     drawProvidersTable(AI_PROVIDERS, config, boxWidth, statusText);

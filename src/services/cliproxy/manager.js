@@ -388,48 +388,64 @@ const ensureRunning = async (onProgress = null) => {
 /**
  * Get OAuth login URL for a provider
  * @param {string} provider - Provider ID (anthropic, openai, google, etc.)
- * @returns {Promise<Object>} { success, url, error }
+ * @returns {Promise<Object>} { success, url, childProcess, error }
  */
 const getLoginUrl = async (provider) => {
   const providerFlags = {
-    anthropic: '--claude-login',
-    openai: '--codex-login',
-    google: '--gemini-login',
-    qwen: '--qwen-login'
+    anthropic: '-claude-login',
+    openai: '-codex-login',
+    google: '-gemini-login',
+    qwen: '-qwen-login'
   };
   
   const flag = providerFlags[provider];
   if (!flag) {
-    return { success: false, url: null, error: 'Provider not supported for OAuth' };
+    return { success: false, url: null, childProcess: null, error: 'Provider not supported for OAuth' };
   }
   
-  // For headless/VPS, use --no-browser flag
+  // For headless/VPS, use -no-browser flag
   return new Promise((resolve) => {
-    const args = [flag, '--no-browser'];
+    const args = [flag, '-no-browser'];
     const child = spawn(BINARY_PATH, args, {
-      cwd: INSTALL_DIR,
-      env: { ...process.env, AUTH_DIR: AUTH_DIR }
+      cwd: INSTALL_DIR
     });
     
     let output = '';
+    let resolved = false;
+    
+    const checkForUrl = () => {
+      if (resolved) return;
+      const urlMatch = output.match(/https?:\/\/[^\s]+/);
+      if (urlMatch) {
+        resolved = true;
+        // Return child process so caller can wait for auth completion
+        resolve({ success: true, url: urlMatch[0], childProcess: child, error: null });
+      }
+    };
     
     child.stdout.on('data', (data) => {
       output += data.toString();
+      checkForUrl();
     });
     
     child.stderr.on('data', (data) => {
       output += data.toString();
+      checkForUrl();
     });
     
-    // Look for URL in output
-    setTimeout(() => {
-      const urlMatch = output.match(/https?:\/\/[^\s]+/);
-      if (urlMatch) {
-        resolve({ success: true, url: urlMatch[0], error: null });
-      } else {
-        resolve({ success: false, url: null, error: 'Could not get login URL' });
+    child.on('error', (err) => {
+      if (!resolved) {
+        resolved = true;
+        resolve({ success: false, url: null, childProcess: null, error: err.message });
       }
-    }, 3000);
+    });
+    
+    child.on('close', (code) => {
+      if (!resolved) {
+        resolved = true;
+        resolve({ success: false, url: null, childProcess: null, error: `Process exited with code ${code}` });
+      }
+    });
   });
 };
 
