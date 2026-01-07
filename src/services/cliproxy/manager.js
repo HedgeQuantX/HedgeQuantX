@@ -21,7 +21,8 @@ const INSTALL_DIR = path.join(os.homedir(), '.hqx', 'cliproxy');
 const BINARY_NAME = process.platform === 'win32' ? 'cli-proxy-api.exe' : 'cli-proxy-api';
 const BINARY_PATH = path.join(INSTALL_DIR, BINARY_NAME);
 const PID_FILE = path.join(INSTALL_DIR, 'cliproxy.pid');
-const AUTH_DIR = path.join(INSTALL_DIR, 'auths');
+// Use default CLIProxyAPI auth directory (where -claude-login saves tokens)
+const AUTH_DIR = path.join(os.homedir(), '.cli-proxy-api');
 
 // Default port
 const DEFAULT_PORT = 8317;
@@ -210,11 +211,10 @@ const isRunning = async () => {
 const CONFIG_PATH = path.join(INSTALL_DIR, 'config.yaml');
 
 /**
- * Create config file if not exists
+ * Create or update config file
  */
 const ensureConfig = () => {
-  if (fs.existsSync(CONFIG_PATH)) return;
-  
+  // Always write config to ensure auth-dir is correct
   const config = `# HQX CLIProxyAPI Config
 host: "127.0.0.1"
 port: ${DEFAULT_PORT}
