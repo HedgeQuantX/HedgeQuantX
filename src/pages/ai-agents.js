@@ -187,12 +187,15 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
   
   // Different flow for VPS/headless vs local
   if (loginResult.isHeadless) {
-    console.log(chalk.magenta('  ══════════════════════════════════════════════════════'));
+    console.log(chalk.magenta('  ══════════════════════════════════════════════════════════'));
     console.log(chalk.magenta('  VPS/SSH DETECTED - MANUAL CALLBACK REQUIRED'));
-    console.log(chalk.magenta('  ══════════════════════════════════════════════════════\n'));
-    console.log(chalk.white('  AFTER AUTHORIZING IN BROWSER, YOU WILL SEE A BLANK PAGE.'));
-    console.log(chalk.white('  COPY THE URL FROM BROWSER ADDRESS BAR (STARTS WITH LOCALHOST)'));
-    console.log(chalk.white('  AND PASTE IT BELOW:\n'));
+    console.log(chalk.magenta('  ══════════════════════════════════════════════════════════\n'));
+    console.log(chalk.white('  1. OPEN THE URL ABOVE IN YOUR LOCAL BROWSER'));
+    console.log(chalk.white('  2. AUTHORIZE THE APPLICATION'));
+    console.log(chalk.white('  3. YOU WILL SEE A BLANK PAGE - THIS IS NORMAL'));
+    console.log(chalk.white('  4. COPY THE FULL URL FROM YOUR BROWSER ADDRESS BAR'));
+    console.log(chalk.white('     (IT STARTS WITH: http://localhost:' + cliproxy.CALLBACK_PORT + '/...)'));
+    console.log(chalk.white('  5. PASTE IT BELOW:\n'));
     
     const callbackUrl = await prompts.textInput(chalk.cyan('  CALLBACK URL: '));
     
@@ -203,21 +206,30 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
       return false;
     }
     
-    // Process the callback
+    // Process the callback - send to the login process listening on CALLBACK_PORT
     const spinner = ora({ text: 'PROCESSING CALLBACK...', color: 'yellow' }).start();
-    const callbackResult = await cliproxy.processCallback(callbackUrl.trim());
     
-    if (!callbackResult.success) {
-      spinner.fail(`CALLBACK FAILED: ${callbackResult.error.toUpperCase()}`);
+    try {
+      const callbackResult = await cliproxy.processCallback(callbackUrl.trim());
+      
+      if (!callbackResult.success) {
+        spinner.fail(`CALLBACK FAILED: ${callbackResult.error}`);
+        if (loginResult.childProcess) loginResult.childProcess.kill();
+        await prompts.waitForEnter();
+        return false;
+      }
+      
+      spinner.succeed('AUTHENTICATION SUCCESSFUL!');
+    } catch (err) {
+      spinner.fail(`ERROR: ${err.message}`);
       if (loginResult.childProcess) loginResult.childProcess.kill();
       await prompts.waitForEnter();
       return false;
     }
     
-    spinner.succeed('AUTHENTICATION SUCCESSFUL!');
+    // Wait for token to be saved
+    await new Promise(r => setTimeout(r, 3000));
     
-    // Wait for CLIProxyAPI to process the token
-    await new Promise(r => setTimeout(r, 2000));
   } else {
     console.log(chalk.gray('  AFTER AUTHENTICATING, PRESS ENTER TO CONTINUE...'));
     await prompts.waitForEnter();
@@ -228,10 +240,20 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
     try { loginResult.childProcess.kill(); } catch (e) { /* ignore */ }
   }
   
+  // Restart CLIProxyAPI to load new tokens
+  console.log(chalk.gray('  RESTARTING CLIPROXYAPI...'));
+  await cliproxy.stop();
+  await new Promise(r => setTimeout(r, 1000));
+  await cliproxy.start();
+  await new Promise(r => setTimeout(r, 2000));
+  
   // Try to fetch models after auth
+  const modelSpinner = ora({ text: 'FETCHING AVAILABLE MODELS...', color: 'yellow' }).start();
   const modelsResult = await cliproxy.fetchProviderModels(provider.id);
   
   if (modelsResult.success && modelsResult.models.length > 0) {
+    modelSpinner.succeed(`FOUND ${modelsResult.models.length} MODELS`);
+    
     const selectedModel = await selectModelFromList(provider, modelsResult.models, boxWidth);
     if (selectedModel) {
       activateProvider(config, provider.id, {
@@ -245,6 +267,7 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
       }
     }
   } else {
+    modelSpinner.warn('NO MODELS FOUND - USING AUTO MODE');
     // No models but auth might have worked
     activateProvider(config, provider.id, {
       connectionType: 'cliproxy',

@@ -14,13 +14,16 @@ const {
   INSTALL_DIR,
   AUTH_DIR,
   DEFAULT_PORT,
+  CALLBACK_PORT,
   isInstalled,
+  isHeadless,
   install,
   isRunning,
   start,
   stop,
   ensureRunning,
-  getLoginUrl
+  getLoginUrl,
+  processCallback
 } = manager;
 
 // Internal API key (must match config.yaml)
@@ -174,13 +177,16 @@ module.exports = {
   INSTALL_DIR,
   AUTH_DIR,
   DEFAULT_PORT,
+  CALLBACK_PORT,
   isInstalled,
+  isHeadless,
   install,
   isRunning,
   start,
   stop,
   ensureRunning,
   getLoginUrl,
+  processCallback,
   
   // API
   fetchLocal,
