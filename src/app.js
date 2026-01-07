@@ -125,6 +125,7 @@ const banner = async () => {
   
   const tagline = isMobile ? `HQX v${version}` : `Prop Futures Algo Trading  v${version}`;
   console.log(chalk.cyan('║') + chalk.white(centerText(tagline, innerWidth)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
 };
 
 const getFullLogo = () => [
@@ -145,19 +146,12 @@ const getMobileLogo = () => [
   ['╚═╝  ╚═╝ ╚══▀▀═╝ ', '╚═╝  ╚═╝'],
 ];
 
-const bannerClosed = async () => {
-  await banner();
-  const termWidth = process.stdout.columns || 100;
-  const boxWidth = termWidth < 60 ? Math.max(termWidth - 2, 40) : Math.max(getLogoWidth(), 98);
-  console.log(chalk.cyan('╚' + '═'.repeat(boxWidth - 2) + '╝'));
-};
-
 // ==================== MAIN LOOP ====================
 
 const run = async () => {
   try {
     log.info('Starting HQX CLI');
-    await bannerClosed();
+    await banner();
 
     // Restore session
     const spinner = ora({ text: 'Restoring session...', color: 'yellow' }).start();
@@ -192,9 +186,9 @@ const run = async () => {
           const totalContentWidth = numCols * colWidth;
           const leftMargin = Math.max(2, Math.floor((innerWidth - totalContentWidth) / 2));
           
-          console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+          console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
           console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PROPFIRM', innerWidth)) + chalk.cyan('║'));
-          console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
+          console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
           
           const rows = Math.ceil(numbered.length / numCols);
           for (let row = 0; row < rows; row++) {
@@ -299,6 +293,12 @@ const run = async () => {
                 console.log(chalk.red(`  Algo error: ${err.message}`));
                 prepareStdin();
               }
+              break;
+
+            case 'aiagents':
+              console.log(chalk.yellow('\n  AI Agents - Coming soon!'));
+              console.log(chalk.gray('  Configure AI trading agents for automated strategies.'));
+              await prompts.waitForEnter();
               break;
 
             case 'update':

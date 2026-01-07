@@ -30,8 +30,8 @@ const dashboardMenu = async (service) => {
     return chalk.cyan('║') + content + ' '.repeat(Math.max(0, padding)) + chalk.cyan('║');
   };
   
-  // Continue from banner (use ╠ not ╔)
-  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
+  // New box for dashboard menu
+  console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
   console.log(makeLine(chalk.yellow.bold('Welcome, HQX Trader!'), 'center'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
@@ -89,7 +89,8 @@ const dashboardMenu = async (service) => {
   const menuItems = [
     { left: '[1] View Accounts', right: '[2] View Stats' },
     { left: '[+] Add Prop-Account', right: '[A] Algo-Trading' },
-    { left: '[U] Update HQX', right: '[X] Disconnect' },
+    { left: '[I] AI Agents', right: '[U] Update HQX' },
+    { left: '', right: '[X] Disconnect' },
   ];
   
   const maxLeftLen = Math.max(...menuItems.map(m => m.left.length));
@@ -121,18 +122,20 @@ const dashboardMenu = async (service) => {
   
   menuRow('[1] View Accounts', '[2] View Stats', chalk.cyan, chalk.cyan);
   menuRow('[+] Add Prop-Account', '[A] Algo-Trading', chalk.cyan, chalk.magenta);
-  menuRow('[U] Update HQX', '[X] Disconnect', chalk.yellow, chalk.red);
+  menuRow('[I] AI Agents', '[U] Update HQX', chalk.green, chalk.yellow);
+  menuRow('', '[X] Disconnect', chalk.white, chalk.red);
   
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
   
   // Simple input - no duplicate menu
-  const input = await prompts.textInput(chalk.cyan('Select (1/2/+/A/U/X)'));
+  const input = await prompts.textInput(chalk.cyan('Select (1/2/+/A/I/U/X)'));
   
   const actionMap = {
     '1': 'accounts',
     '2': 'stats',
     '+': 'add_prop_account',
     'a': 'algotrading',
+    'i': 'aiagents',
     'u': 'update',
     'x': 'disconnect'
   };
