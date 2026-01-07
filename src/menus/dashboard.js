@@ -90,7 +90,6 @@ const dashboardMenu = async (service) => {
     { left: '[1] View Accounts', right: '[2] View Stats' },
     { left: '[+] Add Prop-Account', right: '[A] Algo-Trading' },
     { left: '[I] AI Agents', right: '[U] Update HQX' },
-    { left: '', right: '[X] Disconnect' },
   ];
   
   const maxLeftLen = Math.max(...menuItems.map(m => m.left.length));
@@ -123,7 +122,10 @@ const dashboardMenu = async (service) => {
   menuRow('[1] View Accounts', '[2] View Stats', chalk.cyan, chalk.cyan);
   menuRow('[+] Add Prop-Account', '[A] Algo-Trading', chalk.cyan, chalk.magenta);
   menuRow('[I] AI Agents', '[U] Update HQX', chalk.green, chalk.yellow);
-  menuRow('', '[X] Disconnect', chalk.white, chalk.red);
+  
+  // Separator and centered Disconnect button
+  console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
+  console.log(makeLine(chalk.red('[X] Disconnect'), 'center'));
   
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
   
