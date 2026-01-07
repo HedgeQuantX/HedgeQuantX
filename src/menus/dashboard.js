@@ -30,9 +30,9 @@ const dashboardMenu = async (service) => {
     return chalk.cyan('║') + content + ' '.repeat(Math.max(0, padding)) + chalk.cyan('║');
   };
   
-  // Continue from banner (connected rectangle)
-  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
-  console.log(makeLine(chalk.yellow.bold('Welcome, HQX Trader!'), 'center'));
+  // New rectangle (banner is always closed)
+  console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
+  console.log(makeLine(chalk.yellow.bold('WELCOME, HQX TRADER!'), 'center'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
   // Show connected propfirms
@@ -87,9 +87,9 @@ const dashboardMenu = async (service) => {
   
   // Find max width for alignment
   const menuItems = [
-    { left: '[1] View Accounts', right: '[2] View Stats' },
-    { left: '[+] Add Prop-Account', right: '[A] Algo-Trading' },
-    { left: '[I] AI Agents', right: '[U] Update HQX' },
+    { left: '[1] VIEW ACCOUNTS', right: '[2] VIEW STATS' },
+    { left: '[+] ADD PROP-ACCOUNT', right: '[A] ALGO-TRADING' },
+    { left: '[I] AI AGENTS', right: '[U] UPDATE HQX' },
   ];
   
   const maxLeftLen = Math.max(...menuItems.map(m => m.left.length));
@@ -119,18 +119,18 @@ const dashboardMenu = async (service) => {
     );
   };
   
-  menuRow('[1] View Accounts', '[2] View Stats', chalk.cyan, chalk.cyan);
-  menuRow('[+] Add Prop-Account', '[A] Algo-Trading', chalk.cyan, chalk.magenta);
-  menuRow('[I] AI Agents', '[U] Update HQX', chalk.green, chalk.yellow);
+  menuRow('[1] VIEW ACCOUNTS', '[2] VIEW STATS', chalk.cyan, chalk.cyan);
+  menuRow('[+] ADD PROP-ACCOUNT', '[A] ALGO-TRADING', chalk.cyan, chalk.magenta);
+  menuRow('[I] AI AGENTS', '[U] UPDATE HQX', chalk.green, chalk.yellow);
   
   // Separator and centered Disconnect button
   console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
-  console.log(makeLine(chalk.red('[X] Disconnect'), 'center'));
+  console.log(makeLine(chalk.red('[X] DISCONNECT'), 'center'));
   
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
   
   // Simple input - no duplicate menu
-  const input = await prompts.textInput(chalk.cyan('Select (1/2/+/A/I/U/X)'));
+  const input = await prompts.textInput(chalk.cyan('SELECT (1/2/+/A/I/U/X):'));
   
   const actionMap = {
     '1': 'accounts',
@@ -159,8 +159,8 @@ const handleUpdate = async () => {
       currentVersion = require('../../package.json').version || 'unknown';
     } catch (e) {}
     
-    console.log(chalk.cyan(`\n  Current version: v${currentVersion}`));
-    spinner = ora({ text: 'Checking for updates...', color: 'yellow' }).start();
+    console.log(chalk.cyan(`\n  CURRENT VERSION: V${currentVersion}`));
+    spinner = ora({ text: 'CHECKING FOR UPDATES...', color: 'yellow' }).start();
     
     let latestVersion;
     try {
@@ -174,23 +174,23 @@ const handleUpdate = async () => {
         throw new Error('Invalid version format');
       }
     } catch (e) {
-      spinner.fail('Cannot reach npm registry');
-      console.log(chalk.gray(`  Error: ${e.message}`));
-      console.log(chalk.yellow('  Try manually: npm install -g hedgequantx@latest'));
+      spinner.fail('CANNOT REACH NPM REGISTRY');
+      console.log(chalk.gray(`  ERROR: ${e.message.toUpperCase()}`));
+      console.log(chalk.yellow('  TRY MANUALLY: npm install -g hedgequantx@latest'));
       await prompts.waitForEnter();
       return;
     }
     
-    spinner.succeed(`Latest version: v${latestVersion}`);
+    spinner.succeed(`LATEST VERSION: V${latestVersion}`);
     
     if (currentVersion === latestVersion) {
-      console.log(chalk.green('  Already up to date!'));
+      console.log(chalk.green('  ALREADY UP TO DATE!'));
       await prompts.waitForEnter();
       return;
     }
     
-    console.log(chalk.yellow(`  Update available: v${currentVersion} → v${latestVersion}`));
-    spinner = ora({ text: 'Installing update...', color: 'yellow' }).start();
+    console.log(chalk.yellow(`  UPDATE AVAILABLE: V${currentVersion} → V${latestVersion}`));
+    spinner = ora({ text: 'INSTALLING UPDATE...', color: 'yellow' }).start();
     
     try {
       // Try with sudo first on Unix systems
@@ -205,16 +205,16 @@ const handleUpdate = async () => {
         encoding: 'utf8'
       });
     } catch (e) {
-      spinner.fail('Update failed - permission denied?');
-      console.log(chalk.gray(`  Error: ${e.message}`));
-      console.log(chalk.yellow('  Try manually with sudo:'));
+      spinner.fail('UPDATE FAILED - PERMISSION DENIED?');
+      console.log(chalk.gray(`  ERROR: ${e.message.toUpperCase()}`));
+      console.log(chalk.yellow('  TRY MANUALLY WITH SUDO:'));
       console.log(chalk.white('  sudo npm install -g hedgequantx@latest'));
       await prompts.waitForEnter();
       return;
     }
     
-    spinner.succeed(`Updated to v${latestVersion}!`);
-    console.log(chalk.cyan('  Restarting HQX...'));
+    spinner.succeed(`UPDATED TO V${latestVersion}!`);
+    console.log(chalk.cyan('  RESTARTING HQX...'));
     
     await new Promise(r => setTimeout(r, 1500));
     
@@ -227,15 +227,15 @@ const handleUpdate = async () => {
       child.unref();
       process.exit(0);
     } catch (e) {
-      console.log(chalk.yellow('\n  Please restart HQX manually:'));
+      console.log(chalk.yellow('\n  PLEASE RESTART HQX MANUALLY:'));
       console.log(chalk.white('  hqx'));
       await prompts.waitForEnter();
     }
     
   } catch (error) {
-    if (spinner) spinner.fail('Update error');
-    console.log(chalk.gray(`  Error: ${error.message}`));
-    console.log(chalk.yellow('  Try manually: npm install -g hedgequantx@latest'));
+    if (spinner) spinner.fail('UPDATE ERROR');
+    console.log(chalk.gray(`  ERROR: ${error.message.toUpperCase()}`));
+    console.log(chalk.yellow('  TRY MANUALLY: npm install -g hedgequantx@latest'));
     await prompts.waitForEnter();
   }
 };
