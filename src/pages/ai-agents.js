@@ -15,7 +15,7 @@ const { getLogoWidth } = require('../ui');
 const { prompts } = require('../utils');
 const { fetchModelsFromApi } = require('./ai-models');
 const { drawProvidersTable, drawModelsTable, drawProviderWindow } = require('./ai-agents-ui');
-const { isCliProxyRunning, fetchModelsFromCliProxy, getOAuthUrl, checkOAuthStatus, getCliProxyUrl, setCliProxyUrl, DEFAULT_CLIPROXY_URL } = require('../services/cliproxy');
+const cliproxy = require('../services/cliproxy');
 
 // Config file path
 const CONFIG_DIR = path.join(os.homedir(), '.hqx');
@@ -98,76 +98,53 @@ const activateProvider = (config, providerId, data) => {
   Object.assign(config.providers[providerId], data, { active: true, configuredAt: new Date().toISOString() });
 };
 
-/** Handle CLIProxy connection */
+/** Handle CLIProxy connection (with auto-install) */
 const handleCliProxyConnection = async (provider, config, boxWidth) => {
   console.log();
-  const currentUrl = getCliProxyUrl();
-  const spinner = ora({ text: `Checking CLIProxy at ${currentUrl}...`, color: 'yellow' }).start();
-  let proxyStatus = await isCliProxyRunning();
   
-  if (!proxyStatus.running) {
-    spinner.fail(`CLIProxy not reachable at ${currentUrl}`);
-    console.log();
-    console.log(chalk.yellow('  CLIProxy Options:'));
-    console.log(chalk.gray('  [1] Local  - localhost:8317 (default)'));
-    console.log(chalk.gray('  [2] Remote - Enter custom URL (e.g., http://your-pc-ip:8317)'));
-    console.log(chalk.gray('  [B] Back'));
-    console.log();
+  // Check if CLIProxyAPI is installed
+  if (!cliproxy.isInstalled()) {
+    console.log(chalk.yellow('  CLIProxyAPI not installed. Installing...'));
+    const spinner = ora({ text: 'Downloading CLIProxyAPI...', color: 'yellow' }).start();
     
-    const urlChoice = await prompts.textInput(chalk.cyan('  Select option: '));
+    const installResult = await cliproxy.install((msg, percent) => {
+      spinner.text = `${msg} ${percent}%`;
+    });
     
-    if (!urlChoice || urlChoice.toLowerCase() === 'b') {
+    if (!installResult.success) {
+      spinner.fail(`Installation failed: ${installResult.error}`);
+      await prompts.waitForEnter();
       return false;
     }
-    
-    let newUrl = null;
-    if (urlChoice === '1') {
-      newUrl = DEFAULT_CLIPROXY_URL;
-    } else if (urlChoice === '2') {
-      console.log(chalk.gray('\n  Enter CLIProxy URL (e.g., http://192.168.1.100:8317):'));
-      const customUrl = await prompts.textInput(chalk.cyan('  URL: '));
-      if (!customUrl || customUrl.trim() === '') {
-        console.log(chalk.gray('  Cancelled.'));
-        await prompts.waitForEnter();
-        return false;
-      }
-      newUrl = customUrl.trim();
-      // Add http:// if missing
-      if (!newUrl.startsWith('http://') && !newUrl.startsWith('https://')) {
-        newUrl = 'http://' + newUrl;
-      }
-    }
-    
-    if (newUrl) {
-      const testSpinner = ora({ text: `Testing connection to ${newUrl}...`, color: 'yellow' }).start();
-      proxyStatus = await isCliProxyRunning(newUrl);
-      
-      if (!proxyStatus.running) {
-        testSpinner.fail(`Cannot connect to ${newUrl}`);
-        console.log(chalk.gray(`  Error: ${proxyStatus.error || 'Connection failed'}`));
-        console.log(chalk.yellow('\n  Make sure CLIProxy is running and accessible.'));
-        await prompts.waitForEnter();
-        return false;
-      }
-      
-      testSpinner.succeed(`Connected to CLIProxy at ${newUrl}`);
-      setCliProxyUrl(newUrl);
-    } else {
-      return false;
-    }
-  } else {
-    spinner.succeed(`CLIProxy connected at ${currentUrl}`);
+    spinner.succeed('CLIProxyAPI installed');
   }
-  const oauthResult = await getOAuthUrl(provider.id);
   
-  if (!oauthResult.success) {
-    // OAuth not supported - try direct model fetch
-    console.log(chalk.gray(`  OAuth not available for ${provider.name}, checking models...`));
-    const modelsResult = await fetchModelsFromCliProxy();
+  // Check if running, start if not
+  let status = await cliproxy.isRunning();
+  if (!status.running) {
+    const spinner = ora({ text: 'Starting CLIProxyAPI...', color: 'yellow' }).start();
+    const startResult = await cliproxy.start();
+    
+    if (!startResult.success) {
+      spinner.fail(`Failed to start: ${startResult.error}`);
+      await prompts.waitForEnter();
+      return false;
+    }
+    spinner.succeed('CLIProxyAPI started');
+  } else {
+    console.log(chalk.green('  ✓ CLIProxyAPI is running'));
+  }
+  
+  // Check if provider supports OAuth
+  const oauthProviders = ['anthropic', 'openai', 'google', 'qwen'];
+  if (!oauthProviders.includes(provider.id)) {
+    // Try to fetch models directly
+    console.log(chalk.gray(`  Checking available models for ${provider.name}...`));
+    const modelsResult = await cliproxy.fetchProviderModels(provider.id);
     
     if (!modelsResult.success || modelsResult.models.length === 0) {
-      console.log(chalk.red(`  No models available via CLIProxy for ${provider.name}`));
-      console.log(chalk.gray(`  Error: ${modelsResult.error || 'Unknown'}`));
+      console.log(chalk.red(`  No models available for ${provider.name}`));
+      console.log(chalk.gray('  This provider may require API key connection.'));
       await prompts.waitForEnter();
       return false;
     }
@@ -189,42 +166,25 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
     return true;
   }
   
-  // OAuth flow
-  console.log(chalk.cyan('\n  Open this URL in your browser to authenticate:\n'));
-  console.log(chalk.yellow(`  ${oauthResult.url}\n`));
-  console.log(chalk.gray('  Waiting for authentication... (Press Enter to cancel)'));
+  // OAuth flow - get login URL
+  console.log(chalk.cyan(`\n  Starting OAuth login for ${provider.name}...`));
+  const loginResult = await cliproxy.getLoginUrl(provider.id);
   
-  let authenticated = false;
-  const maxWait = 120000, pollInterval = 3000;
-  let waited = 0;
-  
-  const pollPromise = (async () => {
-    while (waited < maxWait) {
-      await new Promise(r => setTimeout(r, pollInterval));
-      waited += pollInterval;
-      if (oauthResult.state) {
-        const statusResult = await checkOAuthStatus(oauthResult.state);
-        if (statusResult.success && statusResult.status === 'ok') { authenticated = true; return true; }
-        if (statusResult.status === 'error') {
-          console.log(chalk.red(`\n  Authentication error: ${statusResult.error || 'Unknown'}`));
-          return false;
-        }
-      }
-    }
-    return false;
-  })();
-  
-  await Promise.race([pollPromise, prompts.waitForEnter()]);
-  
-  if (!authenticated) {
-    console.log(chalk.yellow('  Authentication cancelled or timed out.'));
+  if (!loginResult.success) {
+    console.log(chalk.red(`  OAuth error: ${loginResult.error}`));
     await prompts.waitForEnter();
     return false;
   }
   
-  console.log(chalk.green('  ✓ Authentication successful!'));
+  console.log(chalk.cyan('\n  Open this URL in your browser to authenticate:\n'));
+  console.log(chalk.yellow(`  ${loginResult.url}\n`));
+  console.log(chalk.gray('  After authenticating, press Enter to continue...'));
   
-  const modelsResult = await fetchModelsFromCliProxy();
+  await prompts.waitForEnter();
+  
+  // Try to fetch models after auth
+  const modelsResult = await cliproxy.fetchProviderModels(provider.id);
+  
   if (modelsResult.success && modelsResult.models.length > 0) {
     const selectedModel = await selectModelFromList(provider, modelsResult.models, boxWidth);
     if (selectedModel) {
@@ -234,17 +194,20 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
         modelName: selectedModel.name
       });
       if (saveConfig(config)) {
-        console.log(chalk.green(`\n  ✓ ${provider.name} connected via CLIProxy.`));
+        console.log(chalk.green(`\n  ✓ ${provider.name} connected via Paid Plan.`));
         console.log(chalk.cyan(`    Model: ${selectedModel.name}`));
       }
     }
   } else {
+    // No models but auth might have worked
     activateProvider(config, provider.id, {
       connectionType: 'cliproxy',
       modelId: null,
-      modelName: 'Default'
+      modelName: 'Auto'
     });
-    if (saveConfig(config)) console.log(chalk.green(`\n  ✓ ${provider.name} connected via CLIProxy.`));
+    if (saveConfig(config)) {
+      console.log(chalk.green(`\n  ✓ ${provider.name} connected via Paid Plan.`));
+    }
   }
   
   await prompts.waitForEnter();
@@ -348,64 +311,24 @@ const getActiveProvider = () => {
 /** Count active AI agents */
 const getActiveAgentCount = () => getActiveProvider() ? 1 : 0;
 
-/** Configure CLIProxy URL */
-const configureCliProxyUrl = async () => {
-  const currentUrl = getCliProxyUrl();
+/** Show CLIProxy status */
+const showCliProxyStatus = async () => {
   console.clear();
-  console.log(chalk.yellow('\n  Configure CLIProxy URL\n'));
-  console.log(chalk.gray(`  Current: ${currentUrl}`));
-  console.log();
-  console.log(chalk.white('  [1] Local  - localhost:8317 (default)'));
-  console.log(chalk.white('  [2] Remote - Enter custom URL'));
-  console.log(chalk.white('  [B] Back'));
-  console.log();
+  console.log(chalk.yellow('\n  CLIProxyAPI Status\n'));
   
-  const choice = await prompts.textInput(chalk.cyan('  Select option: '));
+  const installed = cliproxy.isInstalled();
+  console.log(chalk.gray('  Installed: ') + (installed ? chalk.green('Yes') : chalk.red('No')));
   
-  if (!choice || choice.toLowerCase() === 'b') return;
-  
-  if (choice === '1') {
-    setCliProxyUrl(DEFAULT_CLIPROXY_URL);
-    console.log(chalk.green(`\n  ✓ CLIProxy URL set to ${DEFAULT_CLIPROXY_URL}`));
-    await prompts.waitForEnter();
-    return;
+  if (installed) {
+    const status = await cliproxy.isRunning();
+    console.log(chalk.gray('  Running: ') + (status.running ? chalk.green('Yes') : chalk.red('No')));
+    console.log(chalk.gray('  Version: ') + chalk.cyan(cliproxy.CLIPROXY_VERSION));
+    console.log(chalk.gray('  Port: ') + chalk.cyan(cliproxy.DEFAULT_PORT));
+    console.log(chalk.gray('  Install dir: ') + chalk.cyan(cliproxy.INSTALL_DIR));
   }
   
-  if (choice === '2') {
-    console.log(chalk.gray('\n  Enter CLIProxy URL (e.g., http://192.168.1.100:8317):'));
-    const customUrl = await prompts.textInput(chalk.cyan('  URL: '));
-    
-    if (!customUrl || customUrl.trim() === '') {
-      console.log(chalk.gray('  Cancelled.'));
-      await prompts.waitForEnter();
-      return;
-    }
-    
-    let newUrl = customUrl.trim();
-    if (!newUrl.startsWith('http://') && !newUrl.startsWith('https://')) {
-      newUrl = 'http://' + newUrl;
-    }
-    
-    // Test connection
-    const spinner = ora({ text: `Testing connection to ${newUrl}...`, color: 'yellow' }).start();
-    const status = await isCliProxyRunning(newUrl);
-    
-    if (status.running) {
-      spinner.succeed(`Connected to ${newUrl}`);
-      setCliProxyUrl(newUrl);
-      console.log(chalk.green(`\n  ✓ CLIProxy URL saved.`));
-    } else {
-      spinner.warn(`Cannot connect to ${newUrl}`);
-      console.log(chalk.gray(`  Error: ${status.error || 'Connection failed'}`));
-      console.log(chalk.yellow('\n  Save anyway? (URL will be used when CLIProxy is available)'));
-      const save = await prompts.textInput(chalk.cyan('  Save? (y/N): '));
-      if (save && save.toLowerCase() === 'y') {
-        setCliProxyUrl(newUrl);
-        console.log(chalk.green('  ✓ URL saved.'));
-      }
-    }
-    await prompts.waitForEnter();
-  }
+  console.log();
+  await prompts.waitForEnter();
 };
 
 /** Main AI Agents menu */
@@ -415,16 +338,17 @@ const aiAgentsMenu = async () => {
   
   while (true) {
     console.clear();
-    const cliproxyUrl = getCliProxyUrl();
-    drawProvidersTable(AI_PROVIDERS, config, boxWidth, cliproxyUrl);
+    const status = await cliproxy.isRunning();
+    const statusText = status.running ? `localhost:${cliproxy.DEFAULT_PORT}` : 'Not running';
+    drawProvidersTable(AI_PROVIDERS, config, boxWidth, statusText);
     
-    const input = await prompts.textInput(chalk.cyan('Select (1-8/C/B): '));
+    const input = await prompts.textInput(chalk.cyan('Select (1-8/S/B): '));
     const choice = (input || '').toLowerCase().trim();
     
     if (choice === 'b' || choice === '') break;
     
-    if (choice === 'c') {
-      await configureCliProxyUrl();
+    if (choice === 's') {
+      await showCliProxyStatus();
       continue;
     }
     

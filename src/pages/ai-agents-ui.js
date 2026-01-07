@@ -90,7 +90,7 @@ const drawProvidersTable = (providers, config, boxWidth, cliproxyUrl = null) => 
   }
   
   console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
-  console.log(chalk.cyan('║') + chalk.gray(centerText('[C] Configure CLIProxy URL', W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + chalk.gray(centerText('[S] CLIProxy Status', W)) + chalk.cyan('║'));
   console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
   console.log(chalk.cyan('║') + chalk.red(centerText('[B] Back to Menu', W)) + chalk.cyan('║'));
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
