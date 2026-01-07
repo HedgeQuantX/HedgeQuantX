@@ -159,10 +159,14 @@ const aggregateAccountData = async (activeAccounts) => {
  * Show Stats Page
  */
 const showStats = async (service) => {
+  // Clear screen and show banner
+  console.clear();
+  displayBanner();
+  
   let spinner;
   
   try {
-    spinner = ora({ text: 'Loading stats...', color: 'yellow' }).start();
+    spinner = ora({ text: 'LOADING STATS...', color: 'yellow' }).start();
     
     // Get all connections
     const allConns = connections.count() > 0 
@@ -196,9 +200,7 @@ const showStats = async (service) => {
     // Aggregate account data from APIs
     const accountData = await aggregateAccountData(activeAccounts);
     
-    spinner.succeed('Stats loaded');
-    console.clear();
-    displayBanner();  // Banner always closed
+    spinner.stop();
     
     // Calculate stats from API data
     const stats = aggregateStats(activeAccounts, accountData.allTrades);

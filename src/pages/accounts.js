@@ -7,13 +7,17 @@ const ora = require('ora');
 
 const { connections } = require('../services');
 const { ACCOUNT_STATUS, ACCOUNT_TYPE } = require('../config');
-const { getLogoWidth, getColWidths, drawBoxHeader, drawBoxFooter, draw2ColHeader, visibleLength } = require('../ui');
+const { getLogoWidth, getColWidths, drawBoxHeader, drawBoxFooter, draw2ColHeader, visibleLength, displayBanner } = require('../ui');
 const { prompts } = require('../utils');
 
 /**
  * Show all accounts
  */
 const showAccounts = async (service) => {
+  // Clear screen and show banner
+  console.clear();
+  displayBanner();
+  
   const boxWidth = getLogoWidth();
   const { col1, col2 } = getColWidths(boxWidth);
 
@@ -28,7 +32,6 @@ const showAccounts = async (service) => {
   let spinner;
 
   try {
-    // Single spinner for loading (appears below the dashboard header)
     spinner = ora({ text: 'LOADING ACCOUNTS...', color: 'yellow' }).start();
     
     const allConns = connections.count() > 0 ? connections.getAll() : (service ? [{ service, propfirm: service.propfirm?.name || 'Unknown', type: 'single' }] : []);

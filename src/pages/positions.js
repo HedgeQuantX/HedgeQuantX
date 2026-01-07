@@ -7,19 +7,22 @@ const ora = require('ora');
 
 const { connections } = require('../services');
 const { ORDER_SIDE } = require('../config');
-const { getLogoWidth, drawBoxHeader, drawBoxFooter, drawBoxRow, drawBoxSeparator } = require('../ui');
+const { getLogoWidth, drawBoxHeader, drawBoxFooter, drawBoxRow, drawBoxSeparator, displayBanner } = require('../ui');
 const { prompts } = require('../utils');
 
 /**
  * Show all open positions
  */
 const showPositions = async (service) => {
+  // Clear screen and show banner
+  console.clear();
+  displayBanner();
+  
   const boxWidth = getLogoWidth();
   let spinner;
 
   try {
-    // Step 1: Get connections
-    spinner = ora({ text: 'LOADING CONNECTIONS...', color: 'yellow' }).start();
+    spinner = ora({ text: 'LOADING POSITIONS...', color: 'yellow' }).start();
     
     const allConns = connections.count() > 0 
       ? connections.getAll() 
