@@ -242,24 +242,10 @@ const handleUpdate = async () => {
     
     spinner.succeed(`UPDATED TO V${latestVersion}!`);
     console.log(chalk.green('\n  ✓ UPDATE SUCCESSFUL!'));
-    console.log(chalk.cyan('  RESTARTING HQX...'));
-    
-    await new Promise(r => setTimeout(r, 1000));
-    
-    // Restart HQX
-    try {
-      const child = spawn('hqx', [], { 
-        stdio: 'inherit', 
-        detached: true, 
-        shell: true 
-      });
-      child.unref();
-      process.exit(0);
-    } catch (e) {
-      console.log(chalk.yellow('\n  PLEASE RESTART HQX MANUALLY:'));
-      console.log(chalk.white('  hqx'));
-      await prompts.waitForEnter();
-    }
+    console.log(chalk.yellow('\n  PLEASE RESTART HQX TO USE THE NEW VERSION:'));
+    console.log(chalk.white('  hqx'));
+    await prompts.waitForEnter();
+    process.exit(0);
     
   } catch (error) {
     if (spinner) spinner.fail('UPDATE ERROR');
