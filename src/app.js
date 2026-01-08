@@ -175,7 +175,9 @@ const run = async () => {
       await refreshStats();
     }
     
-    // Don't stop spinner - console.clear() in dashboardMenu will remove it visually
+    // Clear spinner interval but don't erase the line visually
+    // dashboardMenu's console.clear() will handle the visual cleanup
+    spinner.stop();
 
     // Main loop
     while (true) {
