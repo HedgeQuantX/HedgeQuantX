@@ -141,21 +141,14 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
     console.log(chalk.green('  ✓ CLIPROXYAPI IS RUNNING'));
   }
   
-  // Check if provider supports OAuth
-  const oauthProviders = ['anthropic', 'openai', 'google', 'qwen'];
-  if (!oauthProviders.includes(provider.id)) {
-    // Try to fetch models directly
-    console.log(chalk.gray(`  CHECKING AVAILABLE MODELS FOR ${provider.name.toUpperCase()}...`));
-    const modelsResult = await cliproxy.fetchProviderModels(provider.id);
-    
-    if (!modelsResult.success || modelsResult.models.length === 0) {
-      console.log(chalk.red(`  NO MODELS AVAILABLE FOR ${provider.name.toUpperCase()}`));
-      console.log(chalk.gray('  THIS PROVIDER MAY REQUIRE API KEY CONNECTION.'));
-      await prompts.waitForEnter();
-      return false;
-    }
-    
-    const selectedModel = await selectModelFromList(provider, modelsResult.models, boxWidth);
+  // First, check if models are already available (existing auth)
+  console.log(chalk.gray(`  CHECKING EXISTING AUTHENTICATION...`));
+  const existingModels = await cliproxy.fetchProviderModels(provider.id);
+  
+  if (existingModels.success && existingModels.models.length > 0) {
+    // Models already available - skip OAuth, go directly to model selection
+    console.log(chalk.green(`  ✓ ALREADY AUTHENTICATED`));
+    const selectedModel = await selectModelFromList(provider, existingModels.models, boxWidth);
     if (!selectedModel) return false;
     
     activateProvider(config, provider.id, {
@@ -170,6 +163,15 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
     }
     await prompts.waitForEnter();
     return true;
+  }
+  
+  // Check if provider supports OAuth
+  const oauthProviders = ['anthropic', 'openai', 'google', 'qwen'];
+  if (!oauthProviders.includes(provider.id)) {
+    console.log(chalk.red(`  NO MODELS AVAILABLE FOR ${provider.name.toUpperCase()}`));
+    console.log(chalk.gray('  THIS PROVIDER MAY REQUIRE API KEY CONNECTION.'));
+    await prompts.waitForEnter();
+    return false;
   }
   
   // OAuth flow - get login URL
