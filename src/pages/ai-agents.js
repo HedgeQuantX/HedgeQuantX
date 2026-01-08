@@ -125,7 +125,7 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
     spinner.succeed('CLIPROXYAPI INSTALLED');
   }
   
-  // Check if running, start if not
+  // Check if running, start if not (or restart if config missing)
   let status = await cliproxy.isRunning();
   if (!status.running) {
     const spinner = ora({ text: 'STARTING CLIPROXYAPI...', color: 'yellow' }).start();
@@ -138,7 +138,21 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
     }
     spinner.succeed('CLIPROXYAPI STARTED');
   } else {
-    console.log(chalk.green('  ✓ CLIPROXYAPI IS RUNNING'));
+    // Running, but check if config exists (for proper API key auth)
+    const configPath = require('path').join(require('os').homedir(), '.hqx', 'cliproxy', 'config.yaml');
+    if (!require('fs').existsSync(configPath)) {
+      console.log(chalk.yellow('  RESTARTING CLIPROXYAPI WITH PROPER CONFIG...'));
+      await cliproxy.stop();
+      const startResult = await cliproxy.start();
+      if (!startResult.success) {
+        console.log(chalk.red(`  FAILED TO RESTART: ${startResult.error.toUpperCase()}`));
+        await prompts.waitForEnter();
+        return false;
+      }
+      console.log(chalk.green('  ✓ CLIPROXYAPI RESTARTED'));
+    } else {
+      console.log(chalk.green('  ✓ CLIPROXYAPI IS RUNNING'));
+    }
   }
   
   // First, check if models are already available (existing auth)
