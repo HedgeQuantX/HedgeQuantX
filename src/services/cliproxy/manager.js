@@ -354,9 +354,9 @@ const getLoginUrl = async (provider) => {
   
   const headless = isHeadless();
   
-  // For headless/VPS, use -no-browser flag and specify config (which contains auth-dir)
+  // For headless/VPS, use -no-browser flag only (don't pass config to avoid port conflict)
   return new Promise((resolve) => {
-    const args = [flag, '-no-browser', '-config', CONFIG_PATH];
+    const args = [flag, '-no-browser'];
     const child = spawn(BINARY_PATH, args, {
       cwd: INSTALL_DIR
     });

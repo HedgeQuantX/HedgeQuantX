@@ -242,9 +242,6 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
   const modelsResult = await cliproxy.fetchProviderModels(provider.id);
   spinner.stop();
   
-  // DEBUG
-  console.log(chalk.gray(`  DEBUG: success=${modelsResult.success}, count=${modelsResult.models?.length || 0}, error=${modelsResult.error || 'none'}`));
-  
   if (modelsResult.success && modelsResult.models.length > 0) {
     const selectedModel = await selectModelFromList(provider, modelsResult.models, boxWidth);
     if (selectedModel) {
