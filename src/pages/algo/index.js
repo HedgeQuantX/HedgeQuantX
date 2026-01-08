@@ -10,6 +10,7 @@ const log = logger.scope('AlgoMenu');
 
 const { oneAccountMenu } = require('./one-account');
 const { copyTradingMenu } = require('./copy-trading');
+const { customStrategyMenu } = require('./custom-strategy');
 
 /**
  * Algo Trading Menu
@@ -85,29 +86,6 @@ const algoTradingMenu = async (service) => {
     await prompts.waitForEnter();
     return 'back';
   }
-};
-
-/**
- * Custom Strategy Menu - AI-powered strategy creation
- */
-const customStrategyMenu = async (service) => {
-  console.clear();
-  displayBanner();
-  
-  const boxWidth = getLogoWidth();
-  const W = boxWidth - 2;
-  
-  console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
-  console.log(chalk.cyan('║') + chalk.green.bold(centerText('CUSTOM STRATEGY', W)) + chalk.cyan('║'));
-  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
-  console.log(chalk.cyan('║') + centerText('Create your own trading strategy with AI assistance', W) + chalk.cyan('║'));
-  console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
-  console.log(chalk.cyan('║') + chalk.gray(centerText('Coming soon...', W)) + chalk.cyan('║'));
-  console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
-  console.log(chalk.cyan('║') + chalk.red(centerText('[B] BACK', W)) + chalk.cyan('║'));
-  console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
-  
-  await prompts.waitForEnter();
 };
 
 module.exports = { algoTradingMenu };
