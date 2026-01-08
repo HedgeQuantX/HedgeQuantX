@@ -14,7 +14,8 @@ const {
   INSTALL_DIR,
   AUTH_DIR,
   DEFAULT_PORT,
-  CALLBACK_PORT,
+  CALLBACK_PORTS,
+  CALLBACK_PATHS,
   isInstalled,
   isHeadless,
   install,
@@ -23,6 +24,7 @@ const {
   stop,
   ensureRunning,
   getLoginUrl,
+  getCallbackPort,
   processCallback
 } = manager;
 
@@ -178,7 +180,8 @@ module.exports = {
   INSTALL_DIR,
   AUTH_DIR,
   DEFAULT_PORT,
-  CALLBACK_PORT,
+  CALLBACK_PORTS,
+  CALLBACK_PATHS,
   isInstalled,
   isHeadless,
   install,
@@ -187,6 +190,7 @@ module.exports = {
   stop,
   ensureRunning,
   getLoginUrl,
+  getCallbackPort,
   processCallback,
   
   // API

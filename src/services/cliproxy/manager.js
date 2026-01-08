@@ -26,104 +26,59 @@ const AUTH_DIR = path.join(os.homedir(), '.cli-proxy-api');
 
 // Default port
 const DEFAULT_PORT = 8317;
-const CALLBACK_PORT = 54545;
 
-/**
- * Detect if running in headless/VPS environment (no browser access)
- * @returns {boolean}
- */
+// OAuth callback ports per provider (from CLIProxyAPI)
+const CALLBACK_PORTS = {
+  anthropic: 54545,    // Claude: /callback
+  openai: 1455,        // Codex: /auth/callback
+  google: 8085,        // Gemini: /oauth2callback
+  qwen: null,          // Qwen uses polling, no callback
+  antigravity: 51121,  // Antigravity: /oauth-callback
+  iflow: 11451         // iFlow: /oauth2callback
+};
+
+// OAuth callback paths per provider
+const CALLBACK_PATHS = {
+  anthropic: '/callback',
+  openai: '/auth/callback',
+  google: '/oauth2callback',
+  qwen: null,
+  antigravity: '/oauth-callback',
+  iflow: '/oauth2callback'
+};
+
+/** Detect if running in headless/VPS environment (no browser access) */
 const isHeadless = () => {
-  // 1. SSH connection = definitely VPS/remote
-  if (process.env.SSH_CLIENT || process.env.SSH_TTY || process.env.SSH_CONNECTION) {
-    return true;
-  }
-  
-  // 2. Docker/container environment
-  if (process.env.DOCKER_CONTAINER || process.env.KUBERNETES_SERVICE_HOST) {
-    return true;
-  }
-  
-  // 3. Common CI/CD environments
-  if (process.env.CI || process.env.GITHUB_ACTIONS || process.env.GITLAB_CI) {
-    return true;
-  }
-  
-  // 4. Check for display on Linux
+  // SSH/Docker/CI = headless
+  if (process.env.SSH_CLIENT || process.env.SSH_TTY || process.env.SSH_CONNECTION) return true;
+  if (process.env.DOCKER_CONTAINER || process.env.KUBERNETES_SERVICE_HOST) return true;
+  if (process.env.CI || process.env.GITHUB_ACTIONS || process.env.GITLAB_CI) return true;
+  // Linux without display = headless
   if (process.platform === 'linux') {
-    // Has display = local with GUI
-    if (process.env.DISPLAY || process.env.WAYLAND_DISPLAY) {
-      return false;
-    }
-    // No display on Linux = likely headless/VPS
-    return true;
+    return !(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
   }
-  
-  // 5. macOS - check if running in terminal with GUI access
-  if (process.platform === 'darwin') {
-    // macOS always has GUI unless SSH (checked above)
-    return false;
-  }
-  
-  // 6. Windows - usually has GUI
-  if (process.platform === 'win32') {
-    return false;
-  }
-  
-  // Default: assume local
+  // macOS/Windows = local with GUI
   return false;
 };
 
-/**
- * Get download URL for current platform
- * @returns {Object} { url, filename } or null if unsupported
- */
+/** Get download URL for current platform */
 const getDownloadUrl = () => {
-  const platform = process.platform;
-  const arch = process.arch;
+  const platform = process.platform, arch = process.arch;
+  const osMap = { darwin: 'darwin', linux: 'linux', win32: 'windows' };
+  const extMap = { darwin: 'tar.gz', linux: 'tar.gz', win32: 'zip' };
+  const archMap = { x64: 'amd64', amd64: 'amd64', arm64: 'arm64' };
   
-  let osName, archName, ext;
-  
-  if (platform === 'darwin') {
-    osName = 'darwin';
-    ext = 'tar.gz';
-  } else if (platform === 'linux') {
-    osName = 'linux';
-    ext = 'tar.gz';
-  } else if (platform === 'win32') {
-    osName = 'windows';
-    ext = 'zip';
-  } else {
-    return null;
-  }
-  
-  if (arch === 'x64' || arch === 'amd64') {
-    archName = 'amd64';
-  } else if (arch === 'arm64') {
-    archName = 'arm64';
-  } else {
-    return null;
-  }
+  const osName = osMap[platform], ext = extMap[platform], archName = archMap[arch];
+  if (!osName || !archName) return null;
   
   const filename = `CLIProxyAPI_${CLIPROXY_VERSION}_${osName}_${archName}.${ext}`;
-  const url = `${GITHUB_RELEASE_BASE}/v${CLIPROXY_VERSION}/${filename}`;
-  
-  return { url, filename, ext };
+  return { url: `${GITHUB_RELEASE_BASE}/v${CLIPROXY_VERSION}/${filename}`, filename, ext };
 };
 
-/**
- * Check if CLIProxyAPI is installed
- * @returns {boolean}
- */
-const isInstalled = () => {
-  return fs.existsSync(BINARY_PATH);
-};
+/** Check if CLIProxyAPI is installed */
+const isInstalled = () => fs.existsSync(BINARY_PATH);
 
-
-/**
- * Install CLIProxyAPI
- * @param {Function} onProgress - Progress callback (message, percent)
- * @returns {Promise<Object>} { success, error }
- */
+/** Install CLIProxyAPI */
 const install = async (onProgress = null) => {
   try {
     const download = getDownloadUrl();
@@ -175,61 +130,39 @@ const install = async (onProgress = null) => {
   }
 };
 
-/**
- * Check if CLIProxyAPI is running
- * @returns {Promise<Object>} { running, pid }
- */
+/** Check if CLIProxyAPI is running */
 const isRunning = async () => {
-  // Check PID file
   if (fs.existsSync(PID_FILE)) {
     try {
       const pid = parseInt(fs.readFileSync(PID_FILE, 'utf8').trim(), 10);
-      // Check if process exists
       process.kill(pid, 0);
       return { running: true, pid };
-    } catch (e) {
-      // Process doesn't exist, clean up PID file
-      fs.unlinkSync(PID_FILE);
-    }
+    } catch (e) { fs.unlinkSync(PID_FILE); }
   }
-  
-  // Also check by trying to connect (accept 200, 401, 403 as "running")
   return new Promise((resolve) => {
     const req = http.get(`http://127.0.0.1:${DEFAULT_PORT}/v1/models`, (res) => {
-      const running = res.statusCode === 200 || res.statusCode === 401 || res.statusCode === 403;
-      resolve({ running, pid: null });
+      resolve({ running: [200, 401, 403].includes(res.statusCode), pid: null });
     });
     req.on('error', () => resolve({ running: false, pid: null }));
-    req.setTimeout(2000, () => {
-      req.destroy();
-      resolve({ running: false, pid: null });
-    });
+    req.setTimeout(2000, () => { req.destroy(); resolve({ running: false, pid: null }); });
   });
 };
 
-// Config file path
 const CONFIG_PATH = path.join(INSTALL_DIR, 'config.yaml');
 
-/**
- * Create or update config file
- */
+/** Create or update config file */
 const ensureConfig = () => {
-  // Always write config to ensure auth-dir is correct
-  const config = `# HQX CLIProxyAPI Config
+  fs.writeFileSync(CONFIG_PATH, `# HQX CLIProxyAPI Config
 host: "127.0.0.1"
 port: ${DEFAULT_PORT}
 auth-dir: "${AUTH_DIR}"
 debug: false
 api-keys:
   - "hqx-internal-key"
-`;
-  fs.writeFileSync(CONFIG_PATH, config);
+`);
 };
 
-/**
- * Start CLIProxyAPI
- * @returns {Promise<Object>} { success, error, pid }
- */
+/** Start CLIProxyAPI */
 const start = async () => {
   if (!isInstalled()) {
     return { success: false, error: 'CLIProxyAPI not installed', pid: null };
@@ -283,10 +216,7 @@ const start = async () => {
   }
 };
 
-/**
- * Stop CLIProxyAPI
- * @returns {Promise<Object>} { success, error }
- */
+/** Stop CLIProxyAPI */
 const stop = async () => {
   const status = await isRunning();
   if (!status.running) {
@@ -341,144 +271,76 @@ const stop = async () => {
   }
 };
 
-/**
- * Ensure CLIProxyAPI is installed and running
- * @param {Function} onProgress - Progress callback
- * @returns {Promise<Object>} { success, error }
- */
+/** Ensure CLIProxyAPI is installed and running */
 const ensureRunning = async (onProgress = null) => {
-  // Check if installed
   if (!isInstalled()) {
     if (onProgress) onProgress('Installing CLIProxyAPI...', 0);
     const installResult = await install(onProgress);
-    if (!installResult.success) {
-      return installResult;
-    }
+    if (!installResult.success) return installResult;
   }
-  
-  // Check if running
   const status = await isRunning();
-  if (status.running) {
-    return { success: true, error: null };
-  }
-  
-  // Start
+  if (status.running) return { success: true, error: null };
   if (onProgress) onProgress('Starting CLIProxyAPI...', 100);
   return start();
 };
 
-/**
- * Get OAuth login URL for a provider
- * @param {string} provider - Provider ID (anthropic, openai, google, etc.)
- * @returns {Promise<Object>} { success, url, childProcess, isHeadless, error }
- */
+/** Get OAuth login URL for a provider */
 const getLoginUrl = async (provider) => {
-  // CLIProxyAPI login flags per provider (from --help)
   const providerFlags = {
-    anthropic: '-claude-login',    // Claude Code
-    openai: '-codex-login',        // OpenAI Codex
-    google: '-login',              // Gemini CLI (Google Account)
-    qwen: '-qwen-login',           // Qwen Code
-    antigravity: '-antigravity-login',  // Antigravity
-    iflow: '-iflow-login'          // iFlow
+    anthropic: '-claude-login', openai: '-codex-login', google: '-login',
+    qwen: '-qwen-login', antigravity: '-antigravity-login', iflow: '-iflow-login'
   };
-  
   const flag = providerFlags[provider];
-  if (!flag) {
-    return { success: false, url: null, childProcess: null, isHeadless: false, error: 'Provider not supported for OAuth' };
-  }
+  if (!flag) return { success: false, url: null, childProcess: null, isHeadless: false, error: 'Provider not supported for OAuth' };
   
   const headless = isHeadless();
-  
-  // For headless/VPS, use -no-browser flag only (don't pass config to avoid port conflict)
   return new Promise((resolve) => {
-    const args = [flag, '-no-browser'];
-    const child = spawn(BINARY_PATH, args, {
-      cwd: INSTALL_DIR
-    });
-    
-    let output = '';
-    let resolved = false;
+    const child = spawn(BINARY_PATH, [flag, '-no-browser'], { cwd: INSTALL_DIR });
+    let output = '', resolved = false;
     
     const checkForUrl = () => {
       if (resolved) return;
       const urlMatch = output.match(/https?:\/\/[^\s]+/);
       if (urlMatch) {
         resolved = true;
-        // Return child process so caller can wait for auth completion
         resolve({ success: true, url: urlMatch[0], childProcess: child, isHeadless: headless, error: null });
       }
     };
     
-    child.stdout.on('data', (data) => {
-      output += data.toString();
-      checkForUrl();
-    });
-    
-    child.stderr.on('data', (data) => {
-      output += data.toString();
-      checkForUrl();
-    });
-    
-    child.on('error', (err) => {
-      if (!resolved) {
-        resolved = true;
-        resolve({ success: false, url: null, childProcess: null, isHeadless: headless, error: err.message });
-      }
-    });
-    
-    child.on('close', (code) => {
-      if (!resolved) {
-        resolved = true;
-        resolve({ success: false, url: null, childProcess: null, isHeadless: headless, error: `Process exited with code ${code}` });
-      }
-    });
+    child.stdout.on('data', (data) => { output += data.toString(); checkForUrl(); });
+    child.stderr.on('data', (data) => { output += data.toString(); checkForUrl(); });
+    child.on('error', (err) => { if (!resolved) { resolved = true; resolve({ success: false, url: null, childProcess: null, isHeadless: headless, error: err.message }); }});
+    child.on('close', (code) => { if (!resolved) { resolved = true; resolve({ success: false, url: null, childProcess: null, isHeadless: headless, error: `Process exited with code ${code}` }); }});
   });
 };
 
-/**
- * Process OAuth callback URL manually (for VPS/headless)
- * The callback URL looks like: http://localhost:54545/callback?code=xxx&state=yyy
- * We need to forward this to the waiting CLIProxyAPI process
- * @param {string} callbackUrl - The callback URL from the browser
- * @returns {Promise<Object>} { success, error }
- */
-const processCallback = (callbackUrl) => {
+/** Get callback port for a provider */
+const getCallbackPort = (provider) => CALLBACK_PORTS[provider] || null;
+
+/** Process OAuth callback URL manually (for VPS/headless) */
+const processCallback = (callbackUrl, provider = 'anthropic') => {
   return new Promise((resolve) => {
     try {
-      // Parse the callback URL
       const url = new URL(callbackUrl);
-      const params = url.searchParams;
+      const urlPort = url.port || (url.protocol === 'https:' ? 443 : 80);
+      const urlPath = url.pathname + url.search;
+      const expectedPort = CALLBACK_PORTS[provider];
       
-      // Extract query string to forward
-      const queryString = url.search;
+      if (!expectedPort) { resolve({ success: true, error: null }); return; } // Qwen uses polling
       
-      // Make request to local callback endpoint
-      const callbackPath = `/callback${queryString}`;
-      
-      const req = http.get(`http://127.0.0.1:${CALLBACK_PORT}${callbackPath}`, (res) => {
+      const targetPort = parseInt(urlPort) || expectedPort;
+      const req = http.get(`http://127.0.0.1:${targetPort}${urlPath}`, (res) => {
         let data = '';
         res.on('data', chunk => data += chunk);
         res.on('end', () => {
-          if (res.statusCode === 200 || res.statusCode === 302) {
-            resolve({ success: true, error: null });
-          } else {
-            resolve({ success: false, error: `Callback returned ${res.statusCode}: ${data}` });
-          }
+          resolve(res.statusCode === 200 || res.statusCode === 302 
+            ? { success: true, error: null } 
+            : { success: false, error: `Callback returned ${res.statusCode}: ${data}` });
         });
       });
-      
-      req.on('error', (err) => {
-        resolve({ success: false, error: `Callback error: ${err.message}` });
-      });
-      
-      req.setTimeout(10000, () => {
-        req.destroy();
-        resolve({ success: false, error: 'Callback timeout' });
-      });
-    } catch (err) {
-      resolve({ success: false, error: `Invalid URL: ${err.message}` });
-    }
+      req.on('error', (err) => resolve({ success: false, error: `Callback error: ${err.message}` }));
+      req.setTimeout(10000, () => { req.destroy(); resolve({ success: false, error: 'Callback timeout' }); });
+    } catch (err) { resolve({ success: false, error: `Invalid URL: ${err.message}` }); }
   });
 };
 
@@ -488,7 +350,8 @@ module.exports = {
   BINARY_PATH,
   AUTH_DIR,
   DEFAULT_PORT,
-  CALLBACK_PORT,
+  CALLBACK_PORTS,
+  CALLBACK_PATHS,
   getDownloadUrl,
   isInstalled,
   isHeadless,
@@ -498,5 +361,6 @@ module.exports = {
   stop,
   ensureRunning,
   getLoginUrl,
+  getCallbackPort,
   processCallback
 };

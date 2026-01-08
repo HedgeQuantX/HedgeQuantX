@@ -104,6 +104,22 @@ const activateProvider = (config, providerId, data) => {
   Object.assign(config.providers[providerId], data, { active: true, configuredAt: new Date().toISOString() });
 };
 
+/** Wait for child process to exit */
+const waitForProcessExit = (childProcess, timeoutMs = 15000, intervalMs = 500) => {
+  return new Promise((resolve) => {
+    if (!childProcess) return resolve();
+    let elapsed = 0;
+    const checkInterval = setInterval(() => {
+      elapsed += intervalMs;
+      if (childProcess.exitCode !== null || childProcess.killed || elapsed >= timeoutMs) {
+        clearInterval(checkInterval);
+        if (elapsed >= timeoutMs) try { childProcess.kill(); } catch (e) { /* ignore */ }
+        resolve();
+      }
+    }, intervalMs);
+  });
+};
+
 /** Handle CLIProxy connection (with auto-install) */
 const handleCliProxyConnection = async (provider, config, boxWidth) => {
   console.log();
@@ -160,8 +176,6 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
   
   const existingModels = await cliproxy.fetchProviderModels(provider.id);
   
-  // Debug output
-  console.log(chalk.gray(`  > RESULT: success=${existingModels.success}, models=${existingModels.models?.length || 0}, error=${existingModels.error || 'none'}`));
   
   if (existingModels.success && existingModels.models.length > 0) {
     // Models already available - skip OAuth, go directly to model selection
@@ -205,74 +219,67 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
   console.log(chalk.cyan('\n  OPEN THIS URL IN YOUR BROWSER TO AUTHENTICATE:\n'));
   console.log(chalk.yellow(`  ${loginResult.url}\n`));
   
+  // Get callback port for this provider
+  const callbackPort = cliproxy.getCallbackPort(provider.id);
+  const isPollingAuth = (provider.id === 'qwen'); // Qwen uses polling, not callback
+  
   // Different flow for VPS/headless vs local
   if (loginResult.isHeadless) {
     console.log(chalk.magenta('  ══════════════════════════════════════════════════════════'));
     console.log(chalk.magenta('  VPS/SSH DETECTED - MANUAL CALLBACK REQUIRED'));
     console.log(chalk.magenta('  ══════════════════════════════════════════════════════════\n'));
-    console.log(chalk.white('  1. OPEN THE URL ABOVE IN YOUR LOCAL BROWSER'));
-    console.log(chalk.white('  2. AUTHORIZE THE APPLICATION'));
-    console.log(chalk.white('  3. YOU WILL SEE A BLANK PAGE - THIS IS NORMAL'));
-    console.log(chalk.white('  4. COPY THE FULL URL FROM YOUR BROWSER ADDRESS BAR'));
-    console.log(chalk.white('     (IT STARTS WITH: http://localhost:' + cliproxy.CALLBACK_PORT + '/...)'));
-    console.log(chalk.white('  5. PASTE IT BELOW:\n'));
     
-    const callbackUrl = await prompts.textInput(chalk.cyan('  CALLBACK URL: '));
-    
-    if (!callbackUrl || !callbackUrl.includes('localhost')) {
-      console.log(chalk.red('\n  INVALID CALLBACK URL'));
-      if (loginResult.childProcess) loginResult.childProcess.kill();
+    if (isPollingAuth) {
+      // Qwen uses polling - just wait for user to authorize
+      console.log(chalk.white('  1. OPEN THE URL ABOVE IN YOUR BROWSER'));
+      console.log(chalk.white('  2. AUTHORIZE THE APPLICATION'));
+      console.log(chalk.white('  3. WAIT FOR AUTHENTICATION TO COMPLETE'));
+      console.log(chalk.white('  4. PRESS ENTER WHEN DONE\n'));
       await prompts.waitForEnter();
-      return false;
-    }
-    
-    // Process the callback - send to the login process listening on CALLBACK_PORT
-    const spinner = ora({ text: 'PROCESSING CALLBACK...', color: 'yellow' }).start();
-    
-    try {
-      const callbackResult = await cliproxy.processCallback(callbackUrl.trim());
       
-      if (!callbackResult.success) {
-        spinner.fail(`CALLBACK FAILED: ${callbackResult.error}`);
+      const spinner = ora({ text: 'WAITING FOR AUTHENTICATION...', color: 'yellow' }).start();
+      await waitForProcessExit(loginResult.childProcess, 90000, 1000);
+      spinner.succeed('AUTHENTICATION COMPLETED!');
+    } else {
+      // Standard OAuth with callback
+      console.log(chalk.white('  1. OPEN THE URL ABOVE IN YOUR LOCAL BROWSER'));
+      console.log(chalk.white('  2. AUTHORIZE THE APPLICATION'));
+      console.log(chalk.white('  3. YOU WILL SEE A BLANK PAGE - THIS IS NORMAL'));
+      console.log(chalk.white('  4. COPY THE FULL URL FROM YOUR BROWSER ADDRESS BAR'));
+      console.log(chalk.white(`     (IT STARTS WITH: http://localhost:${callbackPort}/...)`));
+      console.log(chalk.white('  5. PASTE IT BELOW:\n'));
+      
+      const callbackUrl = await prompts.textInput(chalk.cyan('  CALLBACK URL: '));
+      
+      if (!callbackUrl || !callbackUrl.includes('localhost')) {
+        console.log(chalk.red('\n  INVALID CALLBACK URL'));
         if (loginResult.childProcess) loginResult.childProcess.kill();
         await prompts.waitForEnter();
         return false;
       }
       
-      spinner.text = 'EXCHANGING TOKEN...';
+      // Process the callback - send to the login process
+      const spinner = ora({ text: 'PROCESSING CALLBACK...', color: 'yellow' }).start();
       
-      // Wait for login process to exit naturally (it saves auth file then exits)
-      // Process typically exits 1-2 seconds after callback
-      await new Promise((resolve) => {
-        if (!loginResult.childProcess) return resolve();
+      try {
+        const callbackResult = await cliproxy.processCallback(callbackUrl.trim(), provider.id);
         
-        // Check every 500ms if process is still running, max 15s
-        let elapsed = 0;
-        const checkInterval = setInterval(() => {
-          elapsed += 500;
-          
-          // Check if process exited (exitCode is set when process exits)
-          if (loginResult.childProcess.exitCode !== null || loginResult.childProcess.killed) {
-            clearInterval(checkInterval);
-            resolve();
-            return;
-          }
-          
-          // Safety timeout after 15s
-          if (elapsed >= 15000) {
-            clearInterval(checkInterval);
-            try { loginResult.childProcess.kill(); } catch (e) { /* ignore */ }
-            resolve();
-          }
-        }, 500);
-      });
-      
-      spinner.succeed('AUTHENTICATION SUCCESSFUL!');
-    } catch (err) {
-      spinner.fail(`ERROR: ${err.message}`);
-      if (loginResult.childProcess) loginResult.childProcess.kill();
-      await prompts.waitForEnter();
-      return false;
+        if (!callbackResult.success) {
+          spinner.fail(`CALLBACK FAILED: ${callbackResult.error}`);
+          if (loginResult.childProcess) loginResult.childProcess.kill();
+          await prompts.waitForEnter();
+          return false;
+        }
+        
+        spinner.text = 'EXCHANGING TOKEN...';
+        await waitForProcessExit(loginResult.childProcess);
+        spinner.succeed('AUTHENTICATION SUCCESSFUL!');
+      } catch (err) {
+        spinner.fail(`ERROR: ${err.message}`);
+        if (loginResult.childProcess) loginResult.childProcess.kill();
+        await prompts.waitForEnter();
+        return false;
+      }
     }
     
   } else {
@@ -280,31 +287,8 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
     console.log(chalk.gray('  AFTER AUTHENTICATING IN YOUR BROWSER, PRESS ENTER...'));
     await prompts.waitForEnter();
     
-    // Wait for login process to finish saving auth file
     const spinner = ora({ text: 'SAVING AUTHENTICATION...', color: 'yellow' }).start();
-    
-    await new Promise((resolve) => {
-      if (!loginResult.childProcess) return resolve();
-      
-      let elapsed = 0;
-      const checkInterval = setInterval(() => {
-        elapsed += 500;
-        
-        if (loginResult.childProcess.exitCode !== null || loginResult.childProcess.killed) {
-          clearInterval(checkInterval);
-          resolve();
-          return;
-        }
-        
-        // Safety timeout after 15s
-        if (elapsed >= 15000) {
-          clearInterval(checkInterval);
-          try { loginResult.childProcess.kill(); } catch (e) { /* ignore */ }
-          resolve();
-        }
-      }, 500);
-    });
-    
+    await waitForProcessExit(loginResult.childProcess);
     spinner.succeed('AUTHENTICATION SAVED');
   }
   
