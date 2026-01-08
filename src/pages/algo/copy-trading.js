@@ -1,6 +1,6 @@
 /**
- * @fileoverview Copy Trading Mode
- * @module pages/algo/copy-trading
+ * Copy Trading Mode - HQX Ultra Scalping
+ * Same as One Account but copies trades to multiple followers
  */
 
 const chalk = require('chalk');
@@ -9,18 +9,18 @@ const readline = require('readline');
 
 const { connections } = require('../../services');
 const { AlgoUI, renderSessionSummary } = require('./ui');
-const { logger, prompts } = require('../../utils');
+const { prompts } = require('../../utils');
 const { checkMarketHours } = require('../../services/rithmic/market');
 
-const log = logger.scope('CopyTrading');
+// Strategy & Market Data
+const { M1 } = require('../../lib/m/s1');
+const { MarketDataFeed } = require('../../lib/data');
 
 /**
  * Copy Trading Menu
  */
 const copyTradingMenu = async () => {
-  log.info('Copy Trading menu opened');
-
-  // Check market hours
+  // Check if market is open
   const market = checkMarketHours();
   if (!market.isOpen && !market.message.includes('early')) {
     console.log();
@@ -30,326 +30,372 @@ const copyTradingMenu = async () => {
     await prompts.waitForEnter();
     return;
   }
-
-  const allConns = connections.getAll();
-
-  if (allConns.length < 2) {
-    console.log();
-    console.log(chalk.yellow(`  Copy Trading requires 2 connected accounts (found: ${allConns.length})`));
+  
+  const spinner = ora({ text: 'Fetching active accounts...', color: 'yellow' }).start();
+  
+  const allAccounts = await connections.getAllAccounts();
+  
+  if (!allAccounts?.length) {
+    spinner.fail('No accounts found');
+    await prompts.waitForEnter();
+    return;
+  }
+  
+  const activeAccounts = allAccounts.filter(acc => acc.status === 0);
+  
+  if (activeAccounts.length < 2) {
+    spinner.fail(`Need at least 2 active accounts (found: ${activeAccounts.length})`);
     console.log(chalk.gray('  Connect to another PropFirm first'));
-    console.log();
     await prompts.waitForEnter();
     return;
   }
-
+  
+  spinner.succeed(`Found ${activeAccounts.length} active accounts`);
+  
+  // Step 1: Select LEAD Account
   console.log();
-  console.log(chalk.yellow.bold('  Copy Trading Setup'));
+  console.log(chalk.cyan.bold('  STEP 1: SELECT LEAD ACCOUNT'));
+  const leadOptions = activeAccounts.map(acc => {
+    const name = acc.accountName || acc.rithmicAccountId || acc.accountId;
+    const balance = acc.balance !== null && acc.balance !== undefined 
+      ? ` - $${acc.balance.toLocaleString()}` 
+      : '';
+    return {
+      label: `${name} (${acc.propfirm || acc.platform || 'Unknown'})${balance}`,
+      value: acc
+    };
+  });
+  leadOptions.push({ label: '< Back', value: 'back' });
+  
+  const leadAccount = await prompts.selectOption('Lead Account:', leadOptions);
+  if (!leadAccount || leadAccount === 'back') return;
+  
+  // Step 2: Select FOLLOWER Account(s)
   console.log();
-
-  // Fetch all accounts
-  const spinner = ora({ text: 'Fetching accounts...', color: 'yellow' }).start();
-  const allAccounts = await fetchAllAccounts(allConns);
-
-  if (allAccounts.length < 2) {
-    spinner.fail('Need at least 2 active accounts');
+  console.log(chalk.yellow.bold('  STEP 2: SELECT FOLLOWER ACCOUNT(S)'));
+  console.log(chalk.gray('  (Select accounts to copy trades to)'));
+  
+  const followers = [];
+  const availableFollowers = activeAccounts.filter(a => a.accountId !== leadAccount.accountId);
+  
+  while (availableFollowers.length > 0) {
+    const remaining = availableFollowers.filter(a => !followers.find(f => f.accountId === a.accountId));
+    if (remaining.length === 0) break;
+    
+    const followerOptions = remaining.map(acc => {
+      const name = acc.accountName || acc.rithmicAccountId || acc.accountId;
+      const balance = acc.balance !== null && acc.balance !== undefined 
+        ? ` - $${acc.balance.toLocaleString()}` 
+        : '';
+      return {
+        label: `${name} (${acc.propfirm || acc.platform || 'Unknown'})${balance}`,
+        value: acc
+      };
+    });
+    
+    if (followers.length > 0) {
+      followerOptions.push({ label: chalk.green('✓ Done selecting followers'), value: 'done' });
+    }
+    followerOptions.push({ label: '< Back', value: 'back' });
+    
+    const msg = followers.length === 0 ? 'Select Follower:' : `Add another follower (${followers.length} selected):`;
+    const selected = await prompts.selectOption(msg, followerOptions);
+    
+    if (!selected || selected === 'back') {
+      if (followers.length === 0) return;
+      break;
+    }
+    if (selected === 'done') break;
+    
+    followers.push(selected);
+    console.log(chalk.green(`  ✓ Added: ${selected.accountName || selected.accountId}`));
+  }
+  
+  if (followers.length === 0) {
+    console.log(chalk.red('  No followers selected'));
     await prompts.waitForEnter();
     return;
   }
-
-  spinner.succeed(`Found ${allAccounts.length} active accounts`);
-
-  // Step 1: Select Lead Account
-  console.log(chalk.cyan('  Step 1: Select LEAD Account'));
-  const leadIdx = await selectAccount('Lead Account:', allAccounts, -1);
-  if (leadIdx === null || leadIdx === -1) return;
-  const lead = allAccounts[leadIdx];
-
-  // Step 2: Select Follower Account
-  console.log();
-  console.log(chalk.cyan('  Step 2: Select FOLLOWER Account'));
-  const followerIdx = await selectAccount('Follower Account:', allAccounts, leadIdx);
-  if (followerIdx === null || followerIdx === -1) return;
-  const follower = allAccounts[followerIdx];
-
+  
   // Step 3: Select Symbol
   console.log();
-  console.log(chalk.cyan('  Step 3: Select Trading Symbol'));
-  const symbol = await selectSymbol(lead.service);
-  if (!symbol) return;
-
+  console.log(chalk.magenta.bold('  STEP 3: SELECT SYMBOL'));
+  const leadService = leadAccount.service || connections.getServiceForAccount(leadAccount.accountId);
+  const contract = await selectSymbol(leadService);
+  if (!contract) return;
+  
   // Step 4: Configure Parameters
   console.log();
-  console.log(chalk.cyan('  Step 4: Configure Parameters'));
-
+  console.log(chalk.cyan.bold('  STEP 4: CONFIGURE PARAMETERS'));
+  console.log();
+  
   const leadContracts = await prompts.numberInput('Lead contracts:', 1, 1, 10);
   if (leadContracts === null) return;
-
-  const followerContracts = await prompts.numberInput('Follower contracts:', leadContracts, 1, 10);
+  
+  const followerContracts = await prompts.numberInput('Follower contracts (each):', leadContracts, 1, 10);
   if (followerContracts === null) return;
-
+  
   const dailyTarget = await prompts.numberInput('Daily target ($):', 400, 1, 10000);
   if (dailyTarget === null) return;
-
+  
   const maxRisk = await prompts.numberInput('Max risk ($):', 200, 1, 5000);
   if (maxRisk === null) return;
-
-  // Step 5: Privacy
-  const showNames = await prompts.selectOption('Account names:', [
-    { label: 'Hide account names', value: false },
-    { label: 'Show account names', value: true },
-  ]);
+  
+  const showNames = await prompts.confirmPrompt('Show account names?', false);
   if (showNames === null) return;
-
-  // Confirm
+  
+  // Summary
   console.log();
-  console.log(chalk.white('  Summary:'));
-  console.log(chalk.cyan(`  Symbol: ${symbol.name}`));
-  console.log(chalk.cyan(`  Lead: ${lead.propfirm} x${leadContracts}`));
-  console.log(chalk.cyan(`  Follower: ${follower.propfirm} x${followerContracts}`));
+  console.log(chalk.white.bold('  SUMMARY:'));
+  console.log(chalk.cyan(`  Symbol: ${contract.name}`));
+  console.log(chalk.cyan(`  Lead: ${leadAccount.propfirm} x${leadContracts}`));
+  console.log(chalk.yellow(`  Followers (${followers.length}):`));
+  for (const f of followers) {
+    console.log(chalk.yellow(`    - ${f.propfirm} x${followerContracts}`));
+  }
   console.log(chalk.cyan(`  Target: $${dailyTarget} | Risk: $${maxRisk}`));
   console.log();
-
+  
   const confirm = await prompts.confirmPrompt('Start Copy Trading?', true);
   if (!confirm) return;
-
-  // Launch
+  
   await launchCopyTrading({
-    lead: { ...lead, symbol, contracts: leadContracts },
-    follower: { ...follower, symbol, contracts: followerContracts },
+    lead: { account: leadAccount, contracts: leadContracts },
+    followers: followers.map(f => ({ account: f, contracts: followerContracts })),
+    contract,
     dailyTarget,
     maxRisk,
-    showNames,
+    showNames
   });
 };
 
 /**
- * Fetch all active accounts from connections
- * @param {Array} allConns - All connections
- * @returns {Promise<Array>}
- */
-const fetchAllAccounts = async (allConns) => {
-  const allAccounts = [];
-
-  for (const conn of allConns) {
-    try {
-      const result = await conn.service.getTradingAccounts();
-      if (result.success && result.accounts) {
-        const active = result.accounts.filter(a => a.status === 0);
-        for (const acc of active) {
-          allAccounts.push({
-            account: acc,
-            service: conn.service,
-            propfirm: conn.propfirm,
-            type: conn.type,
-          });
-        }
-      }
-    } catch (err) {
-      log.warn('Failed to get accounts', { type: conn.type, error: err.message });
-    }
-  }
-
-  return allAccounts;
-};
-
-/**
- * Select account from list
- * @param {string} message - Prompt message
- * @param {Array} accounts - Available accounts
- * @param {number} excludeIdx - Index to exclude
- * @returns {Promise<number|null>}
- */
-const selectAccount = async (message, accounts, excludeIdx) => {
-  const options = accounts
-    .map((a, i) => ({ a, i }))
-    .filter(x => x.i !== excludeIdx)
-    .map(x => {
-      const acc = x.a.account;
-      const balance = acc.balance !== null ? ` ($${acc.balance.toLocaleString()})` : '';
-      return {
-        label: `${x.a.propfirm} - ${acc.accountName || acc.rithmicAccountId || acc.name || acc.accountId}${balance}`,
-        value: x.i,
-      };
-    });
-
-  options.push({ label: '< Cancel', value: -1 });
-  return prompts.selectOption(message, options);
-};
-
-/**
- * Select trading symbol
- * @param {Object} service - Service instance
- * @returns {Promise<Object|null>}
+ * Symbol selection - sorted with popular indices first
  */
 const selectSymbol = async (service) => {
   const spinner = ora({ text: 'Loading symbols...', color: 'yellow' }).start();
-
-  try {
-    // Try Rithmic API first for consistency
-    let contracts = await getContractsFromAPI();
-
-    // Fallback to service
-    if (!contracts && typeof service.getContracts === 'function') {
-      const result = await service.getContracts();
-      if (result.success && result.contracts?.length > 0) {
-        contracts = result.contracts;
-      }
-    }
-
-    if (!contracts || !contracts.length) {
-      spinner.fail('No contracts available');
-      await prompts.waitForEnter();
-      return null;
-    }
-
-    spinner.succeed(`Found ${contracts.length} contracts`);
-
-    // Build options from RAW API data - no static mapping
-    const options = [];
-    let currentGroup = null;
-
-    for (const c of contracts) {
-      // Use RAW API field: contractGroup
-      if (c.contractGroup && c.contractGroup !== currentGroup) {
-        currentGroup = c.contractGroup;
-        options.push({
-          label: chalk.cyan.bold(`── ${currentGroup} ──`),
-          value: null,
-          disabled: true,
-        });
-      }
-
-      // Use RAW API fields: symbol (trading symbol), name (product name), exchange
-      const label = `  ${c.symbol} - ${c.name} (${c.exchange})`;
-      options.push({ label, value: c });
-    }
-
-    options.push({ label: '', value: null, disabled: true });
-    options.push({ label: chalk.gray('< Cancel'), value: null });
-
-    return prompts.selectOption('Trading Symbol:', options);
-  } catch (err) {
-    spinner.fail(`Error loading contracts: ${err.message}`);
-    await prompts.waitForEnter();
+  
+  const contractsResult = await service.getContracts();
+  if (!contractsResult.success || !contractsResult.contracts?.length) {
+    spinner.fail('Failed to load contracts');
     return null;
   }
+  
+  let contracts = contractsResult.contracts;
+  
+  // Sort: Popular indices first
+  const popularPrefixes = ['ES', 'NQ', 'MES', 'MNQ', 'M2K', 'RTY', 'YM', 'MYM', 'NKD', 'GC', 'SI', 'CL'];
+  
+  contracts.sort((a, b) => {
+    const baseA = a.baseSymbol || a.symbol || '';
+    const baseB = b.baseSymbol || b.symbol || '';
+    const idxA = popularPrefixes.findIndex(p => baseA === p || baseA.startsWith(p));
+    const idxB = popularPrefixes.findIndex(p => baseB === p || baseB.startsWith(p));
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return baseA.localeCompare(baseB);
+  });
+  
+  spinner.succeed(`Found ${contracts.length} contracts`);
+  
+  const options = contracts.map(c => ({
+    label: `${c.symbol} - ${c.name} (${c.exchange})`,
+    value: c
+  }));
+  options.push({ label: chalk.gray('< Back'), value: 'back' });
+  
+  const selected = await prompts.selectOption(chalk.yellow('Select Symbol:'), options);
+  return selected === 'back' || selected === null ? null : selected;
 };
 
 /**
- * Get contracts from Rithmic API - RAW data only
- * @returns {Promise<Array|null>}
- */
-const getContractsFromAPI = async () => {
-  const allConns = connections.getAll();
-  const rithmicConn = allConns.find(c => c.type === 'rithmic');
-
-  if (rithmicConn && typeof rithmicConn.service.getContracts === 'function') {
-    const result = await rithmicConn.service.getContracts();
-    if (result.success && result.contracts?.length > 0) {
-      // Return RAW API data - no mapping
-      return result.contracts;
-    }
-  }
-
-  return null;
-};
-
-/**
- * Launch Copy Trading session
- * @param {Object} config - Session configuration
+ * Launch Copy Trading - HQX Ultra Scalping with trade copying
  */
 const launchCopyTrading = async (config) => {
-  const { lead, follower, dailyTarget, maxRisk, showNames } = config;
-
-  // Account names (masked for privacy)
-  const leadName = showNames ? lead.account.accountId : 'HQX Lead *****';
-  const followerName = showNames ? follower.account.accountId : 'HQX Follower *****';
-
+  const { lead, followers, contract, dailyTarget, maxRisk, showNames } = config;
+  
+  const leadAccount = lead.account;
+  const leadService = leadAccount.service || connections.getServiceForAccount(leadAccount.accountId);
+  const leadName = showNames 
+    ? (leadAccount.accountName || leadAccount.rithmicAccountId || leadAccount.accountId) 
+    : 'HQX Lead *****';
+  const symbolName = contract.name;
+  const contractId = contract.id;
+  const tickSize = contract.tickSize || 0.25;
+  
+  const followerNames = followers.map((f, i) => 
+    showNames ? (f.account.accountName || f.account.accountId) : `HQX Follower ${i + 1} *****`
+  );
+  
   const ui = new AlgoUI({ subtitle: 'HQX Copy Trading', mode: 'copy-trading' });
-
+  
   const stats = {
-    leadName,
-    followerName,
-    leadSymbol: lead.symbol.name,
-    followerSymbol: follower.symbol.name,
-    leadQty: lead.contracts,
-    followerQty: follower.contracts,
+    accountName: leadName,
+    followerNames,
+    symbol: symbolName,
+    qty: lead.contracts,
+    followerQty: followers[0]?.contracts || lead.contracts,
     target: dailyTarget,
     risk: maxRisk,
+    propfirm: leadAccount.propfirm || 'Unknown',
+    platform: leadAccount.platform || 'Rithmic',
     pnl: 0,
+    followerPnl: 0,
     trades: 0,
     wins: 0,
     losses: 0,
     latency: 0,
     connected: false,
-    platform: lead.account.platform || 'Rithmic',
+    startTime: Date.now(),
+    followersCount: followers.length
   };
-
+  
   let running = true;
   let stopReason = null;
+  let startingPnL = null;
+  let currentPosition = 0;
+  let pendingOrder = false;
+  let tickCount = 0;
   
-  // Measure API latency (CLI <-> API)
-  const measureLatency = async () => {
+  // Initialize Strategy
+  const strategy = new M1({ tickSize });
+  strategy.initialize(contractId, tickSize);
+  
+  // Initialize Market Data Feed
+  const marketFeed = new MarketDataFeed({ propfirm: leadAccount.propfirm });
+  
+  // Log startup
+  ui.addLog('info', `Lead: ${leadName} | Followers: ${followers.length}`);
+  ui.addLog('info', `Symbol: ${symbolName} | Lead Qty: ${lead.contracts} | Follower Qty: ${followers[0]?.contracts}`);
+  ui.addLog('info', `Target: $${dailyTarget} | Max Risk: $${maxRisk}`);
+  ui.addLog('info', 'Connecting to market data...');
+  
+  // Handle strategy signals - place on lead AND all followers
+  strategy.on('signal', async (signal) => {
+    if (!running || pendingOrder || currentPosition !== 0) return;
+    
+    const { direction, entry, stopLoss, takeProfit, confidence } = signal;
+    
+    ui.addLog('signal', `${direction.toUpperCase()} signal @ ${entry.toFixed(2)} (${(confidence * 100).toFixed(0)}%)`);
+    
+    pendingOrder = true;
     try {
-      const start = Date.now();
-      await lead.service.getPositions(lead.account.accountId);
-      stats.latency = Date.now() - start;
+      const orderSide = direction === 'long' ? 0 : 1;
+      
+      // Place order on LEAD
+      const leadResult = await leadService.placeOrder({
+        accountId: leadAccount.accountId,
+        contractId: contractId,
+        type: 2,
+        side: orderSide,
+        size: lead.contracts
+      });
+      
+      if (leadResult.success) {
+        currentPosition = direction === 'long' ? lead.contracts : -lead.contracts;
+        stats.trades++;
+        ui.addLog('trade', `LEAD: ${direction.toUpperCase()} ${lead.contracts}x @ market`);
+        
+        // Place orders on ALL FOLLOWERS
+        for (let i = 0; i < followers.length; i++) {
+          const f = followers[i];
+          const fService = f.account.service || connections.getServiceForAccount(f.account.accountId);
+          
+          try {
+            const fResult = await fService.placeOrder({
+              accountId: f.account.accountId,
+              contractId: contractId,
+              type: 2,
+              side: orderSide,
+              size: f.contracts
+            });
+            
+            if (fResult.success) {
+              ui.addLog('trade', `FOLLOWER ${i + 1}: ${direction.toUpperCase()} ${f.contracts}x @ market`);
+            } else {
+              ui.addLog('error', `FOLLOWER ${i + 1}: Order failed`);
+            }
+          } catch (e) {
+            ui.addLog('error', `FOLLOWER ${i + 1}: ${e.message}`);
+          }
+        }
+        
+        // Place bracket orders on lead (SL/TP)
+        if (stopLoss && takeProfit) {
+          await leadService.placeOrder({
+            accountId: leadAccount.accountId, contractId, type: 4,
+            side: direction === 'long' ? 1 : 0, size: lead.contracts, stopPrice: stopLoss
+          });
+          await leadService.placeOrder({
+            accountId: leadAccount.accountId, contractId, type: 1,
+            side: direction === 'long' ? 1 : 0, size: lead.contracts, limitPrice: takeProfit
+          });
+          ui.addLog('info', `SL: ${stopLoss.toFixed(2)} | TP: ${takeProfit.toFixed(2)}`);
+        }
+      } else {
+        ui.addLog('error', `Lead order failed: ${leadResult.error}`);
+      }
     } catch (e) {
-      stats.latency = 0;
+      ui.addLog('error', `Order error: ${e.message}`);
     }
-  };
-
-  // Local copy trading - no external server needed
-  ui.addLog('info', `Starting copy trading on ${stats.platform}...`);
-  ui.addLog('info', `Lead: ${stats.leadName} -> Follower: ${stats.followerName}`);
-  ui.addLog('info', `Symbol: ${stats.symbol} | Target: $${dailyTarget} | Risk: $${maxRisk}`);
-  stats.connected = true;
+    pendingOrder = false;
+  });
   
-  // Track lead positions and copy to follower
-  let lastLeadPositions = [];
+  // Handle market data ticks
+  marketFeed.on('tick', (tick) => {
+    tickCount++;
+    const latencyStart = Date.now();
+    
+    strategy.processTick({
+      contractId: tick.contractId || contractId,
+      price: tick.price,
+      bid: tick.bid,
+      ask: tick.ask,
+      volume: tick.volume || 1,
+      side: tick.lastTradeSide || 'unknown',
+      timestamp: tick.timestamp || Date.now()
+    });
+    
+    stats.latency = Date.now() - latencyStart;
+    
+    if (tickCount % 100 === 0) {
+      ui.addLog('info', `Tick #${tickCount} @ ${tick.price?.toFixed(2) || 'N/A'}`);
+    }
+  });
   
-  const pollAndCopy = async () => {
+  marketFeed.on('connected', () => {
+    stats.connected = true;
+    ui.addLog('success', 'Market data connected!');
+  });
+  
+  marketFeed.on('error', (err) => ui.addLog('error', `Market: ${err.message}`));
+  marketFeed.on('disconnected', () => { stats.connected = false; ui.addLog('error', 'Market data disconnected'); });
+  
+  // Connect to market data
+  try {
+    const token = leadService.token || leadService.getToken?.();
+    const propfirmKey = (leadAccount.propfirm || 'topstep').toLowerCase().replace(/\s+/g, '_');
+    await marketFeed.connect(token, propfirmKey, contractId);
+    await marketFeed.subscribe(symbolName, contractId);
+  } catch (e) {
+    ui.addLog('error', `Failed to connect: ${e.message}`);
+  }
+  
+  // Poll P&L from lead and followers
+  const pollPnL = async () => {
     try {
-      // Get lead positions
-      const leadResult = await lead.service.getPositions(lead.account.accountId);
-      if (!leadResult.success) return;
-      
-      const currentPositions = leadResult.positions || [];
-      
-      // Detect new positions on lead
-      for (const pos of currentPositions) {
-        const existing = lastLeadPositions.find(p => p.contractId === pos.contractId);
-        if (!existing && pos.quantity !== 0) {
-          // New position opened - copy to follower
-          ui.addLog('trade', `Lead opened: ${pos.quantity > 0 ? 'LONG' : 'SHORT'} ${Math.abs(pos.quantity)}x ${pos.symbol || pos.contractId}`);
-          // TODO: Place order on follower account
+      // Lead P&L
+      const leadResult = await leadService.getTradingAccounts();
+      if (leadResult.success && leadResult.accounts) {
+        const acc = leadResult.accounts.find(a => a.accountId === leadAccount.accountId);
+        if (acc && acc.profitAndLoss !== undefined) {
+          if (startingPnL === null) startingPnL = acc.profitAndLoss;
+          stats.pnl = acc.profitAndLoss - startingPnL;
         }
       }
       
-      // Detect closed positions
-      for (const oldPos of lastLeadPositions) {
-        const stillOpen = currentPositions.find(p => p.contractId === oldPos.contractId);
-        if (!stillOpen || stillOpen.quantity === 0) {
-          ui.addLog('info', `Lead closed: ${oldPos.symbol || oldPos.contractId}`);
-          // TODO: Close position on follower account
-        }
-      }
-      
-      lastLeadPositions = currentPositions;
-      
-      // Update P&L from lead
-      const leadPnL = currentPositions.reduce((sum, p) => sum + (p.profitAndLoss || 0), 0);
-      if (leadPnL !== stats.pnl) {
-        const diff = leadPnL - stats.pnl;
-        if (Math.abs(diff) > 0.01 && stats.pnl !== 0) {
-          stats.trades++;
-          if (diff >= 0) stats.wins++;
-          else stats.losses++;
-        }
-        stats.pnl = leadPnL;
-      }
-      
-      // Check target/risk limits
+      // Check target/risk
       if (stats.pnl >= dailyTarget) {
         stopReason = 'target';
         running = false;
@@ -357,80 +403,66 @@ const launchCopyTrading = async (config) => {
       } else if (stats.pnl <= -maxRisk) {
         stopReason = 'risk';
         running = false;
-        ui.addLog('error', `MAX RISK HIT! -$${Math.abs(stats.pnl).toFixed(2)}`);
+        ui.addLog('error', `MAX RISK! -$${Math.abs(stats.pnl).toFixed(2)}`);
       }
-    } catch (e) {
-      // Silent fail - will retry
-    }
+    } catch (e) { /* silent */ }
   };
-
-  // UI refresh loop
-  const refreshInterval = setInterval(() => {
-    if (running) ui.render(stats);
-  }, 250);
   
-  // Measure API latency every 5 seconds
-  measureLatency(); // Initial measurement
-  const latencyInterval = setInterval(() => { if (running) measureLatency(); }, 5000);
+  // Start intervals
+  const refreshInterval = setInterval(() => { if (running) ui.render(stats); }, 250);
+  const pnlInterval = setInterval(() => { if (running) pollPnL(); }, 2000);
+  pollPnL();
   
-  // Poll and copy every 2 seconds
-  pollAndCopy(); // Initial poll
-  const copyInterval = setInterval(() => { if (running) pollAndCopy(); }, 2000);
-
-  // Keyboard handling
-  const cleanupKeys = setupKeyboardHandler(() => {
-    running = false;
-    stopReason = 'manual';
-  });
-
-  // Wait for stop
-  await new Promise((resolve) => {
-    const check = setInterval(() => {
-      if (!running) {
-        clearInterval(check);
-        resolve();
+  // Keyboard handler
+  const setupKeyHandler = () => {
+    if (!process.stdin.isTTY) return;
+    readline.emitKeypressEvents(process.stdin);
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    
+    const onKey = (str, key) => {
+      if (key && (key.name === 'x' || key.name === 'X' || (key.ctrl && key.name === 'c'))) {
+        running = false;
+        stopReason = 'manual';
       }
+    };
+    process.stdin.on('keypress', onKey);
+    return () => {
+      process.stdin.removeListener('keypress', onKey);
+      if (process.stdin.isTTY) process.stdin.setRawMode(false);
+    };
+  };
+  
+  const cleanupKeys = setupKeyHandler();
+  
+  // Wait for stop
+  await new Promise(resolve => {
+    const check = setInterval(() => {
+      if (!running) { clearInterval(check); resolve(); }
     }, 100);
   });
-
+  
   // Cleanup
   clearInterval(refreshInterval);
-  clearInterval(latencyInterval);
-  clearInterval(copyInterval);
+  clearInterval(pnlInterval);
+  await marketFeed.disconnect();
   if (cleanupKeys) cleanupKeys();
   ui.cleanup();
-
-  // Show summary
-  renderSessionSummary(stats, stopReason);
-  await prompts.waitForEnter();
-};
-
-/**
- * Setup keyboard handler
- * @param {Function} onStop - Stop callback
- * @returns {Function|null} Cleanup function
- */
-const setupKeyboardHandler = (onStop) => {
-  if (!process.stdin.isTTY) return null;
-
-  readline.emitKeypressEvents(process.stdin);
-  process.stdin.setRawMode(true);
+  
+  if (process.stdin.isTTY) process.stdin.setRawMode(false);
   process.stdin.resume();
-
-  const handler = (str, key) => {
-    if (key && (key.name === 'x' || (key.ctrl && key.name === 'c'))) {
-      onStop();
-    }
-  };
-
-  process.stdin.on('keypress', handler);
-
-  return () => {
-    process.stdin.removeListener('keypress', handler);
-    if (process.stdin.isTTY) {
-      process.stdin.setRawMode(false);
-    }
-  };
+  
+  // Duration
+  const durationMs = Date.now() - stats.startTime;
+  const hours = Math.floor(durationMs / 3600000);
+  const minutes = Math.floor((durationMs % 3600000) / 60000);
+  const seconds = Math.floor((durationMs % 60000) / 1000);
+  stats.duration = hours > 0 ? `${hours}h ${minutes}m ${seconds}s` : minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+  
+  renderSessionSummary(stats, stopReason);
+  
+  console.log('\n  Returning to menu in 3 seconds...');
+  await new Promise(resolve => setTimeout(resolve, 3000));
 };
 
 module.exports = { copyTradingMenu };
