@@ -133,7 +133,7 @@ const banner = async () => {
   console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
   
   const tagline = isMobile ? `HQX V${version}` : `PROP FUTURES ALGO TRADING  V${version}`;
-  console.log(chalk.cyan('║') + chalk.white(centerText(tagline, innerWidth)) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + chalk.yellow(centerText(tagline, innerWidth)) + chalk.cyan('║'));
   
   // ALWAYS close the banner
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));

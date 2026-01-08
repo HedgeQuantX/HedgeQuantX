@@ -48,7 +48,7 @@ const createBoxMenu = async (title, items, options = {}) => {
     });
     
     console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
-    console.log(chalk.cyan('║') + chalk.white(centerText(`PROP FUTURES ALGO TRADING  V${version}`, innerWidth)) + chalk.cyan('║'));
+    console.log(chalk.cyan('║') + chalk.yellow(centerText(`PROP FUTURES ALGO TRADING  V${version}`, innerWidth)) + chalk.cyan('║'));
     
     // Stats bar if provided
     if (options.statsLine) {
