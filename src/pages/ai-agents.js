@@ -143,7 +143,11 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
   
   // First, check if models are already available (existing auth)
   console.log(chalk.gray(`  CHECKING EXISTING AUTHENTICATION...`));
+  
   const existingModels = await cliproxy.fetchProviderModels(provider.id);
+  
+  // Debug output
+  console.log(chalk.gray(`  > RESULT: success=${existingModels.success}, models=${existingModels.models?.length || 0}, error=${existingModels.error || 'none'}`));
   
   if (existingModels.success && existingModels.models.length > 0) {
     // Models already available - skip OAuth, go directly to model selection
