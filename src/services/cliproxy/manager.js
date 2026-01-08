@@ -297,21 +297,30 @@ const stop = async () => {
     if (status.pid) {
       process.kill(status.pid, 'SIGTERM');
     } else {
-      // No PID - try to find and kill by port
+      // No PID - try to find and kill by port (only cli-proxy-api process)
       const { execSync } = require('child_process');
       try {
         if (process.platform === 'win32') {
           // Windows: find PID by port and kill
-          const result = execSync(`netstat -ano | findstr :${DEFAULT_PORT}`, { encoding: 'utf8' });
+          const result = execSync(`netstat -ano | findstr :${DEFAULT_PORT} | findstr LISTENING`, { encoding: 'utf8' });
           const match = result.match(/LISTENING\s+(\d+)/);
-          if (match) process.kill(parseInt(match[1]), 'SIGTERM');
+          if (match) {
+            const pid = parseInt(match[1]);
+            if (pid !== process.pid) process.kill(pid, 'SIGTERM');
+          }
         } else {
-          // Unix: use lsof or fuser
+          // Unix: find PID listening on port, filter to only cli-proxy-api
           try {
-            execSync(`lsof -ti:${DEFAULT_PORT} | xargs kill -9 2>/dev/null || true`, { encoding: 'utf8' });
+            const result = execSync(`lsof -ti:${DEFAULT_PORT} -sTCP:LISTEN 2>/dev/null || true`, { encoding: 'utf8' });
+            const pids = result.trim().split('\n').filter(p => p && parseInt(p) !== process.pid);
+            for (const pidStr of pids) {
+              const pid = parseInt(pidStr);
+              if (pid && pid !== process.pid) {
+                try { process.kill(pid, 'SIGTERM'); } catch (e) { /* ignore */ }
+              }
+            }
           } catch (e) {
-            // Try fuser as fallback
-            execSync(`fuser -k ${DEFAULT_PORT}/tcp 2>/dev/null || true`, { encoding: 'utf8' });
+            // Ignore errors
           }
         }
       } catch (e) {
