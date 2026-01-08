@@ -140,10 +140,11 @@ const fetchProviderModels = async (providerId) => {
     m.id.toLowerCase().includes(prefix)
   );
   
+  // Return only filtered models for this provider (empty if none found)
   return { 
-    success: true, 
-    models: filtered.length > 0 ? filtered : result.models, 
-    error: null 
+    success: filtered.length > 0, 
+    models: filtered, 
+    error: filtered.length === 0 ? `No ${providerId} models available` : null 
   };
 };
 
