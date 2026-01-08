@@ -242,9 +242,18 @@ const handleUpdate = async () => {
     
     spinner.succeed(`UPDATED TO V${latestVersion}!`);
     console.log(chalk.green('\n  ✓ UPDATE SUCCESSFUL!'));
-    console.log(chalk.yellow('\n  PLEASE RESTART HQX TO USE THE NEW VERSION:'));
-    console.log(chalk.white('  hqx'));
-    await prompts.waitForEnter();
+    console.log(chalk.cyan('\n  RESTARTING HQX...'));
+    
+    // Restart CLI with new version using spawn detached
+    const { spawn } = require('child_process');
+    const child = spawn('hqx', [], {
+      detached: true,
+      stdio: 'inherit',
+      shell: true
+    });
+    child.unref();
+    
+    // Exit current process to let new one take over
     process.exit(0);
     
   } catch (error) {
