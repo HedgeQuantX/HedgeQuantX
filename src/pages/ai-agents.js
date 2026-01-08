@@ -219,6 +219,24 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
         return false;
       }
       
+      spinner.text = 'EXCHANGING TOKEN...';
+      
+      // Wait for login process to exit naturally (it saves auth file then exits)
+      await new Promise((resolve) => {
+        if (!loginResult.childProcess) return resolve();
+        
+        const timeout = setTimeout(() => {
+          // Safety timeout after 15s - kill if still running
+          try { loginResult.childProcess.kill(); } catch (e) { /* ignore */ }
+          resolve();
+        }, 15000);
+        
+        loginResult.childProcess.on('exit', () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+      });
+      
       spinner.succeed('AUTHENTICATION SUCCESSFUL!');
     } catch (err) {
       spinner.fail(`ERROR: ${err.message}`);
@@ -232,13 +250,11 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
     await prompts.waitForEnter();
   }
   
-  // Kill login process - we don't need to wait for it
-  if (loginResult.childProcess) {
-    try { loginResult.childProcess.kill(); } catch (e) { /* ignore */ }
-  }
-  
-  // Fetch models directly from CLIProxy API (models are already available)
+  // Small delay for CLIProxy to detect new auth file
   const spinner = ora({ text: 'LOADING MODELS...', color: 'yellow' }).start();
+  await new Promise(r => setTimeout(r, 1000));
+  
+  // Fetch models from CLIProxy API
   const modelsResult = await cliproxy.fetchProviderModels(provider.id);
   spinner.stop();
   

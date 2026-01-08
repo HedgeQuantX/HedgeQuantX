@@ -155,15 +155,70 @@ const drawProvidersTable = (providers, config, boxWidth) => {
 };
 
 /**
- * Draw models table
+ * Draw models table with 2-column layout
  * @param {Object} provider - Provider object
  * @param {Array} models - List of models
  * @param {number} boxWidth - Box width
  */
 const drawModelsTable = (provider, models, boxWidth) => {
   const W = boxWidth - 2;
-  const items = models.map((m, i) => chalk.cyan(`[${i + 1}]`) + ' ' + chalk.white(m.name.toUpperCase()));
-  draw2ColTable(`${provider.name.toUpperCase()} - MODELS`, chalk[provider.color].bold, items, '[B] BACK', W);
+  const colWidth = Math.floor(W / 2);
+  
+  // New rectangle
+  console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
+  console.log(chalk.cyan('║') + chalk[provider.color].bold(centerText(`${provider.name.toUpperCase()} - SELECT MODEL`, W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
+  
+  // Calculate rows (2 columns)
+  const rows = Math.ceil(models.length / 2);
+  
+  // Find max model name length for alignment
+  const maxNameLen = Math.min(
+    Math.max(...models.map(m => m.name.length)),
+    colWidth - 8 // [XX] + space + padding
+  );
+  
+  for (let row = 0; row < rows; row++) {
+    const leftIdx = row;
+    const rightIdx = row + rows;
+    const leftModel = models[leftIdx];
+    const rightModel = models[rightIdx];
+    
+    // Left column
+    let leftCol = '';
+    if (leftModel) {
+      const num = String(leftIdx + 1).padStart(2);
+      const name = leftModel.name.length > maxNameLen 
+        ? leftModel.name.substring(0, maxNameLen - 2) + '..'
+        : leftModel.name.padEnd(maxNameLen);
+      leftCol = `  ${chalk.cyan(`[${num}]`)} ${chalk.white(name)}`;
+      const leftLen = 2 + 4 + 1 + maxNameLen; // padding + [XX] + space + name
+      leftCol += ' '.repeat(Math.max(0, colWidth - leftLen));
+    } else {
+      leftCol = ' '.repeat(colWidth);
+    }
+    
+    // Right column
+    let rightCol = '';
+    const rightColWidth = W - colWidth;
+    if (rightModel) {
+      const num = String(rightIdx + 1).padStart(2);
+      const name = rightModel.name.length > maxNameLen
+        ? rightModel.name.substring(0, maxNameLen - 2) + '..'
+        : rightModel.name.padEnd(maxNameLen);
+      rightCol = `  ${chalk.cyan(`[${num}]`)} ${chalk.white(name)}`;
+      const rightLen = 2 + 4 + 1 + maxNameLen;
+      rightCol += ' '.repeat(Math.max(0, rightColWidth - rightLen));
+    } else {
+      rightCol = ' '.repeat(rightColWidth);
+    }
+    
+    console.log(chalk.cyan('║') + leftCol + rightCol + chalk.cyan('║'));
+  }
+  
+  console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
+  console.log(chalk.cyan('║') + chalk.red(centerText('[B] BACK', W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
 };
 
 /**
