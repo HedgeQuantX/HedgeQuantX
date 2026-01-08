@@ -173,13 +173,12 @@ const run = async () => {
     if (restored) {
       currentService = connections.getAll()[0].service;
       await refreshStats();
-      spinner.succeed('SESSION RESTORED');
+      // Store spinner globally - dashboard will stop it when ready to display
+      global.__hqxSpinner = spinner;
     } else {
       spinner.stop(); // Stop spinner - no session to restore
+      global.__hqxSpinner = null;
     }
-    
-    // Store spinner globally so dashboardMenu can stop it before clear
-    global.__hqxSpinner = null;
 
     // Main loop
     while (true) {
