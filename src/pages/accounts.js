@@ -130,12 +130,11 @@ const showAccounts = async (service) => {
       const pnlColor2 = pnl2 === null || pnl2 === undefined ? chalk.gray : (pnl2 >= 0 ? chalk.green : chalk.red);
       console.log(chalk.cyan('║') + fmtRow('P&L:', pnlColor1(pnlStr1), col1) + chalk.cyan(sep) + (acc2 ? fmtRow('P&L:', pnlColor2(pnlStr2), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
-      // Status - numeric 0 = Active for Rithmic
+      // Status - from API only, N/A if not available
       const getStatusDisplay = (status) => {
-        if (status === null || status === undefined) return { text: '--', color: 'gray' };
-        if (status === 0) return { text: 'Active', color: 'green' };
+        if (status === null || status === undefined) return { text: 'N/A', color: 'gray' };
         if (typeof status === 'number') {
-          return ACCOUNT_STATUS[status] || { text: `Status ${status}`, color: 'yellow' };
+          return ACCOUNT_STATUS[status] || { text: String(status), color: 'yellow' };
         }
         if (typeof status === 'string') {
           const lowerStatus = status.toLowerCase();
@@ -144,16 +143,16 @@ const showAccounts = async (service) => {
           if (lowerStatus.includes('halt')) return { text: status, color: 'red' };
           return { text: status, color: 'yellow' };
         }
-        return { text: '--', color: 'gray' };
+        return { text: 'N/A', color: 'gray' };
       };
       const status1 = getStatusDisplay(acc1.status);
       const status2 = acc2 ? getStatusDisplay(acc2.status) : null;
       console.log(chalk.cyan('║') + fmtRow('Status:', chalk[status1.color](status1.text), col1) + chalk.cyan(sep) + (acc2 ? fmtRow('Status:', chalk[status2.color](status2.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
-      // Type - from accountType or algorithm field
+      // Type - from API only (algorithm or accountType field), N/A if not available
       const getTypeDisplay = (acc) => {
         const value = acc.algorithm || acc.accountType || acc.type;
-        if (value === null || value === undefined) return { text: 'Live', color: 'green' }; // Default for Rithmic
+        if (value === null || value === undefined) return { text: 'N/A', color: 'gray' };
         if (typeof value === 'string') {
           const lowerValue = value.toLowerCase();
           if (lowerValue.includes('eval')) return { text: value, color: 'yellow' };
@@ -163,9 +162,9 @@ const showAccounts = async (service) => {
           return { text: value, color: 'cyan' };
         }
         if (typeof value === 'number') {
-          return ACCOUNT_TYPE[value] || { text: `Type ${value}`, color: 'white' };
+          return ACCOUNT_TYPE[value] || { text: String(value), color: 'white' };
         }
-        return { text: 'Live', color: 'green' };
+        return { text: 'N/A', color: 'gray' };
       };
       const type1 = getTypeDisplay(acc1);
       const type2 = acc2 ? getTypeDisplay(acc2) : null;
