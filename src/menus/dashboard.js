@@ -159,75 +159,94 @@ const dashboardMenu = async (service) => {
  * Handle update process
  */
 const handleUpdate = async () => {
+  console.clear();
+  displayBanner();
   prepareStdin();
+  
+  const boxWidth = getLogoWidth();
+  const W = boxWidth - 2;
+  
+  console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
+  console.log(chalk.cyan('║') + chalk.yellow.bold(centerText('UPDATE HQX', W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
   
   let spinner = null;
   let currentVersion = 'unknown';
   
   try {
+    // Get current version
     try {
       currentVersion = require('../../package.json').version || 'unknown';
     } catch (e) {}
     
-    console.log(chalk.cyan(`\n  CURRENT VERSION: V${currentVersion}`));
+    console.log(chalk.cyan(`\n  CURRENT VERSION: V${currentVersion.toUpperCase()}`));
     spinner = ora({ text: 'CHECKING FOR UPDATES...', color: 'yellow' }).start();
     
+    // Check latest version from npm
     let latestVersion;
     try {
-      latestVersion = execSync('npm view hedgequantx version', { 
+      latestVersion = execSync('npm view hedgequantx version 2>/dev/null', { 
         stdio: ['pipe', 'pipe', 'pipe'], 
         timeout: 30000, 
         encoding: 'utf8'
       }).trim();
       
       if (!latestVersion || !/^\d+\.\d+\.\d+/.test(latestVersion)) {
-        throw new Error('Invalid version format');
+        throw new Error('INVALID VERSION FORMAT');
       }
     } catch (e) {
       spinner.fail('CANNOT REACH NPM REGISTRY');
-      console.log(chalk.gray(`  ERROR: ${e.message.toUpperCase()}`));
-      console.log(chalk.yellow('  TRY MANUALLY: npm install -g hedgequantx@latest'));
+      console.log(chalk.yellow('\n  TRY MANUALLY: npm update -g hedgequantx'));
       await prompts.waitForEnter();
       return;
     }
     
-    spinner.succeed(`LATEST VERSION: V${latestVersion}`);
+    spinner.succeed(`LATEST VERSION: V${latestVersion.toUpperCase()}`);
     
+    // Already up to date
     if (currentVersion === latestVersion) {
-      console.log(chalk.green('  ALREADY UP TO DATE!'));
+      console.log(chalk.green('\n  ✓ ALREADY UP TO DATE!'));
       await prompts.waitForEnter();
       return;
     }
     
-    console.log(chalk.yellow(`  UPDATE AVAILABLE: V${currentVersion} → V${latestVersion}`));
+    // Update available
+    console.log(chalk.yellow(`\n  UPDATE AVAILABLE: V${currentVersion} → V${latestVersion}`));
     spinner = ora({ text: 'INSTALLING UPDATE...', color: 'yellow' }).start();
     
+    // Try to install update
     try {
-      // Try with sudo first on Unix systems
-      const isWindows = process.platform === 'win32';
-      const cmd = isWindows 
-        ? 'npm install -g hedgequantx@latest'
-        : 'npm install -g hedgequantx@latest';
-      
-      execSync(cmd, { 
+      execSync('npm update -g hedgequantx 2>/dev/null', { 
         stdio: ['pipe', 'pipe', 'pipe'], 
         timeout: 180000, 
         encoding: 'utf8'
       });
     } catch (e) {
-      spinner.fail('UPDATE FAILED - PERMISSION DENIED?');
-      console.log(chalk.gray(`  ERROR: ${e.message.toUpperCase()}`));
-      console.log(chalk.yellow('  TRY MANUALLY WITH SUDO:'));
-      console.log(chalk.white('  sudo npm install -g hedgequantx@latest'));
-      await prompts.waitForEnter();
-      return;
+      // Try without redirecting stderr
+      try {
+        execSync('npm update -g hedgequantx', { 
+          stdio: ['pipe', 'pipe', 'pipe'], 
+          timeout: 180000, 
+          encoding: 'utf8'
+        });
+      } catch (e2) {
+        spinner.fail('UPDATE FAILED');
+        console.log(chalk.yellow('\n  TRY MANUALLY:'));
+        console.log(chalk.white('  npm update -g hedgequantx'));
+        console.log(chalk.gray('  OR WITH SUDO:'));
+        console.log(chalk.white('  sudo npm update -g hedgequantx'));
+        await prompts.waitForEnter();
+        return;
+      }
     }
     
     spinner.succeed(`UPDATED TO V${latestVersion}!`);
+    console.log(chalk.green('\n  ✓ UPDATE SUCCESSFUL!'));
     console.log(chalk.cyan('  RESTARTING HQX...'));
     
-    await new Promise(r => setTimeout(r, 1500));
+    await new Promise(r => setTimeout(r, 1000));
     
+    // Restart HQX
     try {
       const child = spawn('hqx', [], { 
         stdio: 'inherit', 
@@ -244,8 +263,7 @@ const handleUpdate = async () => {
     
   } catch (error) {
     if (spinner) spinner.fail('UPDATE ERROR');
-    console.log(chalk.gray(`  ERROR: ${error.message.toUpperCase()}`));
-    console.log(chalk.yellow('  TRY MANUALLY: npm install -g hedgequantx@latest'));
+    console.log(chalk.yellow('\n  TRY MANUALLY: npm update -g hedgequantx'));
     await prompts.waitForEnter();
   }
 };
