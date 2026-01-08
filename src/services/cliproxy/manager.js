@@ -296,11 +296,35 @@ const stop = async () => {
   try {
     if (status.pid) {
       process.kill(status.pid, 'SIGTERM');
+    } else {
+      // No PID - try to find and kill by port
+      const { execSync } = require('child_process');
+      try {
+        if (process.platform === 'win32') {
+          // Windows: find PID by port and kill
+          const result = execSync(`netstat -ano | findstr :${DEFAULT_PORT}`, { encoding: 'utf8' });
+          const match = result.match(/LISTENING\s+(\d+)/);
+          if (match) process.kill(parseInt(match[1]), 'SIGTERM');
+        } else {
+          // Unix: use lsof or fuser
+          try {
+            execSync(`lsof -ti:${DEFAULT_PORT} | xargs kill -9 2>/dev/null || true`, { encoding: 'utf8' });
+          } catch (e) {
+            // Try fuser as fallback
+            execSync(`fuser -k ${DEFAULT_PORT}/tcp 2>/dev/null || true`, { encoding: 'utf8' });
+          }
+        }
+      } catch (e) {
+        // Ignore errors - process may already be dead
+      }
     }
     
     if (fs.existsSync(PID_FILE)) {
       fs.unlinkSync(PID_FILE);
     }
+    
+    // Wait for port to be released
+    await new Promise(r => setTimeout(r, 1000));
     
     return { success: true, error: null };
   } catch (error) {
