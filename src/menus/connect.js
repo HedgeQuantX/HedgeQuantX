@@ -8,7 +8,7 @@ const ora = require('ora');
 const { connections } = require('../services');
 const { RithmicService } = require('../services/rithmic');
 const { PROPFIRM_CHOICES } = require('../config');
-const { getLogoWidth, centerText, prepareStdin } = require('../ui');
+const { getLogoWidth, centerText, prepareStdin, displayBanner } = require('../ui');
 const { validateUsername, validatePassword } = require('../security');
 const { prompts } = require('../utils');
 
@@ -38,6 +38,10 @@ const loginPrompt = async (propfirmName) => {
  * Rithmic menu - Main connection menu
  */
 const rithmicMenu = async () => {
+  // Clear screen and show banner
+  console.clear();
+  displayBanner();
+  
   const propfirms = PROPFIRM_CHOICES;
   const boxWidth = getLogoWidth();
   const innerWidth = boxWidth - 2;
@@ -46,7 +50,6 @@ const rithmicMenu = async () => {
   
   const numbered = propfirms.map((pf, i) => ({ num: i + 1, key: pf.value, name: pf.name }));
   
-  console.log();
   console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
   console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PROPFIRM', innerWidth)) + chalk.cyan('║'));
   console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
