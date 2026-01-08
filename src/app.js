@@ -175,9 +175,8 @@ const run = async () => {
       await refreshStats();
     }
     
-    // Clear spinner interval but don't erase the line visually
-    // dashboardMenu's console.clear() will handle the visual cleanup
-    spinner.stop();
+    // Store spinner globally so dashboardMenu can stop it before clear
+    global.__hqxSpinner = spinner;
 
     // Main loop
     while (true) {

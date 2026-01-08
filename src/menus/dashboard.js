@@ -17,6 +17,12 @@ const { prompts } = require('../utils');
 const dashboardMenu = async (service) => {
   prepareStdin();
   
+  // Stop any global spinner before clearing
+  if (global.__hqxSpinner) {
+    global.__hqxSpinner.stop();
+    global.__hqxSpinner = null;
+  }
+  
   // Clear screen and show banner (always closed)
   console.clear();
   displayBanner();
