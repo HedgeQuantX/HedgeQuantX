@@ -124,7 +124,7 @@ const aggregateAccountData = async (activeAccounts) => {
         } catch (e) {}
       }
       
-      // Trade history (Rithmic doesn't provide this)
+      // Trade history from ORDER_PLANT
       if (typeof svc.getTradeHistory === 'function') {
         try {
           const tradesResult = await svc.getTradeHistory(account.accountId, 30);
@@ -137,7 +137,9 @@ const aggregateAccountData = async (activeAccounts) => {
               connectionType: connType
             })));
           }
-        } catch (e) {}
+        } catch (e) {
+          // Silent - trade history may not be available
+        }
       }
     } catch (e) {}
   }
