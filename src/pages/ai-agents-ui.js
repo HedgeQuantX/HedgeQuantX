@@ -6,6 +6,7 @@
 
 const chalk = require('chalk');
 const { centerText, visibleLength } = require('../ui');
+const cliproxy = require('../services/cliproxy');
 
 /**
  * Draw a 2-column row with perfect alignment
@@ -94,6 +95,9 @@ const drawProvidersTable = (providers, config, boxWidth) => {
   const W = boxWidth - 2;
   const colWidth = Math.floor(W / 2);
   
+  // Get connected providers (have auth files)
+  const connected = cliproxy.getConnectedProviders();
+  
   // New rectangle (banner is always closed)
   console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
   console.log(chalk.cyan('║') + chalk.yellow.bold(centerText('AI AGENTS CONFIGURATION', W)) + chalk.cyan('║'));
@@ -104,9 +108,9 @@ const drawProvidersTable = (providers, config, boxWidth) => {
   // Find max name length across ALL providers for consistent alignment
   const maxNameLen = Math.max(...providers.map(p => p.name.length));
   
-  // Fixed format: "[N] NAME" where N is always same width, NAME padded to maxNameLen
-  // Total content width = 3 ([N]) + 1 (space) + maxNameLen + 2 (possible " ●")
-  const contentWidth = 3 + 1 + maxNameLen + 2;
+  // Fixed format: "● [N] NAME" where ● is yellow if connected (has auth file)
+  // Total content width = 2 (● ) + 3 ([N]) + 1 (space) + maxNameLen
+  const contentWidth = 2 + 3 + 1 + maxNameLen;
   const leftPad = Math.floor((colWidth - contentWidth) / 2);
   const rightPad = Math.floor(((W - colWidth) - contentWidth) / 2);
   
@@ -118,12 +122,13 @@ const drawProvidersTable = (providers, config, boxWidth) => {
     let leftCol = '';
     if (leftP) {
       const num = row + 1;
-      const status = config.providers[leftP.id]?.active ? chalk.green(' ●') : '  ';
-      const statusRaw = config.providers[leftP.id]?.active ? ' ●' : '  ';
+      // Show yellow dot if provider has auth file (connected via OAuth)
+      const isConnected = connected[leftP.id] || config.providers[leftP.id]?.active;
+      const status = isConnected ? chalk.yellow('● ') : '  ';
       const name = leftP.provider ? leftP.provider.name : leftP.name;
       const namePadded = name.toUpperCase().padEnd(maxNameLen);
-      const content = chalk.cyan(`[${num}]`) + ' ' + chalk[leftP.color](namePadded) + status;
-      const contentLen = 3 + 1 + maxNameLen + 2;
+      const content = status + chalk.cyan(`[${num}]`) + ' ' + chalk[leftP.color](namePadded);
+      const contentLen = 2 + 3 + 1 + maxNameLen;
       const padR = colWidth - leftPad - contentLen;
       leftCol = ' '.repeat(leftPad) + content + ' '.repeat(Math.max(0, padR));
     } else {
@@ -135,11 +140,13 @@ const drawProvidersTable = (providers, config, boxWidth) => {
     const rightColWidth = W - colWidth;
     if (rightP) {
       const num = row + rows + 1;
-      const status = config.providers[rightP.id]?.active ? chalk.green(' ●') : '  ';
+      // Show yellow dot if provider has auth file (connected via OAuth)
+      const isConnected = connected[rightP.id] || config.providers[rightP.id]?.active;
+      const status = isConnected ? chalk.yellow('● ') : '  ';
       const name = rightP.provider ? rightP.provider.name : rightP.name;
       const namePadded = name.toUpperCase().padEnd(maxNameLen);
-      const content = chalk.cyan(`[${num}]`) + ' ' + chalk[rightP.color](namePadded) + status;
-      const contentLen = 3 + 1 + maxNameLen + 2;
+      const content = status + chalk.cyan(`[${num}]`) + ' ' + chalk[rightP.color](namePadded);
+      const contentLen = 2 + 3 + 1 + maxNameLen;
       const padR2 = rightColWidth - rightPad - contentLen;
       rightCol = ' '.repeat(rightPad) + content + ' '.repeat(Math.max(0, padR2));
     } else {

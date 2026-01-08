@@ -151,6 +151,29 @@ const fetchProviderModels = async (providerId) => {
 };
 
 /**
+ * Check which providers have auth files (are connected)
+ * @returns {Object} { anthropic: true/false, google: true/false, openai: true/false, qwen: true/false }
+ */
+const getConnectedProviders = () => {
+  const fs = require('fs');
+  const connected = { anthropic: false, google: false, openai: false, qwen: false };
+  
+  try {
+    if (!fs.existsSync(AUTH_DIR)) return connected;
+    
+    const files = fs.readdirSync(AUTH_DIR);
+    for (const file of files) {
+      if (file.startsWith('claude-') && file.endsWith('.json')) connected.anthropic = true;
+      if (file.startsWith('gemini-') && file.endsWith('.json')) connected.google = true;
+      if (file.startsWith('codex-') && file.endsWith('.json')) connected.openai = true;
+      if (file.startsWith('qwen-') && file.endsWith('.json')) connected.qwen = true;
+    }
+  } catch (e) { /* ignore */ }
+  
+  return connected;
+};
+
+/**
  * Chat completion request
  * @param {string} model - Model ID
  * @param {Array} messages - Chat messages
@@ -197,5 +220,6 @@ module.exports = {
   fetchLocal,
   fetchModels,
   fetchProviderModels,
+  getConnectedProviders,
   chatCompletion
 };

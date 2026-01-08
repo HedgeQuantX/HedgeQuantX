@@ -95,11 +95,8 @@ const selectModel = async (provider, apiKey) => {
   return selectModelFromList(provider, result.models, boxWidth);
 };
 
-/** Deactivate all providers and activate one */
+/** Activate a provider (multiple providers can be active at the same time) */
 const activateProvider = (config, providerId, data) => {
-  Object.keys(config.providers).forEach(id => {
-    if (config.providers[id]) config.providers[id].active = false;
-  });
   if (!config.providers[providerId]) config.providers[providerId] = {};
   Object.assign(config.providers[providerId], data, { active: true, configuredAt: new Date().toISOString() });
 };
