@@ -222,19 +222,29 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
       spinner.text = 'EXCHANGING TOKEN...';
       
       // Wait for login process to exit naturally (it saves auth file then exits)
+      // Process typically exits 1-2 seconds after callback
       await new Promise((resolve) => {
         if (!loginResult.childProcess) return resolve();
         
-        const timeout = setTimeout(() => {
-          // Safety timeout after 15s - kill if still running
-          try { loginResult.childProcess.kill(); } catch (e) { /* ignore */ }
-          resolve();
-        }, 15000);
-        
-        loginResult.childProcess.on('exit', () => {
-          clearTimeout(timeout);
-          resolve();
-        });
+        // Check every 500ms if process is still running, max 15s
+        let elapsed = 0;
+        const checkInterval = setInterval(() => {
+          elapsed += 500;
+          
+          // Check if process exited (exitCode is set when process exits)
+          if (loginResult.childProcess.exitCode !== null || loginResult.childProcess.killed) {
+            clearInterval(checkInterval);
+            resolve();
+            return;
+          }
+          
+          // Safety timeout after 15s
+          if (elapsed >= 15000) {
+            clearInterval(checkInterval);
+            try { loginResult.childProcess.kill(); } catch (e) { /* ignore */ }
+            resolve();
+          }
+        }, 500);
       });
       
       spinner.succeed('AUTHENTICATION SUCCESSFUL!');
