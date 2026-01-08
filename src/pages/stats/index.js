@@ -188,19 +188,17 @@ const showStats = async (service) => {
       return;
     }
 
-    // Filter active accounts (status === 0)
-    const activeAccounts = allAccountsData.filter(acc => acc.status === 0);
-    
-    if (activeAccounts.length === 0) {
-      spinner.fail('No active accounts found');
-      await prompts.waitForEnter();
-      return;
-    }
+    // Use all accounts (don't filter by status - Rithmic may have different status formats)
+    const activeAccounts = allAccountsData;
 
     // Aggregate account data from APIs
     const accountData = await aggregateAccountData(activeAccounts);
     
     spinner.stop();
+    
+    // Clear and show banner before displaying stats
+    console.clear();
+    displayBanner();
     
     // Calculate stats from API data
     const stats = aggregateStats(activeAccounts, accountData.allTrades);
