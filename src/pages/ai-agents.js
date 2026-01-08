@@ -232,22 +232,27 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
     await prompts.waitForEnter();
   }
   
-  // Wait for login process to save the auth file (it exits on its own after saving)
+  // Wait for login process to save the auth file
   const spinner = ora({ text: 'SAVING CREDENTIALS...', color: 'yellow' }).start();
+  
+  // Wait for child process to exit (it saves auth file before exiting)
   if (loginResult.childProcess) {
     await new Promise((resolve) => {
       const timeout = setTimeout(() => {
         try { loginResult.childProcess.kill(); } catch (e) { /* ignore */ }
         resolve();
-      }, 10000);
+      }, 15000);
       loginResult.childProcess.on('exit', () => {
         clearTimeout(timeout);
         resolve();
       });
     });
   }
+  
+  // Wait for CLIProxy to detect the new auth file
   spinner.text = 'LOADING MODELS...';
-  await new Promise(r => setTimeout(r, 1000));
+  await new Promise(r => setTimeout(r, 3000));
+  
   const modelsResult = await cliproxy.fetchProviderModels(provider.id);
   spinner.stop();
   
