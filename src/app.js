@@ -163,20 +163,23 @@ const run = async () => {
   try {
     log.info('Starting HQX CLI');
     
-    // First launch - show banner then spinner
+    // First launch - show banner then try restore session
     await banner();
     
-    const spinner = ora({ text: 'LOADING DASHBOARD...', color: 'yellow' }).start();
+    const spinner = ora({ text: 'LOADING...', color: 'yellow' }).start();
     
     const restored = await connections.restoreFromStorage();
 
     if (restored) {
       currentService = connections.getAll()[0].service;
       await refreshStats();
+      spinner.succeed('SESSION RESTORED');
+    } else {
+      spinner.stop(); // Stop spinner - no session to restore
     }
     
     // Store spinner globally so dashboardMenu can stop it before clear
-    global.__hqxSpinner = spinner;
+    global.__hqxSpinner = null;
 
     // Main loop
     while (true) {
