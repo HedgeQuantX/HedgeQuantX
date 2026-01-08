@@ -6,13 +6,17 @@ const chalk = require('chalk');
 const ora = require('ora');
 
 const { connections } = require('../services');
-const { getLogoWidth, getColWidths, drawBoxHeader, drawBoxFooter, draw2ColHeader, visibleLength, padText } = require('../ui');
+const { getLogoWidth, getColWidths, drawBoxHeader, drawBoxFooter, draw2ColHeader, visibleLength, padText, displayBanner } = require('../ui');
 const { prompts } = require('../utils');
 
 /**
  * Show user info
  */
 const showUserInfo = async (service) => {
+  // Clear screen and show banner
+  console.clear();
+  displayBanner();
+  
   const boxWidth = getLogoWidth();
   const { col1, col2 } = getColWidths(boxWidth);
   let spinner;
