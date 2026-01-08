@@ -294,8 +294,14 @@ const getLoginUrl = async (provider) => {
   if (!flag) return { success: false, url: null, childProcess: null, isHeadless: false, error: 'Provider not supported for OAuth' };
   
   const headless = isHeadless();
+  const isGemini = (provider === 'google');
+  
   return new Promise((resolve) => {
-    const child = spawn(BINARY_PATH, [flag, '-no-browser'], { cwd: INSTALL_DIR });
+    // For Gemini: use 'pipe' stdin so we can send default project selection
+    const child = spawn(BINARY_PATH, [flag, '-no-browser'], { 
+      cwd: INSTALL_DIR,
+      stdio: isGemini ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe']
+    });
     let output = '', resolved = false;
     
     const checkForUrl = () => {
@@ -303,14 +309,29 @@ const getLoginUrl = async (provider) => {
       const urlMatch = output.match(/https?:\/\/[^\s]+/);
       if (urlMatch) {
         resolved = true;
-        resolve({ success: true, url: urlMatch[0], childProcess: child, isHeadless: headless, error: null });
+        resolve({ success: true, url: urlMatch[0], childProcess: child, isHeadless: headless, isGemini, error: null });
       }
     };
     
-    child.stdout.on('data', (data) => { output += data.toString(); checkForUrl(); });
-    child.stderr.on('data', (data) => { output += data.toString(); checkForUrl(); });
-    child.on('error', (err) => { if (!resolved) { resolved = true; resolve({ success: false, url: null, childProcess: null, isHeadless: headless, error: err.message }); }});
-    child.on('close', (code) => { if (!resolved) { resolved = true; resolve({ success: false, url: null, childProcess: null, isHeadless: headless, error: `Process exited with code ${code}` }); }});
+    // For Gemini: auto-select default project when prompted
+    if (isGemini && child.stdout) {
+      child.stdout.on('data', (data) => {
+        output += data.toString();
+        checkForUrl();
+        // When Gemini asks for project selection, send Enter (default) or ALL
+        if (data.toString().includes('Enter project ID') && child.stdin) {
+          child.stdin.write('\n'); // Select default project
+        }
+      });
+    } else if (child.stdout) {
+      child.stdout.on('data', (data) => { output += data.toString(); checkForUrl(); });
+    }
+    
+    if (child.stderr) {
+      child.stderr.on('data', (data) => { output += data.toString(); checkForUrl(); });
+    }
+    child.on('error', (err) => { if (!resolved) { resolved = true; resolve({ success: false, url: null, childProcess: null, isHeadless: headless, isGemini: false, error: err.message }); }});
+    child.on('close', (code) => { if (!resolved) { resolved = true; resolve({ success: false, url: null, childProcess: null, isHeadless: headless, isGemini: false, error: `Process exited with code ${code}` }); }});
   });
 };
 
