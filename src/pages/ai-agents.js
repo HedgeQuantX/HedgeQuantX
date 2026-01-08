@@ -237,26 +237,9 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
     try { loginResult.childProcess.kill(); } catch (e) { /* ignore */ }
   }
   
-  // Restart CLIProxy to load new tokens
-  const restartSpinner = ora({ text: 'RESTARTING CLIPROXY...', color: 'yellow' }).start();
-  await cliproxy.stop();
-  await new Promise(r => setTimeout(r, 1000));
-  await cliproxy.start();
-  await new Promise(r => setTimeout(r, 2000));
-  restartSpinner.stop();
-  
-  // Fetch models from CLIProxy (retry a few times if needed)
-  let modelsResult = { success: false, models: [] };
+  // Fetch models from CLIProxy
   const spinner = ora({ text: 'LOADING MODELS...', color: 'yellow' }).start();
-  
-  for (let i = 0; i < 10; i++) {
-    modelsResult = await cliproxy.fetchProviderModels(provider.id);
-    if (modelsResult.success && modelsResult.models.length > 0) {
-      spinner.stop();
-      break;
-    }
-    await new Promise(r => setTimeout(r, 1000));
-  }
+  const modelsResult = await cliproxy.fetchProviderModels(provider.id);
   spinner.stop();
   
   if (modelsResult.success && modelsResult.models.length > 0) {
