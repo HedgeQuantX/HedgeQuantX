@@ -85,29 +85,68 @@ const draw2ColRowCentered = (leftText, rightText, W) => {
 };
 
 /**
- * Draw providers table
+ * Draw providers table with vertically aligned columns
  * @param {Array} providers - List of AI providers
  * @param {Object} config - Current config
  * @param {number} boxWidth - Box width
  */
 const drawProvidersTable = (providers, config, boxWidth) => {
   const W = boxWidth - 2;
+  const colWidth = Math.floor(W / 2);
   
   // New rectangle (banner is always closed)
   console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
   console.log(chalk.cyan('║') + chalk.yellow.bold(centerText('AI AGENTS CONFIGURATION', W)) + chalk.cyan('║'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
-  const items = providers.map((p, i) => {
-    const status = config.providers[p.id]?.active ? chalk.green(' ●') : '';
-    return chalk.cyan(`[${i + 1}]`) + ' ' + chalk[p.color](p.name.toUpperCase()) + status;
-  });
+  const rows = Math.ceil(providers.length / 2);
   
-  const rows = Math.ceil(items.length / 2);
+  // Find max name length across ALL providers for consistent alignment
+  const maxNameLen = Math.max(...providers.map(p => p.name.length));
+  
+  // Fixed format: "[N] NAME" where N is always same width, NAME padded to maxNameLen
+  // Total content width = 3 ([N]) + 1 (space) + maxNameLen + 2 (possible " ●")
+  const contentWidth = 3 + 1 + maxNameLen + 2;
+  const leftPad = Math.floor((colWidth - contentWidth) / 2);
+  const rightPad = Math.floor(((W - colWidth) - contentWidth) / 2);
+  
   for (let row = 0; row < rows; row++) {
-    const left = items[row];
-    const right = items[row + rows];
-    draw2ColRowCentered(left || '', right || '', W);
+    const leftP = providers[row];
+    const rightP = providers[row + rows];
+    
+    // Left column
+    let leftCol = '';
+    if (leftP) {
+      const num = row + 1;
+      const status = config.providers[leftP.id]?.active ? chalk.green(' ●') : '  ';
+      const statusRaw = config.providers[leftP.id]?.active ? ' ●' : '  ';
+      const name = leftP.provider ? leftP.provider.name : leftP.name;
+      const namePadded = name.toUpperCase().padEnd(maxNameLen);
+      const content = chalk.cyan(`[${num}]`) + ' ' + chalk[leftP.color](namePadded) + status;
+      const contentLen = 3 + 1 + maxNameLen + 2;
+      const padR = colWidth - leftPad - contentLen;
+      leftCol = ' '.repeat(leftPad) + content + ' '.repeat(Math.max(0, padR));
+    } else {
+      leftCol = ' '.repeat(colWidth);
+    }
+    
+    // Right column
+    let rightCol = '';
+    const rightColWidth = W - colWidth;
+    if (rightP) {
+      const num = row + rows + 1;
+      const status = config.providers[rightP.id]?.active ? chalk.green(' ●') : '  ';
+      const name = rightP.provider ? rightP.provider.name : rightP.name;
+      const namePadded = name.toUpperCase().padEnd(maxNameLen);
+      const content = chalk.cyan(`[${num}]`) + ' ' + chalk[rightP.color](namePadded) + status;
+      const contentLen = 3 + 1 + maxNameLen + 2;
+      const padR2 = rightColWidth - rightPad - contentLen;
+      rightCol = ' '.repeat(rightPad) + content + ' '.repeat(Math.max(0, padR2));
+    } else {
+      rightCol = ' '.repeat(rightColWidth);
+    }
+    
+    console.log(chalk.cyan('║') + leftCol + rightCol + chalk.cyan('║'));
   }
   
   console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
@@ -144,18 +183,12 @@ const drawProviderWindow = (provider, config, boxWidth) => {
   console.log(chalk.cyan('║') + chalk[provider.color].bold(centerText(provider.name.toUpperCase(), W)) + chalk.cyan('║'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
-  // Empty line
-  console.log(chalk.cyan('║') + ' '.repeat(W) + chalk.cyan('║'));
+  // Options in 2 columns (centered)
+  const opt1 = '[1] CONNECT VIA PAID PLAN';
+  const opt2 = '[2] CONNECT VIA API KEY';
   
-  // Options in 2 columns
-  const opt1Title = '[1] CONNECT VIA PAID PLAN';
-  const opt1Desc = 'USES CLIPROXY - NO API KEY NEEDED';
-  const opt2Title = '[2] CONNECT VIA API KEY';
-  const opt2Desc = 'ENTER YOUR OWN API KEY';
-  
-  // Row 1: Titles
-  const left1 = chalk.green(opt1Title);
-  const right1 = chalk.yellow(opt2Title);
+  const left1 = chalk.green(opt1);
+  const right1 = chalk.yellow(opt2);
   const left1Len = visibleLength(left1);
   const right1Len = visibleLength(right1);
   const left1PadTotal = col1Width - left1Len;
@@ -171,28 +204,6 @@ const drawProviderWindow = (provider, config, boxWidth) => {
     ' '.repeat(right1PadL) + right1 + ' '.repeat(right1PadR) +
     chalk.cyan('║')
   );
-  
-  // Row 2: Descriptions
-  const left2 = chalk.gray(opt1Desc);
-  const right2 = chalk.gray(opt2Desc);
-  const left2Len = visibleLength(left2);
-  const right2Len = visibleLength(right2);
-  const left2PadTotal = col1Width - left2Len;
-  const left2PadL = Math.floor(left2PadTotal / 2);
-  const left2PadR = left2PadTotal - left2PadL;
-  const right2PadTotal = col2Width - right2Len;
-  const right2PadL = Math.floor(right2PadTotal / 2);
-  const right2PadR = right2PadTotal - right2PadL;
-  
-  console.log(
-    chalk.cyan('║') +
-    ' '.repeat(left2PadL) + left2 + ' '.repeat(left2PadR) +
-    ' '.repeat(right2PadL) + right2 + ' '.repeat(right2PadR) +
-    chalk.cyan('║')
-  );
-  
-  // Empty line
-  console.log(chalk.cyan('║') + ' '.repeat(W) + chalk.cyan('║'));
   
   // Status bar
   console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
