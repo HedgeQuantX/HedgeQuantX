@@ -100,7 +100,7 @@ const drawProvidersTable = (providers, config, boxWidth) => {
   
   // New rectangle (banner is always closed)
   console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
-  console.log(chalk.cyan('║') + chalk.yellow.bold(centerText('AI AGENTS CONFIGURATION', W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + chalk.cyan.bold(centerText('AI AGENTS CONFIGURATION', W)) + chalk.cyan('║'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
   const rows = Math.ceil(providers.length / 2);
@@ -122,12 +122,12 @@ const drawProvidersTable = (providers, config, boxWidth) => {
     let leftCol = '';
     if (leftP) {
       const num = row + 1;
-      // Show yellow dot if provider has auth file (connected via OAuth)
+      // Show cyan dot if provider has auth file (connected via OAuth)
       const isConnected = connected[leftP.id] || config.providers[leftP.id]?.active;
-      const status = isConnected ? chalk.yellow('● ') : '  ';
+      const status = isConnected ? chalk.cyan('● ') : '  ';
       const name = leftP.provider ? leftP.provider.name : leftP.name;
       const namePadded = name.toUpperCase().padEnd(maxNameLen);
-      const content = status + chalk.cyan(`[${num}]`) + ' ' + chalk[leftP.color](namePadded);
+      const content = status + chalk.yellow(`[${num}]`) + ' ' + chalk.cyan(namePadded);
       const contentLen = 2 + 3 + 1 + maxNameLen;
       const padR = colWidth - leftPad - contentLen;
       leftCol = ' '.repeat(leftPad) + content + ' '.repeat(Math.max(0, padR));
@@ -140,12 +140,12 @@ const drawProvidersTable = (providers, config, boxWidth) => {
     const rightColWidth = W - colWidth;
     if (rightP) {
       const num = row + rows + 1;
-      // Show yellow dot if provider has auth file (connected via OAuth)
+      // Show cyan dot if provider has auth file (connected via OAuth)
       const isConnected = connected[rightP.id] || config.providers[rightP.id]?.active;
-      const status = isConnected ? chalk.yellow('● ') : '  ';
+      const status = isConnected ? chalk.cyan('● ') : '  ';
       const name = rightP.provider ? rightP.provider.name : rightP.name;
       const namePadded = name.toUpperCase().padEnd(maxNameLen);
-      const content = status + chalk.cyan(`[${num}]`) + ' ' + chalk[rightP.color](namePadded);
+      const content = status + chalk.yellow(`[${num}]`) + ' ' + chalk.cyan(namePadded);
       const contentLen = 2 + 3 + 1 + maxNameLen;
       const padR2 = rightColWidth - rightPad - contentLen;
       rightCol = ' '.repeat(rightPad) + content + ' '.repeat(Math.max(0, padR2));
