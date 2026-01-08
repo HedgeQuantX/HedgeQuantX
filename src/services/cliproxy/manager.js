@@ -373,11 +373,14 @@ const ensureRunning = async (onProgress = null) => {
  * @returns {Promise<Object>} { success, url, childProcess, isHeadless, error }
  */
 const getLoginUrl = async (provider) => {
+  // CLIProxyAPI login flags per provider (from --help)
   const providerFlags = {
-    anthropic: '-claude-login',
-    openai: '-codex-login',
-    google: '-gemini-login',
-    qwen: '-qwen-login'
+    anthropic: '-claude-login',    // Claude Code
+    openai: '-codex-login',        // OpenAI Codex
+    google: '-login',              // Gemini CLI (Google Account)
+    qwen: '-qwen-login',           // Qwen Code
+    antigravity: '-antigravity-login',  // Antigravity
+    iflow: '-iflow-login'          // iFlow
   };
   
   const flag = providerFlags[provider];
