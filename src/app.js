@@ -199,9 +199,9 @@ const run = async () => {
           
           // Find max name length for alignment
           const maxNameLen = Math.max(...numbered.map(n => n.name.length));
-          const colWidth = 4 + 1 + maxNameLen + 2; // [##] + space + name + gap
-          const totalContentWidth = numCols * colWidth;
-          const leftMargin = Math.max(2, Math.floor((innerWidth - totalContentWidth) / 2));
+          const itemWidth = 4 + 1 + maxNameLen; // [##] + space + name
+          const gap = 3; // gap between columns
+          const totalContentWidth = (itemWidth * numCols) + (gap * (numCols - 1));
           
           // New rectangle (banner is always closed)
           console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
@@ -223,19 +223,22 @@ const run = async () => {
               }
             }
             
-            let line = ' '.repeat(leftMargin);
+            // Build line content
+            let content = '';
             for (let i = 0; i < lineParts.length; i++) {
               if (lineParts[i]) {
-                line += chalk.cyan(lineParts[i].num) + ' ' + chalk.white(lineParts[i].name);
+                content += chalk.cyan(lineParts[i].num) + ' ' + chalk.white(lineParts[i].name);
               } else {
-                line += ' '.repeat(4 + 1 + maxNameLen);
+                content += ' '.repeat(itemWidth);
               }
-              if (i < lineParts.length - 1) line += '  ';
+              if (i < lineParts.length - 1) content += ' '.repeat(gap);
             }
             
-            const lineLen = line.replace(/\x1b\[[0-9;]*m/g, '').length;
-            const rightPad = Math.max(0, innerWidth - lineLen);
-            console.log(chalk.cyan('║') + line + ' '.repeat(rightPad) + chalk.cyan('║'));
+            // Center the content
+            const contentLen = content.replace(/\x1b\[[0-9;]*m/g, '').length;
+            const leftPad = Math.floor((innerWidth - contentLen) / 2);
+            const rightPad = innerWidth - contentLen - leftPad;
+            console.log(chalk.cyan('║') + ' '.repeat(leftPad) + content + ' '.repeat(rightPad) + chalk.cyan('║'));
           }
           
           console.log(chalk.cyan('╠' + '─'.repeat(innerWidth) + '╣'));
