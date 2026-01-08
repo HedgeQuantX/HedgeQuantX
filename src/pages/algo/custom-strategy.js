@@ -1,6 +1,6 @@
 /**
- * Custom Strategy - AI-powered modular strategy builder
- * Each strategy is a folder with modular components
+ * Custom Strategy - AI-powered strategy builder
+ * Same config flow as One Account, then AI chat to create strategy
  */
 
 const chalk = require('chalk');
@@ -8,13 +8,16 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const ora = require('ora');
+const readline = require('readline');
 
 const { getLogoWidth, centerText, displayBanner } = require('../../ui');
 const { prompts } = require('../../utils');
+const { connections } = require('../../services');
 const { getActiveProvider } = require('../ai-agents');
 const cliproxy = require('../../services/cliproxy');
+const { checkMarketHours } = require('../../services/rithmic/market');
 
-// Base strategies directory
+// Strategies directory
 const STRATEGIES_DIR = path.join(os.homedir(), '.hqx', 'strategies');
 
 /** Ensure strategies directory exists */
@@ -22,112 +25,160 @@ const ensureStrategiesDir = () => {
   if (!fs.existsSync(STRATEGIES_DIR)) fs.mkdirSync(STRATEGIES_DIR, { recursive: true });
 };
 
-/** Load all saved strategies (folders) */
-const loadStrategies = () => {
-  ensureStrategiesDir();
-  try {
-    const items = fs.readdirSync(STRATEGIES_DIR, { withFileTypes: true });
-    return items.filter(i => i.isDirectory()).map(dir => {
-      const configPath = path.join(STRATEGIES_DIR, dir.name, 'config.json');
-      if (fs.existsSync(configPath)) {
-        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        return { folder: dir.name, path: path.join(STRATEGIES_DIR, dir.name), ...config };
-      }
-      return { folder: dir.name, path: path.join(STRATEGIES_DIR, dir.name), name: dir.name };
-    });
-  } catch (e) { return []; }
-};
-
-/** Create strategy folder structure */
-const createStrategyFolder = (name) => {
-  ensureStrategiesDir();
-  const folderName = name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
-  const strategyPath = path.join(STRATEGIES_DIR, folderName);
-  
-  if (fs.existsSync(strategyPath)) {
-    return { success: false, error: 'Strategy folder already exists', path: null };
-  }
-  
-  fs.mkdirSync(strategyPath, { recursive: true });
-  return { success: true, path: strategyPath, folder: folderName };
-};
-
-/** Save strategy module */
-const saveModule = (strategyPath, moduleName, content) => {
-  const filePath = path.join(strategyPath, moduleName);
-  fs.writeFileSync(filePath, typeof content === 'string' ? content : JSON.stringify(content, null, 2));
-  return filePath;
-};
-
-/** Delete strategy folder */
-const deleteStrategy = (strategyPath) => {
-  if (fs.existsSync(strategyPath)) {
-    fs.rmSync(strategyPath, { recursive: true, force: true });
-    return true;
-  }
-  return false;
-};
-
 /** Custom Strategy Menu */
 const customStrategyMenu = async (service) => {
-  while (true) {
-    console.clear();
-    displayBanner();
-    
-    const boxWidth = getLogoWidth();
-    const W = boxWidth - 2;
-    const aiProvider = getActiveProvider();
-    const strategies = loadStrategies();
-    
-    console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
-    console.log(chalk.cyan('║') + chalk.green.bold(centerText('CUSTOM STRATEGY BUILDER', W)) + chalk.cyan('║'));
-    console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
-    
-    // AI Status
-    if (aiProvider) {
-      const status = `AI: ${aiProvider.name} (${aiProvider.modelName || 'default'})`;
-      console.log(chalk.cyan('║') + chalk.green(centerText('● ' + status, W)) + chalk.cyan('║'));
-    } else {
-      console.log(chalk.cyan('║') + chalk.red(centerText('○ NO AI AGENT CONNECTED', W)) + chalk.cyan('║'));
-    }
-    
-    console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
-    
-    // Options
-    const col1 = '[1] CREATE NEW';
-    const col2 = `[2] MY STRATEGIES (${strategies.length})`;
-    const colWidth = Math.floor(W / 2);
-    const pad1 = Math.floor((colWidth - col1.length) / 2);
-    const pad2 = Math.floor((W - colWidth - col2.length) / 2);
-    console.log(chalk.cyan('║') + 
-      ' '.repeat(pad1) + chalk.yellow(col1) + ' '.repeat(colWidth - col1.length - pad1) +
-      ' '.repeat(pad2) + chalk.cyan(col2) + ' '.repeat(W - colWidth - col2.length - pad2) +
-      chalk.cyan('║'));
-    
-    console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
-    console.log(chalk.cyan('║') + chalk.red(centerText('[B] BACK', W)) + chalk.cyan('║'));
-    console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
-    
-    const input = await prompts.textInput(chalk.cyan('SELECT (1/2/B): '));
-    const choice = (input || '').toLowerCase().trim();
-    
-    if (choice === 'b' || choice === '') return;
-    
-    if (choice === '1') {
-      if (!aiProvider) {
-        console.log(chalk.red('\n  Connect an AI Agent first (AI Agents menu)'));
-        await prompts.waitForEnter();
-        continue;
-      }
-      await createStrategyWizard(aiProvider);
-    } else if (choice === '2') {
-      await myStrategiesMenu(strategies, service);
-    }
+  // Check AI provider first
+  const aiProvider = getActiveProvider();
+  if (!aiProvider) {
+    console.log(chalk.red('\n  No AI Agent connected. Go to AI Agents menu first.'));
+    await prompts.waitForEnter();
+    return;
   }
+  
+  // Check market hours
+  const market = checkMarketHours();
+  if (!market.isOpen && !market.message.includes('early')) {
+    console.log();
+    console.log(chalk.red(`  ${market.message}`));
+    console.log(chalk.gray('  Custom strategy requires market to be open'));
+    console.log();
+    await prompts.waitForEnter();
+    return;
+  }
+  
+  // Step 1: Fetch accounts
+  const spinner = ora({ text: 'Fetching active accounts...', color: 'yellow' }).start();
+  const allAccounts = await connections.getAllAccounts();
+  
+  if (!allAccounts?.length) {
+    spinner.fail('No accounts found');
+    await prompts.waitForEnter();
+    return;
+  }
+  
+  const activeAccounts = allAccounts.filter(acc => acc.status === 0);
+  if (!activeAccounts.length) {
+    spinner.fail('No active accounts');
+    await prompts.waitForEnter();
+    return;
+  }
+  
+  spinner.succeed(`Found ${activeAccounts.length} active account(s)`);
+  
+  // Step 2: Select account
+  console.log();
+  console.log(chalk.cyan.bold('  STEP 1: SELECT ACCOUNT'));
+  const accountOptions = activeAccounts.map(acc => {
+    const name = acc.accountName || acc.rithmicAccountId || acc.accountId;
+    const balance = acc.balance !== null && acc.balance !== undefined 
+      ? ` - $${acc.balance.toLocaleString()}` : '';
+    return {
+      label: `${name} (${acc.propfirm || acc.platform || 'Unknown'})${balance}`,
+      value: acc
+    };
+  });
+  accountOptions.push({ label: '< Back', value: 'back' });
+  
+  const selectedAccount = await prompts.selectOption('Select Account:', accountOptions);
+  if (!selectedAccount || selectedAccount === 'back') return;
+  
+  const accountService = selectedAccount.service || connections.getServiceForAccount(selectedAccount.accountId) || service;
+  
+  // Step 3: Select symbol
+  console.log();
+  console.log(chalk.cyan.bold('  STEP 2: SELECT SYMBOL'));
+  const contract = await selectSymbol(accountService);
+  if (!contract) return;
+  
+  // Step 4: Configure parameters
+  console.log();
+  console.log(chalk.cyan.bold('  STEP 3: CONFIGURE PARAMETERS'));
+  console.log();
+  
+  const contracts = await prompts.numberInput('Number of contracts:', 1, 1, 10);
+  if (contracts === null) return;
+  
+  const dailyTarget = await prompts.numberInput('Daily target ($):', 200, 1, 10000);
+  if (dailyTarget === null) return;
+  
+  const maxRisk = await prompts.numberInput('Max risk ($):', 100, 1, 5000);
+  if (maxRisk === null) return;
+  
+  const showName = await prompts.confirmPrompt('Show account name?', false);
+  if (showName === null) return;
+  
+  // Step 5: AI Supervision
+  console.log();
+  console.log(chalk.cyan.bold('  STEP 4: AI SUPERVISION'));
+  const aiSupervision = await prompts.confirmPrompt('Enable AI supervision during execution?', true);
+  if (aiSupervision === null) return;
+  
+  const config = {
+    account: selectedAccount,
+    contract,
+    contracts,
+    dailyTarget,
+    maxRisk,
+    showName,
+    aiSupervision,
+    aiProvider
+  };
+  
+  // Step 6: AI Chat to create/configure strategy
+  console.log();
+  console.log(chalk.cyan.bold('  STEP 5: CREATE YOUR STRATEGY WITH AI'));
+  console.log(chalk.gray('  Describe your trading strategy in plain English.'));
+  console.log(chalk.gray('  The AI will help you build and validate it.'));
+  console.log();
+  
+  await strategyChat(config, accountService);
 };
 
-/** AI Wizard to create modular strategy */
-const createStrategyWizard = async (aiProvider) => {
+/** Select symbol - same as one-account */
+const selectSymbol = async (service) => {
+  const spinner = ora({ text: 'Loading symbols...', color: 'yellow' }).start();
+  
+  const contractsResult = await service.getContracts();
+  if (!contractsResult.success || !contractsResult.contracts?.length) {
+    spinner.fail('Failed to load contracts');
+    return null;
+  }
+  
+  let contracts = contractsResult.contracts;
+  
+  // Sort popular indices first
+  const popular = ['ES', 'NQ', 'MES', 'MNQ', 'M2K', 'RTY', 'YM', 'MYM', 'NKD', 'GC', 'SI', 'CL'];
+  contracts.sort((a, b) => {
+    const baseA = a.baseSymbol || a.symbol || '';
+    const baseB = b.baseSymbol || b.symbol || '';
+    const idxA = popular.findIndex(p => baseA === p || baseA.startsWith(p));
+    const idxB = popular.findIndex(p => baseB === p || baseB.startsWith(p));
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return baseA.localeCompare(baseB);
+  });
+  
+  spinner.succeed(`Found ${contracts.length} contracts`);
+  
+  const options = contracts.map(c => ({
+    label: `${c.symbol} - ${c.name} (${c.exchange})`,
+    value: c
+  }));
+  options.push({ label: chalk.gray('< Back'), value: 'back' });
+  
+  const selected = await prompts.selectOption(chalk.yellow('Select Symbol:'), options);
+  return selected === 'back' || selected === null ? null : selected;
+};
+
+/** AI Chat for strategy creation */
+const strategyChat = async (config, service) => {
+  const { account, contract, contracts, dailyTarget, maxRisk, showName, aiSupervision, aiProvider } = config;
+  
+  const accountName = showName 
+    ? (account.accountName || account.rithmicAccountId || account.accountId) 
+    : 'HQX *****';
+  
   console.clear();
   displayBanner();
   
@@ -135,62 +186,42 @@ const createStrategyWizard = async (aiProvider) => {
   const W = boxWidth - 2;
   
   console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
-  console.log(chalk.cyan('║') + chalk.green.bold(centerText('CREATE STRATEGY WITH AI', W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + chalk.green.bold(centerText('CUSTOM STRATEGY - AI CHAT', W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
+  console.log(chalk.cyan('║') + centerText(`Account: ${accountName} | Symbol: ${contract.name} | Qty: ${contracts}`, W) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + centerText(`Target: $${dailyTarget} | Risk: $${maxRisk} | AI Supervision: ${aiSupervision ? 'ON' : 'OFF'}`, W) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + chalk.gray(centerText(`AI: ${aiProvider.name} (${aiProvider.modelName || 'default'})`, W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
+  console.log(chalk.cyan('║') + chalk.gray(centerText('Type your strategy. "run" to execute, "save" to save, "cancel" to abort', W)) + chalk.cyan('║'));
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
   console.log();
   
-  // Step 1: Strategy name
-  console.log(chalk.yellow('  STEP 1: Name your strategy'));
-  const name = await prompts.textInput(chalk.cyan('  Strategy name: '));
-  if (!name || !name.trim()) {
-    console.log(chalk.red('  Cancelled'));
-    await prompts.waitForEnter();
-    return;
-  }
-  
-  // Create folder
-  const folder = createStrategyFolder(name.trim());
-  if (!folder.success) {
-    console.log(chalk.red(`  Error: ${folder.error}`));
-    await prompts.waitForEnter();
-    return;
-  }
-  
-  console.log(chalk.green(`  ✓ Created: ${folder.path}`));
-  console.log();
-  
-  // Step 2: Chat with AI to build strategy
-  console.log(chalk.yellow('  STEP 2: Describe your strategy to the AI'));
-  console.log(chalk.gray('  Type your strategy idea in plain English.'));
-  console.log(chalk.gray('  The AI will help you build each module.'));
-  console.log(chalk.gray('  Type "done" when finished, "cancel" to abort.'));
-  console.log();
-  
-  const systemPrompt = `You are an expert algo trading strategy builder for futures (ES, NQ, MES, MNQ, etc).
-Help the user create a modular trading strategy. Build these components:
+  const systemPrompt = `You are an expert algorithmic trading assistant for futures trading.
 
-1. ENTRY CONDITIONS - When to open a position (long/short signals)
-2. EXIT CONDITIONS - Take profit, stop loss, trailing stops
-3. RISK MANAGEMENT - Position sizing, max loss, max positions
-4. FILTERS - Market conditions when NOT to trade
+Current setup:
+- Account: ${accountName}
+- Symbol: ${contract.name} (${contract.symbol})
+- Contracts: ${contracts}
+- Daily Target: $${dailyTarget}
+- Max Risk: $${maxRisk}
+- AI Supervision: ${aiSupervision ? 'Enabled' : 'Disabled'}
 
-Ask clarifying questions. Be concise. When ready, output each module.
+Help the user create a trading strategy. When they describe what they want:
+1. Understand their entry/exit logic
+2. Validate the strategy makes sense
+3. Suggest improvements if needed
+4. When ready, confirm the strategy is valid
 
-For each module, output JavaScript code in this format:
-\`\`\`javascript:entry.js
-module.exports = {
-  checkLongEntry: (data) => { /* return true/false */ },
-  checkShortEntry: (data) => { /* return true/false */ }
-};
-\`\`\`
-
-The 'data' object contains: { price, bid, ask, volume, atr, ema20, ema50, rsi, macd, vwap, high, low, open, close }`;
+Keep responses concise (2-3 sentences max unless explaining strategy details).
+When the user says "run", output: [STRATEGY_READY]
+Include the strategy parameters in JSON format when ready.`;
 
   const messages = [{ role: 'system', content: systemPrompt }];
-  const modules = {};
+  let strategyReady = false;
+  let strategyConfig = null;
   
-  console.log(chalk.green('  AI: ') + 'What kind of trading strategy do you want to create?');
-  console.log(chalk.gray('      Example: "A mean reversion strategy that buys when RSI < 30"'));
+  console.log(chalk.green('  AI: ') + `Hello! I'll help you create a custom strategy for ${contract.name}.`);
+  console.log(chalk.green('      ') + 'What kind of trading strategy do you want to build?');
   console.log();
   
   while (true) {
@@ -198,30 +229,32 @@ The 'data' object contains: { price, bid, ask, volume, atr, ema20, ema50, rsi, m
     
     if (!userInput) continue;
     
-    if (userInput.toLowerCase() === 'cancel') {
-      deleteStrategy(folder.path);
-      console.log(chalk.gray('\n  Strategy cancelled and folder deleted.'));
+    const cmd = userInput.toLowerCase().trim();
+    
+    if (cmd === 'cancel' || cmd === 'exit' || cmd === 'quit') {
+      console.log(chalk.gray('\n  Strategy creation cancelled.'));
       await prompts.waitForEnter();
       return;
     }
     
-    if (userInput.toLowerCase() === 'done') {
-      // Save config
-      saveModule(folder.path, 'config.json', {
-        name: name.trim(),
-        description: modules.description || '',
-        createdAt: new Date().toISOString(),
-        modules: Object.keys(modules).filter(k => k !== 'description')
-      });
-      
-      console.log(chalk.green('\n  ✓ Strategy saved!'));
-      console.log(chalk.cyan(`  Location: ${folder.path}`));
-      console.log(chalk.gray('  Modules created:'));
-      for (const m of Object.keys(modules)) {
-        if (m !== 'description') console.log(chalk.gray(`    - ${m}`));
+    if (cmd === 'save') {
+      if (strategyConfig) {
+        await saveStrategy(strategyConfig, config);
+      } else {
+        console.log(chalk.yellow('\n  No strategy to save yet. Keep describing your strategy.'));
       }
-      await prompts.waitForEnter();
-      return;
+      continue;
+    }
+    
+    if (cmd === 'run') {
+      if (strategyReady && strategyConfig) {
+        console.log(chalk.green('\n  Launching strategy...'));
+        await launchCustomStrategy(config, strategyConfig, service);
+        return;
+      } else {
+        console.log(chalk.yellow('\n  Strategy not ready yet. Describe your entry/exit conditions first.'));
+        continue;
+      }
     }
     
     messages.push({ role: 'user', content: userInput });
@@ -243,24 +276,23 @@ The 'data' object contains: { price, bid, ask, volume, atr, ema20, ema50, rsi, m
       
       spinner.stop();
       console.log();
-      
-      // Extract and save code modules
-      const codeBlocks = response.matchAll(/```javascript:(\w+\.js)\n([\s\S]*?)```/g);
-      for (const match of codeBlocks) {
-        const [, filename, code] = match;
-        saveModule(folder.path, filename, code.trim());
-        modules[filename] = true;
-        console.log(chalk.green(`  ✓ Saved module: ${filename}`));
-      }
-      
-      // Extract description if present
-      const descMatch = response.match(/description[:\s]*["']?([^"'\n]+)/i);
-      if (descMatch) modules.description = descMatch[1];
-      
-      // Print AI response (without code blocks for cleaner output)
-      const cleanResponse = response.replace(/```[\s\S]*?```/g, '[code saved]');
-      console.log(chalk.green('  AI: ') + formatResponse(cleanResponse));
+      console.log(chalk.green('  AI: ') + formatResponse(response));
       console.log();
+      
+      // Check if strategy is ready
+      if (response.includes('[STRATEGY_READY]') || response.toLowerCase().includes('strategy is ready')) {
+        strategyReady = true;
+        // Try to extract JSON config
+        const jsonMatch = response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try { strategyConfig = JSON.parse(jsonMatch[0]); } catch (e) {}
+        }
+        if (!strategyConfig) {
+          strategyConfig = { description: userInput, messages: messages.slice(1) };
+        }
+        console.log(chalk.cyan('  [Strategy ready! Type "run" to execute or "save" to save for later]'));
+        console.log();
+      }
       
     } catch (e) {
       spinner.fail(`Error: ${e.message}`);
@@ -269,126 +301,79 @@ The 'data' object contains: { price, bid, ask, volume, atr, ema20, ema50, rsi, m
   }
 };
 
-/** Get default model */
+/** Get default model for provider */
 const getDefaultModel = (providerId) => {
-  const defaults = {
-    anthropic: 'claude-sonnet-4-20250514',
-    google: 'gemini-2.5-pro',
-    openai: 'gpt-4o'
-  };
+  const defaults = { anthropic: 'claude-sonnet-4-20250514', google: 'gemini-2.5-pro', openai: 'gpt-4o' };
   return defaults[providerId] || 'claude-sonnet-4-20250514';
 };
 
-/** Format response for terminal */
+/** Format AI response */
 const formatResponse = (text) => {
-  const lines = text.split('\n');
+  const clean = text.replace(/\[STRATEGY_READY\]/g, '').trim();
+  const lines = clean.split('\n');
   return lines.map((l, i) => i === 0 ? l : '      ' + l).join('\n');
 };
 
-/** My Strategies Menu */
-const myStrategiesMenu = async (strategies, service) => {
-  while (true) {
-    console.clear();
-    displayBanner();
-    
-    const boxWidth = getLogoWidth();
-    const W = boxWidth - 2;
-    
-    console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
-    console.log(chalk.cyan('║') + chalk.yellow.bold(centerText('MY STRATEGIES', W)) + chalk.cyan('║'));
-    console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
-    
-    if (strategies.length === 0) {
-      console.log(chalk.cyan('║') + chalk.gray(centerText('No strategies yet', W)) + chalk.cyan('║'));
-    } else {
-      for (let i = 0; i < strategies.length; i++) {
-        const s = strategies[i];
-        const num = `[${i + 1}]`.padEnd(4);
-        const sname = (s.name || s.folder).substring(0, 30).padEnd(32);
-        const modules = s.modules ? `${s.modules.length} modules` : '';
-        const line = `${num} ${sname} ${chalk.gray(modules)}`;
-        console.log(chalk.cyan('║') + '  ' + chalk.white(num) + chalk.cyan(sname) + chalk.gray(modules.padEnd(W - 38)) + chalk.cyan('║'));
+/** Save strategy to disk */
+const saveStrategy = async (strategyConfig, config) => {
+  ensureStrategiesDir();
+  
+  const name = await prompts.textInput(chalk.cyan('  Strategy name: '));
+  if (!name || !name.trim()) {
+    console.log(chalk.gray('  Save cancelled.'));
+    return;
+  }
+  
+  const folderName = name.trim().toLowerCase().replace(/[^a-z0-9]/g, '-');
+  const strategyPath = path.join(STRATEGIES_DIR, folderName);
+  
+  if (!fs.existsSync(strategyPath)) fs.mkdirSync(strategyPath, { recursive: true });
+  
+  const configFile = {
+    name: name.trim(),
+    symbol: config.contract.name,
+    contracts: config.contracts,
+    dailyTarget: config.dailyTarget,
+    maxRisk: config.maxRisk,
+    aiSupervision: config.aiSupervision,
+    strategy: strategyConfig,
+    createdAt: new Date().toISOString()
+  };
+  
+  fs.writeFileSync(path.join(strategyPath, 'config.json'), JSON.stringify(configFile, null, 2));
+  console.log(chalk.green(`\n  ✓ Strategy saved: ${strategyPath}`));
+};
+
+/** Launch custom strategy execution */
+const launchCustomStrategy = async (config, strategyConfig, service) => {
+  const { account, contract, contracts, dailyTarget, maxRisk, showName, aiSupervision, aiProvider } = config;
+  
+  console.log(chalk.yellow('\n  Custom strategy execution coming soon...'));
+  console.log(chalk.gray('  Your strategy will use the HQX engine with AI supervision.'));
+  console.log();
+  console.log(chalk.white('  Strategy Summary:'));
+  console.log(chalk.gray(`  - Symbol: ${contract.name}`));
+  console.log(chalk.gray(`  - Contracts: ${contracts}`));
+  console.log(chalk.gray(`  - Target: $${dailyTarget}`));
+  console.log(chalk.gray(`  - Risk: $${maxRisk}`));
+  console.log(chalk.gray(`  - AI Supervision: ${aiSupervision ? 'Enabled' : 'Disabled'}`));
+  
+  await prompts.waitForEnter();
+};
+
+/** Load saved strategies */
+const loadStrategies = () => {
+  ensureStrategiesDir();
+  try {
+    const items = fs.readdirSync(STRATEGIES_DIR, { withFileTypes: true });
+    return items.filter(i => i.isDirectory()).map(dir => {
+      const configPath = path.join(STRATEGIES_DIR, dir.name, 'config.json');
+      if (fs.existsSync(configPath)) {
+        return { folder: dir.name, ...JSON.parse(fs.readFileSync(configPath, 'utf8')) };
       }
-    }
-    
-    console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
-    console.log(chalk.cyan('║') + chalk.red(centerText('[B] BACK', W)) + chalk.cyan('║'));
-    console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
-    
-    if (strategies.length === 0) {
-      await prompts.waitForEnter();
-      return;
-    }
-    
-    const input = await prompts.textInput(chalk.cyan(`SELECT (1-${strategies.length}/B): `));
-    const choice = (input || '').toLowerCase().trim();
-    
-    if (choice === 'b' || choice === '') return;
-    
-    const num = parseInt(choice);
-    if (!isNaN(num) && num >= 1 && num <= strategies.length) {
-      await strategyDetailMenu(strategies[num - 1], service);
-      strategies.length = 0;
-      strategies.push(...loadStrategies());
-    }
-  }
+      return { folder: dir.name, name: dir.name };
+    });
+  } catch (e) { return []; }
 };
 
-/** Strategy Detail Menu */
-const strategyDetailMenu = async (strategy, service) => {
-  console.clear();
-  displayBanner();
-  
-  const boxWidth = getLogoWidth();
-  const W = boxWidth - 2;
-  
-  console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
-  console.log(chalk.cyan('║') + chalk.green.bold(centerText((strategy.name || strategy.folder).toUpperCase(), W)) + chalk.cyan('║'));
-  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
-  
-  // Show modules
-  const files = fs.readdirSync(strategy.path);
-  console.log(chalk.cyan('║') + chalk.gray(centerText(`Path: ${strategy.path}`, W)) + chalk.cyan('║'));
-  console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
-  console.log(chalk.cyan('║') + chalk.white(centerText('MODULES:', W)) + chalk.cyan('║'));
-  
-  for (const f of files) {
-    const icon = f.endsWith('.js') ? '📄' : f.endsWith('.json') ? '⚙️' : '📁';
-    console.log(chalk.cyan('║') + centerText(`${icon} ${f}`, W) + chalk.cyan('║'));
-  }
-  
-  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
-  
-  // Options: Run, Edit with AI, Delete
-  const opts = ['[1] RUN', '[2] EDIT WITH AI', '[3] DELETE'];
-  const optLine = opts.join('     ');
-  console.log(chalk.cyan('║') + centerText(
-    chalk.green(opts[0]) + '     ' + chalk.yellow(opts[1]) + '     ' + chalk.red(opts[2]), W
-  ) + chalk.cyan('║'));
-  
-  console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
-  console.log(chalk.cyan('║') + chalk.red(centerText('[B] BACK', W)) + chalk.cyan('║'));
-  console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
-  
-  const input = await prompts.textInput(chalk.cyan('SELECT (1/2/3/B): '));
-  const choice = (input || '').toLowerCase().trim();
-  
-  if (choice === '1') {
-    console.log(chalk.yellow('\n  Running custom strategy...'));
-    console.log(chalk.gray('  This will use your connected accounts and market data.'));
-    console.log(chalk.gray('  (Full execution coming soon)'));
-    await prompts.waitForEnter();
-  } else if (choice === '2') {
-    console.log(chalk.yellow('\n  Edit with AI coming soon...'));
-    await prompts.waitForEnter();
-  } else if (choice === '3') {
-    const confirm = await prompts.confirmPrompt(`Delete "${strategy.name || strategy.folder}"?`, false);
-    if (confirm) {
-      deleteStrategy(strategy.path);
-      console.log(chalk.green('\n  ✓ Strategy deleted'));
-      await prompts.waitForEnter();
-    }
-  }
-};
-
-module.exports = { customStrategyMenu, loadStrategies, createStrategyFolder, saveModule };
+module.exports = { customStrategyMenu, loadStrategies };
