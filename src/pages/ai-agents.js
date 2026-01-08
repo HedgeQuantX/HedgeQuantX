@@ -276,13 +276,41 @@ const handleCliProxyConnection = async (provider, config, boxWidth) => {
     }
     
   } else {
-    console.log(chalk.gray('  AFTER AUTHENTICATING, PRESS ENTER TO CONTINUE...'));
+    // Local machine - browser opens automatically, wait for user to auth
+    console.log(chalk.gray('  AFTER AUTHENTICATING IN YOUR BROWSER, PRESS ENTER...'));
     await prompts.waitForEnter();
+    
+    // Wait for login process to finish saving auth file
+    const spinner = ora({ text: 'SAVING AUTHENTICATION...', color: 'yellow' }).start();
+    
+    await new Promise((resolve) => {
+      if (!loginResult.childProcess) return resolve();
+      
+      let elapsed = 0;
+      const checkInterval = setInterval(() => {
+        elapsed += 500;
+        
+        if (loginResult.childProcess.exitCode !== null || loginResult.childProcess.killed) {
+          clearInterval(checkInterval);
+          resolve();
+          return;
+        }
+        
+        // Safety timeout after 15s
+        if (elapsed >= 15000) {
+          clearInterval(checkInterval);
+          try { loginResult.childProcess.kill(); } catch (e) { /* ignore */ }
+          resolve();
+        }
+      }, 500);
+    });
+    
+    spinner.succeed('AUTHENTICATION SAVED');
   }
   
   // Small delay for CLIProxy to detect new auth file
   const spinner = ora({ text: 'LOADING MODELS...', color: 'yellow' }).start();
-  await new Promise(r => setTimeout(r, 1000));
+  await new Promise(r => setTimeout(r, 2000));
   
   // Fetch models from CLIProxy API
   const modelsResult = await cliproxy.fetchProviderModels(provider.id);
