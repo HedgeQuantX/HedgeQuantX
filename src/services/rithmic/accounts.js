@@ -245,18 +245,16 @@ const getTradingAccounts = async (service) => {
       profitAndLoss: profitAndLoss,
       openPnL: openPnL,
       todayPnL: closedPnL,
-      // Status/Type: Rithmic API doesn't provide user-friendly values
-      // "admin only" and "Max Loss" are RMS internal values, not account status
-      // Set to null to show "--" in UI (per RULES.md - no fake data)
-      status: null,
-      type: null,
-      // Keep RMS data for reference
-      rmsStatus: rmsInfo.status || null,
-      rmsAlgorithm: rmsInfo.algorithm || null,
+      // Status from Rithmic RMS API (field 154003 - ACCOUNT_STATUS)
+      status: rmsInfo.status || null,
+      // Algorithm/Type from Rithmic RMS API (field 150142 - ALGORITHM)
+      algorithm: rmsInfo.algorithm || null,
+      // Additional RMS data from API
       lossLimit: rmsInfo.lossLimit || null,
       minAccountBalance: rmsInfo.minAccountBalance || null,
       buyLimit: rmsInfo.buyLimit || null,
       sellLimit: rmsInfo.sellLimit || null,
+      currency: rmsInfo.currency || acc.accountCurrency || null,
       platform: 'Rithmic',
       propfirm: service.propfirm.name,
     };

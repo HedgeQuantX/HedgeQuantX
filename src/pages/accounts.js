@@ -130,12 +130,10 @@ const showAccounts = async (service) => {
       const pnlColor2 = pnl2 === null || pnl2 === undefined ? chalk.gray : (pnl2 >= 0 ? chalk.green : chalk.red);
       console.log(chalk.cyan('║') + fmtRow('P&L:', pnlColor1(pnlStr1), col1) + chalk.cyan(sep) + (acc2 ? fmtRow('P&L:', pnlColor2(pnlStr2), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
-      // Status - from API only, N/A if not available
-      const getStatusDisplay = (status) => {
+      // Status - from Rithmic RMS API (field 154003), N/A if not available
+      const getStatusDisplay = (acc) => {
+        const status = acc.status;
         if (status === null || status === undefined) return { text: 'N/A', color: 'gray' };
-        if (typeof status === 'number') {
-          return ACCOUNT_STATUS[status] || { text: String(status), color: 'yellow' };
-        }
         if (typeof status === 'string') {
           const lowerStatus = status.toLowerCase();
           if (lowerStatus.includes('active') || lowerStatus.includes('open')) return { text: status, color: 'green' };
@@ -143,32 +141,28 @@ const showAccounts = async (service) => {
           if (lowerStatus.includes('halt')) return { text: status, color: 'red' };
           return { text: status, color: 'yellow' };
         }
-        return { text: 'N/A', color: 'gray' };
+        return { text: String(status), color: 'yellow' };
       };
-      const status1 = getStatusDisplay(acc1.status);
-      const status2 = acc2 ? getStatusDisplay(acc2.status) : null;
+      const status1 = getStatusDisplay(acc1);
+      const status2 = acc2 ? getStatusDisplay(acc2) : null;
       console.log(chalk.cyan('║') + fmtRow('Status:', chalk[status1.color](status1.text), col1) + chalk.cyan(sep) + (acc2 ? fmtRow('Status:', chalk[status2.color](status2.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
-      // Type - from API only (algorithm or accountType field), N/A if not available
-      const getTypeDisplay = (acc) => {
-        const value = acc.algorithm || acc.accountType || acc.type;
-        if (value === null || value === undefined) return { text: 'N/A', color: 'gray' };
-        if (typeof value === 'string') {
-          const lowerValue = value.toLowerCase();
-          if (lowerValue.includes('eval')) return { text: value, color: 'yellow' };
-          if (lowerValue.includes('live') || lowerValue.includes('funded')) return { text: value, color: 'green' };
-          if (lowerValue.includes('sim') || lowerValue.includes('demo')) return { text: value, color: 'gray' };
-          if (lowerValue.includes('express')) return { text: value, color: 'magenta' };
-          return { text: value, color: 'cyan' };
+      // Algorithm - from Rithmic RMS API (field 150142), N/A if not available
+      const getAlgorithmDisplay = (acc) => {
+        const algo = acc.algorithm;
+        if (algo === null || algo === undefined) return { text: 'N/A', color: 'gray' };
+        if (typeof algo === 'string') {
+          const lowerAlgo = algo.toLowerCase();
+          if (lowerAlgo.includes('eval')) return { text: algo, color: 'yellow' };
+          if (lowerAlgo.includes('live') || lowerAlgo.includes('funded')) return { text: algo, color: 'green' };
+          if (lowerAlgo.includes('sim') || lowerAlgo.includes('demo')) return { text: algo, color: 'gray' };
+          return { text: algo, color: 'cyan' };
         }
-        if (typeof value === 'number') {
-          return ACCOUNT_TYPE[value] || { text: String(value), color: 'white' };
-        }
-        return { text: 'N/A', color: 'gray' };
+        return { text: String(algo), color: 'cyan' };
       };
-      const type1 = getTypeDisplay(acc1);
-      const type2 = acc2 ? getTypeDisplay(acc2) : null;
-      console.log(chalk.cyan('║') + fmtRow('Type:', chalk[type1.color](type1.text), col1) + chalk.cyan(sep) + (acc2 ? fmtRow('Type:', chalk[type2.color](type2.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+      const algo1 = getAlgorithmDisplay(acc1);
+      const algo2 = acc2 ? getAlgorithmDisplay(acc2) : null;
+      console.log(chalk.cyan('║') + fmtRow('Algorithm:', chalk[algo1.color](algo1.text), col1) + chalk.cyan(sep) + (acc2 ? fmtRow('Algorithm:', chalk[algo2.color](algo2.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
       if (i + 2 < allAccounts.length) {
         console.log(chalk.cyan('╠') + chalk.cyan('═'.repeat(col1)) + chalk.cyan('╪') + chalk.cyan('═'.repeat(col2)) + chalk.cyan('╣'));
