@@ -81,8 +81,11 @@ const showAccounts = async (service) => {
       } catch (e) {}
     }
     
-    spinner.succeed('ACCOUNTS LOADED');
-    console.log();
+    spinner.stop();
+    
+    // Clear and show banner again before displaying accounts
+    console.clear();
+    displayBanner();
 
     // Display accounts
     drawBoxHeader('TRADING ACCOUNTS', boxWidth);
