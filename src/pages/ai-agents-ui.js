@@ -239,7 +239,8 @@ const drawModelsTable = (provider, models, boxWidth) => {
 
 /**
  * Draw provider configuration window
- * @param {Object} provider - Provider object
+ * Shows connection options based on provider capabilities (OAuth and/or API Key)
+ * @param {Object} provider - Provider object with supportsOAuth and supportsApiKey flags
  * @param {Object} config - Current config
  * @param {number} boxWidth - Box width
  */
@@ -249,32 +250,47 @@ const drawProviderWindow = (provider, config, boxWidth) => {
   const col2Width = W - col1Width;
   const providerConfig = config.providers[provider.id] || {};
   
+  // Check provider capabilities (default to both if not specified)
+  const supportsOAuth = provider.supportsOAuth !== false;
+  const supportsApiKey = provider.supportsApiKey !== false;
+  
   // New rectangle (banner is always closed)
   console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
   console.log(chalk.cyan('║') + chalk[provider.color].bold(centerText(provider.name.toUpperCase(), W)) + chalk.cyan('║'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
-  // Options in 2 columns (centered)
-  const opt1 = '[1] CONNECT VIA PAID PLAN';
-  const opt2 = '[2] CONNECT VIA API KEY';
-  
-  const left1 = chalk.green(opt1);
-  const right1 = chalk.yellow(opt2);
-  const left1Len = visibleLength(left1);
-  const right1Len = visibleLength(right1);
-  const left1PadTotal = col1Width - left1Len;
-  const left1PadL = Math.floor(left1PadTotal / 2);
-  const left1PadR = left1PadTotal - left1PadL;
-  const right1PadTotal = col2Width - right1Len;
-  const right1PadL = Math.floor(right1PadTotal / 2);
-  const right1PadR = right1PadTotal - right1PadL;
-  
-  console.log(
-    chalk.cyan('║') +
-    ' '.repeat(left1PadL) + left1 + ' '.repeat(left1PadR) +
-    ' '.repeat(right1PadL) + right1 + ' '.repeat(right1PadR) +
-    chalk.cyan('║')
-  );
+  // Display connection options based on provider capabilities
+  if (supportsOAuth && supportsApiKey) {
+    // Both options: 2 columns
+    const opt1 = '[1] CONNECT VIA PAID PLAN';
+    const opt2 = '[2] CONNECT VIA API KEY';
+    
+    const left1 = chalk.green(opt1);
+    const right1 = chalk.yellow(opt2);
+    const left1Len = visibleLength(left1);
+    const right1Len = visibleLength(right1);
+    const left1PadTotal = col1Width - left1Len;
+    const left1PadL = Math.floor(left1PadTotal / 2);
+    const left1PadR = left1PadTotal - left1PadL;
+    const right1PadTotal = col2Width - right1Len;
+    const right1PadL = Math.floor(right1PadTotal / 2);
+    const right1PadR = right1PadTotal - right1PadL;
+    
+    console.log(
+      chalk.cyan('║') +
+      ' '.repeat(left1PadL) + left1 + ' '.repeat(left1PadR) +
+      ' '.repeat(right1PadL) + right1 + ' '.repeat(right1PadR) +
+      chalk.cyan('║')
+    );
+  } else if (supportsApiKey) {
+    // API Key only: centered single option
+    const opt = '[1] CONNECT VIA API KEY';
+    console.log(chalk.cyan('║') + chalk.yellow(centerText(opt, W)) + chalk.cyan('║'));
+  } else if (supportsOAuth) {
+    // OAuth only: centered single option
+    const opt = '[1] CONNECT VIA PAID PLAN';
+    console.log(chalk.cyan('║') + chalk.green(centerText(opt, W)) + chalk.cyan('║'));
+  }
   
   // Status bar
   console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));

@@ -15,6 +15,8 @@ const API_ENDPOINTS = {
   anthropic: 'https://api.anthropic.com/v1/models',
   openai: 'https://api.openai.com/v1/models',
   google: 'https://generativelanguage.googleapis.com/v1beta/models', // v1beta for Gemini 3
+  deepseek: 'https://api.deepseek.com/v1/models',
+  minimax: 'https://api.minimax.chat/v1/models',
   mistral: 'https://api.mistral.ai/v1/models',
   groq: 'https://api.groq.com/openai/v1/models',
   xai: 'https://api.x.ai/v1/models',
@@ -85,15 +87,16 @@ const getAuthHeaders = (providerId, apiKey) => {
     case 'anthropic':
       return { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' };
     case 'openai':
+    case 'deepseek':
+    case 'minimax':
     case 'groq':
     case 'xai':
     case 'perplexity':
     case 'openrouter':
+    case 'mistral':
       return { 'Authorization': `Bearer ${apiKey}` };
     case 'google':
       return {}; // Google uses query param
-    case 'mistral':
-      return { 'Authorization': `Bearer ${apiKey}` };
     default:
       return { 'Authorization': `Bearer ${apiKey}` };
   }
@@ -232,6 +235,27 @@ const parseModelsResponse = (providerId, data) => {
           .map(m => ({
             id: m.id,
             name: m.id
+          }));
+        break;
+      
+      case 'deepseek':
+        // DeepSeek format: { data: [{ id, ... }] } - OpenAI compatible
+        models = (data.data || [])
+          .filter(m => m.id && !shouldExcludeModel(m.id))
+          .filter(m => m.id.includes('deepseek'))
+          .map(m => ({
+            id: m.id,
+            name: m.id
+          }));
+        break;
+      
+      case 'minimax':
+        // MiniMax format: { data: [{ id, ... }] } or { models: [...] }
+        models = (data.data || data.models || [])
+          .filter(m => (m.id || m.model) && !shouldExcludeModel(m.id || m.model))
+          .map(m => ({
+            id: m.id || m.model,
+            name: m.id || m.model
           }));
         break;
       

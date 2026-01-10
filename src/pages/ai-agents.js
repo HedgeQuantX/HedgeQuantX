@@ -1,9 +1,4 @@
-/**
- * AI Agents Configuration Page
- * 
- * Allows users to configure AI providers for trading strategies.
- * Supports both CLIProxy (paid plans) and direct API keys.
- */
+/** AI Agents Configuration Page - CLIProxy (OAuth) + LLM Proxy (API Key) */
 
 const chalk = require('chalk');
 const os = require('os');
@@ -27,16 +22,24 @@ const clearWithBanner = () => {
 const CONFIG_DIR = path.join(os.homedir(), '.hqx');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'ai-config.json');
 
-// AI Providers list
+// AI Providers list with OAuth (paid plan) and API Key support
+// CLIProxyAPI (port 8317): OAuth for Anthropic, OpenAI, Google, Qwen, iFlow
+// LLM Proxy (port 8318): API Key for all providers via LiteLLM
 const AI_PROVIDERS = [
-  { id: 'anthropic', name: 'Anthropic (Claude)', color: 'magenta' },
-  { id: 'openai', name: 'OpenAI (GPT)', color: 'green' },
-  { id: 'google', name: 'Google (Gemini)', color: 'blue' },
-  { id: 'mistral', name: 'Mistral AI', color: 'yellow' },
-  { id: 'groq', name: 'Groq', color: 'cyan' },
-  { id: 'xai', name: 'xAI (Grok)', color: 'white' },
-  { id: 'perplexity', name: 'Perplexity', color: 'blue' },
-  { id: 'openrouter', name: 'OpenRouter', color: 'gray' },
+  // OAuth + API Key supported (can use paid plan OR API key)
+  { id: 'anthropic', name: 'Anthropic (Claude)', color: 'magenta', supportsOAuth: true, supportsApiKey: true },
+  { id: 'openai', name: 'OpenAI (GPT)', color: 'green', supportsOAuth: true, supportsApiKey: true },
+  { id: 'google', name: 'Google (Gemini)', color: 'blue', supportsOAuth: true, supportsApiKey: true },
+  { id: 'qwen', name: 'Qwen', color: 'cyan', supportsOAuth: true, supportsApiKey: true },
+  { id: 'iflow', name: 'iFlow (DeepSeek/GLM)', color: 'yellow', supportsOAuth: true, supportsApiKey: true },
+  // API Key only (no OAuth - uses LLM Proxy via LiteLLM)
+  { id: 'deepseek', name: 'DeepSeek', color: 'blue', supportsOAuth: false, supportsApiKey: true },
+  { id: 'minimax', name: 'MiniMax', color: 'magenta', supportsOAuth: false, supportsApiKey: true },
+  { id: 'mistral', name: 'Mistral AI', color: 'yellow', supportsOAuth: false, supportsApiKey: true },
+  { id: 'groq', name: 'Groq', color: 'cyan', supportsOAuth: false, supportsApiKey: true },
+  { id: 'xai', name: 'xAI (Grok)', color: 'white', supportsOAuth: false, supportsApiKey: true },
+  { id: 'perplexity', name: 'Perplexity', color: 'blue', supportsOAuth: false, supportsApiKey: true },
+  { id: 'openrouter', name: 'OpenRouter', color: 'gray', supportsOAuth: false, supportsApiKey: true },
 ];
 
 /** Load AI config from file */
@@ -342,6 +345,10 @@ const handleApiKeyConnection = async (provider, config) => {
 const handleProviderConfig = async (provider, config) => {
   const boxWidth = getLogoWidth();
   
+  // Check provider capabilities
+  const supportsOAuth = provider.supportsOAuth !== false;
+  const supportsApiKey = provider.supportsApiKey !== false;
+  
   while (true) {
     clearWithBanner();
     drawProviderWindow(provider, config, boxWidth);
@@ -360,11 +367,21 @@ const handleProviderConfig = async (provider, config) => {
     }
     
     if (choice === '1') {
-      await handleCliProxyConnection(provider, config, boxWidth);
+      if (supportsOAuth && supportsApiKey) {
+        // Both supported: [1] = OAuth via CLIProxy
+        await handleCliProxyConnection(provider, config, boxWidth);
+      } else if (supportsApiKey) {
+        // API Key only: [1] = API Key via LLM Proxy
+        await handleApiKeyConnection(provider, config);
+      } else if (supportsOAuth) {
+        // OAuth only: [1] = OAuth via CLIProxy
+        await handleCliProxyConnection(provider, config, boxWidth);
+      }
       continue;
     }
     
-    if (choice === '2') {
+    if (choice === '2' && supportsOAuth && supportsApiKey) {
+      // Only available when both are supported: [2] = API Key
       await handleApiKeyConnection(provider, config);
       continue;
     }
