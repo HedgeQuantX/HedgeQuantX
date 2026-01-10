@@ -111,9 +111,9 @@ const drawProvidersTable = (providers, config, boxWidth, showTest = false) => {
   // Find max name length across ALL providers for consistent alignment
   const maxNameLen = Math.max(...providers.map(p => p.name.length));
   
-  // Fixed format: "● [N] NAME" where ● is yellow if connected (has auth file)
-  // Total content width = 2 (● ) + 3 ([N]) + 1 (space) + maxNameLen
-  const contentWidth = 2 + 3 + 1 + maxNameLen;
+  // Fixed format: "● [XX] NAME" where XX is 2-digit padded number
+  // Total content width = 2 (● ) + 4 ([XX]) + 1 (space) + maxNameLen
+  const contentWidth = 2 + 4 + 1 + maxNameLen;
   const leftPad = Math.floor((colWidth - contentWidth) / 2);
   const rightPad = Math.floor(((W - colWidth) - contentWidth) / 2);
   
@@ -124,14 +124,14 @@ const drawProvidersTable = (providers, config, boxWidth, showTest = false) => {
     // Left column
     let leftCol = '';
     if (leftP) {
-      const num = row + 1;
+      const num = String(row + 1).padStart(2);
       // Show cyan dot if provider has auth file (connected via OAuth)
       const isConnected = connected[leftP.id] || config.providers[leftP.id]?.active;
       const status = isConnected ? chalk.cyan('● ') : '  ';
       const name = leftP.provider ? leftP.provider.name : leftP.name;
       const namePadded = name.toUpperCase().padEnd(maxNameLen);
       const content = status + chalk.yellow(`[${num}]`) + ' ' + chalk.cyan(namePadded);
-      const contentLen = 2 + 3 + 1 + maxNameLen;
+      const contentLen = 2 + 4 + 1 + maxNameLen;
       const padR = colWidth - leftPad - contentLen;
       leftCol = ' '.repeat(leftPad) + content + ' '.repeat(Math.max(0, padR));
     } else {
@@ -142,14 +142,14 @@ const drawProvidersTable = (providers, config, boxWidth, showTest = false) => {
     let rightCol = '';
     const rightColWidth = W - colWidth;
     if (rightP) {
-      const num = row + rows + 1;
+      const num = String(row + rows + 1).padStart(2);
       // Show cyan dot if provider has auth file (connected via OAuth)
       const isConnected = connected[rightP.id] || config.providers[rightP.id]?.active;
       const status = isConnected ? chalk.cyan('● ') : '  ';
       const name = rightP.provider ? rightP.provider.name : rightP.name;
       const namePadded = name.toUpperCase().padEnd(maxNameLen);
       const content = status + chalk.yellow(`[${num}]`) + ' ' + chalk.cyan(namePadded);
-      const contentLen = 2 + 3 + 1 + maxNameLen;
+      const contentLen = 2 + 4 + 1 + maxNameLen;
       const padR2 = rightColWidth - rightPad - contentLen;
       rightCol = ' '.repeat(rightPad) + content + ' '.repeat(Math.max(0, padR2));
     } else {
