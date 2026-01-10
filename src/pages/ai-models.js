@@ -9,11 +9,12 @@ const https = require('https');
 
 /**
  * API endpoints for fetching models
+ * Using beta endpoints where available for latest models
  */
 const API_ENDPOINTS = {
   anthropic: 'https://api.anthropic.com/v1/models',
   openai: 'https://api.openai.com/v1/models',
-  google: 'https://generativelanguage.googleapis.com/v1/models',
+  google: 'https://generativelanguage.googleapis.com/v1beta/models', // v1beta for Gemini 3
   mistral: 'https://api.mistral.ai/v1/models',
   groq: 'https://api.groq.com/openai/v1/models',
   xai: 'https://api.x.ai/v1/models',
@@ -99,65 +100,202 @@ const getAuthHeaders = (providerId, apiKey) => {
 };
 
 /**
- * Parse models response based on provider
+ * Excluded patterns - models NOT suitable for algo trading
+ * These are image, audio, embedding, moderation models
+ */
+const EXCLUDED_PATTERNS = [
+  'whisper', 'tts', 'dall-e', 'embedding', 'embed', 'moderation',
+  'image', 'vision', 'audio', 'speech', 'realtime', 'transcription',
+  'aqa', 'gecko', 'bison', 'learnlm'
+];
+
+/**
+ * Check if model should be excluded (not for algo trading)
+ * @param {string} modelId - Model ID
+ * @returns {boolean} True if should be excluded
+ */
+const shouldExcludeModel = (modelId) => {
+  const id = modelId.toLowerCase();
+  return EXCLUDED_PATTERNS.some(pattern => id.includes(pattern));
+};
+
+/**
+ * Extract version number from model ID for sorting
+ * @param {string} modelId - Model ID
+ * @returns {number} Version number (higher = newer)
+ */
+const extractVersion = (modelId) => {
+  const id = modelId.toLowerCase();
+  
+  // Gemini: gemini-3 > gemini-2.5 > gemini-2.0
+  const geminiMatch = id.match(/gemini-(\d+\.?\d*)/);
+  if (geminiMatch) return parseFloat(geminiMatch[1]) * 100;
+  
+  // Claude: opus-4.5 > opus-4 > sonnet-4 > haiku
+  if (id.includes('opus-4.5') || id.includes('opus-4-5')) return 450;
+  if (id.includes('opus-4.1') || id.includes('opus-4-1')) return 410;
+  if (id.includes('opus-4')) return 400;
+  if (id.includes('sonnet-4.5') || id.includes('sonnet-4-5')) return 350;
+  if (id.includes('sonnet-4')) return 340;
+  if (id.includes('haiku-4.5') || id.includes('haiku-4-5')) return 250;
+  if (id.includes('sonnet-3.7') || id.includes('3-7-sonnet')) return 237;
+  if (id.includes('sonnet-3.5') || id.includes('3-5-sonnet')) return 235;
+  if (id.includes('haiku-3.5') || id.includes('3-5-haiku')) return 135;
+  if (id.includes('opus')) return 300;
+  if (id.includes('sonnet')) return 200;
+  if (id.includes('haiku')) return 100;
+  
+  // GPT: gpt-4o > gpt-4-turbo > gpt-4 > gpt-3.5
+  if (id.includes('gpt-4o')) return 450;
+  if (id.includes('gpt-4-turbo')) return 420;
+  if (id.includes('gpt-4')) return 400;
+  if (id.includes('gpt-3.5')) return 350;
+  if (id.includes('o1')) return 500; // o1 reasoning models
+  if (id.includes('o3')) return 530; // o3 reasoning models
+  
+  // Mistral: large > medium > small
+  if (id.includes('large')) return 300;
+  if (id.includes('medium')) return 200;
+  if (id.includes('small') || id.includes('tiny')) return 100;
+  
+  // Default
+  return 50;
+};
+
+/**
+ * Get model tier for display (Pro/Flash/Lite)
+ * @param {string} modelId - Model ID
+ * @returns {number} Tier weight (higher = more powerful)
+ */
+const getModelTier = (modelId) => {
+  const id = modelId.toLowerCase();
+  if (id.includes('pro') || id.includes('opus') || id.includes('large')) return 30;
+  if (id.includes('flash') || id.includes('sonnet') || id.includes('medium')) return 20;
+  if (id.includes('lite') || id.includes('haiku') || id.includes('small')) return 10;
+  return 15;
+};
+
+/**
+ * Parse models response based on provider - filtered for algo trading
  * @param {string} providerId - Provider ID
  * @param {Object} data - API response data
- * @returns {Array} Parsed models list
+ * @returns {Array} Parsed and filtered models list
  */
 const parseModelsResponse = (providerId, data) => {
   if (!data) return [];
   
   try {
+    let models = [];
+    
     switch (providerId) {
       case 'anthropic':
         // Anthropic returns { data: [{ id, display_name, ... }] }
-        return (data.data || []).map(m => ({
-          id: m.id,
-          name: m.display_name || m.id
-        }));
+        models = (data.data || [])
+          .filter(m => m.id && !shouldExcludeModel(m.id))
+          .map(m => ({
+            id: m.id,
+            name: m.display_name || m.id
+          }));
+        break;
       
       case 'openai':
-      case 'groq':
-      case 'xai':
         // OpenAI format: { data: [{ id, ... }] }
-        return (data.data || [])
-          .filter(m => m.id && !m.id.includes('whisper') && !m.id.includes('tts') && !m.id.includes('dall-e'))
+        models = (data.data || [])
+          .filter(m => m.id && !shouldExcludeModel(m.id))
+          .filter(m => m.id.startsWith('gpt-') || m.id.startsWith('o1') || m.id.startsWith('o3'))
           .map(m => ({
             id: m.id,
             name: m.id
           }));
+        break;
       
       case 'google':
-        // Google format: { models: [{ name, displayName, ... }] }
-        return (data.models || []).map(m => ({
-          id: m.name?.replace('models/', '') || m.name,
-          name: m.displayName || m.name
-        }));
+        // Google format: { models: [{ name, displayName, supportedGenerationMethods }] }
+        models = (data.models || [])
+          .filter(m => {
+            const id = m.name?.replace('models/', '') || '';
+            // Only Gemini chat models
+            return id.startsWith('gemini-') && 
+                   !shouldExcludeModel(id) &&
+                   m.supportedGenerationMethods?.includes('generateContent');
+          })
+          .map(m => ({
+            id: m.name?.replace('models/', '') || m.name,
+            name: m.displayName || m.name
+          }));
+        break;
+      
+      case 'groq':
+        // Groq format: { data: [{ id, ... }] }
+        models = (data.data || [])
+          .filter(m => m.id && !shouldExcludeModel(m.id))
+          .map(m => ({
+            id: m.id,
+            name: m.id
+          }));
+        break;
+      
+      case 'xai':
+        // xAI format: { data: [{ id, ... }] }
+        models = (data.data || [])
+          .filter(m => m.id && !shouldExcludeModel(m.id))
+          .filter(m => m.id.includes('grok'))
+          .map(m => ({
+            id: m.id,
+            name: m.id
+          }));
+        break;
       
       case 'mistral':
         // Mistral format: { data: [{ id, ... }] }
-        return (data.data || []).map(m => ({
-          id: m.id,
-          name: m.id
-        }));
+        models = (data.data || [])
+          .filter(m => m.id && !shouldExcludeModel(m.id))
+          .map(m => ({
+            id: m.id,
+            name: m.id
+          }));
+        break;
       
       case 'perplexity':
         // Perplexity format varies
-        return (data.models || data.data || []).map(m => ({
-          id: m.id || m.model,
-          name: m.id || m.model
-        }));
+        models = (data.models || data.data || [])
+          .filter(m => (m.id || m.model) && !shouldExcludeModel(m.id || m.model))
+          .map(m => ({
+            id: m.id || m.model,
+            name: m.id || m.model
+          }));
+        break;
       
       case 'openrouter':
         // OpenRouter format: { data: [{ id, name, ... }] }
-        return (data.data || []).map(m => ({
-          id: m.id,
-          name: m.name || m.id
-        }));
+        // Filter to show only main providers' chat models
+        models = (data.data || [])
+          .filter(m => {
+            if (!m.id || shouldExcludeModel(m.id)) return false;
+            // Only keep major providers for trading
+            const validPrefixes = [
+              'anthropic/claude', 'openai/gpt', 'openai/o1', 'openai/o3',
+              'google/gemini', 'mistralai/', 'meta-llama/', 'x-ai/grok'
+            ];
+            return validPrefixes.some(p => m.id.startsWith(p));
+          })
+          .map(m => ({
+            id: m.id,
+            name: m.name || m.id
+          }));
+        break;
       
       default:
         return [];
     }
+    
+    // Sort by version (newest first), then by tier (most powerful first)
+    return models.sort((a, b) => {
+      const versionDiff = extractVersion(b.id) - extractVersion(a.id);
+      if (versionDiff !== 0) return versionDiff;
+      return getModelTier(b.id) - getModelTier(a.id);
+    });
+    
   } catch (error) {
     return [];
   }
