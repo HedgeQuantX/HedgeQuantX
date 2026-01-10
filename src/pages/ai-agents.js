@@ -439,13 +439,8 @@ const aiAgentsMenu = async () => {
   
   while (true) {
     clearWithBanner();
-    drawProvidersTable(AI_PROVIDERS, config, boxWidth);
-    
-    // Show [T] TEST option if agents are configured
     const agentCount = getActiveAgentCount();
-    if (agentCount > 0) {
-      console.log(chalk.cyan('  [T] TEST ALL CONNECTIONS'));
-    }
+    drawProvidersTable(AI_PROVIDERS, config, boxWidth, agentCount > 0);
     console.log();
     
     const promptText = agentCount > 0 ? 'SELECT (1-8/T/B): ' : 'SELECT (1-8/B): ';

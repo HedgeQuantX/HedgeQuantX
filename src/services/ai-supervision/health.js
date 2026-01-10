@@ -15,8 +15,8 @@ const cliproxy = require('../cliproxy');
 const TEST_PROMPT = `You are being tested. Respond ONLY with this exact JSON, nothing else:
 {"decision":"approve","confidence":100,"reason":"test-ok"}`;
 
-/** Timeout for agent response (agents should respond in < 1 second) */
-const AGENT_TIMEOUT = 2000;
+/** Timeout for agent response (increased for slower providers like Gemini) */
+const AGENT_TIMEOUT = 15000;
 
 /**
  * Check if CLIProxy is running and responding
@@ -211,19 +211,27 @@ const runPreflightCheck = async (agents) => {
 const formatPreflightResults = (results, boxWidth) => {
   const chalk = require('chalk');
   const lines = [];
-  const W = boxWidth - 2;
+  const W = boxWidth - 4; // Account for borders and padding
+  
+  // Helper to create dotted line with proper alignment
+  const dottedLine = (label, value, labelPad = 3) => {
+    const valueLen = value.replace(/\x1b\[[0-9;]*m/g, '').length; // Strip ANSI
+    const labelLen = label.length;
+    const dotsLen = W - labelPad - labelLen - valueLen - 1;
+    return ' '.repeat(labelPad) + chalk.white(label) + chalk.gray('.'.repeat(Math.max(3, dotsLen))) + value;
+  };
   
   // CLIProxy status
   if (results.cliproxy.success) {
-    lines.push(chalk.white('  CLIProxy Status') + chalk.gray('.'.repeat(Math.max(1, W - 35))) + chalk.green(' ✓ RUNNING'));
+    lines.push(dottedLine('CLIProxy Status', chalk.green('✓ RUNNING')));
   } else {
-    lines.push(chalk.white('  CLIProxy Status') + chalk.gray('.'.repeat(Math.max(1, W - 35))) + chalk.red(' ✗ NOT RUNNING'));
-    lines.push(chalk.red(`  Error: ${results.cliproxy.error}`));
+    lines.push(dottedLine('CLIProxy Status', chalk.red('✗ NOT RUNNING')));
+    lines.push(chalk.red(`   Error: ${results.cliproxy.error}`));
     return lines;
   }
   
   lines.push('');
-  lines.push(chalk.white(`  Testing ${results.summary.total} agent(s):`));
+  lines.push(chalk.white(`   Testing ${results.summary.total} agent(s):`));
   lines.push('');
   
   // Each agent
@@ -231,15 +239,15 @@ const formatPreflightResults = (results, boxWidth) => {
     const agent = results.agents[i];
     const num = `[${i + 1}/${results.summary.total}]`;
     
-    lines.push(chalk.cyan(`  ${num} ${agent.name} (${agent.modelId || agent.provider})`));
+    lines.push(chalk.cyan(`   ${num} ${agent.name} (${agent.modelId || agent.provider})`));
     
     if (agent.success) {
-      const latencyStr = `${agent.latency}ms`;
-      lines.push(chalk.gray('        Connection') + chalk.gray('.'.repeat(Math.max(1, W - 40))) + chalk.green(` ✓ OK ${latencyStr}`));
-      lines.push(chalk.gray('        Format') + chalk.gray('.'.repeat(Math.max(1, W - 36))) + chalk.green(' ✓ VALID'));
+      const latencyStr = `✓ OK ${agent.latency}ms`;
+      lines.push(dottedLine('Connection', chalk.green(latencyStr), 9));
+      lines.push(dottedLine('Format', chalk.green('✓ VALID'), 9));
     } else {
-      lines.push(chalk.gray('        Connection') + chalk.gray('.'.repeat(Math.max(1, W - 38))) + chalk.red(' ✗ FAILED'));
-      lines.push(chalk.red(`        Error: ${agent.error}`));
+      lines.push(dottedLine('Connection', chalk.red('✗ FAILED'), 9));
+      lines.push(chalk.red(`         Error: ${agent.error}`));
     }
     
     lines.push('');

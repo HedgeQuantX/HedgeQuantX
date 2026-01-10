@@ -92,8 +92,9 @@ const draw2ColRowCentered = (leftText, rightText, W) => {
  * @param {Array} providers - List of AI providers
  * @param {Object} config - Current config
  * @param {number} boxWidth - Box width
+ * @param {boolean} showTest - Show [T] TEST option
  */
-const drawProvidersTable = (providers, config, boxWidth) => {
+const drawProvidersTable = (providers, config, boxWidth, showTest = false) => {
   const W = boxWidth - 2;
   const colWidth = Math.floor(W / 2);
   
@@ -156,6 +157,12 @@ const drawProvidersTable = (providers, config, boxWidth) => {
     }
     
     console.log(chalk.cyan('║') + leftCol + rightCol + chalk.cyan('║'));
+  }
+  
+  // Show [T] TEST option if agents are configured
+  if (showTest) {
+    console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
+    console.log(chalk.cyan('║') + chalk.green(centerText('[T] TEST ALL CONNECTIONS', W)) + chalk.cyan('║'));
   }
   
   console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
@@ -322,11 +329,18 @@ const drawConnectionTest = async (agents, boxWidth, clearWithBanner) => {
   const results = await runPreflightCheck(agents);
   spinner.stop();
   
+  // Clear and redraw with results
+  clearWithBanner();
+  console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
+  console.log(chalk.cyan('║') + chalk.yellow.bold(centerText('AI AGENTS CONNECTION TEST', W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
+  
   // Display results
   const lines = formatPreflightResults(results, boxWidth);
   for (const line of lines) {
-    const paddedLine = line.length < W - 1 ? line + ' '.repeat(W - 1 - visibleLength(line)) : line;
-    console.log(chalk.cyan('║') + ' ' + paddedLine + chalk.cyan('║'));
+    const lineLen = visibleLength(line);
+    const padding = Math.max(0, W - lineLen);
+    console.log(chalk.cyan('║') + line + ' '.repeat(padding) + chalk.cyan('║'));
   }
   
   // Summary
