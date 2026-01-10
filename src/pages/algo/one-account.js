@@ -1,5 +1,6 @@
 /**
  * One Account Mode - HQX Ultra Scalping
+ * Supports multi-agent AI supervision
  */
 
 const chalk = require('chalk');
@@ -9,6 +10,8 @@ const { connections } = require('../../services');
 const { prompts } = require('../../utils');
 const { checkMarketHours } = require('../../services/rithmic/market');
 const { executeAlgo } = require('./algo-executor');
+const { getActiveAgentCount, getSupervisionConfig, getActiveAgents } = require('../ai-agents');
+const { runPreflightCheck, formatPreflightResults, getPreflightSummary } = require('../../services/ai-supervision');
 
 
 
@@ -75,11 +78,55 @@ const oneAccountMenu = async (service) => {
   const config = await configureAlgo(selectedAccount, contract);
   if (!config) return;
   
+  // Check for AI Supervision
+  const agentCount = getActiveAgentCount();
+  let supervisionConfig = null;
+  
+  if (agentCount > 0) {
+    console.log();
+    console.log(chalk.cyan(`  ${agentCount} AI Agent(s) available for supervision`));
+    const enableAI = await prompts.confirmPrompt('Enable AI Supervision?', true);
+    
+    if (enableAI) {
+      // Run pre-flight check - ALL agents must pass
+      console.log();
+      console.log(chalk.yellow('  Running AI pre-flight check...'));
+      console.log();
+      
+      const agents = getActiveAgents();
+      const preflightResults = await runPreflightCheck(agents);
+      
+      // Display results
+      const lines = formatPreflightResults(preflightResults, 60);
+      for (const line of lines) {
+        console.log(line);
+      }
+      
+      const summary = getPreflightSummary(preflightResults);
+      console.log();
+      console.log(`  ${summary.text}`);
+      console.log();
+      
+      if (!preflightResults.success) {
+        console.log(chalk.red('  Cannot start algo - fix agent connections first.'));
+        await prompts.waitForEnter();
+        return;
+      }
+      
+      supervisionConfig = getSupervisionConfig();
+      console.log(chalk.green(`  ✓ AI Supervision ready with ${agentCount} agent(s)`));
+      
+      const proceedWithAI = await prompts.confirmPrompt('Start algo with AI supervision?', true);
+      if (!proceedWithAI) return;
+    }
+  }
+  
   await executeAlgo({
     service: accountService,
     account: selectedAccount,
     contract,
-    config
+    config,
+    options: { supervisionConfig }
   });
 };
 

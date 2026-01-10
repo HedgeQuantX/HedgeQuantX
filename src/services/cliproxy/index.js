@@ -197,6 +197,36 @@ const chatCompletion = async (model, messages, options = {}) => {
   return { success: true, response: result.data, error: null };
 };
 
+/**
+ * Simple chat function for AI supervision
+ * @param {string} providerId - Provider ID (anthropic, openai, google, etc.)
+ * @param {string} modelId - Model ID
+ * @param {string} prompt - User prompt
+ * @param {number} timeout - Timeout in ms
+ * @returns {Promise<Object>} { success, content, error }
+ */
+const chat = async (providerId, modelId, prompt, timeout = 30000) => {
+  const messages = [{ role: 'user', content: prompt }];
+  
+  const result = await fetchLocal('/v1/chat/completions', 'POST', {
+    model: modelId,
+    messages,
+    stream: false
+  }, timeout);
+  
+  if (!result.success) {
+    return { success: false, content: null, error: result.error };
+  }
+  
+  // Extract content from response
+  const data = result.data;
+  if (data?.choices?.[0]?.message?.content) {
+    return { success: true, content: data.choices[0].message.content, error: null };
+  }
+  
+  return { success: false, content: null, error: 'No content in response' };
+};
+
 module.exports = {
   // Manager
   CLIPROXY_VERSION,
@@ -221,5 +251,6 @@ module.exports = {
   fetchModels,
   fetchProviderModels,
   getConnectedProviders,
-  chatCompletion
+  chatCompletion,
+  chat
 };

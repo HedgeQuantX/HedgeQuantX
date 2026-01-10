@@ -14,7 +14,7 @@ const ora = require('ora');
 const { getLogoWidth, displayBanner } = require('../ui');
 const { prompts } = require('../utils');
 const { fetchModelsFromApi } = require('./ai-models');
-const { drawProvidersTable, drawModelsTable, drawProviderWindow } = require('./ai-agents-ui');
+const { drawProvidersTable, drawModelsTable, drawProviderWindow, drawConnectionTest } = require('./ai-agents-ui');
 const cliproxy = require('../services/cliproxy');
 
 /** Clear screen and show banner (always closed) */
@@ -102,70 +102,46 @@ const activateProvider = (config, providerId, data) => {
 };
 
 /** Wait for child process to exit */
-const waitForProcessExit = (childProcess, timeoutMs = 15000, intervalMs = 500) => {
-  return new Promise((resolve) => {
-    if (!childProcess) return resolve();
-    let elapsed = 0;
-    const checkInterval = setInterval(() => {
-      elapsed += intervalMs;
-      if (childProcess.exitCode !== null || childProcess.killed || elapsed >= timeoutMs) {
-        clearInterval(checkInterval);
-        if (elapsed >= timeoutMs) try { childProcess.kill(); } catch (e) { /* ignore */ }
-        resolve();
-      }
-    }, intervalMs);
-  });
-};
+const waitForProcessExit = (cp, timeoutMs = 15000, intervalMs = 500) => new Promise((resolve) => {
+  if (!cp) return resolve();
+  let elapsed = 0;
+  const check = setInterval(() => {
+    elapsed += intervalMs;
+    if (cp.exitCode !== null || cp.killed || elapsed >= timeoutMs) {
+      clearInterval(check);
+      if (elapsed >= timeoutMs) try { cp.kill(); } catch (e) {}
+      resolve();
+    }
+  }, intervalMs);
+});
 
 /** Handle CLIProxy connection (with auto-install) */
 const handleCliProxyConnection = async (provider, config, boxWidth) => {
   console.log();
-  
-  // Check if CLIProxyAPI is installed
+  // Check/install CLIProxyAPI
   if (!cliproxy.isInstalled()) {
     console.log(chalk.yellow('  CLIPROXYAPI NOT INSTALLED. INSTALLING...'));
-    const spinner = ora({ text: 'DOWNLOADING CLIPROXYAPI...', color: 'yellow' }).start();
-    
-    const installResult = await cliproxy.install((msg, percent) => {
-      spinner.text = `${msg.toUpperCase()} ${percent}%`;
-    });
-    
-    if (!installResult.success) {
-      spinner.fail(`INSTALLATION FAILED: ${installResult.error.toUpperCase()}`);
-      await prompts.waitForEnter();
-      return false;
-    }
+    const spinner = ora({ text: 'DOWNLOADING...', color: 'yellow' }).start();
+    const installResult = await cliproxy.install((msg, percent) => { spinner.text = `${msg.toUpperCase()} ${percent}%`; });
+    if (!installResult.success) { spinner.fail(`INSTALL FAILED: ${installResult.error}`); await prompts.waitForEnter(); return false; }
     spinner.succeed('CLIPROXYAPI INSTALLED');
   }
-  
-  // Check if running, start if not (or restart if config missing)
+  // Check/start CLIProxy
   let status = await cliproxy.isRunning();
   if (!status.running) {
     const spinner = ora({ text: 'STARTING CLIPROXYAPI...', color: 'yellow' }).start();
     const startResult = await cliproxy.start();
-    
-    if (!startResult.success) {
-      spinner.fail(`FAILED TO START: ${startResult.error.toUpperCase()}`);
-      await prompts.waitForEnter();
-      return false;
-    }
+    if (!startResult.success) { spinner.fail(`START FAILED: ${startResult.error}`); await prompts.waitForEnter(); return false; }
     spinner.succeed('CLIPROXYAPI STARTED');
   } else {
-    // Running, but check if config exists (for proper API key auth)
-    const configPath = require('path').join(require('os').homedir(), '.hqx', 'cliproxy', 'config.yaml');
-    if (!require('fs').existsSync(configPath)) {
-      console.log(chalk.yellow('  RESTARTING CLIPROXYAPI WITH PROPER CONFIG...'));
+    const cfgPath = path.join(os.homedir(), '.hqx', 'cliproxy', 'config.yaml');
+    if (!fs.existsSync(cfgPath)) {
+      console.log(chalk.yellow('  RESTARTING CLIPROXYAPI...'));
       await cliproxy.stop();
-      const startResult = await cliproxy.start();
-      if (!startResult.success) {
-        console.log(chalk.red(`  FAILED TO RESTART: ${startResult.error.toUpperCase()}`));
-        await prompts.waitForEnter();
-        return false;
-      }
-      console.log(chalk.green('  ✓ CLIPROXYAPI RESTARTED'));
-    } else {
-      console.log(chalk.green('  ✓ CLIPROXYAPI IS RUNNING'));
-    }
+      const res = await cliproxy.start();
+      if (!res.success) { console.log(chalk.red(`  RESTART FAILED: ${res.error}`)); await prompts.waitForEnter(); return false; }
+      console.log(chalk.green('  ✓ RESTARTED'));
+    } else console.log(chalk.green('  ✓ CLIPROXYAPI RUNNING'));
   }
   
   // First, check if models are already available (existing auth)
@@ -397,7 +373,7 @@ const handleProviderConfig = async (provider, config) => {
   return config;
 };
 
-/** Get active AI provider config */
+/** Get active AI provider config (legacy - single provider) */
 const getActiveProvider = () => {
   const config = loadConfig();
   for (const provider of AI_PROVIDERS) {
@@ -409,15 +385,52 @@ const getActiveProvider = () => {
         connectionType: pc.connectionType,
         apiKey: pc.apiKey || null,
         modelId: pc.modelId || null,
-        modelName: pc.modelName || null
+        modelName: pc.modelName || null,
+        weight: pc.weight || 100
       };
     }
   }
   return null;
 };
 
+/** Get ALL active AI agents for multi-agent supervision */
+const getActiveAgents = () => {
+  const config = loadConfig();
+  const agents = [];
+  
+  for (const provider of AI_PROVIDERS) {
+    const pc = config.providers[provider.id];
+    if (pc && pc.active) {
+      agents.push({
+        id: `agent-${provider.id}`,
+        provider: provider.id,
+        name: provider.name,
+        connectionType: pc.connectionType,
+        apiKey: pc.apiKey || null,
+        modelId: pc.modelId || null,
+        modelName: pc.modelName || null,
+        weight: pc.weight || Math.floor(100 / AI_PROVIDERS.filter(p => config.providers[p.id]?.active).length),
+        active: true
+      });
+    }
+  }
+  
+  return agents;
+};
+
+/** Get supervision config for SupervisionEngine */
+const getSupervisionConfig = () => {
+  const agents = getActiveAgents();
+  return {
+    supervisionEnabled: agents.length > 0,
+    agents,
+    minAgents: 1,
+    timeout: 30000
+  };
+};
+
 /** Count active AI agents */
-const getActiveAgentCount = () => getActiveProvider() ? 1 : 0;
+const getActiveAgentCount = () => getActiveAgents().length;
 
 /** Main AI Agents menu */
 const aiAgentsMenu = async () => {
@@ -428,10 +441,25 @@ const aiAgentsMenu = async () => {
     clearWithBanner();
     drawProvidersTable(AI_PROVIDERS, config, boxWidth);
     
-    const input = await prompts.textInput(chalk.cyan('SELECT (1-8/B): '));
+    // Show [T] TEST option if agents are configured
+    const agentCount = getActiveAgentCount();
+    if (agentCount > 0) {
+      console.log(chalk.cyan('  [T] TEST ALL CONNECTIONS'));
+    }
+    console.log();
+    
+    const promptText = agentCount > 0 ? 'SELECT (1-8/T/B): ' : 'SELECT (1-8/B): ';
+    const input = await prompts.textInput(chalk.cyan(promptText));
     const choice = (input || '').toLowerCase().trim();
     
     if (choice === 'b' || choice === '') break;
+    
+    if (choice === 't' && agentCount > 0) {
+      const agents = getActiveAgents();
+      await drawConnectionTest(agents, boxWidth, clearWithBanner);
+      await prompts.waitForEnter();
+      continue;
+    }
     
     const num = parseInt(choice);
     if (!isNaN(num) && num >= 1 && num <= AI_PROVIDERS.length) {
@@ -447,6 +475,8 @@ const aiAgentsMenu = async () => {
 module.exports = {
   aiAgentsMenu,
   getActiveProvider,
+  getActiveAgents,
+  getSupervisionConfig,
   getActiveAgentCount,
   loadConfig,
   saveConfig,

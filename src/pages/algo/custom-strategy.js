@@ -12,8 +12,9 @@ const ora = require('ora');
 const { getLogoWidth, centerText, displayBanner } = require('../../ui');
 const { prompts } = require('../../utils');
 const { connections } = require('../../services');
-const { getActiveProvider } = require('../ai-agents');
+const { getActiveProvider, getActiveAgents } = require('../ai-agents');
 const cliproxy = require('../../services/cliproxy');
+const { runPreflightCheck, formatPreflightResults, getPreflightSummary } = require('../../services/ai-supervision');
 const { checkMarketHours } = require('../../services/rithmic/market');
 const { executeAlgo } = require('./algo-executor');
 
@@ -84,10 +85,34 @@ const customStrategyMenu = async (service) => {
   const showName = await prompts.confirmPrompt('Show account name?', false);
   if (showName === null) return;
   
-  // Step 4: AI Supervision
+  // Step 4: AI Supervision with Pre-flight Check
   console.log(chalk.cyan.bold('\n  STEP 4: AI SUPERVISION'));
   const aiSupervision = await prompts.confirmPrompt('Enable AI supervision during execution?', true);
   if (aiSupervision === null) return;
+  
+  if (aiSupervision) {
+    // Run pre-flight check - agent must pass
+    console.log();
+    console.log(chalk.yellow('  Running AI pre-flight check...'));
+    console.log();
+    
+    const agents = getActiveAgents();
+    const preflightResults = await runPreflightCheck(agents);
+    
+    const lines = formatPreflightResults(preflightResults, 60);
+    for (const line of lines) console.log(line);
+    
+    const summary = getPreflightSummary(preflightResults);
+    console.log();
+    console.log(`  ${summary.text}`);
+    console.log();
+    
+    if (!preflightResults.success) {
+      console.log(chalk.red('  Cannot start - fix agent connection first.'));
+      await prompts.waitForEnter();
+      return;
+    }
+  }
   
   const config = { account: selectedAccount, contract, contracts, dailyTarget, maxRisk, showName, aiSupervision, aiProvider };
   

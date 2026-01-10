@@ -5,8 +5,10 @@
  */
 
 const chalk = require('chalk');
+const ora = require('ora');
 const { centerText, visibleLength } = require('../ui');
 const cliproxy = require('../services/cliproxy');
+const { runPreflightCheck, formatPreflightResults, getPreflightSummary } = require('../services/ai-supervision');
 
 /**
  * Draw a 2-column row with perfect alignment
@@ -294,10 +296,53 @@ const drawProviderWindow = (provider, config, boxWidth) => {
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
 };
 
+/**
+ * Draw and run connection test for all agents
+ * @param {Array} agents - Array of agent configs
+ * @param {number} boxWidth - Box width
+ * @param {Function} clearWithBanner - Function to clear and show banner
+ * @returns {Promise<Object>} Test results
+ */
+const drawConnectionTest = async (agents, boxWidth, clearWithBanner) => {
+  if (agents.length === 0) {
+    console.log(chalk.yellow('\n  No agents configured. Connect an agent first.'));
+    return { success: false, error: 'No agents' };
+  }
+  
+  clearWithBanner();
+  const W = boxWidth - 2;
+  
+  console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
+  console.log(chalk.cyan('║') + chalk.yellow.bold(centerText('AI AGENTS CONNECTION TEST', W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
+  console.log(chalk.cyan('║') + ' '.repeat(W) + chalk.cyan('║'));
+  
+  // Run pre-flight check
+  const spinner = ora({ text: 'Testing connections...', color: 'yellow' }).start();
+  const results = await runPreflightCheck(agents);
+  spinner.stop();
+  
+  // Display results
+  const lines = formatPreflightResults(results, boxWidth);
+  for (const line of lines) {
+    const paddedLine = line.length < W - 1 ? line + ' '.repeat(W - 1 - visibleLength(line)) : line;
+    console.log(chalk.cyan('║') + ' ' + paddedLine + chalk.cyan('║'));
+  }
+  
+  // Summary
+  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
+  const summary = getPreflightSummary(results);
+  console.log(chalk.cyan('║') + centerText(summary.text, W) + chalk.cyan('║'));
+  console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
+  
+  return results;
+};
+
 module.exports = {
   draw2ColRow,
   draw2ColTable,
   drawProvidersTable,
   drawModelsTable,
-  drawProviderWindow
+  drawProviderWindow,
+  drawConnectionTest
 };
