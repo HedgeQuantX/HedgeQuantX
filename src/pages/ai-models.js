@@ -2,27 +2,36 @@
  * AI Models - Fetch from provider APIs
  * 
  * Models are fetched dynamically from each provider's API.
- * No hardcoded model lists - data comes from real APIs only.
+ * Exception: MiniMax (no /models API) - see RULES.md for details.
  */
 
 const https = require('https');
 
 /**
  * API endpoints for fetching models
- * Using beta endpoints where available for latest models
+ * null = provider doesn't have /models endpoint
  */
 const API_ENDPOINTS = {
   anthropic: 'https://api.anthropic.com/v1/models',
   openai: 'https://api.openai.com/v1/models',
-  google: 'https://generativelanguage.googleapis.com/v1beta/models', // v1beta for Gemini 3
-  deepseek: 'https://api.deepseek.com/v1/models',
-  minimax: 'https://api.minimax.chat/v1/models',
+  google: 'https://generativelanguage.googleapis.com/v1beta/models',
+  minimax: null, // No /models API - uses MINIMAX_MODELS (see RULES.md exception)
   mistral: 'https://api.mistral.ai/v1/models',
   groq: 'https://api.groq.com/openai/v1/models',
   xai: 'https://api.x.ai/v1/models',
-  perplexity: 'https://api.perplexity.ai/models',
   openrouter: 'https://openrouter.ai/api/v1/models',
 };
+
+/**
+ * MiniMax Models - EXCEPTION to no-hardcode rule (see RULES.md)
+ * 
+ * MiniMax does not provide /models API endpoint.
+ * Confirmed by: OpenCode, Cursor, LiteLLM - all use hardcoded models.
+ * Source: https://platform.minimax.io/docs/api-reference/text-intro
+ */
+const MINIMAX_MODELS = [
+  { id: 'MiniMax-M2.1', name: 'MiniMax-M2.1' },
+];
 
 /**
  * Make HTTPS request
@@ -332,7 +341,13 @@ const parseModelsResponse = (providerId, data) => {
  * @returns {Promise<Object>} { success, models, error }
  */
 const fetchModelsFromApi = async (providerId, apiKey) => {
+  // MiniMax: no /models API, use hardcoded list (see RULES.md exception)
+  if (providerId === 'minimax') {
+    return { success: true, models: MINIMAX_MODELS, error: null };
+  }
+  
   const endpoint = API_ENDPOINTS[providerId];
+  
   if (!endpoint) {
     return { success: false, models: [], error: 'Unknown provider' };
   }

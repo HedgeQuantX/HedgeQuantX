@@ -68,6 +68,28 @@
 
 ---
 
+## Exceptions Documentées
+
+### MiniMax Models (hardcoded)
+
+MiniMax ne fournit **pas d'endpoint API `/models`** pour lister les modèles disponibles.
+Cette exception est documentée et justifiée par:
+
+**Preuves:**
+- Test API: `GET /v1/models` retourne 404
+- Documentation officielle MiniMax: https://platform.minimax.io/docs/api-reference/text-intro
+- MiniMax-MCP officiel n'a pas de `list_models`, seulement `list_voices`
+- OpenCode, Cursor, LiteLLM utilisent tous des modèles hardcodés pour MiniMax
+
+**Modèles hardcodés:**
+- `MiniMax-M2.1` (Coding Plan)
+
+**Validation de connexion:**
+Le test de connexion utilise `POST /v1/chat/completions` et vérifie que
+la réponse contient `"model": "MiniMax-M2.1"` pour confirmer le bon modèle.
+
+---
+
 ## Rappel
 
 > **LIRE ET RELIRE CES RÈGLES TOUT LE TEMPS**
