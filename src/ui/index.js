@@ -81,8 +81,8 @@ const displayBanner = () => {
  * Uses ANSI escape codes directly to avoid terminal state issues
  */
 const clearScreen = () => {
-  // ESC[2J = clear entire screen, ESC[H = move cursor to home
-  process.stdout.write('\x1B[2J\x1B[H');
+  // ESC[H = home, ESC[2J = clear screen, ESC[3J = clear scrollback
+  process.stdout.write('\x1B[H\x1B[2J\x1B[3J');
 };
 
 /**
