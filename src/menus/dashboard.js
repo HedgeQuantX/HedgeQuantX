@@ -244,9 +244,9 @@ const handleUpdate = async () => {
     console.log(chalk.green('\n  ✓ UPDATE SUCCESSFUL!'));
     console.log(chalk.yellow('\n  Please restart HQX to use the new version.'));
     console.log(chalk.cyan('  Run: hqx\n'));
-    await prompts.waitForEnter('Press Enter to exit...');
-    console.log();
-    process.exit(0);
+    await prompts.waitForEnter();
+    // Return to let the app exit naturally from the menu loop
+    return 'exit';
     
   } catch (error) {
     if (spinner) spinner.fail('UPDATE ERROR');

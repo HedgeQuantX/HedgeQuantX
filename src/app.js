@@ -320,7 +320,10 @@ const run = async () => {
               break;
 
             case 'update':
-              await handleUpdate();
+              const updateResult = await handleUpdate();
+              if (updateResult === 'exit') {
+                running = false;
+              }
               break;
 
             case 'disconnect':
