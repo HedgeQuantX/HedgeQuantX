@@ -56,83 +56,59 @@ const API_CHAT_ENDPOINTS = {
  * @param {Object} agent - Agent config
  * @returns {Promise<Object>} { success, latency, formatValid, error }
  */
-const testApiKeyConnection = (agent) => {
-  return new Promise((resolve) => {
-    const startTime = Date.now();
-    const endpoint = API_CHAT_ENDPOINTS[agent.provider];
+const testApiKeyConnection = async (agent) => {
+  const startTime = Date.now();
+  const endpoint = API_CHAT_ENDPOINTS[agent.provider];
+  
+  if (!endpoint || !agent.apiKey) {
+    return { success: false, latency: 0, formatValid: false, error: 'Missing endpoint or API key' };
+  }
+  
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), AGENT_TIMEOUT);
     
-    if (!endpoint || !agent.apiKey) {
-      resolve({ success: false, latency: 0, formatValid: false, error: 'Missing endpoint or API key' });
-      return;
-    }
-    
-    const url = new URL(endpoint);
-    const body = JSON.stringify({
-      model: agent.modelId,
-      messages: [{ role: 'user', content: TEST_PROMPT }],
-      max_tokens: 100,
-      stream: false
-    });
-    
-    const options = {
-      hostname: url.hostname,
-      path: url.pathname,
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${agent.apiKey}`,
-        'Content-Length': Buffer.byteLength(body)
+        'Authorization': `Bearer ${agent.apiKey}`
       },
-      timeout: AGENT_TIMEOUT
-    };
-    
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        const latency = Date.now() - startTime;
-        try {
-          // Handle potential SSE format (data: {...}\n\ndata: {...})
-          let jsonData = data.trim();
-          if (jsonData.startsWith('data:')) {
-            // SSE format - extract last complete JSON
-            const lines = jsonData.split('\n').filter(l => l.startsWith('data:'));
-            const lastData = lines.filter(l => l !== 'data: [DONE]').pop();
-            if (lastData) jsonData = lastData.replace('data: ', '');
-          }
-          
-          const parsed = JSON.parse(jsonData);
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            const content = parsed.choices?.[0]?.message?.content || 
-                           parsed.choices?.[0]?.delta?.content || '';
-            const formatResult = validateResponseFormat(content);
-            resolve({
-              success: formatResult.valid,
-              latency,
-              formatValid: formatResult.valid,
-              error: formatResult.valid ? null : formatResult.error,
-              response: content
-            });
-          } else {
-            resolve({ success: false, latency, formatValid: false, 
-              error: parsed.error?.message || `HTTP ${res.statusCode}` });
-          }
-        } catch (e) {
-          resolve({ success: false, latency, formatValid: false, error: `Parse error: ${e.message}` });
-        }
-      });
+      body: JSON.stringify({
+        model: agent.modelId,
+        messages: [{ role: 'user', content: TEST_PROMPT }],
+        max_tokens: 100,
+        stream: false
+      }),
+      signal: controller.signal
     });
     
-    req.on('error', (e) => resolve({ 
-      success: false, latency: Date.now() - startTime, formatValid: false, error: e.message 
-    }));
-    req.on('timeout', () => { 
-      req.destroy(); 
-      resolve({ success: false, latency: AGENT_TIMEOUT, formatValid: false, error: 'Timeout' }); 
-    });
-    req.write(body);
-    req.end();
-  });
+    clearTimeout(timeoutId);
+    const latency = Date.now() - startTime;
+    
+    const data = await response.json();
+    
+    if (response.ok) {
+      const content = data.choices?.[0]?.message?.content || '';
+      const formatResult = validateResponseFormat(content);
+      return {
+        success: formatResult.valid,
+        latency,
+        formatValid: formatResult.valid,
+        error: formatResult.valid ? null : formatResult.error,
+        response: content
+      };
+    } else {
+      return { success: false, latency, formatValid: false, 
+        error: data.error?.message || `HTTP ${response.status}` };
+    }
+  } catch (e) {
+    const latency = Date.now() - startTime;
+    if (e.name === 'AbortError') {
+      return { success: false, latency: AGENT_TIMEOUT, formatValid: false, error: 'Timeout' };
+    }
+    return { success: false, latency, formatValid: false, error: e.message };
+  }
 };
 
 /**
