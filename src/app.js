@@ -30,7 +30,7 @@ let currentService = null;
 
 const restoreTerminal = () => {
   try {
-    process.stdout.write('\x1B[?1049l');
+    // Show cursor
     process.stdout.write('\x1B[?25h');
     if (process.stdin.isTTY && process.stdin.isRaw) {
       process.stdin.setRawMode(false);
