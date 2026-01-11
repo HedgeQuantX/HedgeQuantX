@@ -101,6 +101,7 @@ const refreshStats = async () => {
       balance: hasBalanceData ? totalBalance : null,
       pnl: hasPnlData ? totalPnl : null,
       pnlPercent: null,
+      agents: getActiveAgentCount(),
     });
   } catch (err) {
     log.warn('Failed to refresh stats', { error: err.message });
