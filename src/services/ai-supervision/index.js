@@ -14,6 +14,17 @@ const { runPreflightCheck, formatPreflightResults, getPreflightSummary } = requi
 const cliproxy = require('../cliproxy');
 
 /**
+ * API endpoints for direct API key providers
+ */
+const API_CHAT_ENDPOINTS = {
+  minimax: 'https://api.minimaxi.chat/v1/chat/completions',
+  deepseek: 'https://api.deepseek.com/v1/chat/completions',
+  mistral: 'https://api.mistral.ai/v1/chat/completions',
+  xai: 'https://api.x.ai/v1/chat/completions',
+  openrouter: 'https://openrouter.ai/api/v1/chat/completions',
+};
+
+/**
  * SupervisionEngine class - manages multi-agent supervision
  */
 class SupervisionEngine {
@@ -125,14 +136,53 @@ class SupervisionEngine {
 
   /**
    * Direct API call for API key connections
+   * Uses fetch API for direct HTTPS requests to provider endpoints
    */
   async callDirectAPI(agent, prompt) {
-    // This would be implemented per provider
-    // For now, return error to use CLIProxy instead
-    return {
-      success: false,
-      error: 'Direct API not implemented - use CLIProxy'
-    };
+    const endpoint = API_CHAT_ENDPOINTS[agent.provider];
+    
+    if (!endpoint) {
+      return { success: false, error: `No endpoint for provider: ${agent.provider}` };
+    }
+    
+    if (!agent.apiKey) {
+      return { success: false, error: 'Missing API key' };
+    }
+    
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+      
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${agent.apiKey}`
+        },
+        body: JSON.stringify({
+          model: agent.modelId,
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 500,
+          stream: false
+        }),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      const data = await response.json();
+      
+      if (response.ok) {
+        const content = data.choices?.[0]?.message?.content || '';
+        return { success: true, content, error: null };
+      } else {
+        return { success: false, error: data.error?.message || `HTTP ${response.status}` };
+      }
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        return { success: false, error: 'Timeout' };
+      }
+      return { success: false, error: e.message };
+    }
   }
 
   /**
