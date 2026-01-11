@@ -243,9 +243,9 @@ const handleUpdate = async () => {
     spinner.succeed(`UPDATED TO V${latestVersion}!`);
     console.log(chalk.green('\n  ✓ UPDATE SUCCESSFUL!'));
     console.log(chalk.yellow('\n  Please restart HQX to use the new version.'));
-    console.log(chalk.cyan('  Run: hqx'));
+    console.log(chalk.cyan('  Run: hqx\n'));
+    await prompts.waitForEnter('Press Enter to exit...');
     console.log();
-    await prompts.waitForEnter();
     process.exit(0);
     
   } catch (error) {
