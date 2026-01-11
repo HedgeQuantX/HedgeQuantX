@@ -5,7 +5,7 @@
  * before allowing algo trading with AI supervision.
  * 
  * Supports both connection types:
- * - CLIProxy (OAuth) for Anthropic, OpenAI, Google, Qwen, iFlow
+ * - HQX Connector (OAuth) for Anthropic, OpenAI, Google, Qwen, iFlow
  * - Direct API Key for MiniMax, DeepSeek, Mistral, xAI, OpenRouter
  */
 
@@ -34,7 +34,7 @@ const checkCliproxyRunning = async () => {
       return { success: true, latency, error: null };
     }
     
-    return { success: false, latency, error: 'CLIProxy not running' };
+    return { success: false, latency, error: 'HQX Connector not running' };
   } catch (error) {
     return { success: false, latency: Date.now() - startTime, error: error.message };
   }
@@ -275,7 +275,7 @@ const runPreflightCheck = async (agents) => {
         success: false,
         latency: 0,
         formatValid: false,
-        error: 'CLIProxy not running'
+        error: 'HQX Connector not running'
       });
       results.summary.failed++;
       continue;
@@ -327,9 +327,9 @@ const formatPreflightResults = (results, boxWidth) => {
   // CLIProxy status (only show if needed)
   if (results.needsCliproxy) {
     if (results.cliproxy.success) {
-      lines.push(dottedLine('CLIProxy Status', chalk.green('✓ RUNNING')));
+      lines.push(dottedLine('HQX Connector', chalk.green('✓ RUNNING')));
     } else {
-      lines.push(dottedLine('CLIProxy Status', chalk.red('✗ NOT RUNNING')));
+      lines.push(dottedLine('HQX Connector', chalk.red('✗ NOT RUNNING')));
     }
   }
   
@@ -371,7 +371,7 @@ const getPreflightSummary = (results) => {
   // Only show CLIProxy error if it was needed and failed
   if (results.needsCliproxy && !results.cliproxy.success) {
     return {
-      text: chalk.red('✗ CLIProxy not running - some agents cannot be verified'),
+      text: chalk.red('✗ HQX Connector not running - some agents cannot be verified'),
       success: false
     };
   }

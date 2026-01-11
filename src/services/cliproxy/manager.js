@@ -97,9 +97,9 @@ const install = async (onProgress = null) => {
     const archivePath = path.join(INSTALL_DIR, download.filename);
     
     // Download
-    if (onProgress) onProgress('Downloading CLIProxyAPI...', 0);
+    if (onProgress) onProgress('Downloading HQX Connector...', 0);
     await downloadFile(download.url, archivePath, (percent) => {
-      if (onProgress) onProgress('Downloading CLIProxyAPI...', percent);
+      if (onProgress) onProgress('Downloading HQX Connector...', percent);
     });
     
     // Extract
@@ -165,7 +165,7 @@ api-keys:
 /** Start CLIProxyAPI */
 const start = async () => {
   if (!isInstalled()) {
-    return { success: false, error: 'CLIProxyAPI not installed', pid: null };
+    return { success: false, error: 'HQX Connector not installed', pid: null };
   }
   
   const status = await isRunning();
@@ -204,7 +204,7 @@ const start = async () => {
       return { success: true, error: null, pid: child.pid };
     } else {
       // Read log for error details
-      let errorDetail = 'Failed to start CLIProxyAPI';
+      let errorDetail = 'Failed to start HQX Connector';
       if (fs.existsSync(logPath)) {
         const log = fs.readFileSync(logPath, 'utf8').slice(-500);
         if (log) errorDetail += `: ${log.split('\n').pop()}`;
@@ -274,13 +274,13 @@ const stop = async () => {
 /** Ensure CLIProxyAPI is installed and running */
 const ensureRunning = async (onProgress = null) => {
   if (!isInstalled()) {
-    if (onProgress) onProgress('Installing CLIProxyAPI...', 0);
+    if (onProgress) onProgress('Installing HQX Connector...', 0);
     const installResult = await install(onProgress);
     if (!installResult.success) return installResult;
   }
   const status = await isRunning();
   if (status.running) return { success: true, error: null };
-  if (onProgress) onProgress('Starting CLIProxyAPI...', 100);
+  if (onProgress) onProgress('Starting HQX Connector...', 100);
   return start();
 };
 

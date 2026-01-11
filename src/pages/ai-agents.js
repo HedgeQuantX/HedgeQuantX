@@ -1,4 +1,4 @@
-/** AI Agents Configuration Page - CLIProxy (OAuth) + LLM Proxy (API Key) */
+/** AI Agents Configuration Page - HQX Connector (OAuth) + API Key */
 
 const chalk = require('chalk');
 const os = require('os');
@@ -23,8 +23,8 @@ const CONFIG_DIR = path.join(os.homedir(), '.hqx');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'ai-config.json');
 
 // AI Providers list with OAuth (paid plan) and API Key support
-// CLIProxyAPI (port 8317): OAuth for Anthropic, OpenAI, Google, Qwen, iFlow
-// LLM Proxy (port 8318): API Key for all providers via LiteLLM
+// HQX Connector (port 8317): OAuth for Anthropic, OpenAI, Google, Qwen, iFlow
+// Direct API Key: For MiniMax, DeepSeek, Mistral, xAI, OpenRouter
 const AI_PROVIDERS = [
   // OAuth + API Key supported (can use paid plan OR API key)
   { id: 'anthropic', name: 'Anthropic (Claude)', color: 'magenta', supportsOAuth: true, supportsApiKey: true },
@@ -116,33 +116,33 @@ const waitForProcessExit = (cp, timeoutMs = 15000, intervalMs = 500) => new Prom
   }, intervalMs);
 });
 
-/** Handle CLIProxy connection (with auto-install) */
+/** Handle HQX Connector connection (with auto-install) */
 const handleCliProxyConnection = async (provider, config, boxWidth) => {
   console.log();
-  // Check/install CLIProxyAPI
+  // Check/install HQX Connector
   if (!cliproxy.isInstalled()) {
-    console.log(chalk.yellow('  CLIPROXYAPI NOT INSTALLED. INSTALLING...'));
+    console.log(chalk.yellow('  HQX CONNECTOR NOT INSTALLED. INSTALLING...'));
     const spinner = ora({ text: 'DOWNLOADING...', color: 'yellow' }).start();
     const installResult = await cliproxy.install((msg, percent) => { spinner.text = `${msg.toUpperCase()} ${percent}%`; });
     if (!installResult.success) { spinner.fail(`INSTALL FAILED: ${installResult.error}`); await prompts.waitForEnter(); return false; }
-    spinner.succeed('CLIPROXYAPI INSTALLED');
+    spinner.succeed('HQX CONNECTOR INSTALLED');
   }
-  // Check/start CLIProxy
+  // Check/start HQX Connector
   let status = await cliproxy.isRunning();
   if (!status.running) {
-    const spinner = ora({ text: 'STARTING CLIPROXYAPI...', color: 'yellow' }).start();
+    const spinner = ora({ text: 'STARTING HQX CONNECTOR...', color: 'yellow' }).start();
     const startResult = await cliproxy.start();
     if (!startResult.success) { spinner.fail(`START FAILED: ${startResult.error}`); await prompts.waitForEnter(); return false; }
-    spinner.succeed('CLIPROXYAPI STARTED');
+    spinner.succeed('HQX CONNECTOR STARTED');
   } else {
     const cfgPath = path.join(os.homedir(), '.hqx', 'cliproxy', 'config.yaml');
     if (!fs.existsSync(cfgPath)) {
-      console.log(chalk.yellow('  RESTARTING CLIPROXYAPI...'));
+      console.log(chalk.yellow('  RESTARTING HQX CONNECTOR...'));
       await cliproxy.stop();
       const res = await cliproxy.start();
       if (!res.success) { console.log(chalk.red(`  RESTART FAILED: ${res.error}`)); await prompts.waitForEnter(); return false; }
       console.log(chalk.green('  ✓ RESTARTED'));
-    } else console.log(chalk.green('  ✓ CLIPROXYAPI RUNNING'));
+    } else console.log(chalk.green('  ✓ HQX CONNECTOR RUNNING'));
   }
   
   // First, check if models are already available (existing auth)
