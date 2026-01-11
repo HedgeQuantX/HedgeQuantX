@@ -70,7 +70,8 @@ const testApiKeyConnection = (agent) => {
     const body = JSON.stringify({
       model: agent.modelId,
       messages: [{ role: 'user', content: TEST_PROMPT }],
-      max_tokens: 100
+      max_tokens: 100,
+      stream: false
     });
     
     const options = {
@@ -107,7 +108,7 @@ const testApiKeyConnection = (agent) => {
               error: parsed.error?.message || `HTTP ${res.statusCode}` });
           }
         } catch (e) {
-          resolve({ success: false, latency, formatValid: false, error: 'Invalid response' });
+          resolve({ success: false, latency, formatValid: false, error: `Parse error: ${e.message}` });
         }
       });
     });
