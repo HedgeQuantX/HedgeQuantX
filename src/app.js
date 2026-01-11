@@ -7,7 +7,7 @@ const chalk = require('chalk');
 const ora = require('ora');
 
 const { connections } = require('./services');
-const { getLogoWidth, centerText, prepareStdin } = require('./ui');
+const { getLogoWidth, centerText, prepareStdin, clearScreen } = require('./ui');
 const { logger, prompts } = require('./utils');
 const { setCachedStats, clearCachedStats } = require('./services/stats-cache');
 
@@ -110,7 +110,7 @@ const refreshStats = async () => {
 // ==================== BANNER ====================
 
 const banner = async () => {
-  console.clear();
+  clearScreen();
   
   const termWidth = process.stdout.columns || 100;
   const isMobile = termWidth < 60;

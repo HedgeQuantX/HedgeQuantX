@@ -8,7 +8,7 @@ const ora = require('ora');
 const { connections } = require('../services');
 const { RithmicService } = require('../services/rithmic');
 const { PROPFIRM_CHOICES } = require('../config');
-const { getLogoWidth, centerText, prepareStdin, displayBanner } = require('../ui');
+const { getLogoWidth, centerText, prepareStdin, displayBanner , clearScreen } = require('../ui');
 const { validateUsername, validatePassword } = require('../security');
 const { prompts } = require('../utils');
 
@@ -39,7 +39,7 @@ const loginPrompt = async (propfirmName) => {
  */
 const rithmicMenu = async () => {
   // Clear screen and show banner
-  console.clear();
+  clearScreen();
   displayBanner();
   
   const propfirms = PROPFIRM_CHOICES;

@@ -371,7 +371,7 @@ const renderSessionSummary = (stats, stopReason) => {
   const colR = W - colL - 1;
   const version = require('../../../package.json').version;
   
-  console.clear();
+  process.stdout.write('\x1B[2J\x1B[H');
   console.log();
   
   // Top border

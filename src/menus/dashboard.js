@@ -7,7 +7,7 @@ const ora = require('ora');
 const { execSync, spawn } = require('child_process');
 
 const { connections } = require('../services');
-const { getLogoWidth, centerText, prepareStdin, displayBanner } = require('../ui');
+const { getLogoWidth, centerText, prepareStdin, displayBanner, clearScreen } = require('../ui');
 const { getCachedStats } = require('../services/stats-cache');
 const { prompts } = require('../utils');
 
@@ -24,7 +24,7 @@ const dashboardMenu = async (service) => {
   }
   
   // Clear screen and show banner (always closed)
-  console.clear();
+  clearScreen();
   displayBanner();
   
   const boxWidth = getLogoWidth();
@@ -159,7 +159,7 @@ const dashboardMenu = async (service) => {
  * Handle update process
  */
 const handleUpdate = async () => {
-  console.clear();
+  clearScreen();
   displayBanner();
   prepareStdin();
   

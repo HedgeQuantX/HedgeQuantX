@@ -3,7 +3,7 @@
  */
 
 const chalk = require('chalk');
-const { getLogoWidth, centerText, displayBanner } = require('../../ui');
+const { getLogoWidth, centerText, displayBanner , clearScreen } = require('../../ui');
 const { logger, prompts } = require('../../utils');
 const { getActiveProvider } = require('../ai-agents');
 
@@ -21,7 +21,7 @@ const algoTradingMenu = async (service) => {
   
   try {
     // Clear screen and show banner
-    console.clear();
+    clearScreen();
     displayBanner();
     
     const boxWidth = getLogoWidth();

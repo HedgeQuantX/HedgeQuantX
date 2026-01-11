@@ -6,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const ora = require('ora');
 
-const { getLogoWidth, displayBanner } = require('../ui');
+const { getLogoWidth, displayBanner, clearScreen } = require('../ui');
 const { prompts } = require('../utils');
 const { fetchModelsFromApi } = require('./ai-models');
 const { drawProvidersTable, drawModelsTable, drawProviderWindow, drawConnectionTest } = require('./ai-agents-ui');
@@ -14,7 +14,7 @@ const cliproxy = require('../services/cliproxy');
 
 /** Clear screen and show banner (always closed) */
 const clearWithBanner = () => {
-  console.clear();
+  clearScreen();
   displayBanner();  // Banner always closed
 };
 

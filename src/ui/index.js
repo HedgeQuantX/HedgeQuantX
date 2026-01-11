@@ -77,6 +77,15 @@ const displayBanner = () => {
 };
 
 /**
+ * Clear screen without using alternate screen buffer
+ * Uses ANSI escape codes directly to avoid terminal state issues
+ */
+const clearScreen = () => {
+  // ESC[2J = clear entire screen, ESC[H = move cursor to home
+  process.stdout.write('\x1B[2J\x1B[H');
+};
+
+/**
  * Ensure stdin is ready for inquirer prompts
  * This fixes input leaking to bash after session restore or algo trading
  */
@@ -123,5 +132,7 @@ module.exports = {
   // Stdin
   prepareStdin,
   // Banner
-  displayBanner
+  displayBanner,
+  // Screen
+  clearScreen
 };

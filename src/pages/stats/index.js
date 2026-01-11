@@ -11,7 +11,7 @@ const ora = require('ora');
 
 const { connections } = require('../../services');
 const { prompts } = require('../../utils');
-const { displayBanner } = require('../../ui');
+const { displayBanner , clearScreen } = require('../../ui');
 const { aggregateStats, calculateDerivedMetrics, calculateQuantMetrics, calculateHQXScore } = require('./metrics');
 const { renderOverview, renderPnLMetrics, renderQuantMetrics, renderTradesHistory, renderHQXScore, renderNotice } = require('./display');
 const { renderEquityCurve } = require('./chart');
@@ -162,7 +162,7 @@ const aggregateAccountData = async (activeAccounts) => {
  */
 const showStats = async (service) => {
   // Clear screen and show banner
-  console.clear();
+  clearScreen();
   displayBanner();
   
   let spinner;
@@ -199,7 +199,7 @@ const showStats = async (service) => {
     spinner.stop();
     
     // Clear and show banner before displaying stats
-    console.clear();
+    clearScreen();
     displayBanner();
     
     // Calculate stats from API data

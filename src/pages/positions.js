@@ -7,7 +7,7 @@ const ora = require('ora');
 
 const { connections } = require('../services');
 const { ORDER_SIDE } = require('../config');
-const { getLogoWidth, drawBoxHeader, drawBoxFooter, drawBoxRow, drawBoxSeparator, displayBanner } = require('../ui');
+const { getLogoWidth, drawBoxHeader, drawBoxFooter, drawBoxRow, drawBoxSeparator, displayBanner, clearScreen } = require('../ui');
 const { prompts } = require('../utils');
 
 /**
@@ -15,7 +15,7 @@ const { prompts } = require('../utils');
  */
 const showPositions = async (service) => {
   // Clear screen and show banner
-  console.clear();
+  clearScreen();
   displayBanner();
   
   const boxWidth = getLogoWidth();

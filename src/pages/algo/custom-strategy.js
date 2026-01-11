@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const ora = require('ora');
 
-const { getLogoWidth, centerText, displayBanner } = require('../../ui');
+const { getLogoWidth, centerText, displayBanner , clearScreen } = require('../../ui');
 const { prompts } = require('../../utils');
 const { connections } = require('../../services');
 const { getActiveProvider, getActiveAgents } = require('../ai-agents');
@@ -155,7 +155,7 @@ const strategyChat = async (config, service) => {
   const { account, contract, contracts, dailyTarget, maxRisk, showName, aiSupervision, aiProvider } = config;
   const accountName = showName ? (account.accountName || account.rithmicAccountId || account.accountId) : 'HQX *****';
   
-  console.clear();
+  clearScreen();
   displayBanner();
   
   const W = getLogoWidth() - 2;

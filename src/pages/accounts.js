@@ -7,7 +7,7 @@ const ora = require('ora');
 
 const { connections } = require('../services');
 const { ACCOUNT_STATUS, ACCOUNT_TYPE } = require('../config');
-const { getLogoWidth, getColWidths, drawBoxHeader, drawBoxFooter, draw2ColHeader, visibleLength, displayBanner } = require('../ui');
+const { getLogoWidth, getColWidths, drawBoxHeader, drawBoxFooter, draw2ColHeader, visibleLength, displayBanner, clearScreen } = require('../ui');
 const { prompts } = require('../utils');
 
 /**
@@ -15,7 +15,7 @@ const { prompts } = require('../utils');
  */
 const showAccounts = async (service) => {
   // Clear screen and show banner
-  console.clear();
+  clearScreen();
   displayBanner();
   
   const boxWidth = getLogoWidth();
@@ -84,7 +84,7 @@ const showAccounts = async (service) => {
     spinner.stop();
     
     // Clear and show banner again before displaying accounts
-    console.clear();
+    clearScreen();
     displayBanner();
 
     // Display accounts
