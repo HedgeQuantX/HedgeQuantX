@@ -4,12 +4,13 @@
  * Verifies that AI agents are properly connected and responding
  * before allowing algo trading with AI supervision.
  * 
- * Two verification points:
- * 1. [T] TEST in AI Agents menu - manual verification
- * 2. Pre-check before algo launch - automatic verification
+ * Supports both connection types:
+ * - CLIProxy (OAuth) for Anthropic, OpenAI, Google, Qwen, iFlow
+ * - Direct API Key for MiniMax, DeepSeek, Mistral, xAI, OpenRouter
  */
 
 const cliproxy = require('../cliproxy');
+const https = require('https');
 
 /** Test prompt to verify agent understands directive format */
 const TEST_PROMPT = `You are being tested. Respond ONLY with this exact JSON, nothing else:
@@ -40,27 +41,104 @@ const checkCliproxyRunning = async () => {
 };
 
 /**
+ * API endpoints for direct API key providers
+ */
+const API_CHAT_ENDPOINTS = {
+  minimax: 'https://api.minimax.io/v1/chat/completions',
+  deepseek: 'https://api.deepseek.com/v1/chat/completions',
+  mistral: 'https://api.mistral.ai/v1/chat/completions',
+  xai: 'https://api.x.ai/v1/chat/completions',
+  openrouter: 'https://openrouter.ai/api/v1/chat/completions',
+};
+
+/**
+ * Test connection via direct API key
+ * @param {Object} agent - Agent config
+ * @returns {Promise<Object>} { success, latency, formatValid, error }
+ */
+const testApiKeyConnection = (agent) => {
+  return new Promise((resolve) => {
+    const startTime = Date.now();
+    const endpoint = API_CHAT_ENDPOINTS[agent.provider];
+    
+    if (!endpoint || !agent.apiKey) {
+      resolve({ success: false, latency: 0, formatValid: false, error: 'Missing endpoint or API key' });
+      return;
+    }
+    
+    const url = new URL(endpoint);
+    const body = JSON.stringify({
+      model: agent.modelId,
+      messages: [{ role: 'user', content: TEST_PROMPT }],
+      max_tokens: 100
+    });
+    
+    const options = {
+      hostname: url.hostname,
+      path: url.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${agent.apiKey}`,
+        'Content-Length': Buffer.byteLength(body)
+      },
+      timeout: AGENT_TIMEOUT
+    };
+    
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        const latency = Date.now() - startTime;
+        try {
+          const parsed = JSON.parse(data);
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            const content = parsed.choices?.[0]?.message?.content || '';
+            const formatResult = validateResponseFormat(content);
+            resolve({
+              success: formatResult.valid,
+              latency,
+              formatValid: formatResult.valid,
+              error: formatResult.valid ? null : formatResult.error,
+              response: content
+            });
+          } else {
+            resolve({ success: false, latency, formatValid: false, 
+              error: parsed.error?.message || `HTTP ${res.statusCode}` });
+          }
+        } catch (e) {
+          resolve({ success: false, latency, formatValid: false, error: 'Invalid response' });
+        }
+      });
+    });
+    
+    req.on('error', (e) => resolve({ 
+      success: false, latency: Date.now() - startTime, formatValid: false, error: e.message 
+    }));
+    req.on('timeout', () => { 
+      req.destroy(); 
+      resolve({ success: false, latency: AGENT_TIMEOUT, formatValid: false, error: 'Timeout' }); 
+    });
+    req.write(body);
+    req.end();
+  });
+};
+
+/**
  * Test a single agent connection and response format
- * @param {Object} agent - Agent config { id, provider, modelId, connectionType, ... }
+ * @param {Object} agent - Agent config { id, provider, modelId, connectionType, apiKey, ... }
  * @returns {Promise<Object>} { success, latency, formatValid, error }
  */
 const testAgentConnection = async (agent) => {
   const startTime = Date.now();
   
   try {
-    // Only test CLIProxy connections for now
-    if (agent.connectionType !== 'cliproxy') {
-      // For API key connections, we would need different logic
-      // For now, mark as needing CLIProxy
-      return {
-        success: false,
-        latency: 0,
-        formatValid: false,
-        error: 'Only CLIProxy connections supported for pre-check'
-      };
+    // Route based on connection type
+    if (agent.connectionType === 'apikey') {
+      return await testApiKeyConnection(agent);
     }
     
-    // Send test prompt with short timeout
+    // CLIProxy connection
     const result = await cliproxy.chat(agent.provider, agent.modelId, TEST_PROMPT, AGENT_TIMEOUT);
     const latency = Date.now() - startTime;
     
@@ -156,29 +234,53 @@ const validateResponseFormat = (content) => {
 /**
  * Run pre-flight check on all agents
  * @param {Array} agents - Array of agent configs
- * @returns {Promise<Object>} { success, cliproxy, agents, summary }
+ * @returns {Promise<Object>} { success, cliproxy, needsCliproxy, agents, summary }
  */
 const runPreflightCheck = async (agents) => {
   const results = {
     success: false,
     cliproxy: null,
+    needsCliproxy: false,
     agents: [],
     summary: { total: 0, passed: 0, failed: 0 }
   };
   
-  // Step 1: Check CLIProxy
-  results.cliproxy = await checkCliproxyRunning();
+  // Check if any agent needs CLIProxy (non-apikey connection)
+  results.needsCliproxy = agents.some(a => a.connectionType !== 'apikey');
   
-  if (!results.cliproxy.success) {
-    results.summary.total = agents.length;
-    results.summary.failed = agents.length;
-    return results;
+  // Step 1: Check CLIProxy only if needed
+  if (results.needsCliproxy) {
+    results.cliproxy = await checkCliproxyRunning();
+    if (!results.cliproxy.success) {
+      // Mark only CLIProxy agents as failed, still test API Key agents
+      results.summary.total = agents.length;
+    }
+  } else {
+    // No CLIProxy needed, mark as success
+    results.cliproxy = { success: true, latency: 0, error: null, notNeeded: true };
   }
   
   // Step 2: Test each agent
   results.summary.total = agents.length;
   
   for (const agent of agents) {
+    // Skip CLIProxy agents if CLIProxy is not running
+    if (agent.connectionType !== 'apikey' && !results.cliproxy.success) {
+      results.agents.push({
+        id: agent.id,
+        name: agent.name,
+        provider: agent.provider,
+        modelId: agent.modelId,
+        connectionType: agent.connectionType,
+        success: false,
+        latency: 0,
+        formatValid: false,
+        error: 'CLIProxy not running'
+      });
+      results.summary.failed++;
+      continue;
+    }
+    
     const agentResult = await testAgentConnection(agent);
     
     results.agents.push({
@@ -186,6 +288,7 @@ const runPreflightCheck = async (agents) => {
       name: agent.name,
       provider: agent.provider,
       modelId: agent.modelId,
+      connectionType: agent.connectionType,
       ...agentResult
     });
     
@@ -221,13 +324,13 @@ const formatPreflightResults = (results, boxWidth) => {
     return ' '.repeat(labelPad) + chalk.white(label) + chalk.gray('.'.repeat(Math.max(3, dotsLen))) + value;
   };
   
-  // CLIProxy status
-  if (results.cliproxy.success) {
-    lines.push(dottedLine('CLIProxy Status', chalk.green('✓ RUNNING')));
-  } else {
-    lines.push(dottedLine('CLIProxy Status', chalk.red('✗ NOT RUNNING')));
-    lines.push(chalk.red(`   Error: ${results.cliproxy.error}`));
-    return lines;
+  // CLIProxy status (only show if needed)
+  if (results.needsCliproxy) {
+    if (results.cliproxy.success) {
+      lines.push(dottedLine('CLIProxy Status', chalk.green('✓ RUNNING')));
+    } else {
+      lines.push(dottedLine('CLIProxy Status', chalk.red('✗ NOT RUNNING')));
+    }
   }
   
   lines.push('');
@@ -238,8 +341,9 @@ const formatPreflightResults = (results, boxWidth) => {
   for (let i = 0; i < results.agents.length; i++) {
     const agent = results.agents[i];
     const num = `[${i + 1}/${results.summary.total}]`;
+    const connType = agent.connectionType === 'apikey' ? 'API Key' : 'OAuth';
     
-    lines.push(chalk.cyan(`   ${num} ${agent.name} (${agent.modelId || agent.provider})`));
+    lines.push(chalk.cyan(`   ${num} ${agent.name} (${agent.modelId || agent.provider}) [${connType}]`));
     
     if (agent.success) {
       const latencyStr = `✓ OK ${agent.latency}ms`;
@@ -264,9 +368,10 @@ const formatPreflightResults = (results, boxWidth) => {
 const getPreflightSummary = (results) => {
   const chalk = require('chalk');
   
-  if (!results.cliproxy.success) {
+  // Only show CLIProxy error if it was needed and failed
+  if (results.needsCliproxy && !results.cliproxy.success) {
     return {
-      text: chalk.red('✗ CLIProxy not running - cannot verify agents'),
+      text: chalk.red('✗ CLIProxy not running - some agents cannot be verified'),
       success: false
     };
   }
