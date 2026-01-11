@@ -10,6 +10,7 @@ const { connections } = require('../services');
 const { getLogoWidth, centerText, prepareStdin, displayBanner, clearScreen } = require('../ui');
 const { getCachedStats } = require('../services/stats-cache');
 const { prompts } = require('../utils');
+const { getActiveAgentCount } = require('../pages/ai-agents');
 
 /**
  * Dashboard menu after login
@@ -61,8 +62,8 @@ const dashboardMenu = async (service) => {
     const balStr = statsInfo.balance !== null ? `$${statsInfo.balance.toLocaleString()}` : '--';
     const balColor = statsInfo.balance !== null ? chalk.green : chalk.gray;
     
-    // AI Agents status
-    const agentCount = statsInfo.agents || 0;
+    // AI Agents status - get fresh count, not from cache
+    const agentCount = getActiveAgentCount();
     const agentDisplay = agentCount > 0 ? 'ON' : 'OFF';
     const agentColor = agentCount > 0 ? chalk.green : chalk.red;
     
@@ -242,11 +243,11 @@ const handleUpdate = async () => {
     
     spinner.succeed(`UPDATED TO V${latestVersion}!`);
     console.log(chalk.green('\n  ✓ UPDATE SUCCESSFUL!'));
-    console.log(chalk.yellow('\n  Please restart HQX to use the new version.'));
-    console.log(chalk.cyan('  Run: hqx\n'));
-    await prompts.waitForEnter();
-    // Return to let the app exit naturally from the menu loop
-    return 'exit';
+    console.log(chalk.yellow('\n  Restarting HQX...'));
+    
+    // Small delay then exit - the user will run hqx again
+    await new Promise(r => setTimeout(r, 1500));
+    process.exit(0);
     
   } catch (error) {
     if (spinner) spinner.fail('UPDATE ERROR');
