@@ -334,18 +334,26 @@ const drawConnectionTest = async (agents, boxWidth, clearWithBanner) => {
   
   const W = boxWidth - 2;
   
-  // Show loading state with complete box (centered vertically and horizontally)
+  // Show loading state with spinner
   clearWithBanner();
   console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
   console.log(chalk.cyan('║') + chalk.yellow.bold(centerText('AI AGENTS CONNECTION TEST', W)) + chalk.cyan('║'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   console.log(chalk.cyan('║') + ' '.repeat(W) + chalk.cyan('║'));
-  console.log(chalk.cyan('║') + chalk.yellow(centerText('Testing connections... Please wait', W)) + chalk.cyan('║'));
-  console.log(chalk.cyan('║') + ' '.repeat(W) + chalk.cyan('║'));
-  console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
   
-  // Run pre-flight check (no spinner, box stays complete)
+  // Start spinner on the loading line
+  const spinnerText = 'Testing connections... Please wait';
+  const spinner = ora({
+    text: spinnerText,
+    spinner: 'dots',
+    color: 'yellow'
+  }).start();
+  
+  // Run pre-flight check
   const results = await runPreflightCheck(agents);
+  
+  // Stop spinner
+  spinner.stop();
   
   // Clear and redraw with results
   clearWithBanner();
