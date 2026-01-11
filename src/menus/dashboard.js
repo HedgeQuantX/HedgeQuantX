@@ -243,10 +243,7 @@ const handleUpdate = async () => {
     
     spinner.succeed(`UPDATED TO V${latestVersion}!`);
     console.log(chalk.green('\n  ✓ UPDATE SUCCESSFUL!'));
-    console.log(chalk.yellow('\n  Restarting HQX...'));
-    
-    // Small delay then exit - the user will run hqx again
-    await new Promise(r => setTimeout(r, 1500));
+    console.log(chalk.yellow('\n  Run ') + chalk.cyan('hqx') + chalk.yellow(' to start the new version.\n'));
     process.exit(0);
     
   } catch (error) {
