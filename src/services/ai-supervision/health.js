@@ -92,9 +92,19 @@ const testApiKeyConnection = (agent) => {
       res.on('end', () => {
         const latency = Date.now() - startTime;
         try {
-          const parsed = JSON.parse(data);
+          // Handle potential SSE format (data: {...}\n\ndata: {...})
+          let jsonData = data.trim();
+          if (jsonData.startsWith('data:')) {
+            // SSE format - extract last complete JSON
+            const lines = jsonData.split('\n').filter(l => l.startsWith('data:'));
+            const lastData = lines.filter(l => l !== 'data: [DONE]').pop();
+            if (lastData) jsonData = lastData.replace('data: ', '');
+          }
+          
+          const parsed = JSON.parse(jsonData);
           if (res.statusCode >= 200 && res.statusCode < 300) {
-            const content = parsed.choices?.[0]?.message?.content || '';
+            const content = parsed.choices?.[0]?.message?.content || 
+                           parsed.choices?.[0]?.delta?.content || '';
             const formatResult = validateResponseFormat(content);
             resolve({
               success: formatResult.valid,

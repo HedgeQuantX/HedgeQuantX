@@ -334,13 +334,13 @@ const drawConnectionTest = async (agents, boxWidth, clearWithBanner) => {
   
   const W = boxWidth - 2;
   
-  // Show loading state with complete box
+  // Show loading state with complete box (centered vertically and horizontally)
   clearWithBanner();
   console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
   console.log(chalk.cyan('║') + chalk.yellow.bold(centerText('AI AGENTS CONNECTION TEST', W)) + chalk.cyan('║'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
-  const loadingText = '   Testing connections... Please wait';
-  console.log(chalk.cyan('║') + chalk.yellow(loadingText) + ' '.repeat(W - loadingText.length) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + ' '.repeat(W) + chalk.cyan('║'));
+  console.log(chalk.cyan('║') + chalk.yellow(centerText('Testing connections... Please wait', W)) + chalk.cyan('║'));
   console.log(chalk.cyan('║') + ' '.repeat(W) + chalk.cyan('║'));
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
   
