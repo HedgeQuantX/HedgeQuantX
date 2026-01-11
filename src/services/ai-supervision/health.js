@@ -44,7 +44,7 @@ const checkCliproxyRunning = async () => {
  * API endpoints for direct API key providers
  */
 const API_CHAT_ENDPOINTS = {
-  minimax: 'https://api.minimax.io/v1/chat/completions',
+  minimax: 'https://api.minimaxi.chat/v1/chat/completions',
   deepseek: 'https://api.deepseek.com/v1/chat/completions',
   mistral: 'https://api.mistral.ai/v1/chat/completions',
   xai: 'https://api.x.ai/v1/chat/completions',
