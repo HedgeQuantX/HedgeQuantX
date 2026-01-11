@@ -16,8 +16,8 @@ const API_ENDPOINTS = {
   openai: 'https://api.openai.com/v1/models',
   google: 'https://generativelanguage.googleapis.com/v1beta/models',
   minimax: null, // No /models API - uses MINIMAX_MODELS (see RULES.md exception)
+  deepseek: 'https://api.deepseek.com/v1/models',
   mistral: 'https://api.mistral.ai/v1/models',
-  groq: 'https://api.groq.com/openai/v1/models',
   xai: 'https://api.x.ai/v1/models',
   openrouter: 'https://openrouter.ai/api/v1/models',
 };
@@ -98,9 +98,7 @@ const getAuthHeaders = (providerId, apiKey) => {
     case 'openai':
     case 'deepseek':
     case 'minimax':
-    case 'groq':
     case 'xai':
-    case 'perplexity':
     case 'openrouter':
     case 'mistral':
       return { 'Authorization': `Bearer ${apiKey}` };
@@ -234,16 +232,6 @@ const parseModelsResponse = (providerId, data) => {
           .map(m => ({
             id: m.name?.replace('models/', '') || m.name,
             name: m.displayName || m.name
-          }));
-        break;
-      
-      case 'groq':
-        // Groq format: { data: [{ id, ... }] }
-        models = (data.data || [])
-          .filter(m => m.id && !shouldExcludeModel(m.id))
-          .map(m => ({
-            id: m.id,
-            name: m.id
           }));
         break;
       

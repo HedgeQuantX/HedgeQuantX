@@ -34,8 +34,8 @@ const AI_PROVIDERS = [
   { id: 'iflow', name: 'iFlow (DeepSeek/GLM)', color: 'yellow', supportsOAuth: true, supportsApiKey: true },
   // API Key only (no OAuth - uses LLM Proxy via LiteLLM)
   { id: 'minimax', name: 'MiniMax', color: 'magenta', supportsOAuth: false, supportsApiKey: true },
+  { id: 'deepseek', name: 'DeepSeek', color: 'blue', supportsOAuth: false, supportsApiKey: true },
   { id: 'mistral', name: 'Mistral AI', color: 'yellow', supportsOAuth: false, supportsApiKey: true },
-  { id: 'groq', name: 'Groq', color: 'cyan', supportsOAuth: false, supportsApiKey: true },
   { id: 'xai', name: 'xAI (Grok)', color: 'white', supportsOAuth: false, supportsApiKey: true },
   { id: 'openrouter', name: 'OpenRouter', color: 'gray', supportsOAuth: false, supportsApiKey: true },
 ];
