@@ -10,23 +10,19 @@ let logoWidth = null;
 
 /**
  * Get logo width for consistent box sizing
+ * Fixed width of 98 to match HQX banner (logo 88 + X 8 + padding 2)
  * Adapts to terminal width for mobile devices
  */
 const getLogoWidth = () => {
-  const termWidth = process.stdout.columns || 80;
+  const termWidth = process.stdout.columns || 100;
   
   // Mobile: use terminal width
   if (termWidth < 60) {
     return Math.max(termWidth - 2, 40);
   }
   
-  // Desktop: use logo width
-  if (!logoWidth) {
-    const logoText = figlet.textSync('HEDGEQUANTX', { font: 'ANSI Shadow' });
-    const lines = logoText.split('\n').filter(line => line.trim().length > 0);
-    logoWidth = Math.max(...lines.map(line => line.length)) + 4;
-  }
-  return Math.min(logoWidth, termWidth - 2);
+  // Desktop: fixed width 98 to match banner
+  return Math.min(98, termWidth - 2);
 };
 
 /**
@@ -97,7 +93,7 @@ const drawBoxSeparator = (width) => {
 const printLogo = () => {
   const logoText = figlet.textSync('HEDGEQUANTX', { font: 'ANSI Shadow' });
   console.log(chalk.cyan(logoText));
-  console.log(chalk.gray.italic('  Prop Futures Algo Trading CLI'));
+  console.log(chalk.gray.italic('  PROP FUTURES ALGO TRADING CLI'));
   console.log();
 };
 

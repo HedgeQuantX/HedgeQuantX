@@ -7,13 +7,17 @@ const ora = require('ora');
 
 const { connections } = require('../services');
 const { ACCOUNT_STATUS, ACCOUNT_TYPE } = require('../config');
-const { getLogoWidth, getColWidths, drawBoxHeader, drawBoxFooter, draw2ColHeader, visibleLength, displayBanner } = require('../ui');
+const { getLogoWidth, getColWidths, drawBoxHeader, drawBoxFooter, draw2ColHeader, visibleLength, displayBanner, clearScreen } = require('../ui');
 const { prompts } = require('../utils');
 
 /**
  * Show all accounts
  */
 const showAccounts = async (service) => {
+  // Clear screen and show banner
+  clearScreen();
+  displayBanner();
+  
   const boxWidth = getLogoWidth();
   const { col1, col2 } = getColWidths(boxWidth);
 
@@ -28,13 +32,12 @@ const showAccounts = async (service) => {
   let spinner;
 
   try {
-    // Single spinner for loading (appears below the dashboard header)
-    spinner = ora({ text: 'Loading accounts...', color: 'yellow' }).start();
+    spinner = ora({ text: 'LOADING ACCOUNTS...', color: 'yellow' }).start();
     
     const allConns = connections.count() > 0 ? connections.getAll() : (service ? [{ service, propfirm: service.propfirm?.name || 'Unknown', type: 'single' }] : []);
     
     if (allConns.length === 0) {
-      spinner.fail('No connections found');
+      spinner.fail('NO CONNECTIONS FOUND');
       await prompts.waitForEnter();
       return;
     }
@@ -60,7 +63,7 @@ const showAccounts = async (service) => {
     }
 
     if (allAccounts.length === 0) {
-      spinner.fail('No accounts found');
+      spinner.fail('NO ACCOUNTS FOUND');
       await prompts.waitForEnter();
       return;
     }
@@ -78,8 +81,11 @@ const showAccounts = async (service) => {
       } catch (e) {}
     }
     
-    spinner.succeed('Accounts loaded');
-    console.log();
+    spinner.stop();
+    
+    // Clear and show banner again before displaying accounts
+    clearScreen();
+    displayBanner();
 
     // Display accounts
     drawBoxHeader('TRADING ACCOUNTS', boxWidth);
@@ -91,12 +97,20 @@ const showAccounts = async (service) => {
       const name1 = String(acc1.accountName || acc1.rithmicAccountId || acc1.accountId || `Account #${i + 1}`);
       const name2 = acc2 ? String(acc2.accountName || acc2.rithmicAccountId || acc2.accountId || `Account #${i + 2}`) : '';
 
-      draw2ColHeader(name1.substring(0, col1 - 4), name2 ? name2.substring(0, col2 - 4) : '', boxWidth);
+      // For single account, use full width; for pairs, use 2-column layout
+      const sep = acc2 ? '│' : '║';
+      const rightCol = acc2 ? col2 : col2;
+      
+      // Header row with account name(s)
+      const h1 = centerText(name1.substring(0, col1 - 4), col1);
+      const h2 = acc2 ? centerText(name2.substring(0, col2 - 4), col2) : ' '.repeat(col2);
+      console.log(chalk.cyan('║') + chalk.cyan.bold(h1) + chalk.cyan(sep) + chalk.cyan.bold(h2) + chalk.cyan('║'));
+      console.log(chalk.cyan('╠') + chalk.cyan('─'.repeat(col1)) + chalk.cyan(acc2 ? '┼' : '┼') + chalk.cyan('─'.repeat(col2)) + chalk.cyan('╣'));
 
       // PropFirm
       const pf1 = chalk.magenta(acc1.propfirm || 'Unknown');
       const pf2 = acc2 ? chalk.magenta(acc2.propfirm || 'Unknown') : '';
-      console.log(chalk.cyan('║') + fmtRow('PropFirm:', pf1, col1) + chalk.cyan('│') + (acc2 ? fmtRow('PropFirm:', pf2, col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('PropFirm:', pf1, col1) + chalk.cyan(sep) + (acc2 ? fmtRow('PropFirm:', pf2, col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
       // Balance
       const bal1 = acc1.balance;
@@ -105,7 +119,7 @@ const showAccounts = async (service) => {
       const balStr2 = bal2 !== null && bal2 !== undefined ? '$' + Number(bal2).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--';
       const balColor1 = bal1 === null || bal1 === undefined ? chalk.gray : (bal1 >= 0 ? chalk.green : chalk.red);
       const balColor2 = bal2 === null || bal2 === undefined ? chalk.gray : (bal2 >= 0 ? chalk.green : chalk.red);
-      console.log(chalk.cyan('║') + fmtRow('Balance:', balColor1(balStr1), col1) + chalk.cyan('│') + (acc2 ? fmtRow('Balance:', balColor2(balStr2), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('Balance:', balColor1(balStr1), col1) + chalk.cyan(sep) + (acc2 ? fmtRow('Balance:', balColor2(balStr2), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
       // P&L
       const pnl1 = acc1.profitAndLoss;
@@ -114,44 +128,41 @@ const showAccounts = async (service) => {
       const pnlStr2 = pnl2 !== null && pnl2 !== undefined ? (pnl2 >= 0 ? '+' : '') + '$' + Number(pnl2).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--';
       const pnlColor1 = pnl1 === null || pnl1 === undefined ? chalk.gray : (pnl1 >= 0 ? chalk.green : chalk.red);
       const pnlColor2 = pnl2 === null || pnl2 === undefined ? chalk.gray : (pnl2 >= 0 ? chalk.green : chalk.red);
-      console.log(chalk.cyan('║') + fmtRow('P&L:', pnlColor1(pnlStr1), col1) + chalk.cyan('│') + (acc2 ? fmtRow('P&L:', pnlColor2(pnlStr2), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+      console.log(chalk.cyan('║') + fmtRow('P&L:', pnlColor1(pnlStr1), col1) + chalk.cyan(sep) + (acc2 ? fmtRow('P&L:', pnlColor2(pnlStr2), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
-      // Status - handle both string from API and numeric lookup
-      const getStatusDisplay = (status) => {
-        if (!status && status !== 0) return { text: '--', color: 'gray' };
+      // Status - from Rithmic RMS API (field 154003), N/A if not available
+      const getStatusDisplay = (acc) => {
+        const status = acc.status;
+        if (status === null || status === undefined) return { text: 'N/A', color: 'gray' };
         if (typeof status === 'string') {
-          // Direct string from Rithmic API (e.g., "Active", "Disabled")
           const lowerStatus = status.toLowerCase();
           if (lowerStatus.includes('active') || lowerStatus.includes('open')) return { text: status, color: 'green' };
           if (lowerStatus.includes('disabled') || lowerStatus.includes('closed')) return { text: status, color: 'red' };
           if (lowerStatus.includes('halt')) return { text: status, color: 'red' };
           return { text: status, color: 'yellow' };
         }
-        return ACCOUNT_STATUS[status] || { text: 'Unknown', color: 'gray' };
+        return { text: String(status), color: 'yellow' };
       };
-      const status1 = getStatusDisplay(acc1.status);
-      const status2 = acc2 ? getStatusDisplay(acc2.status) : null;
-      console.log(chalk.cyan('║') + fmtRow('Status:', chalk[status1.color](status1.text), col1) + chalk.cyan('│') + (acc2 ? fmtRow('Status:', chalk[status2.color](status2.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+      const status1 = getStatusDisplay(acc1);
+      const status2 = acc2 ? getStatusDisplay(acc2) : null;
+      console.log(chalk.cyan('║') + fmtRow('Status:', chalk[status1.color](status1.text), col1) + chalk.cyan(sep) + (acc2 ? fmtRow('Status:', chalk[status2.color](status2.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
-      // Type/Algorithm - handle both string from API and numeric lookup
-      const getTypeDisplay = (type, algorithm) => {
-        // Prefer algorithm from RMS info if available
-        const value = algorithm || type;
-        if (!value && value !== 0) return { text: '--', color: 'gray' };
-        if (typeof value === 'string') {
-          // Direct string from Rithmic API
-          const lowerValue = value.toLowerCase();
-          if (lowerValue.includes('eval')) return { text: value, color: 'yellow' };
-          if (lowerValue.includes('live') || lowerValue.includes('funded')) return { text: value, color: 'green' };
-          if (lowerValue.includes('sim') || lowerValue.includes('demo')) return { text: value, color: 'gray' };
-          if (lowerValue.includes('express')) return { text: value, color: 'magenta' };
-          return { text: value, color: 'cyan' };
+      // Algorithm - from Rithmic RMS API (field 150142), N/A if not available
+      const getAlgorithmDisplay = (acc) => {
+        const algo = acc.algorithm;
+        if (algo === null || algo === undefined) return { text: 'N/A', color: 'gray' };
+        if (typeof algo === 'string') {
+          const lowerAlgo = algo.toLowerCase();
+          if (lowerAlgo.includes('eval')) return { text: algo, color: 'yellow' };
+          if (lowerAlgo.includes('live') || lowerAlgo.includes('funded')) return { text: algo, color: 'green' };
+          if (lowerAlgo.includes('sim') || lowerAlgo.includes('demo')) return { text: algo, color: 'gray' };
+          return { text: algo, color: 'cyan' };
         }
-        return ACCOUNT_TYPE[value] || { text: 'Unknown', color: 'white' };
+        return { text: String(algo), color: 'cyan' };
       };
-      const type1 = getTypeDisplay(acc1.type, acc1.algorithm);
-      const type2 = acc2 ? getTypeDisplay(acc2.type, acc2.algorithm) : null;
-      console.log(chalk.cyan('║') + fmtRow('Type:', chalk[type1.color](type1.text), col1) + chalk.cyan('│') + (acc2 ? fmtRow('Type:', chalk[type2.color](type2.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
+      const algo1 = getAlgorithmDisplay(acc1);
+      const algo2 = acc2 ? getAlgorithmDisplay(acc2) : null;
+      console.log(chalk.cyan('║') + fmtRow('Algorithm:', chalk[algo1.color](algo1.text), col1) + chalk.cyan(sep) + (acc2 ? fmtRow('Algorithm:', chalk[algo2.color](algo2.text), col2) : ' '.repeat(col2)) + chalk.cyan('║'));
 
       if (i + 2 < allAccounts.length) {
         console.log(chalk.cyan('╠') + chalk.cyan('═'.repeat(col1)) + chalk.cyan('╪') + chalk.cyan('═'.repeat(col2)) + chalk.cyan('╣'));
@@ -162,7 +173,7 @@ const showAccounts = async (service) => {
     console.log();
 
   } catch (error) {
-    if (spinner) spinner.fail('Error loading accounts: ' + error.message);
+    if (spinner) spinner.fail('ERROR LOADING ACCOUNTS: ' + error.message.toUpperCase());
   }
 
   await prompts.waitForEnter();

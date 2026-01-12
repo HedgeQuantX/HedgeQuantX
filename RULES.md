@@ -59,16 +59,16 @@
   cd /root/HQX-CLI && git log --oneline -1 && cd /home/hqx/HQX-CLI && git log --oneline -1
   ```
 - Si les commits sont **différents**, synchroniser AVANT de travailler
-- `/root/HQX-CLI` = version de développement (source de vérité)
-- `/home/hqx/HQX-CLI` = version utilisateur (doit être synchronisée)
-- **NE JAMAIS** travailler sur une version désynchronisée
+- `/home/hqx/HQX-CLI` = version de référence (source de vérité)
+- **NE JAMAIS** faire de git pull sans vérifier les conséquences
+- **NE JAMAIS** écraser les modifications locales
 
 ---
 
 ## Checklist Avant Modification
 
 - [ ] J'ai lu RULES.md en entier
-- [ ] J'ai vérifié la synchronisation `/root/HQX-CLI` ↔ `/home/hqx/HQX-CLI`
+- [ ] J'ai vérifié la synchronisation des repos (règle #8)
 - [ ] Ma modification n'utilise pas de mock data
 - [ ] Ma modification n'ajoute pas de simulation
 - [ ] Ma modification utilise uniquement des données API réelles
@@ -77,6 +77,28 @@
 - [ ] Le code a été testé et validé
 - [ ] Les imports/exports sont corrects
 - [ ] J'ai demandé l'autorisation pour les changements majeurs
+
+---
+
+## Exceptions Documentées
+
+### MiniMax Models (hardcoded)
+
+MiniMax ne fournit **pas d'endpoint API `/models`** pour lister les modèles disponibles.
+Cette exception est documentée et justifiée par:
+
+**Preuves:**
+- Test API: `GET /v1/models` retourne 404
+- Documentation officielle MiniMax: https://platform.minimax.io/docs/api-reference/text-intro
+- MiniMax-MCP officiel n'a pas de `list_models`, seulement `list_voices`
+- OpenCode, Cursor, LiteLLM utilisent tous des modèles hardcodés pour MiniMax
+
+**Modèles hardcodés:**
+- `MiniMax-M2.1` (Coding Plan)
+
+**Validation de connexion:**
+Le test de connexion utilise `POST /v1/chat/completions` et vérifie que
+la réponse contient `"model": "MiniMax-M2.1"` pour confirmer le bon modèle.
 
 ---
 

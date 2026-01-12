@@ -26,8 +26,7 @@ const {
 const { createBoxMenu } = require('./menu');
 
 /**
- * Display HQX Banner (without closing border)
- * Note: console.clear() is handled by app.js banner() to avoid terminal bugs
+ * Display HQX Banner - ALWAYS closed with bottom border
  */
 const displayBanner = () => {
   const termWidth = process.stdout.columns || 100;
@@ -70,8 +69,20 @@ const displayBanner = () => {
   }
   
   console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
-  const tagline = isMobile ? `HQX v${version}` : `Prop Futures Algo Trading  v${version}`;
-  console.log(chalk.cyan('║') + chalk.white(centerText(tagline, innerWidth)) + chalk.cyan('║'));
+  const tagline = isMobile ? `HQX V${version}` : `PROP FUTURES ALGO TRADING  V${version}`;
+  console.log(chalk.cyan('║') + chalk.yellow(centerText(tagline, innerWidth)) + chalk.cyan('║'));
+  
+  // ALWAYS close the banner
+  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
+};
+
+/**
+ * Clear screen without using alternate screen buffer
+ * Uses ANSI escape codes directly to avoid terminal state issues
+ */
+const clearScreen = () => {
+  // ESC[H = home, ESC[2J = clear screen, ESC[3J = clear scrollback
+  process.stdout.write('\x1B[H\x1B[2J\x1B[3J');
 };
 
 /**
@@ -121,5 +132,7 @@ module.exports = {
   // Stdin
   prepareStdin,
   // Banner
-  displayBanner
+  displayBanner,
+  // Screen
+  clearScreen
 };

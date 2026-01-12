@@ -7,7 +7,7 @@ const chalk = require('chalk');
 const ora = require('ora');
 
 const { connections } = require('./services');
-const { getLogoWidth, centerText, prepareStdin } = require('./ui');
+const { getLogoWidth, centerText, prepareStdin, clearScreen } = require('./ui');
 const { logger, prompts } = require('./utils');
 const { setCachedStats, clearCachedStats } = require('./services/stats-cache');
 
@@ -17,6 +17,7 @@ const log = logger.scope('App');
 const { showStats } = require('./pages/stats');
 const { showAccounts } = require('./pages/accounts');
 const { algoTradingMenu } = require('./pages/algo');
+const { aiAgentsMenu, getActiveAgentCount } = require('./pages/ai-agents');
 
 // Menus
 const { rithmicMenu, dashboardMenu, handleUpdate } = require('./menus');
@@ -29,7 +30,7 @@ let currentService = null;
 
 const restoreTerminal = () => {
   try {
-    process.stdout.write('\x1B[?1049l');
+    // Show cursor
     process.stdout.write('\x1B[?25h');
     if (process.stdin.isTTY && process.stdin.isRaw) {
       process.stdin.setRawMode(false);
@@ -41,7 +42,15 @@ const restoreTerminal = () => {
 };
 
 process.on('exit', restoreTerminal);
-process.on('SIGINT', () => { restoreTerminal(); process.exit(0); });
+process.on('SIGINT', () => { 
+  restoreTerminal();
+  // Draw bottom border before exit
+  const termWidth = process.stdout.columns || 100;
+  const boxWidth = termWidth < 60 ? Math.max(termWidth - 2, 40) : Math.max(getLogoWidth(), 98);
+  console.log(chalk.cyan('\n╚' + '═'.repeat(boxWidth - 2) + '╝'));
+  console.log(chalk.gray('GOODBYE!'));
+  process.exit(0);
+});
 process.on('SIGTERM', () => { restoreTerminal(); process.exit(0); });
 
 process.on('uncaughtException', (err) => {
@@ -92,6 +101,7 @@ const refreshStats = async () => {
       balance: hasBalanceData ? totalBalance : null,
       pnl: hasPnlData ? totalPnl : null,
       pnlPercent: null,
+      agents: getActiveAgentCount(),
     });
   } catch (err) {
     log.warn('Failed to refresh stats', { error: err.message });
@@ -101,7 +111,7 @@ const refreshStats = async () => {
 // ==================== BANNER ====================
 
 const banner = async () => {
-  console.clear();
+  clearScreen();
   
   const termWidth = process.stdout.columns || 100;
   const isMobile = termWidth < 60;
@@ -123,8 +133,11 @@ const banner = async () => {
 
   console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
   
-  const tagline = isMobile ? `HQX v${version}` : `Prop Futures Algo Trading  v${version}`;
-  console.log(chalk.cyan('║') + chalk.white(centerText(tagline, innerWidth)) + chalk.cyan('║'));
+  const tagline = isMobile ? `HQX V${version}` : `PROP FUTURES ALGO TRADING  V${version}`;
+  console.log(chalk.cyan('║') + chalk.yellow(centerText(tagline, innerWidth)) + chalk.cyan('║'));
+  
+  // ALWAYS close the banner
+  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
 };
 
 const getFullLogo = () => [
@@ -145,39 +158,37 @@ const getMobileLogo = () => [
   ['╚═╝  ╚═╝ ╚══▀▀═╝ ', '╚═╝  ╚═╝'],
 ];
 
-const bannerClosed = async () => {
-  await banner();
-  const termWidth = process.stdout.columns || 100;
-  const boxWidth = termWidth < 60 ? Math.max(termWidth - 2, 40) : Math.max(getLogoWidth(), 98);
-  console.log(chalk.cyan('╚' + '═'.repeat(boxWidth - 2) + '╝'));
-};
-
 // ==================== MAIN LOOP ====================
 
 const run = async () => {
   try {
     log.info('Starting HQX CLI');
-    await bannerClosed();
-
-    // Restore session
-    const spinner = ora({ text: 'Testing connections...', color: 'yellow' }).start();
+    
+    // First launch - show banner then try restore session
+    await banner();
+    
+    const spinner = ora({ text: 'LOADING DASHBOARD...', color: 'yellow' }).start();
+    
     const restored = await connections.restoreFromStorage();
 
     if (restored) {
-      spinner.succeed('Connected');
       currentService = connections.getAll()[0].service;
       await refreshStats();
+      // Store spinner globally - dashboard will stop it when ready to display
+      global.__hqxSpinner = spinner;
     } else {
-      spinner.info('No saved connections');
+      spinner.stop(); // Stop spinner - no session to restore
+      global.__hqxSpinner = null;
     }
 
     // Main loop
     while (true) {
       try {
         prepareStdin();
-        await banner();
 
         if (!connections.isConnected()) {
+          // Not connected - show banner + propfirm selection
+          await banner();
           // Not connected - show propfirm selection directly
           const boxWidth = getLogoWidth();
           const innerWidth = boxWidth - 2;
@@ -188,13 +199,14 @@ const run = async () => {
           
           // Find max name length for alignment
           const maxNameLen = Math.max(...numbered.map(n => n.name.length));
-          const colWidth = 4 + 1 + maxNameLen + 2; // [##] + space + name + gap
-          const totalContentWidth = numCols * colWidth;
-          const leftMargin = Math.max(2, Math.floor((innerWidth - totalContentWidth) / 2));
+          const itemWidth = 4 + 1 + maxNameLen; // [##] + space + name
+          const gap = 3; // gap between columns
+          const totalContentWidth = (itemWidth * numCols) + (gap * (numCols - 1));
           
-          console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+          // New rectangle (banner is always closed)
+          console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
           console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PROPFIRM', innerWidth)) + chalk.cyan('║'));
-          console.log(chalk.cyan('║') + ' '.repeat(innerWidth) + chalk.cyan('║'));
+          console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
           
           const rows = Math.ceil(numbered.length / numCols);
           for (let row = 0; row < rows; row++) {
@@ -211,29 +223,32 @@ const run = async () => {
               }
             }
             
-            let line = ' '.repeat(leftMargin);
+            // Build line content
+            let content = '';
             for (let i = 0; i < lineParts.length; i++) {
               if (lineParts[i]) {
-                line += chalk.cyan(lineParts[i].num) + ' ' + chalk.white(lineParts[i].name);
+                content += chalk.cyan(lineParts[i].num) + ' ' + chalk.white(lineParts[i].name);
               } else {
-                line += ' '.repeat(4 + 1 + maxNameLen);
+                content += ' '.repeat(itemWidth);
               }
-              if (i < lineParts.length - 1) line += '  ';
+              if (i < lineParts.length - 1) content += ' '.repeat(gap);
             }
             
-            const lineLen = line.replace(/\x1b\[[0-9;]*m/g, '').length;
-            const rightPad = Math.max(0, innerWidth - lineLen);
-            console.log(chalk.cyan('║') + line + ' '.repeat(rightPad) + chalk.cyan('║'));
+            // Center the content
+            const contentLen = content.replace(/\x1b\[[0-9;]*m/g, '').length;
+            const leftPad = Math.floor((innerWidth - contentLen) / 2);
+            const rightPad = innerWidth - contentLen - leftPad;
+            console.log(chalk.cyan('║') + ' '.repeat(leftPad) + content + ' '.repeat(rightPad) + chalk.cyan('║'));
           }
           
           console.log(chalk.cyan('╠' + '─'.repeat(innerWidth) + '╣'));
-          console.log(chalk.cyan('║') + chalk.red(centerText('[X] Exit', innerWidth)) + chalk.cyan('║'));
+          console.log(chalk.cyan('║') + chalk.red(centerText('[X] EXIT', innerWidth)) + chalk.cyan('║'));
           console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
           
-          const input = await prompts.textInput(chalk.cyan('Select number (or X):'));
+          const input = await prompts.textInput(chalk.cyan('SELECT (1-' + numbered.length + '/X): '));
           
           if (!input || input.toLowerCase() === 'x') {
-            console.log(chalk.gray('Goodbye!'));
+            console.log(chalk.gray('GOODBYE!'));
             process.exit(0);
           }
           
@@ -244,26 +259,26 @@ const run = async () => {
             const credentials = await loginPrompt(selectedPropfirm.name);
             
             if (credentials) {
-              const spinner = ora({ text: 'Connecting to Rithmic...', color: 'yellow' }).start();
+              const spinner = ora({ text: 'CONNECTING TO RITHMIC...', color: 'yellow' }).start();
               try {
                 const { RithmicService } = require('./services/rithmic');
                 const service = new RithmicService(selectedPropfirm.key);
                 const result = await service.login(credentials.username, credentials.password);
                 
                 if (result.success) {
-                  spinner.text = 'Fetching accounts...';
+                  spinner.text = 'FETCHING ACCOUNTS...';
                   const accResult = await service.getTradingAccounts();
                   connections.add('rithmic', service, service.propfirm.name);
-                  spinner.succeed(`Connected to ${service.propfirm.name} (${accResult.accounts?.length || 0} accounts)`);
+                  spinner.succeed(`CONNECTED TO ${service.propfirm.name.toUpperCase()} (${accResult.accounts?.length || 0} ACCOUNTS)`);
                   currentService = service;
                   await refreshStats();
                   await new Promise(r => setTimeout(r, 1500));
                 } else {
-                  spinner.fail(result.error || 'Authentication failed');
+                  spinner.fail((result.error || 'AUTHENTICATION FAILED').toUpperCase());
                   await new Promise(r => setTimeout(r, 2000));
                 }
               } catch (error) {
-                spinner.fail(`Connection error: ${error.message}`);
+                spinner.fail(`CONNECTION ERROR: ${error.message.toUpperCase()}`);
                 await new Promise(r => setTimeout(r, 2000));
               }
             }
@@ -296,13 +311,20 @@ const run = async () => {
               try {
                 await algoTradingMenu(currentService);
               } catch (err) {
-                console.log(chalk.red(`  Algo error: ${err.message}`));
+                console.log(chalk.red(`  ALGO ERROR: ${err.message.toUpperCase()}`));
                 prepareStdin();
               }
               break;
 
+            case 'aiagents':
+              await aiAgentsMenu();
+              break;
+
             case 'update':
-              await handleUpdate();
+              const updateResult = await handleUpdate();
+              if (updateResult === 'exit') {
+                running = false;
+              }
               break;
 
             case 'disconnect':

@@ -7,15 +7,26 @@ const ora = require('ora');
 const { execSync, spawn } = require('child_process');
 
 const { connections } = require('../services');
-const { getLogoWidth, centerText, prepareStdin } = require('../ui');
+const { getLogoWidth, centerText, prepareStdin, displayBanner, clearScreen } = require('../ui');
 const { getCachedStats } = require('../services/stats-cache');
 const { prompts } = require('../utils');
+const { getActiveAgentCount } = require('../pages/ai-agents');
 
 /**
  * Dashboard menu after login
  */
 const dashboardMenu = async (service) => {
   prepareStdin();
+  
+  // Stop any global spinner before clearing
+  if (global.__hqxSpinner) {
+    global.__hqxSpinner.stop();
+    global.__hqxSpinner = null;
+  }
+  
+  // Clear screen and show banner (always closed)
+  clearScreen();
+  displayBanner();
   
   const boxWidth = getLogoWidth();
   const W = boxWidth - 2;
@@ -30,9 +41,9 @@ const dashboardMenu = async (service) => {
     return chalk.cyan('║') + content + ' '.repeat(Math.max(0, padding)) + chalk.cyan('║');
   };
   
-  // Continue from banner (use ╠ not ╔)
-  console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
-  console.log(makeLine(chalk.yellow.bold('Welcome, HQX Trader!'), 'center'));
+  // New rectangle (banner is always closed)
+  console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
+  console.log(makeLine(chalk.yellow.bold('WELCOME, HQX TRADER!'), 'center'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
   // Show connected propfirms
@@ -51,8 +62,8 @@ const dashboardMenu = async (service) => {
     const balStr = statsInfo.balance !== null ? `$${statsInfo.balance.toLocaleString()}` : '--';
     const balColor = statsInfo.balance !== null ? chalk.green : chalk.gray;
     
-    // AI Agents status
-    const agentCount = statsInfo.agents || 0;
+    // AI Agents status - get fresh count, not from cache
+    const agentCount = getActiveAgentCount();
     const agentDisplay = agentCount > 0 ? 'ON' : 'OFF';
     const agentColor = agentCount > 0 ? chalk.green : chalk.red;
     
@@ -87,9 +98,9 @@ const dashboardMenu = async (service) => {
   
   // Find max width for alignment
   const menuItems = [
-    { left: '[1] View Accounts', right: '[2] View Stats' },
-    { left: '[+] Add Prop-Account', right: '[A] Algo-Trading' },
-    { left: '[U] Update HQX', right: '[X] Disconnect' },
+    { left: '[1] VIEW ACCOUNTS', right: '[2] VIEW STATS' },
+    { left: '[+] ADD PROP-ACCOUNT', right: '[A] ALGO-TRADING' },
+    { left: '[I] AI AGENTS', right: '[U] UPDATE HQX' },
   ];
   
   const maxLeftLen = Math.max(...menuItems.map(m => m.left.length));
@@ -119,20 +130,25 @@ const dashboardMenu = async (service) => {
     );
   };
   
-  menuRow('[1] View Accounts', '[2] View Stats', chalk.cyan, chalk.cyan);
-  menuRow('[+] Add Prop-Account', '[A] Algo-Trading', chalk.cyan, chalk.magenta);
-  menuRow('[U] Update HQX', '[X] Disconnect', chalk.yellow, chalk.red);
+  menuRow('[1] VIEW ACCOUNTS', '[2] VIEW STATS', chalk.cyan, chalk.cyan);
+  menuRow('[+] ADD PROP-ACCOUNT', '[A] ALGO-TRADING', chalk.cyan, chalk.magenta);
+  menuRow('[I] AI AGENTS', '[U] UPDATE HQX', chalk.green, chalk.yellow);
+  
+  // Separator and centered Disconnect button
+  console.log(chalk.cyan('╠' + '─'.repeat(W) + '╣'));
+  console.log(makeLine(chalk.red('[X] DISCONNECT'), 'center'));
   
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
   
   // Simple input - no duplicate menu
-  const input = await prompts.textInput(chalk.cyan('Select (1/2/+/A/U/X)'));
+  const input = await prompts.textInput(chalk.cyan('SELECT (1/2/+/A/I/U/X):'));
   
   const actionMap = {
     '1': 'accounts',
     '2': 'stats',
     '+': 'add_prop_account',
     'a': 'algotrading',
+    'i': 'aiagents',
     'u': 'update',
     'x': 'disconnect'
   };
@@ -144,93 +160,95 @@ const dashboardMenu = async (service) => {
  * Handle update process
  */
 const handleUpdate = async () => {
+  clearScreen();
+  displayBanner();
   prepareStdin();
+  
+  const boxWidth = getLogoWidth();
+  const W = boxWidth - 2;
+  
+  console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
+  console.log(chalk.cyan('║') + chalk.yellow.bold(centerText('UPDATE HQX', W)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
   
   let spinner = null;
   let currentVersion = 'unknown';
   
   try {
+    // Get current version
     try {
       currentVersion = require('../../package.json').version || 'unknown';
     } catch (e) {}
     
-    console.log(chalk.cyan(`\n  Current version: v${currentVersion}`));
-    spinner = ora({ text: 'Checking for updates...', color: 'yellow' }).start();
+    console.log(chalk.cyan(`\n  CURRENT VERSION: V${currentVersion.toUpperCase()}`));
+    spinner = ora({ text: 'CHECKING FOR UPDATES...', color: 'yellow' }).start();
     
+    // Check latest version from npm
     let latestVersion;
     try {
-      latestVersion = execSync('npm view hedgequantx version', { 
+      latestVersion = execSync('npm view hedgequantx version 2>/dev/null', { 
         stdio: ['pipe', 'pipe', 'pipe'], 
         timeout: 30000, 
         encoding: 'utf8'
       }).trim();
       
       if (!latestVersion || !/^\d+\.\d+\.\d+/.test(latestVersion)) {
-        throw new Error('Invalid version format');
+        throw new Error('INVALID VERSION FORMAT');
       }
     } catch (e) {
-      spinner.fail('Cannot reach npm registry');
-      console.log(chalk.gray(`  Error: ${e.message}`));
-      console.log(chalk.yellow('  Try manually: npm install -g hedgequantx@latest'));
+      spinner.fail('CANNOT REACH NPM REGISTRY');
+      console.log(chalk.yellow('\n  TRY MANUALLY: npm update -g hedgequantx'));
       await prompts.waitForEnter();
       return;
     }
     
-    spinner.succeed(`Latest version: v${latestVersion}`);
+    spinner.succeed(`LATEST VERSION: V${latestVersion.toUpperCase()}`);
     
+    // Already up to date
     if (currentVersion === latestVersion) {
-      console.log(chalk.green('  Already up to date!'));
+      console.log(chalk.green('\n  ✓ ALREADY UP TO DATE!'));
       await prompts.waitForEnter();
       return;
     }
     
-    console.log(chalk.yellow(`  Update available: v${currentVersion} → v${latestVersion}`));
-    spinner = ora({ text: 'Installing update...', color: 'yellow' }).start();
+    // Update available
+    console.log(chalk.yellow(`\n  UPDATE AVAILABLE: V${currentVersion} → V${latestVersion}`));
+    spinner = ora({ text: 'INSTALLING UPDATE...', color: 'yellow' }).start();
     
+    // Try to install update
     try {
-      // Try with sudo first on Unix systems
-      const isWindows = process.platform === 'win32';
-      const cmd = isWindows 
-        ? 'npm install -g hedgequantx@latest'
-        : 'npm install -g hedgequantx@latest';
-      
-      execSync(cmd, { 
+      execSync('npm update -g hedgequantx 2>/dev/null', { 
         stdio: ['pipe', 'pipe', 'pipe'], 
         timeout: 180000, 
         encoding: 'utf8'
       });
     } catch (e) {
-      spinner.fail('Update failed - permission denied?');
-      console.log(chalk.gray(`  Error: ${e.message}`));
-      console.log(chalk.yellow('  Try manually with sudo:'));
-      console.log(chalk.white('  sudo npm install -g hedgequantx@latest'));
-      await prompts.waitForEnter();
-      return;
+      // Try without redirecting stderr
+      try {
+        execSync('npm update -g hedgequantx', { 
+          stdio: ['pipe', 'pipe', 'pipe'], 
+          timeout: 180000, 
+          encoding: 'utf8'
+        });
+      } catch (e2) {
+        spinner.fail('UPDATE FAILED');
+        console.log(chalk.yellow('\n  TRY MANUALLY:'));
+        console.log(chalk.white('  npm update -g hedgequantx'));
+        console.log(chalk.gray('  OR WITH SUDO:'));
+        console.log(chalk.white('  sudo npm update -g hedgequantx'));
+        await prompts.waitForEnter();
+        return;
+      }
     }
     
-    spinner.succeed(`Updated to v${latestVersion}!`);
-    console.log(chalk.cyan('  Restarting HQX...'));
-    
-    await new Promise(r => setTimeout(r, 1500));
-    
-    try {
-      const child = spawn('hqx', [], { 
-        stdio: 'inherit', 
-        detached: true, 
-        shell: true 
-      });
-      child.unref();
-      process.exit(0);
-    } catch (e) {
-      console.log(chalk.yellow('\n  Please restart HQX manually:'));
-      console.log(chalk.white('  hqx'));
-      await prompts.waitForEnter();
-    }
+    spinner.succeed(`UPDATED TO V${latestVersion}!`);
+    console.log(chalk.green('\n  ✓ UPDATE SUCCESSFUL!'));
+    console.log(chalk.yellow('\n  Run ') + chalk.cyan('hqx') + chalk.yellow(' to start the new version.\n'));
+    process.exit(0);
     
   } catch (error) {
-    if (spinner) spinner.fail('Update error');
-    console.log(chalk.gray(`  Error: ${error.message}`));
-    console.log(chalk.yellow('  Try manually: npm install -g hedgequantx@latest'));
+    if (spinner) spinner.fail('UPDATE ERROR');
+    console.log(chalk.yellow('\n  TRY MANUALLY: npm update -g hedgequantx'));
     await prompts.waitForEnter();
   }
 };

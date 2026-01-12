@@ -1,0 +1,256 @@
+/**
+ * CLIProxy Service
+ * 
+ * Provides OAuth connections to paid AI plans (Claude Pro, ChatGPT Plus, etc.)
+ * via the embedded CLIProxyAPI binary.
+ */
+
+const http = require('http');
+const manager = require('./manager');
+
+// Re-export manager functions
+const {
+  CLIPROXY_VERSION,
+  INSTALL_DIR,
+  AUTH_DIR,
+  DEFAULT_PORT,
+  CALLBACK_PORTS,
+  CALLBACK_PATHS,
+  isInstalled,
+  isHeadless,
+  install,
+  isRunning,
+  start,
+  stop,
+  ensureRunning,
+  getLoginUrl,
+  getCallbackPort,
+  processCallback
+} = manager;
+
+// Internal API key (must match config.yaml)
+const API_KEY = 'hqx-internal-key';
+
+/**
+ * Make HTTP request to local CLIProxyAPI
+ * @param {string} path - API path
+ * @param {string} method - HTTP method
+ * @param {Object} body - Request body (optional)
+ * @param {number} timeout - Timeout in ms (default 60000 per RULES.md #15)
+ * @returns {Promise<Object>} { success, data, error }
+ */
+const fetchLocal = (path, method = 'GET', body = null, timeout = 60000) => {
+  return new Promise((resolve) => {
+    const options = {
+      hostname: '127.0.0.1',
+      port: DEFAULT_PORT,
+      path,
+      method,
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${API_KEY}`
+      },
+      timeout
+    };
+
+    const req = http.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            const parsed = data ? JSON.parse(data) : {};
+            resolve({ success: true, data: parsed, error: null });
+          } else {
+            resolve({ success: false, error: `HTTP ${res.statusCode}`, data: null });
+          }
+        } catch (error) {
+          resolve({ success: false, error: 'Invalid JSON response', data: null });
+        }
+      });
+    });
+
+    req.on('error', (error) => {
+      if (error.code === 'ECONNREFUSED') {
+        resolve({ success: false, error: 'CLIProxyAPI not running', data: null });
+      } else {
+        resolve({ success: false, error: error.message, data: null });
+      }
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      resolve({ success: false, error: 'Request timeout', data: null });
+    });
+
+    if (body) {
+      req.write(JSON.stringify(body));
+    }
+    
+    req.end();
+  });
+};
+
+/**
+ * Fetch available models from CLIProxyAPI
+ * @returns {Promise<Object>} { success, models, error }
+ */
+const fetchModels = async () => {
+  const result = await fetchLocal('/v1/models');
+  
+  if (!result.success) {
+    return { success: false, models: [], error: result.error };
+  }
+  
+  const data = result.data;
+  if (!data || !data.data || !Array.isArray(data.data)) {
+    return { success: false, models: [], error: 'Invalid response format' };
+  }
+  
+  const models = data.data
+    .filter(m => m.id)
+    .map(m => ({ id: m.id, name: m.id }));
+  
+  if (models.length === 0) {
+    return { success: false, models: [], error: 'No models available' };
+  }
+  
+  return { success: true, models, error: null };
+};
+
+/**
+ * Get provider-specific models
+ * @param {string} providerId - Provider ID
+ * @returns {Promise<Object>} { success, models, error }
+ */
+const fetchProviderModels = async (providerId) => {
+  const result = await fetchModels();
+  if (!result.success) return result;
+  
+  // Filter by provider prefix
+  const prefixMap = {
+    anthropic: 'claude',
+    openai: 'gpt',
+    google: 'gemini',
+    qwen: 'qwen'
+  };
+  
+  const prefix = prefixMap[providerId];
+  if (!prefix) return result;
+  
+  const filtered = result.models.filter(m => 
+    m.id.toLowerCase().includes(prefix)
+  );
+  
+  // Return only filtered models for this provider (empty if none found)
+  return { 
+    success: filtered.length > 0, 
+    models: filtered, 
+    error: filtered.length === 0 ? `No ${providerId} models available` : null 
+  };
+};
+
+/**
+ * Check which providers have auth files (are connected)
+ * @returns {Object} { anthropic: true/false, google: true/false, openai: true/false, qwen: true/false }
+ */
+const getConnectedProviders = () => {
+  const fs = require('fs');
+  const connected = { anthropic: false, google: false, openai: false, qwen: false };
+  
+  try {
+    if (!fs.existsSync(AUTH_DIR)) return connected;
+    
+    const files = fs.readdirSync(AUTH_DIR);
+    for (const file of files) {
+      if (file.startsWith('claude-') && file.endsWith('.json')) connected.anthropic = true;
+      if (file.startsWith('gemini-') && file.endsWith('.json')) connected.google = true;
+      if (file.startsWith('codex-') && file.endsWith('.json')) connected.openai = true;
+      if (file.startsWith('qwen-') && file.endsWith('.json')) connected.qwen = true;
+    }
+  } catch (e) { /* ignore */ }
+  
+  return connected;
+};
+
+/**
+ * Chat completion request
+ * @param {string} model - Model ID
+ * @param {Array} messages - Chat messages
+ * @param {Object} options - Additional options
+ * @returns {Promise<Object>} { success, response, error }
+ */
+const chatCompletion = async (model, messages, options = {}) => {
+  const body = {
+    model,
+    messages,
+    stream: false,
+    ...options
+  };
+  
+  const result = await fetchLocal('/v1/chat/completions', 'POST', body);
+  
+  if (!result.success) {
+    return { success: false, response: null, error: result.error };
+  }
+  
+  return { success: true, response: result.data, error: null };
+};
+
+/**
+ * Simple chat function for AI supervision
+ * @param {string} providerId - Provider ID (anthropic, openai, google, etc.)
+ * @param {string} modelId - Model ID
+ * @param {string} prompt - User prompt
+ * @param {number} timeout - Timeout in ms
+ * @returns {Promise<Object>} { success, content, error }
+ */
+const chat = async (providerId, modelId, prompt, timeout = 30000) => {
+  const messages = [{ role: 'user', content: prompt }];
+  
+  const result = await fetchLocal('/v1/chat/completions', 'POST', {
+    model: modelId,
+    messages,
+    stream: false
+  }, timeout);
+  
+  if (!result.success) {
+    return { success: false, content: null, error: result.error };
+  }
+  
+  // Extract content from response
+  const data = result.data;
+  if (data?.choices?.[0]?.message?.content) {
+    return { success: true, content: data.choices[0].message.content, error: null };
+  }
+  
+  return { success: false, content: null, error: 'No content in response' };
+};
+
+module.exports = {
+  // Manager
+  CLIPROXY_VERSION,
+  INSTALL_DIR,
+  AUTH_DIR,
+  DEFAULT_PORT,
+  CALLBACK_PORTS,
+  CALLBACK_PATHS,
+  isInstalled,
+  isHeadless,
+  install,
+  isRunning,
+  start,
+  stop,
+  ensureRunning,
+  getLoginUrl,
+  getCallbackPort,
+  processCallback,
+  
+  // API
+  fetchLocal,
+  fetchModels,
+  fetchProviderModels,
+  getConnectedProviders,
+  chatCompletion,
+  chat
+};

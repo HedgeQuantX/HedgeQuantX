@@ -11,7 +11,7 @@ const ora = require('ora');
 
 const { connections } = require('../../services');
 const { prompts } = require('../../utils');
-const { displayBanner } = require('../../ui');
+const { displayBanner , clearScreen } = require('../../ui');
 const { aggregateStats, calculateDerivedMetrics, calculateQuantMetrics, calculateHQXScore } = require('./metrics');
 const { renderOverview, renderPnLMetrics, renderQuantMetrics, renderTradesHistory, renderHQXScore, renderNotice } = require('./display');
 const { renderEquityCurve } = require('./chart');
@@ -124,7 +124,7 @@ const aggregateAccountData = async (activeAccounts) => {
         } catch (e) {}
       }
       
-      // Trade history (Rithmic doesn't provide this)
+      // Trade history from ORDER_PLANT
       if (typeof svc.getTradeHistory === 'function') {
         try {
           const tradesResult = await svc.getTradeHistory(account.accountId, 30);
@@ -137,7 +137,9 @@ const aggregateAccountData = async (activeAccounts) => {
               connectionType: connType
             })));
           }
-        } catch (e) {}
+        } catch (e) {
+          // Silent - trade history may not be available
+        }
       }
     } catch (e) {}
   }
@@ -159,10 +161,14 @@ const aggregateAccountData = async (activeAccounts) => {
  * Show Stats Page
  */
 const showStats = async (service) => {
+  // Clear screen and show banner
+  clearScreen();
+  displayBanner();
+  
   let spinner;
   
   try {
-    spinner = ora({ text: 'Loading stats...', color: 'yellow' }).start();
+    spinner = ora({ text: 'LOADING STATS...', color: 'yellow' }).start();
     
     // Get all connections
     const allConns = connections.count() > 0 
@@ -184,22 +190,17 @@ const showStats = async (service) => {
       return;
     }
 
-    // Filter active accounts (status === 0)
-    const activeAccounts = allAccountsData.filter(acc => acc.status === 0);
-    
-    if (activeAccounts.length === 0) {
-      spinner.fail('No active accounts found');
-      await prompts.waitForEnter();
-      return;
-    }
+    // Use all accounts (don't filter by status - Rithmic may have different status formats)
+    const activeAccounts = allAccountsData;
 
     // Aggregate account data from APIs
     const accountData = await aggregateAccountData(activeAccounts);
     
-    spinner.succeed('Stats loaded');
-    console.clear();
+    spinner.stop();
+    
+    // Clear and show banner before displaying stats
+    clearScreen();
     displayBanner();
-    console.log();
     
     // Calculate stats from API data
     const stats = aggregateStats(activeAccounts, accountData.allTrades);

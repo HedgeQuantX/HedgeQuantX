@@ -1,37 +1,18 @@
 /**
- * One Account Mode - HQX Algo Trading with Strategy Selection
+ * One Account Mode - HQX Ultra Scalping
+ * Supports multi-agent AI supervision
  */
 
 const chalk = require('chalk');
 const ora = require('ora');
-const readline = require('readline');
 
 const { connections } = require('../../services');
-const { AlgoUI, renderSessionSummary } = require('./ui');
 const { prompts } = require('../../utils');
 const { checkMarketHours } = require('../../services/rithmic/market');
+const { executeAlgo } = require('./algo-executor');
+const { getActiveAgentCount, getSupervisionConfig, getActiveAgents } = require('../ai-agents');
+const { runPreflightCheck, formatPreflightResults, getPreflightSummary } = require('../../services/ai-supervision');
 
-// Strategy Registry & Market Data
-const { getAvailableStrategies, loadStrategy, getStrategy } = require('../../lib/m');
-const { MarketDataFeed } = require('../../lib/data');
-
-
-/**
- * Strategy Selection
- * @returns {Promise<string|null>} Selected strategy ID or null
- */
-const selectStrategy = async () => {
-  const strategies = getAvailableStrategies();
-  
-  const options = strategies.map(s => ({
-    label: s.id === 'ultra-scalping' ? 'HQX Scalping' : 'HQX Sweep',
-    value: s.id
-  }));
-  options.push({ label: chalk.gray('< Back'), value: 'back' });
-  
-  const selected = await prompts.selectOption('Select Strategy:', options);
-  return selected === 'back' ? null : selected;
-};
 
 
 /**
@@ -93,15 +74,60 @@ const oneAccountMenu = async (service) => {
   const contract = await selectSymbol(accountService, selectedAccount);
   if (!contract) return;
   
-  // Select strategy
-  const strategyId = await selectStrategy();
-  if (!strategyId) return;
-  
   // Configure algo
-  const config = await configureAlgo(selectedAccount, contract, strategyId);
+  const config = await configureAlgo(selectedAccount, contract);
   if (!config) return;
   
-  await launchAlgo(accountService, selectedAccount, contract, config, strategyId);
+  // Check for AI Supervision
+  const agentCount = getActiveAgentCount();
+  let supervisionConfig = null;
+  
+  if (agentCount > 0) {
+    console.log();
+    console.log(chalk.cyan(`  ${agentCount} AI Agent(s) available for supervision`));
+    const enableAI = await prompts.confirmPrompt('Enable AI Supervision?', true);
+    
+    if (enableAI) {
+      // Run pre-flight check - ALL agents must pass
+      console.log();
+      console.log(chalk.yellow('  Running AI pre-flight check...'));
+      console.log();
+      
+      const agents = getActiveAgents();
+      const preflightResults = await runPreflightCheck(agents);
+      
+      // Display results
+      const lines = formatPreflightResults(preflightResults, 60);
+      for (const line of lines) {
+        console.log(line);
+      }
+      
+      const summary = getPreflightSummary(preflightResults);
+      console.log();
+      console.log(`  ${summary.text}`);
+      console.log();
+      
+      if (!preflightResults.success) {
+        console.log(chalk.red('  Cannot start algo - fix agent connections first.'));
+        await prompts.waitForEnter();
+        return;
+      }
+      
+      supervisionConfig = getSupervisionConfig();
+      console.log(chalk.green(`  ✓ AI Supervision ready with ${agentCount} agent(s)`));
+      
+      const proceedWithAI = await prompts.confirmPrompt('Start algo with AI supervision?', true);
+      if (!proceedWithAI) return;
+    }
+  }
+  
+  await executeAlgo({
+    service: accountService,
+    account: selectedAccount,
+    contract,
+    config,
+    options: { supervisionConfig }
+  });
 };
 
 /**
@@ -156,12 +182,9 @@ const selectSymbol = async (service, account) => {
 /**
  * Configure algo
  */
-const configureAlgo = async (account, contract, strategyId) => {
-  const strategyInfo = getStrategy(strategyId);
-  
+const configureAlgo = async (account, contract) => {
   console.log();
   console.log(chalk.cyan('  Configure Algo Parameters'));
-  console.log(chalk.gray(`  Strategy: ${strategyInfo.name}`));
   console.log();
   
   const contracts = await prompts.numberInput('Number of contracts:', 1, 1, 10);
@@ -180,294 +203,6 @@ const configureAlgo = async (account, contract, strategyId) => {
   if (!confirm) return null;
   
   return { contracts, dailyTarget, maxRisk, showName };
-};
-
-/**
- * Launch algo trading - Dynamic Strategy Loading
- * Real-time market data + Strategy signals + Auto order execution
- */
-const launchAlgo = async (service, account, contract, config, strategyId) => {
-  const { contracts, dailyTarget, maxRisk, showName } = config;
-  
-  // Load strategy dynamically
-  const strategyInfo = getStrategy(strategyId);
-  const strategyModule = loadStrategy(strategyId);
-  
-  // Use RAW API fields
-  const accountName = showName 
-    ? (account.accountName || account.rithmicAccountId || account.accountId) 
-    : 'HQX *****';
-  const symbolName = contract.name;
-  const contractId = contract.id;
-  const connectionType = account.platform || 'Rithmic';
-  const tickSize = contract.tickSize || 0.25;
-  
-  const ui = new AlgoUI({ subtitle: strategyInfo.name, mode: 'one-account' });
-  
-  const stats = {
-    accountName,
-    symbol: symbolName,
-    qty: contracts,
-    target: dailyTarget,
-    risk: maxRisk,
-    propfirm: account.propfirm || 'Unknown',
-    platform: connectionType,
-    pnl: 0,
-    trades: 0,
-    wins: 0,
-    losses: 0,
-    latency: 0,
-    connected: false,
-    startTime: Date.now()
-  };
-  
-  let running = true;
-  let stopReason = null;
-  let startingPnL = null;
-  let currentPosition = 0; // Current position qty (+ long, - short)
-  let pendingOrder = false; // Prevent duplicate orders
-  let tickCount = 0;
-  
-  // Initialize Strategy dynamically
-  const strategy = new strategyModule.M1({ tickSize });
-  strategy.initialize(contractId, tickSize);
-  
-  // Initialize Market Data Feed
-  const marketFeed = new MarketDataFeed({ propfirm: account.propfirm });
-  
-  // Log startup
-  ui.addLog('info', `Strategy: ${strategyInfo.name}`);
-  ui.addLog('info', `Connection: ${connectionType}`);
-  ui.addLog('info', `Account: ${accountName}`);
-  ui.addLog('info', `Symbol: ${symbolName} | Qty: ${contracts}`);
-  ui.addLog('info', `Target: $${dailyTarget} | Max Risk: $${maxRisk}`);
-  ui.addLog('info', `Params: ${strategyInfo.params.stopTicks}t stop, ${strategyInfo.params.targetTicks}t target (${strategyInfo.params.riskReward})`);
-  ui.addLog('info', 'Connecting to market data...');
-  
-  // Handle strategy signals
-  strategy.on('signal', async (signal) => {
-    if (!running || pendingOrder || currentPosition !== 0) return;
-    
-    const { side, direction, entry, stopLoss, takeProfit, confidence } = signal;
-    
-    ui.addLog('signal', `${direction.toUpperCase()} signal @ ${entry.toFixed(2)} (${(confidence * 100).toFixed(0)}%)`);
-    
-    // Place order via API
-    pendingOrder = true;
-    try {
-      const orderSide = direction === 'long' ? 0 : 1; // 0=Buy, 1=Sell
-      const orderResult = await service.placeOrder({
-        accountId: account.accountId,
-        contractId: contractId,
-        type: 2, // Market order
-        side: orderSide,
-        size: contracts
-      });
-      
-      if (orderResult.success) {
-        currentPosition = direction === 'long' ? contracts : -contracts;
-        stats.trades++;
-        ui.addLog('trade', `OPENED ${direction.toUpperCase()} ${contracts}x @ market`);
-        
-        // Place bracket orders (SL/TP)
-        if (stopLoss && takeProfit) {
-          // Stop Loss
-          await service.placeOrder({
-            accountId: account.accountId,
-            contractId: contractId,
-            type: 4, // Stop order
-            side: direction === 'long' ? 1 : 0, // Opposite side
-            size: contracts,
-            stopPrice: stopLoss
-          });
-          
-          // Take Profit
-          await service.placeOrder({
-            accountId: account.accountId,
-            contractId: contractId,
-            type: 1, // Limit order
-            side: direction === 'long' ? 1 : 0,
-            size: contracts,
-            limitPrice: takeProfit
-          });
-          
-          ui.addLog('info', `SL: ${stopLoss.toFixed(2)} | TP: ${takeProfit.toFixed(2)}`);
-        }
-      } else {
-        ui.addLog('error', `Order failed: ${orderResult.error}`);
-      }
-    } catch (e) {
-      ui.addLog('error', `Order error: ${e.message}`);
-    }
-    pendingOrder = false;
-  });
-  
-  // Handle market data ticks
-  marketFeed.on('tick', (tick) => {
-    tickCount++;
-    const latencyStart = Date.now();
-    
-    // Feed tick to strategy
-    strategy.processTick({
-      contractId: tick.contractId || contractId,
-      price: tick.price,
-      bid: tick.bid,
-      ask: tick.ask,
-      volume: tick.volume || 1,
-      side: tick.lastTradeSide || 'unknown',
-      timestamp: tick.timestamp || Date.now()
-    });
-    
-    stats.latency = Date.now() - latencyStart;
-    
-    // Log every 100th tick to show activity
-    if (tickCount % 100 === 0) {
-      ui.addLog('info', `Tick #${tickCount} @ ${tick.price?.toFixed(2) || 'N/A'}`);
-    }
-  });
-  
-  marketFeed.on('connected', () => {
-    stats.connected = true;
-    ui.addLog('success', 'Market data connected!');
-  });
-  
-  marketFeed.on('error', (err) => {
-    ui.addLog('error', `Market: ${err.message}`);
-  });
-  
-  marketFeed.on('disconnected', () => {
-    stats.connected = false;
-    ui.addLog('error', 'Market data disconnected');
-  });
-  
-  // Connect to market data
-  try {
-    const token = service.token || service.getToken?.();
-    const propfirmKey = (account.propfirm || 'topstep').toLowerCase().replace(/\s+/g, '_');
-    await marketFeed.connect(token, propfirmKey, contractId);
-    await marketFeed.subscribe(symbolName, contractId);
-  } catch (e) {
-    ui.addLog('error', `Failed to connect: ${e.message}`);
-  }
-  
-  // Poll account P&L from API
-  const pollPnL = async () => {
-    try {
-      const accountResult = await service.getTradingAccounts();
-      if (accountResult.success && accountResult.accounts) {
-        const acc = accountResult.accounts.find(a => a.accountId === account.accountId);
-        if (acc && acc.profitAndLoss !== undefined) {
-          if (startingPnL === null) startingPnL = acc.profitAndLoss;
-          stats.pnl = acc.profitAndLoss - startingPnL;
-          
-          // Record trade result in strategy
-          if (stats.pnl !== 0) {
-            strategy.recordTradeResult(stats.pnl);
-          }
-        }
-      }
-      
-      // Check positions
-      const posResult = await service.getPositions(account.accountId);
-      if (posResult.success && posResult.positions) {
-        const pos = posResult.positions.find(p => {
-          const sym = p.contractId || p.symbol || '';
-          return sym.includes(contract.name) || sym.includes(contractId);
-        });
-        
-        if (pos && pos.quantity !== 0) {
-          currentPosition = pos.quantity;
-          const side = pos.quantity > 0 ? 'LONG' : 'SHORT';
-          const pnl = pos.profitAndLoss || 0;
-          
-          // Check if position closed (win/loss)
-          if (pnl > 0) stats.wins = Math.max(stats.wins, 1);
-          else if (pnl < 0) stats.losses = Math.max(stats.losses, 1);
-        } else {
-          currentPosition = 0;
-        }
-      }
-      
-      // Check target/risk
-      if (stats.pnl >= dailyTarget) {
-        stopReason = 'target';
-        running = false;
-        ui.addLog('success', `TARGET REACHED! +$${stats.pnl.toFixed(2)}`);
-      } else if (stats.pnl <= -maxRisk) {
-        stopReason = 'risk';
-        running = false;
-        ui.addLog('error', `MAX RISK! -$${Math.abs(stats.pnl).toFixed(2)}`);
-      }
-    } catch (e) {
-      // Silently handle polling errors
-    }
-  };
-  
-  // Start polling and UI refresh
-  const refreshInterval = setInterval(() => { if (running) ui.render(stats); }, 250);
-  const pnlInterval = setInterval(() => { if (running) pollPnL(); }, 2000);
-  pollPnL(); // Initial poll
-  
-  // Keyboard handler
-  const setupKeyHandler = () => {
-    if (!process.stdin.isTTY) return;
-    readline.emitKeypressEvents(process.stdin);
-    process.stdin.setRawMode(true);
-    process.stdin.resume();
-    
-    const onKey = (str, key) => {
-      if (key && (key.name === 'x' || key.name === 'X' || (key.ctrl && key.name === 'c'))) {
-        running = false;
-        stopReason = 'manual';
-      }
-    };
-    process.stdin.on('keypress', onKey);
-    return () => {
-      process.stdin.removeListener('keypress', onKey);
-      if (process.stdin.isTTY) process.stdin.setRawMode(false);
-    };
-  };
-  
-  const cleanupKeys = setupKeyHandler();
-  
-  // Wait for stop
-  await new Promise(resolve => {
-    const check = setInterval(() => {
-      if (!running) {
-        clearInterval(check);
-        resolve();
-      }
-    }, 100);
-  });
-  
-  // Cleanup
-  clearInterval(refreshInterval);
-  clearInterval(pnlInterval);
-  await marketFeed.disconnect();
-  if (cleanupKeys) cleanupKeys();
-  ui.cleanup();
-  
-  if (process.stdin.isTTY) {
-    process.stdin.setRawMode(false);
-  }
-  process.stdin.resume();
-  
-  // Duration
-  const durationMs = Date.now() - stats.startTime;
-  const hours = Math.floor(durationMs / 3600000);
-  const minutes = Math.floor((durationMs % 3600000) / 60000);
-  const seconds = Math.floor((durationMs % 60000) / 1000);
-  stats.duration = hours > 0 
-    ? `${hours}h ${minutes}m ${seconds}s`
-    : minutes > 0 
-      ? `${minutes}m ${seconds}s`
-      : `${seconds}s`;
-  
-  // Summary
-  renderSessionSummary(stats, stopReason);
-  
-  console.log('\n  Returning to menu in 3 seconds...');
-  await new Promise(resolve => setTimeout(resolve, 3000));
 };
 
 module.exports = { oneAccountMenu };
