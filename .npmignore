@@ -1,0 +1,23 @@
+# Never publish source files
+private/
+scripts/
+src/lib/
+
+# Development files
+*.log
+.env
+.DS_Store
+.git/
+.gitignore
+.vscode/
+node_modules/
+__pycache__/
+*.pyc
+
+# Test files
+test-*.js
+*.test.js
+*.spec.js
+
+# Config
+.config/
