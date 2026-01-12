@@ -10,7 +10,7 @@
  */
 
 const cliproxy = require('../cliproxy');
-const https = require('https');
+const { extractJSON } = require('./parser');
 
 /** Test prompt to verify agent understands directive format */
 const TEST_PROMPT = `You are being tested. Respond ONLY with this exact JSON, nothing else:
@@ -161,6 +161,7 @@ const testAgentConnection = async (agent) => {
 
 /**
  * Validate that response matches expected JSON format
+ * Uses extractJSON from parser.js to handle MiniMax <think> tags and other formats
  * @param {string} content - Response content from agent
  * @returns {Object} { valid, error }
  */
@@ -169,53 +170,40 @@ const validateResponseFormat = (content) => {
     return { valid: false, error: 'Empty response' };
   }
   
-  try {
-    // Try to extract JSON from response
-    let json;
-    
-    // Direct parse
-    try {
-      json = JSON.parse(content.trim());
-    } catch (e) {
-      // Try to find JSON in response
-      const match = content.match(/\{[\s\S]*\}/);
-      if (match) {
-        json = JSON.parse(match[0]);
-      } else {
-        return { valid: false, error: 'No JSON in response' };
-      }
-    }
-    
-    // Check required fields
-    if (!json.decision) {
-      return { valid: false, error: 'Missing "decision" field' };
-    }
-    
-    if (json.confidence === undefined) {
-      return { valid: false, error: 'Missing "confidence" field' };
-    }
-    
-    if (!json.reason) {
-      return { valid: false, error: 'Missing "reason" field' };
-    }
-    
-    // Validate decision value
-    const validDecisions = ['approve', 'reject', 'modify'];
-    if (!validDecisions.includes(json.decision)) {
-      return { valid: false, error: `Invalid decision: ${json.decision}` };
-    }
-    
-    // Validate confidence is number 0-100
-    const conf = Number(json.confidence);
-    if (isNaN(conf) || conf < 0 || conf > 100) {
-      return { valid: false, error: `Invalid confidence: ${json.confidence}` };
-    }
-    
-    return { valid: true, error: null };
-    
-  } catch (error) {
-    return { valid: false, error: `Parse error: ${error.message}` };
+  // Use robust JSON extraction from parser.js
+  // Handles: direct JSON, markdown code blocks, JSON with extra text (MiniMax <think> tags)
+  const json = extractJSON(content);
+  
+  if (!json) {
+    return { valid: false, error: 'No valid JSON found in response' };
   }
+  
+  // Check required fields
+  if (!json.decision) {
+    return { valid: false, error: 'Missing "decision" field' };
+  }
+  
+  if (json.confidence === undefined) {
+    return { valid: false, error: 'Missing "confidence" field' };
+  }
+  
+  if (!json.reason) {
+    return { valid: false, error: 'Missing "reason" field' };
+  }
+  
+  // Validate decision value
+  const validDecisions = ['approve', 'reject', 'modify'];
+  if (!validDecisions.includes(json.decision)) {
+    return { valid: false, error: `Invalid decision: ${json.decision}` };
+  }
+  
+  // Validate confidence is number 0-100
+  const conf = Number(json.confidence);
+  if (isNaN(conf) || conf < 0 || conf > 100) {
+    return { valid: false, error: `Invalid confidence: ${json.confidence}` };
+  }
+  
+  return { valid: true, error: null };
 };
 
 /**
@@ -338,7 +326,13 @@ const formatPreflightResults = (results, boxWidth) => {
       lines.push(dottedLine('Format', chalk.green('✓ VALID'), 9));
     } else {
       lines.push(dottedLine('Connection', chalk.red('✗ FAILED'), 9));
-      lines.push(chalk.red(`         Error: ${agent.error}`));
+      // Truncate error message to fit in box
+      const maxErrorLen = W - 16; // Account for "         Error: " prefix
+      let errorMsg = agent.error || 'Unknown error';
+      if (errorMsg.length > maxErrorLen) {
+        errorMsg = errorMsg.substring(0, maxErrorLen - 3) + '...';
+      }
+      lines.push(chalk.red(`         Error: ${errorMsg}`));
     }
     
     lines.push('');
