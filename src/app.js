@@ -160,15 +160,15 @@ const run = async () => {
     await bannerClosed();
 
     // Restore session
-    const spinner = ora({ text: 'Restoring session...', color: 'yellow' }).start();
+    const spinner = ora({ text: 'Testing connections...', color: 'yellow' }).start();
     const restored = await connections.restoreFromStorage();
 
     if (restored) {
-      spinner.succeed('Session restored');
+      spinner.succeed('Connected');
       currentService = connections.getAll()[0].service;
       await refreshStats();
     } else {
-      spinner.info('No active session');
+      spinner.info('No saved connections');
     }
 
     // Main loop
