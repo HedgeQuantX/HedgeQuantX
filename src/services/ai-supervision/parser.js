@@ -19,6 +19,7 @@ const DEFAULT_RESPONSE = {
 
 /**
  * Extract JSON from a string that may contain markdown or extra text
+ * Handles MiniMax <think> tags, markdown code blocks, etc.
  */
 const extractJSON = (text) => {
   if (!text || typeof text !== 'string') return null;
@@ -36,8 +37,36 @@ const extractJSON = (text) => {
     } catch (e) { /* continue */ }
   }
 
-  // Try to find JSON object pattern
-  const jsonMatch = text.match(/\{[\s\S]*"decision"[\s\S]*\}/);
+  // Remove <think>...</think> tags (MiniMax)
+  let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  
+  // Try to parse cleaned text
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) { /* continue */ }
+
+  // Find first complete JSON object using bracket matching
+  const startIdx = cleaned.indexOf('{');
+  if (startIdx !== -1) {
+    let depth = 0;
+    let endIdx = -1;
+    for (let i = startIdx; i < cleaned.length; i++) {
+      if (cleaned[i] === '{') depth++;
+      if (cleaned[i] === '}') depth--;
+      if (depth === 0) {
+        endIdx = i;
+        break;
+      }
+    }
+    if (endIdx !== -1) {
+      try {
+        return JSON.parse(cleaned.substring(startIdx, endIdx + 1));
+      } catch (e) { /* continue */ }
+    }
+  }
+
+  // Last resort: try to find JSON object pattern with "decision"
+  const jsonMatch = cleaned.match(/\{[^{}]*"decision"[^{}]*\}/);
   if (jsonMatch) {
     try {
       return JSON.parse(jsonMatch[0]);
