@@ -334,33 +334,25 @@ const drawConnectionTest = async (agents, boxWidth, clearWithBanner) => {
   
   const W = boxWidth - 2;
   
-  // Show loading state with spinner inside closed box (centered vertically)
+  // Show loading box with centered spinner text
   clearWithBanner();
   console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
   console.log(chalk.cyan('║') + chalk.yellow.bold(centerText('AI AGENTS CONNECTION TEST', W)) + chalk.cyan('║'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
-  
-  // Empty lines for vertical centering (top)
-  console.log(chalk.cyan('║') + ' '.repeat(W) + chalk.cyan('║'));
-  console.log(chalk.cyan('║') + ' '.repeat(W) + chalk.cyan('║'));
-  console.log(chalk.cyan('║') + ' '.repeat(W) + chalk.cyan('║'));
-  
-  // Centered spinner text inside box
-  const spinnerText = 'Testing connections...';
-  const paddedText = centerText(spinnerText, W);
-  console.log(chalk.cyan('║') + chalk.yellow(paddedText) + chalk.cyan('║'));
-  
-  // Empty lines for vertical centering (bottom)
-  console.log(chalk.cyan('║') + ' '.repeat(W) + chalk.cyan('║'));
   console.log(chalk.cyan('║') + ' '.repeat(W) + chalk.cyan('║'));
   console.log(chalk.cyan('║') + ' '.repeat(W) + chalk.cyan('║'));
   console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
+  console.log('');
   
-  // Start spinner below the box
+  // Spinner with text - centered below the box
+  const spinnerText = 'Testing connections...';
+  const spinnerLeftPad = Math.floor((W - spinnerText.length - 2) / 2);
+  
   const spinner = ora({
-    text: '',
+    text: chalk.yellow(spinnerText),
     spinner: 'dots',
-    color: 'yellow'
+    color: 'yellow',
+    indent: spinnerLeftPad
   }).start();
   
   // Run pre-flight check
