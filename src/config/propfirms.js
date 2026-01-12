@@ -15,14 +15,6 @@ const PROPFIRMS = {
     rithmicSystem: 'Apex',
     wsEndpoint: 'wss://ritpa11120.11.rithmic.com:443',
   },
-  rithmic_paper: {
-    id: 'rithmic-paper',
-    name: 'Rithmic Paper Trading',
-    displayName: 'Rithmic Paper Trading',
-    platform: 'Rithmic',
-    rithmicSystem: 'Rithmic Paper Trading',
-    wsEndpoint: 'wss://ritpa11120.11.rithmic.com:443',
-  },
   topsteptrader: {
     id: 'topsteptrader',
     name: 'TopstepTrader',
@@ -142,6 +134,14 @@ const PROPFIRMS = {
     platform: 'Rithmic',
     rithmicSystem: 'tradesea',
     wsEndpoint: 'wss://ritpa11120.11.rithmic.com:443'
+  },
+  rithmic_paper: {
+    id: 'rithmic-paper',
+    name: 'Rithmic Paper Trading',
+    displayName: 'Rithmic Paper Trading',
+    platform: 'Rithmic',
+    rithmicSystem: 'Rithmic Paper Trading',
+    wsEndpoint: 'wss://ritpa11120.11.rithmic.com:443'
   }
 };
 
@@ -154,15 +154,17 @@ const PROPFIRM_CHOICES = Object.entries(PROPFIRMS)
     // Apex always first
     if (a.name === 'Apex') return -1;
     if (b.name === 'Apex') return 1;
-    // Rithmic Paper Trading second
-    if (a.name === 'Rithmic Paper Trading') return -1;
-    if (b.name === 'Rithmic Paper Trading') return 1;
-    // 4PropTrader and 10XFutures always last
-    const lastItems = ['4PropTrader', '10XFutures'];
+    // 4PropTrader, 10XFutures, Rithmic Paper Trading always last
+    const lastItems = ['4PropTrader', '10XFutures', 'Rithmic Paper Trading'];
     const aIsLast = lastItems.includes(a.name);
     const bIsLast = lastItems.includes(b.name);
     if (aIsLast && !bIsLast) return 1;
     if (!aIsLast && bIsLast) return -1;
+    // If both are last items, order them: 10XFutures, 4PropTrader, Rithmic Paper Trading
+    if (aIsLast && bIsLast) {
+      const order = ['10XFutures', '4PropTrader', 'Rithmic Paper Trading'];
+      return order.indexOf(a.name) - order.indexOf(b.name);
+    }
     // Then alphabetical
     return a.name.localeCompare(b.name);
   });
