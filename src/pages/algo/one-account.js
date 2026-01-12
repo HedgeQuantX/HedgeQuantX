@@ -17,31 +17,19 @@ const { MarketDataFeed } = require('../../lib/data');
 
 
 /**
- * Strategy Selection - Display available strategies with backtest results
+ * Strategy Selection
  * @returns {Promise<string|null>} Selected strategy ID or null
  */
 const selectStrategy = async () => {
   const strategies = getAvailableStrategies();
   
-  console.log();
-  console.log(chalk.cyan.bold('  Available Strategies:'));
-  console.log();
-  
-  for (const s of strategies) {
-    console.log(chalk.white(`  ${s.name}`));
-    console.log(chalk.gray(`    ${s.description}`));
-    console.log(chalk.gray(`    Stop: ${s.params.stopTicks}t | Target: ${s.params.targetTicks}t | R:R ${s.params.riskReward}`));
-    console.log(chalk.green(`    Backtest: ${s.backtest.winRate} WR | ${s.backtest.pnl} P&L | ${s.backtest.trades} trades`));
-    console.log();
-  }
-  
   const options = strategies.map(s => ({
-    label: `${s.name} (${s.backtest.winRate} WR, ${s.backtest.pnl})`,
+    label: s.id === 'ultra-scalping' ? 'HQX Scalping' : 'HQX Sweep',
     value: s.id
   }));
   options.push({ label: chalk.gray('< Back'), value: 'back' });
   
-  const selected = await prompts.selectOption(chalk.yellow('Select Strategy:'), options);
+  const selected = await prompts.selectOption('Select Strategy:', options);
   return selected === 'back' ? null : selected;
 };
 
