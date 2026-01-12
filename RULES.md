@@ -52,11 +52,23 @@
 - Vérifier que le code fonctionne correctement avec les autres modules
 - S'assurer que les imports/exports sont corrects et fonctionnels
 
+### 8. Synchronisation des Repositories
+- **TOUJOURS** vérifier la synchronisation entre `/root/HQX-CLI` et `/home/hqx/HQX-CLI` en début de session
+- **AVANT** toute modification, exécuter:
+  ```bash
+  cd /root/HQX-CLI && git log --oneline -1 && cd /home/hqx/HQX-CLI && git log --oneline -1
+  ```
+- Si les commits sont **différents**, synchroniser AVANT de travailler
+- `/root/HQX-CLI` = version de développement (source de vérité)
+- `/home/hqx/HQX-CLI` = version utilisateur (doit être synchronisée)
+- **NE JAMAIS** travailler sur une version désynchronisée
+
 ---
 
 ## Checklist Avant Modification
 
 - [ ] J'ai lu RULES.md en entier
+- [ ] J'ai vérifié la synchronisation `/root/HQX-CLI` ↔ `/home/hqx/HQX-CLI`
 - [ ] Ma modification n'utilise pas de mock data
 - [ ] Ma modification n'ajoute pas de simulation
 - [ ] Ma modification utilise uniquement des données API réelles
