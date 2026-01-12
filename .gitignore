@@ -10,6 +10,9 @@ __pycache__/
 # Source (protected)
 src/lib/
 
+# Private strategy sources (NEVER commit)
+private/
+
 # Build
 scripts/
 

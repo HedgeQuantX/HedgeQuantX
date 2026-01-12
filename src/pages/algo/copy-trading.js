@@ -1,5 +1,5 @@
 /**
- * @fileoverview Copy Trading Mode
+ * @fileoverview Copy Trading Mode with Strategy Selection
  * @module pages/algo/copy-trading
  */
 
@@ -12,7 +12,42 @@ const { AlgoUI, renderSessionSummary } = require('./ui');
 const { logger, prompts } = require('../../utils');
 const { checkMarketHours } = require('../../services/rithmic/market');
 
+// Strategy Registry & Market Data
+const { getAvailableStrategies, loadStrategy, getStrategy } = require('../../lib/m');
+const { MarketDataFeed } = require('../../lib/data');
+
 const log = logger.scope('CopyTrading');
+
+
+/**
+ * Strategy Selection - Display available strategies with backtest results
+ * @returns {Promise<string|null>} Selected strategy ID or null
+ */
+const selectStrategy = async () => {
+  const strategies = getAvailableStrategies();
+  
+  console.log();
+  console.log(chalk.cyan.bold('  Available Strategies:'));
+  console.log();
+  
+  for (const s of strategies) {
+    console.log(chalk.white(`  ${s.name}`));
+    console.log(chalk.gray(`    ${s.description}`));
+    console.log(chalk.gray(`    Stop: ${s.params.stopTicks}t | Target: ${s.params.targetTicks}t | R:R ${s.params.riskReward}`));
+    console.log(chalk.green(`    Backtest: ${s.backtest.winRate} WR | ${s.backtest.pnl} P&L | ${s.backtest.trades} trades`));
+    console.log();
+  }
+  
+  const options = strategies.map(s => ({
+    label: `${s.name} (${s.backtest.winRate} WR, ${s.backtest.pnl})`,
+    value: s.id
+  }));
+  options.push({ label: chalk.gray('< Back'), value: 'back' });
+  
+  const selected = await prompts.selectOption(chalk.yellow('Select Strategy:'), options);
+  return selected === 'back' ? null : selected;
+};
+
 
 /**
  * Copy Trading Menu
@@ -77,9 +112,15 @@ const copyTradingMenu = async () => {
   const symbol = await selectSymbol(lead.service);
   if (!symbol) return;
 
-  // Step 4: Configure Parameters
+  // Step 4: Select Strategy
   console.log();
-  console.log(chalk.cyan('  Step 4: Configure Parameters'));
+  console.log(chalk.cyan('  Step 4: Select Trading Strategy'));
+  const strategyId = await selectStrategy();
+  if (!strategyId) return;
+
+  // Step 5: Configure Parameters
+  console.log();
+  console.log(chalk.cyan('  Step 5: Configure Parameters'));
 
   const leadContracts = await prompts.numberInput('Lead contracts:', 1, 1, 10);
   if (leadContracts === null) return;
@@ -93,7 +134,7 @@ const copyTradingMenu = async () => {
   const maxRisk = await prompts.numberInput('Max risk ($):', 200, 1, 5000);
   if (maxRisk === null) return;
 
-  // Step 5: Privacy
+  // Step 6: Privacy
   const showNames = await prompts.selectOption('Account names:', [
     { label: 'Hide account names', value: false },
     { label: 'Show account names', value: true },
@@ -101,8 +142,10 @@ const copyTradingMenu = async () => {
   if (showNames === null) return;
 
   // Confirm
+  const strategyInfo = getStrategy(strategyId);
   console.log();
   console.log(chalk.white('  Summary:'));
+  console.log(chalk.cyan(`  Strategy: ${strategyInfo.name}`));
   console.log(chalk.cyan(`  Symbol: ${symbol.name}`));
   console.log(chalk.cyan(`  Lead: ${lead.propfirm} x${leadContracts}`));
   console.log(chalk.cyan(`  Follower: ${follower.propfirm} x${followerContracts}`));
@@ -116,6 +159,7 @@ const copyTradingMenu = async () => {
   await launchCopyTrading({
     lead: { ...lead, symbol, contracts: leadContracts },
     follower: { ...follower, symbol, contracts: followerContracts },
+    strategyId,
     dailyTarget,
     maxRisk,
     showNames,
@@ -213,7 +257,7 @@ const selectSymbol = async (service) => {
       if (c.contractGroup && c.contractGroup !== currentGroup) {
         currentGroup = c.contractGroup;
         options.push({
-          label: chalk.cyan.bold(`── ${currentGroup} ──`),
+          label: chalk.cyan.bold(`-- ${currentGroup} --`),
           value: null,
           disabled: true,
         });
@@ -255,17 +299,24 @@ const getContractsFromAPI = async () => {
 };
 
 /**
- * Launch Copy Trading session
+ * Launch Copy Trading session with strategy
  * @param {Object} config - Session configuration
  */
 const launchCopyTrading = async (config) => {
-  const { lead, follower, dailyTarget, maxRisk, showNames } = config;
+  const { lead, follower, strategyId, dailyTarget, maxRisk, showNames } = config;
+
+  // Load strategy dynamically
+  const strategyInfo = getStrategy(strategyId);
+  const strategyModule = loadStrategy(strategyId);
 
   // Account names (masked for privacy)
   const leadName = showNames ? lead.account.accountId : 'HQX Lead *****';
   const followerName = showNames ? follower.account.accountId : 'HQX Follower *****';
+  
+  const tickSize = lead.symbol.tickSize || 0.25;
+  const contractId = lead.symbol.id;
 
-  const ui = new AlgoUI({ subtitle: 'HQX Copy Trading', mode: 'copy-trading' });
+  const ui = new AlgoUI({ subtitle: `${strategyInfo.name} - Copy Trading`, mode: 'copy-trading' });
 
   const stats = {
     leadName,
@@ -283,10 +334,21 @@ const launchCopyTrading = async (config) => {
     latency: 0,
     connected: false,
     platform: lead.account.platform || 'Rithmic',
+    startTime: Date.now(),
   };
 
   let running = true;
   let stopReason = null;
+  let currentPosition = 0;
+  let pendingOrder = false;
+  let tickCount = 0;
+  
+  // Initialize Strategy dynamically
+  const strategy = new strategyModule.M1({ tickSize });
+  strategy.initialize(contractId, tickSize);
+  
+  // Initialize Market Data Feed
+  const marketFeed = new MarketDataFeed({ propfirm: lead.propfirm });
   
   // Measure API latency (CLI <-> API)
   const measureLatency = async () => {
@@ -299,54 +361,168 @@ const launchCopyTrading = async (config) => {
     }
   };
 
-  // Local copy trading - no external server needed
-  ui.addLog('info', `Starting copy trading on ${stats.platform}...`);
+  // Log startup
+  ui.addLog('info', `Strategy: ${strategyInfo.name}`);
   ui.addLog('info', `Lead: ${stats.leadName} -> Follower: ${stats.followerName}`);
-  ui.addLog('info', `Symbol: ${stats.symbol} | Target: $${dailyTarget} | Risk: $${maxRisk}`);
-  stats.connected = true;
+  ui.addLog('info', `Symbol: ${stats.leadSymbol} | Target: $${dailyTarget} | Risk: $${maxRisk}`);
+  ui.addLog('info', `Params: ${strategyInfo.params.stopTicks}t stop, ${strategyInfo.params.targetTicks}t target (${strategyInfo.params.riskReward})`);
+  ui.addLog('info', 'Connecting to market data...');
   
-  // Track lead positions and copy to follower
-  let lastLeadPositions = [];
-  
-  const pollAndCopy = async () => {
+  // Handle strategy signals - execute on BOTH accounts
+  strategy.on('signal', async (signal) => {
+    if (!running || pendingOrder || currentPosition !== 0) return;
+    
+    const { side, direction, entry, stopLoss, takeProfit, confidence } = signal;
+    
+    ui.addLog('signal', `${direction.toUpperCase()} signal @ ${entry.toFixed(2)} (${(confidence * 100).toFixed(0)}%)`);
+    
+    pendingOrder = true;
     try {
-      // Get lead positions
-      const leadResult = await lead.service.getPositions(lead.account.accountId);
-      if (!leadResult.success) return;
+      const orderSide = direction === 'long' ? 0 : 1;
       
-      const currentPositions = leadResult.positions || [];
+      // Place on LEAD account
+      const leadResult = await lead.service.placeOrder({
+        accountId: lead.account.accountId,
+        contractId: contractId,
+        type: 2,
+        side: orderSide,
+        size: lead.contracts
+      });
       
-      // Detect new positions on lead
-      for (const pos of currentPositions) {
-        const existing = lastLeadPositions.find(p => p.contractId === pos.contractId);
-        if (!existing && pos.quantity !== 0) {
-          // New position opened - copy to follower
-          ui.addLog('trade', `Lead opened: ${pos.quantity > 0 ? 'LONG' : 'SHORT'} ${Math.abs(pos.quantity)}x ${pos.symbol || pos.contractId}`);
-          // TODO: Place order on follower account
-        }
-      }
-      
-      // Detect closed positions
-      for (const oldPos of lastLeadPositions) {
-        const stillOpen = currentPositions.find(p => p.contractId === oldPos.contractId);
-        if (!stillOpen || stillOpen.quantity === 0) {
-          ui.addLog('info', `Lead closed: ${oldPos.symbol || oldPos.contractId}`);
-          // TODO: Close position on follower account
-        }
-      }
-      
-      lastLeadPositions = currentPositions;
-      
-      // Update P&L from lead
-      const leadPnL = currentPositions.reduce((sum, p) => sum + (p.profitAndLoss || 0), 0);
-      if (leadPnL !== stats.pnl) {
-        const diff = leadPnL - stats.pnl;
-        if (Math.abs(diff) > 0.01 && stats.pnl !== 0) {
+      if (leadResult.success) {
+        ui.addLog('trade', `LEAD: ${direction.toUpperCase()} ${lead.contracts}x`);
+        
+        // Place on FOLLOWER account
+        const followerResult = await follower.service.placeOrder({
+          accountId: follower.account.accountId,
+          contractId: contractId,
+          type: 2,
+          side: orderSide,
+          size: follower.contracts
+        });
+        
+        if (followerResult.success) {
+          ui.addLog('trade', `FOLLOWER: ${direction.toUpperCase()} ${follower.contracts}x`);
+          currentPosition = direction === 'long' ? lead.contracts : -lead.contracts;
           stats.trades++;
+          
+          // Place bracket orders on both accounts
+          if (stopLoss && takeProfit) {
+            const exitSide = direction === 'long' ? 1 : 0;
+            
+            // Lead SL/TP
+            await lead.service.placeOrder({
+              accountId: lead.account.accountId, contractId, type: 4, side: exitSide, size: lead.contracts, stopPrice: stopLoss
+            });
+            await lead.service.placeOrder({
+              accountId: lead.account.accountId, contractId, type: 1, side: exitSide, size: lead.contracts, limitPrice: takeProfit
+            });
+            
+            // Follower SL/TP
+            await follower.service.placeOrder({
+              accountId: follower.account.accountId, contractId, type: 4, side: exitSide, size: follower.contracts, stopPrice: stopLoss
+            });
+            await follower.service.placeOrder({
+              accountId: follower.account.accountId, contractId, type: 1, side: exitSide, size: follower.contracts, limitPrice: takeProfit
+            });
+            
+            ui.addLog('info', `SL: ${stopLoss.toFixed(2)} | TP: ${takeProfit.toFixed(2)}`);
+          }
+        } else {
+          ui.addLog('error', `Follower order failed: ${followerResult.error}`);
+        }
+      } else {
+        ui.addLog('error', `Lead order failed: ${leadResult.error}`);
+      }
+    } catch (e) {
+      ui.addLog('error', `Order error: ${e.message}`);
+    }
+    pendingOrder = false;
+  });
+  
+  // Handle market data ticks
+  marketFeed.on('tick', (tick) => {
+    tickCount++;
+    const latencyStart = Date.now();
+    
+    strategy.processTick({
+      contractId: tick.contractId || contractId,
+      price: tick.price,
+      bid: tick.bid,
+      ask: tick.ask,
+      volume: tick.volume || 1,
+      side: tick.lastTradeSide || 'unknown',
+      timestamp: tick.timestamp || Date.now()
+    });
+    
+    stats.latency = Date.now() - latencyStart;
+    
+    if (tickCount % 100 === 0) {
+      ui.addLog('info', `Tick #${tickCount} @ ${tick.price?.toFixed(2) || 'N/A'}`);
+    }
+  });
+  
+  marketFeed.on('connected', () => {
+    stats.connected = true;
+    ui.addLog('success', 'Market data connected!');
+  });
+  
+  marketFeed.on('error', (err) => {
+    ui.addLog('error', `Market: ${err.message}`);
+  });
+  
+  marketFeed.on('disconnected', () => {
+    stats.connected = false;
+    ui.addLog('error', 'Market data disconnected');
+  });
+  
+  // Connect to market data
+  try {
+    const token = lead.service.token || lead.service.getToken?.();
+    const propfirmKey = (lead.propfirm || 'topstep').toLowerCase().replace(/\s+/g, '_');
+    await marketFeed.connect(token, propfirmKey, contractId);
+    await marketFeed.subscribe(lead.symbol.name, contractId);
+  } catch (e) {
+    ui.addLog('error', `Failed to connect: ${e.message}`);
+  }
+  
+  // Poll combined P&L from both accounts
+  const pollPnL = async () => {
+    try {
+      let combinedPnL = 0;
+      
+      // Lead P&L
+      const leadResult = await lead.service.getPositions(lead.account.accountId);
+      if (leadResult.success && leadResult.positions) {
+        const pos = leadResult.positions.find(p => {
+          const sym = p.contractId || p.symbol || '';
+          return sym.includes(lead.symbol.name) || sym.includes(contractId);
+        });
+        if (pos) combinedPnL += pos.profitAndLoss || 0;
+      }
+      
+      // Follower P&L
+      const followerResult = await follower.service.getPositions(follower.account.accountId);
+      if (followerResult.success && followerResult.positions) {
+        const pos = followerResult.positions.find(p => {
+          const sym = p.contractId || p.symbol || '';
+          return sym.includes(follower.symbol.name) || sym.includes(contractId);
+        });
+        if (pos) combinedPnL += pos.profitAndLoss || 0;
+      }
+      
+      // Update stats
+      if (combinedPnL !== stats.pnl) {
+        const diff = combinedPnL - stats.pnl;
+        if (Math.abs(diff) > 0.01 && stats.pnl !== 0) {
           if (diff >= 0) stats.wins++;
           else stats.losses++;
         }
-        stats.pnl = leadPnL;
+        stats.pnl = combinedPnL;
+        
+        if (stats.pnl !== 0) {
+          strategy.recordTradeResult(stats.pnl);
+        }
       }
       
       // Check target/risk limits
@@ -370,12 +546,12 @@ const launchCopyTrading = async (config) => {
   }, 250);
   
   // Measure API latency every 5 seconds
-  measureLatency(); // Initial measurement
+  measureLatency();
   const latencyInterval = setInterval(() => { if (running) measureLatency(); }, 5000);
   
-  // Poll and copy every 2 seconds
-  pollAndCopy(); // Initial poll
-  const copyInterval = setInterval(() => { if (running) pollAndCopy(); }, 2000);
+  // Poll P&L every 2 seconds
+  pollPnL();
+  const pnlInterval = setInterval(() => { if (running) pollPnL(); }, 2000);
 
   // Keyboard handling
   const cleanupKeys = setupKeyboardHandler(() => {
@@ -396,9 +572,26 @@ const launchCopyTrading = async (config) => {
   // Cleanup
   clearInterval(refreshInterval);
   clearInterval(latencyInterval);
-  clearInterval(copyInterval);
+  clearInterval(pnlInterval);
+  await marketFeed.disconnect();
   if (cleanupKeys) cleanupKeys();
   ui.cleanup();
+  
+  if (process.stdin.isTTY) {
+    process.stdin.setRawMode(false);
+  }
+  process.stdin.resume();
+
+  // Duration
+  const durationMs = Date.now() - stats.startTime;
+  const hours = Math.floor(durationMs / 3600000);
+  const minutes = Math.floor((durationMs % 3600000) / 60000);
+  const seconds = Math.floor((durationMs % 60000) / 1000);
+  stats.duration = hours > 0 
+    ? `${hours}h ${minutes}m ${seconds}s`
+    : minutes > 0 
+      ? `${minutes}m ${seconds}s`
+      : `${seconds}s`;
 
   // Show summary
   renderSessionSummary(stats, stopReason);

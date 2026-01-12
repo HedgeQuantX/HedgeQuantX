@@ -1,5 +1,5 @@
 /**
- * One Account Mode - HQX Ultra Scalping
+ * One Account Mode - HQX Algo Trading with Strategy Selection
  */
 
 const chalk = require('chalk');
@@ -11,10 +11,39 @@ const { AlgoUI, renderSessionSummary } = require('./ui');
 const { prompts } = require('../../utils');
 const { checkMarketHours } = require('../../services/rithmic/market');
 
-// Strategy & Market Data
-const { M1 } = require('../../lib/m/s1');
+// Strategy Registry & Market Data
+const { getAvailableStrategies, loadStrategy, getStrategy } = require('../../lib/m');
 const { MarketDataFeed } = require('../../lib/data');
 
+
+/**
+ * Strategy Selection - Display available strategies with backtest results
+ * @returns {Promise<string|null>} Selected strategy ID or null
+ */
+const selectStrategy = async () => {
+  const strategies = getAvailableStrategies();
+  
+  console.log();
+  console.log(chalk.cyan.bold('  Available Strategies:'));
+  console.log();
+  
+  for (const s of strategies) {
+    console.log(chalk.white(`  ${s.name}`));
+    console.log(chalk.gray(`    ${s.description}`));
+    console.log(chalk.gray(`    Stop: ${s.params.stopTicks}t | Target: ${s.params.targetTicks}t | R:R ${s.params.riskReward}`));
+    console.log(chalk.green(`    Backtest: ${s.backtest.winRate} WR | ${s.backtest.pnl} P&L | ${s.backtest.trades} trades`));
+    console.log();
+  }
+  
+  const options = strategies.map(s => ({
+    label: `${s.name} (${s.backtest.winRate} WR, ${s.backtest.pnl})`,
+    value: s.id
+  }));
+  options.push({ label: chalk.gray('< Back'), value: 'back' });
+  
+  const selected = await prompts.selectOption(chalk.yellow('Select Strategy:'), options);
+  return selected === 'back' ? null : selected;
+};
 
 
 /**
@@ -76,11 +105,15 @@ const oneAccountMenu = async (service) => {
   const contract = await selectSymbol(accountService, selectedAccount);
   if (!contract) return;
   
+  // Select strategy
+  const strategyId = await selectStrategy();
+  if (!strategyId) return;
+  
   // Configure algo
-  const config = await configureAlgo(selectedAccount, contract);
+  const config = await configureAlgo(selectedAccount, contract, strategyId);
   if (!config) return;
   
-  await launchAlgo(accountService, selectedAccount, contract, config);
+  await launchAlgo(accountService, selectedAccount, contract, config, strategyId);
 };
 
 /**
@@ -135,9 +168,12 @@ const selectSymbol = async (service, account) => {
 /**
  * Configure algo
  */
-const configureAlgo = async (account, contract) => {
+const configureAlgo = async (account, contract, strategyId) => {
+  const strategyInfo = getStrategy(strategyId);
+  
   console.log();
   console.log(chalk.cyan('  Configure Algo Parameters'));
+  console.log(chalk.gray(`  Strategy: ${strategyInfo.name}`));
   console.log();
   
   const contracts = await prompts.numberInput('Number of contracts:', 1, 1, 10);
@@ -159,11 +195,15 @@ const configureAlgo = async (account, contract) => {
 };
 
 /**
- * Launch algo trading - HQX Ultra Scalping Strategy
+ * Launch algo trading - Dynamic Strategy Loading
  * Real-time market data + Strategy signals + Auto order execution
  */
-const launchAlgo = async (service, account, contract, config) => {
+const launchAlgo = async (service, account, contract, config, strategyId) => {
   const { contracts, dailyTarget, maxRisk, showName } = config;
+  
+  // Load strategy dynamically
+  const strategyInfo = getStrategy(strategyId);
+  const strategyModule = loadStrategy(strategyId);
   
   // Use RAW API fields
   const accountName = showName 
@@ -174,7 +214,7 @@ const launchAlgo = async (service, account, contract, config) => {
   const connectionType = account.platform || 'Rithmic';
   const tickSize = contract.tickSize || 0.25;
   
-  const ui = new AlgoUI({ subtitle: 'HQX Ultra Scalping', mode: 'one-account' });
+  const ui = new AlgoUI({ subtitle: strategyInfo.name, mode: 'one-account' });
   
   const stats = {
     accountName,
@@ -200,18 +240,20 @@ const launchAlgo = async (service, account, contract, config) => {
   let pendingOrder = false; // Prevent duplicate orders
   let tickCount = 0;
   
-  // Initialize Strategy
-  const strategy = new M1({ tickSize });
+  // Initialize Strategy dynamically
+  const strategy = new strategyModule.M1({ tickSize });
   strategy.initialize(contractId, tickSize);
   
   // Initialize Market Data Feed
   const marketFeed = new MarketDataFeed({ propfirm: account.propfirm });
   
   // Log startup
+  ui.addLog('info', `Strategy: ${strategyInfo.name}`);
   ui.addLog('info', `Connection: ${connectionType}`);
   ui.addLog('info', `Account: ${accountName}`);
   ui.addLog('info', `Symbol: ${symbolName} | Qty: ${contracts}`);
   ui.addLog('info', `Target: $${dailyTarget} | Max Risk: $${maxRisk}`);
+  ui.addLog('info', `Params: ${strategyInfo.params.stopTicks}t stop, ${strategyInfo.params.targetTicks}t target (${strategyInfo.params.riskReward})`);
   ui.addLog('info', 'Connecting to market data...');
   
   // Handle strategy signals
