@@ -7,7 +7,7 @@ const ora = require('ora');
 
 const { connections } = require('../services');
 const { ACCOUNT_STATUS, ACCOUNT_TYPE } = require('../config');
-const { getLogoWidth, getColWidths, drawBoxHeader, drawBoxFooter, draw2ColHeader, visibleLength, displayBanner, clearScreen } = require('../ui');
+const { getLogoWidth, getColWidths, drawBoxHeader, drawBoxFooter, draw2ColHeader, visibleLength, displayBanner, clearScreen, centerText } = require('../ui');
 const { prompts } = require('../utils');
 
 /**
@@ -173,7 +173,24 @@ const showAccounts = async (service) => {
     console.log();
 
   } catch (error) {
-    if (spinner) spinner.fail('ERROR LOADING ACCOUNTS: ' + error.message.toUpperCase());
+    if (spinner) spinner.stop();
+    
+    // Display error in a proper box
+    const W = boxWidth - 2;
+    console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
+    console.log(chalk.cyan('║') + chalk.yellow.bold(centerText('TRADING ACCOUNTS', W)) + chalk.cyan('║'));
+    console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
+    console.log(chalk.cyan('║') + ' '.repeat(W) + chalk.cyan('║'));
+    
+    // Truncate error message to fit
+    let errMsg = (error.message || 'Unknown error').toUpperCase();
+    const maxLen = W - 4;
+    if (errMsg.length > maxLen) {
+      errMsg = errMsg.substring(0, maxLen - 3) + '...';
+    }
+    console.log(chalk.cyan('║') + chalk.red(centerText('ERROR: ' + errMsg, W)) + chalk.cyan('║'));
+    console.log(chalk.cyan('║') + ' '.repeat(W) + chalk.cyan('║'));
+    console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
   }
 
   await prompts.waitForEnter();
