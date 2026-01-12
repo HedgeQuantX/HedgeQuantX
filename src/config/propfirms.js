@@ -15,6 +15,14 @@ const PROPFIRMS = {
     rithmicSystem: 'Apex',
     wsEndpoint: 'wss://ritpa11120.11.rithmic.com:443',
   },
+  rithmic_paper: {
+    id: 'rithmic-paper',
+    name: 'Rithmic Paper Trading',
+    displayName: 'Rithmic Paper Trading',
+    platform: 'Rithmic',
+    rithmicSystem: 'Rithmic Paper Trading',
+    wsEndpoint: 'wss://ritpa11120.11.rithmic.com:443',
+  },
   topsteptrader: {
     id: 'topsteptrader',
     name: 'TopstepTrader',
@@ -146,6 +154,9 @@ const PROPFIRM_CHOICES = Object.entries(PROPFIRMS)
     // Apex always first
     if (a.name === 'Apex') return -1;
     if (b.name === 'Apex') return 1;
+    // Rithmic Paper Trading second
+    if (a.name === 'Rithmic Paper Trading') return -1;
+    if (b.name === 'Rithmic Paper Trading') return 1;
     // 4PropTrader and 10XFutures always last
     const lastItems = ['4PropTrader', '10XFutures'];
     const aIsLast = lastItems.includes(a.name);
