@@ -234,12 +234,12 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     aiContext.recentTicks.push(tick);
     if (aiContext.recentTicks.length > aiContext.maxTicks) aiContext.recentTicks.shift();
     
-    const price = tick.price || tick.tradePrice;
-    const bid = tick.bid || tick.bidPrice;
-    const ask = tick.ask || tick.askPrice;
-    const volume = tick.volume || tick.size || 1;
+    const price = Number(tick.price) || Number(tick.tradePrice) || null;
+    const bid = Number(tick.bid) || Number(tick.bidPrice) || null;
+    const ask = Number(tick.ask) || Number(tick.askPrice) || null;
+    const volume = Number(tick.volume) || Number(tick.size) || 1;
     
-    // Track buy/sell volume
+    // Track buy/sell volume (ensure numeric addition)
     if (tick.side === 'buy' || tick.aggressor === 1) buyVolume += volume;
     else if (tick.side === 'sell' || tick.aggressor === 2) sellVolume += volume;
     else if (price && lastPrice) {
