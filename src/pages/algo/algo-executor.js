@@ -219,10 +219,14 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   let sellVolume = 0;
   let barCount = 0;
   
+  // Track tick arrival times for latency estimation
+  let lastTickTime = 0;
+  let tickLatencies = [];
+  
   marketFeed.on('tick', (tick) => {
     tickCount++;
-    const latencyStart = Date.now();
-    const currentSecond = Math.floor(Date.now() / 1000);
+    const now = Date.now();
+    const currentSecond = Math.floor(now / 1000);
     
     // Count ticks per second
     if (currentSecond === lastTickSecond) {
@@ -340,16 +344,30 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       timestamp: tick.timestamp || Date.now()
     });
     
-    // Calculate network latency from tick timestamp (if available)
+    // Calculate latency based on tick timestamp or inter-tick timing
     if (tick.timestamp) {
       const tickTime = typeof tick.timestamp === 'number' ? tick.timestamp : Date.parse(tick.timestamp);
-      if (!isNaN(tickTime)) {
-        stats.latency = Math.max(0, Date.now() - tickTime);
+      if (!isNaN(tickTime) && tickTime > 1000000000000) { // Valid millisecond timestamp
+        stats.latency = Math.max(0, now - tickTime);
       }
+    } else if (tick.ssboe && tick.usecs) {
+      // Rithmic sends ssboe (seconds since epoch) and usecs (microseconds)
+      const tickTimeMs = tick.ssboe * 1000 + Math.floor(tick.usecs / 1000);
+      stats.latency = Math.max(0, now - tickTimeMs);
     } else {
-      // Fallback: processing latency
-      stats.latency = Date.now() - latencyStart;
+      // Estimate latency from tick frequency - if we're getting real-time data, latency should be low
+      if (lastTickTime > 0) {
+        const timeSinceLastTick = now - lastTickTime;
+        // If ticks are coming frequently, latency is low
+        if (timeSinceLastTick < 100) {
+          tickLatencies.push(timeSinceLastTick);
+          if (tickLatencies.length > 20) tickLatencies.shift();
+          // Average of recent inter-tick times as proxy for latency
+          stats.latency = Math.round(tickLatencies.reduce((a, b) => a + b, 0) / tickLatencies.length);
+        }
+      }
     }
+    lastTickTime = now;
   });
   
   marketFeed.on('connected', () => { 
