@@ -38,6 +38,12 @@ const DEFAULT_CONFIG = {
     kalman: 0.15,      // 15%
     kyleLambda: 0.10,  // 10%
     volatility: 0.10   // 10%
+  },
+
+  // Session (Futures Market Hours - Sunday 18:00 to Friday 17:00 EST)
+  session: {
+    enabled: false,           // Trade anytime markets are open
+    timezone: 'America/New_York'
   }
 };
 
