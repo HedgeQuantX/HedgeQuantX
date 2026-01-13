@@ -88,12 +88,21 @@ const oneAccountMenu = async (service) => {
         
         // Load contracts to find the saved symbol (match by baseSymbol first, then exact symbol)
         const contractsResult = await accountService.getContracts();
-        if (contractsResult.success) {
+        if (contractsResult.success && contractsResult.contracts.length > 0) {
           // Try baseSymbol match first (more stable across contract rolls)
-          contract = contractsResult.contracts.find(c => c.baseSymbol === lastConfig.baseSymbol);
+          if (lastConfig.baseSymbol) {
+            contract = contractsResult.contracts.find(c => c.baseSymbol === lastConfig.baseSymbol);
+          }
           // Fall back to exact symbol match
-          if (!contract) {
+          if (!contract && lastConfig.symbol) {
             contract = contractsResult.contracts.find(c => c.symbol === lastConfig.symbol);
+          }
+          // Last resort: try to extract base symbol from saved symbol (e.g., MESH6 -> MES)
+          if (!contract && lastConfig.symbol) {
+            const extractedBase = lastConfig.symbol.replace(/[A-Z]\d+$/, '');
+            if (extractedBase) {
+              contract = contractsResult.contracts.find(c => c.baseSymbol === extractedBase);
+            }
           }
         }
         
