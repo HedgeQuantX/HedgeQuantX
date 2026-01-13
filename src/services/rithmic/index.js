@@ -42,6 +42,8 @@ const PROPFIRM_CONFIGS = {
   lucidtrading: { name: 'Lucid Trading', systemName: RITHMIC_SYSTEMS.LUCID_TRADING, gateway: RITHMIC_ENDPOINTS.CHICAGO },
   thrivetrading: { name: 'Thrive Trading', systemName: RITHMIC_SYSTEMS.THRIVE_TRADING, gateway: RITHMIC_ENDPOINTS.CHICAGO },
   legendstrading: { name: 'Legends Trading', systemName: RITHMIC_SYSTEMS.LEGENDS_TRADING, gateway: RITHMIC_ENDPOINTS.CHICAGO },
+  // Rithmic Paper Trading - uses dedicated PAPER endpoint
+  rithmic_paper: { name: 'Rithmic Paper Trading', systemName: RITHMIC_SYSTEMS.PAPER, gateway: RITHMIC_ENDPOINTS.PAPER },
 };
 
 /**
