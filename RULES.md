@@ -55,7 +55,20 @@
 ### 7b. Tests et Validation
 - **TESTER** tout toi-même avant d'implémenter
 - **UNE FOIS** tout validé, implémenter les changements
-- **PUIS** commit + push + publish npm
+- **PUIS** CPP (Commit + Push + Publish npm)
+
+### 7c. CPP (Commit + Push + Publish)
+- **CPP** = Commit + Push + Publish npm
+- Quand l'utilisateur dit "CPP", exécuter dans l'ordre:
+  1. `git add -A`
+  2. `git commit -m "vX.X.X: description"`
+  3. `npm version patch --no-git-tag-version`
+  4. `git add package.json package-lock.json`
+  5. `git commit --amend -m "vX.X.X: description"`
+  6. `git push`
+  7. `npm publish`
+- **TOUJOURS** incrémenter la version avec `npm version patch`
+- **TOUJOURS** inclure un message de commit descriptif
 
 ### 8. Synchronisation des Repositories
 - **TOUJOURS** vérifier la synchronisation entre `/root/HQX-CLI` et `/home/hqx/HQX-CLI` en début de session
