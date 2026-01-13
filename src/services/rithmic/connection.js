@@ -5,8 +5,24 @@
 
 const WebSocket = require('ws');
 const EventEmitter = require('events');
+const os = require('os');
 const { proto } = require('./protobuf');
 const { REQ, RES, INFRA_TYPE } = require('./constants');
+
+/**
+ * Get MAC address from network interfaces
+ */
+function getMacAddress() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (!iface.internal && iface.mac !== '00:00:00:00:00:00') {
+        return iface.mac;
+      }
+    }
+  }
+  return '00:00:00:00:00:00';
+}
 
 class RithmicConnection extends EventEmitter {
   constructor() {
@@ -108,6 +124,9 @@ class RithmicConnection extends EventEmitter {
       appVersion: this.config.appVersion || '1.0.0',
       systemName: this.config.systemName,
       infraType: INFRA_TYPE[infraType],
+      macAddr: [getMacAddress()],
+      osVersion: os.release(),
+      osPlatform: os.platform(),
     });
   }
 

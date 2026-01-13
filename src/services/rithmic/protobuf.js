@@ -331,46 +331,59 @@ class ProtobufHandler {
   }
 
   /**
-   * Encode a message to Buffer
+   * Encode a message to Buffer with 4-byte length prefix
    */
   encode(typeName, data) {
     if (!this.root) throw new Error('Proto not loaded');
 
     const Type = this.root.lookupType(typeName);
     const msg = Type.create(data);
-    return Buffer.from(Type.encode(msg).finish());
+    const serialized = Buffer.from(Type.encode(msg).finish());
+    
+    // Add 4-byte length prefix (big-endian, signed)
+    const lengthPrefix = Buffer.alloc(4);
+    lengthPrefix.writeInt32BE(serialized.length, 0);
+    
+    return Buffer.concat([lengthPrefix, serialized]);
   }
 
   /**
-   * Decode a Buffer to object
+   * Decode a Buffer to object (skip 4-byte length prefix)
    */
   decode(typeName, buffer) {
     if (!this.root) throw new Error('Proto not loaded');
 
+    // Skip 4-byte length prefix if present
+    const data = buffer.length > 4 ? buffer.slice(4) : buffer;
+    
     const Type = this.root.lookupType(typeName);
-    return Type.decode(buffer);
+    return Type.decode(data);
   }
 
   /**
    * Get template ID from buffer (manual decode for large field IDs)
+   * Skips 4-byte length prefix if present
    */
   getTemplateId(buffer) {
     const TEMPLATE_ID_FIELD = 154467;
 
+    // Skip 4-byte length prefix
+    const data = buffer.length > 4 ? buffer.slice(4) : buffer;
+    
     let offset = 0;
-    while (offset < buffer.length) {
+    while (offset < data.length) {
       try {
-        const [tag, newOffset] = readVarint(buffer, offset);
+        const [tag, newOffset] = readVarint(data, offset);
         const fieldNumber = tag >>> 3;
         const wireType = tag & 0x7;
         offset = newOffset;
 
         if (fieldNumber === TEMPLATE_ID_FIELD && wireType === 0) {
-          const [templateId] = readVarint(buffer, offset);
+          const [templateId] = readVarint(data, offset);
           return templateId;
         }
 
-        offset = skipField(buffer, offset, wireType);
+        offset = skipField(data, offset, wireType);
       } catch (e) {
         break;
       }
@@ -380,7 +393,7 @@ class ProtobufHandler {
     if (this.root) {
       try {
         const Base = this.root.lookupType('Base');
-        const base = Base.decode(buffer);
+        const base = Base.decode(data);
         return base.templateId;
       } catch (e) {
         return -1;
