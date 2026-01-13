@@ -216,9 +216,9 @@ const decodeProductCodes = (buffer) => {
       } else if (wireType === 2) {
         const [val, newOff] = readString(data, offset);
         offset = newOff;
-        // Field IDs from response_product_codes.proto
+        // Field IDs from Rithmic API
         if (fieldNumber === 110101) result.exchange = val;      // exchange
-        if (fieldNumber === 110102) result.productCode = val;   // product_code (ES, MES, MNQ, etc.)
+        if (fieldNumber === 100749) result.productCode = val;   // product_code (ES, MES, MNQ, etc.)
         if (fieldNumber === 110103) result.productName = val;   // product_name
       } else {
         break;

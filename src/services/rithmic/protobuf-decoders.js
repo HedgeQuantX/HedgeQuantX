@@ -30,8 +30,9 @@ const PNL_FIELDS = {
 const SYMBOL_FIELDS = {
   TEMPLATE_ID: 154467,
   RP_CODE: 132766,
+  RP_CODE_2: 132764,      // Another rp_code field
   EXCHANGE: 110101,
-  PRODUCT_CODE: 110102,   // Base symbol (ES, NQ, MNQ)
+  PRODUCT_CODE: 100749,   // Base symbol (ES, NQ, MNQ) - actual field ID from Rithmic
   PRODUCT_NAME: 110103,   // Product name
   SYMBOL: 110100,         // Full contract symbol (ESH26)
   TRADING_SYMBOL: 157095, // Trading symbol
@@ -262,43 +263,45 @@ function decodeInstrumentPnL(buffer) {
 
 /**
  * Decode ResponseProductCodes (template 112) - list of available symbols
- * @param {Buffer} buffer - Raw protobuf buffer
+ * @param {Buffer} buffer - Raw protobuf buffer (with 4-byte length prefix)
  * @returns {Object} Decoded product codes
  */
 function decodeProductCodes(buffer) {
+  // Skip 4-byte length prefix
+  const data = buffer.length > 4 ? buffer.slice(4) : buffer;
   const result = { rpCode: [] };
   let offset = 0;
 
-  while (offset < buffer.length) {
+  while (offset < data.length) {
     try {
-      const [tag, tagOffset] = readVarint(buffer, offset);
+      const [tag, tagOffset] = readVarint(data, offset);
       const wireType = tag & 0x7;
       const fieldNumber = tag >>> 3;
       offset = tagOffset;
 
       switch (fieldNumber) {
         case SYMBOL_FIELDS.TEMPLATE_ID:
-          [result.templateId, offset] = readVarint(buffer, offset);
+          [result.templateId, offset] = readVarint(data, offset);
           break;
         case SYMBOL_FIELDS.RP_CODE:
           let rpCode;
-          [rpCode, offset] = readLengthDelimited(buffer, offset);
+          [rpCode, offset] = readLengthDelimited(data, offset);
           result.rpCode.push(rpCode);
           break;
         case SYMBOL_FIELDS.EXCHANGE:
-          [result.exchange, offset] = readLengthDelimited(buffer, offset);
+          [result.exchange, offset] = readLengthDelimited(data, offset);
           break;
         case SYMBOL_FIELDS.PRODUCT_CODE:
-          [result.productCode, offset] = readLengthDelimited(buffer, offset);
+          [result.productCode, offset] = readLengthDelimited(data, offset);
           break;
         case SYMBOL_FIELDS.PRODUCT_NAME:
-          [result.productName, offset] = readLengthDelimited(buffer, offset);
+          [result.productName, offset] = readLengthDelimited(data, offset);
           break;
         case SYMBOL_FIELDS.USER_MSG:
-          [result.userMsg, offset] = readLengthDelimited(buffer, offset);
+          [result.userMsg, offset] = readLengthDelimited(data, offset);
           break;
         default:
-          offset = skipField(buffer, offset, wireType);
+          offset = skipField(data, offset, wireType);
       }
     } catch (error) {
       break;

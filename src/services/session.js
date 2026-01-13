@@ -112,27 +112,36 @@ const connections = {
   },
 
   saveToStorage() {
-    const sessions = this.services.map(conn => ({
+    // Load existing sessions to preserve AI agents
+    const existingSessions = storage.load();
+    const aiSessions = existingSessions.filter(s => s.type === 'ai');
+    
+    // Build Rithmic sessions
+    const rithmicSessions = this.services.map(conn => ({
       type: conn.type,
       propfirm: conn.propfirm,
       propfirmKey: conn.service.propfirmKey || conn.propfirmKey,
       credentials: conn.service.credentials,
     }));
     
-    storage.save(sessions);
+    // Merge: AI sessions + Rithmic sessions
+    storage.save([...aiSessions, ...rithmicSessions]);
   },
 
   async restoreFromStorage() {
     loadServices();
     const sessions = storage.load();
     
-    if (!sessions.length) {
+    // Filter only Rithmic sessions (AI sessions are managed by ai-agents.js)
+    const rithmicSessions = sessions.filter(s => s.type === 'rithmic');
+    
+    if (!rithmicSessions.length) {
       return false;
     }
     
-    log.info('Restoring sessions', { count: sessions.length });
+    log.info('Restoring sessions', { count: rithmicSessions.length });
     
-    for (const session of sessions) {
+    for (const session of rithmicSessions) {
       try {
         await this._restoreSession(session);
       } catch (err) {
