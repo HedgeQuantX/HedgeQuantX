@@ -81,6 +81,36 @@
 - **NE JAMAIS** faire de git pull sans vérifier les conséquences
 - **NE JAMAIS** écraser les modifications locales
 
+### 9. Protection des Fichiers Sources (Proprietary Code)
+
+Certains répertoires contiennent du code propriétaire protégé et sont **exclus de git** via `.gitignore`:
+
+**Répertoires protégés (non versionnés sur git):**
+- `src/lib/` - Librairies internes, stratégies, modules de données
+- `scripts/` - Scripts de build et déploiement
+
+**Workflow de publication:**
+- Ces fichiers sont **exclus de git** mais **inclus dans npm publish**
+- Voir `package.json` → `"files"` pour la liste des fichiers publiés
+- Les modifications dans `src/lib/` sont publiées via `npm publish` mais pas commitées sur GitHub
+- Cela protège le code source propriétaire tout en permettant la distribution via npm
+
+**Structure de protection:**
+```
+.gitignore:
+  src/lib/     # Code propriétaire (stratégies, algos)
+  scripts/     # Scripts de build
+
+package.json "files":
+  src/lib/     # Inclus dans npm (distribué aux utilisateurs)
+  dist/lib/    # Versions compilées (bytenode)
+```
+
+**Important:**
+- **NE JAMAIS** retirer `src/lib/` du `.gitignore`
+- **NE JAMAIS** forcer l'ajout avec `git add -f` pour ces répertoires
+- Le code source propriétaire reste local et sur npm uniquement
+
 ---
 
 ## Checklist Avant Modification
@@ -128,4 +158,4 @@ la réponse contient `"model": "MiniMax-M2.1"` pour confirmer le bon modèle.
 
 ---
 
-*Dernière mise à jour: Janvier 2025*
+*Dernière mise à jour: 13 Janvier 2026*
