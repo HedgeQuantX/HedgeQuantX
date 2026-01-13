@@ -15,14 +15,7 @@ const PROPFIRMS = {
     rithmicSystem: 'Apex',
     wsEndpoint: 'wss://ritpa11120.11.rithmic.com:443',
   },
-  topsteptrader: {
-    id: 'topsteptrader',
-    name: 'TopstepTrader',
-    displayName: 'TopstepTrader',
-    platform: 'Rithmic',
-    rithmicSystem: 'TopstepTrader',
-    wsEndpoint: 'wss://ritpa11120.11.rithmic.com:443'
-  },
+
   mes_capital: {
     id: 'mes-capital',
     name: 'MES Capital',

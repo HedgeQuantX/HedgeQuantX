@@ -13,7 +13,7 @@
 - **JAMAIS** de mock data
 - **JAMAIS** de simulation
 - **JAMAIS** d'estimation ou d'invention
-- **TOUJOURS** utiliser des vraies données via les APIs (ProjectX, Rithmic, Tradovate)
+- **TOUJOURS** utiliser des vraies données via l'API Rithmic
 - Toutes les valeurs affichées doivent provenir directement des APIs
 
 ### 2. Charte des Règles
@@ -52,18 +52,10 @@
 - Vérifier que le code fonctionne correctement avec les autres modules
 - S'assurer que les imports/exports sont corrects et fonctionnels
 
-### 7b. Tests Obligatoires Avant Publication (npm publish)
-- **IMPÉRATIF**: Tester EXACTEMENT comme l'utilisateur final (package npm installé globalement)
-- **AVANT** tout commit/push/publish, simuler l'environnement de production:
-  ```bash
-  # Créer un dossier temporaire isolé
-  mkdir -p /tmp/test-hqx && cd /tmp/test-hqx
-  # Copier UNIQUEMENT les fichiers qui seront dans le package npm (voir "files" dans package.json)
-  # Tester depuis ce dossier isolé, PAS depuis /home/hqx/HQX-CLI
-  ```
-- **NE JAMAIS** tester depuis le repo source (il contient des fichiers non publiés comme /private/)
-- **TOUJOURS** vérifier que les chemins relatifs fonctionnent dans le package publié
-- Les tests locaux dans le repo NE GARANTISSENT PAS que le package npm fonctionnera
+### 7b. Tests et Validation
+- **TESTER** tout toi-même avant d'implémenter
+- **UNE FOIS** tout validé, implémenter les changements
+- **PUIS** commit + push + publish npm
 
 ### 8. Synchronisation des Repositories
 - **TOUJOURS** vérifier la synchronisation entre `/root/HQX-CLI` et `/home/hqx/HQX-CLI` en début de session

@@ -77,8 +77,8 @@ const launchCopyTrading = async (config) => {
   const strategy = new StrategyClass({ tickSize });
   strategy.initialize(contractId, tickSize);
   
-  // Initialize Market Data Feed
-  const marketFeed = new MarketDataFeed({ propfirm: leadAccount.propfirm });
+  // Initialize Market Data Feed (Rithmic TICKER_PLANT)
+  const marketFeed = new MarketDataFeed();
   
   // Log startup
   ui.addLog('info', `Lead: ${leadName} | Followers: ${followers.length}`);
@@ -186,12 +186,14 @@ const launchCopyTrading = async (config) => {
   marketFeed.on('error', (err) => ui.addLog('error', `Market: ${err.message}`));
   marketFeed.on('disconnected', () => { stats.connected = false; ui.addLog('error', 'Disconnected'); });
   
-  // Connect to market data
+  // Connect to market data (Rithmic TICKER_PLANT)
   try {
-    const token = leadService.token || leadService.getToken?.();
-    const pk = (leadAccount.propfirm || 'topstep').toLowerCase().replace(/\s+/g, '_');
-    await marketFeed.connect(token, pk, contractId);
-    await marketFeed.subscribe(symbolName, contractId);
+    const rithmicCredentials = leadService.getRithmicCredentials?.();
+    if (!rithmicCredentials) {
+      throw new Error('Rithmic credentials not available');
+    }
+    await marketFeed.connect(rithmicCredentials);
+    await marketFeed.subscribe(symbolName, contract.exchange || 'CME');
   } catch (e) {
     ui.addLog('error', `Connect failed: ${e.message}`);
   }

@@ -13,7 +13,7 @@ const { SupervisionEngine } = require('../../services/ai-supervision');
 /**
  * Execute algo strategy with market data
  * @param {Object} params - Execution parameters
- * @param {Object} params.service - Trading service (Rithmic/ProjectX)
+ * @param {Object} params.service - Rithmic trading service
  * @param {Object} params.account - Account object
  * @param {Object} params.contract - Contract object
  * @param {Object} params.config - Algo config (contracts, target, risk, showName)
@@ -77,8 +77,8 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   const strategy = new StrategyClass({ tickSize });
   strategy.initialize(contractId, tickSize);
   
-  // Initialize Market Data Feed
-  const marketFeed = new MarketDataFeed({ propfirm: account.propfirm });
+  // Initialize Market Data Feed (Rithmic TICKER_PLANT)
+  const marketFeed = new MarketDataFeed();
   
   // Log startup
   ui.addLog('info', `Strategy: ${strategyName}${supervisionEnabled ? ' + AI' : ''}`);
@@ -207,12 +207,14 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   marketFeed.on('error', (err) => ui.addLog('error', `Market: ${err.message}`));
   marketFeed.on('disconnected', () => { stats.connected = false; ui.addLog('error', 'Market disconnected'); });
   
-  // Connect to market data
+  // Connect to market data (Rithmic TICKER_PLANT)
   try {
-    const token = service.token || service.getToken?.();
-    const propfirmKey = (account.propfirm || 'topstep').toLowerCase().replace(/\s+/g, '_');
-    await marketFeed.connect(token, propfirmKey, contractId);
-    await marketFeed.subscribe(symbolName, contractId);
+    const rithmicCredentials = service.getRithmicCredentials?.();
+    if (!rithmicCredentials) {
+      throw new Error('Rithmic credentials not available');
+    }
+    await marketFeed.connect(rithmicCredentials);
+    await marketFeed.subscribe(symbolName, contract.exchange || 'CME');
   } catch (e) {
     ui.addLog('error', `Failed to connect: ${e.message}`);
   }

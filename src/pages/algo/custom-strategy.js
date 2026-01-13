@@ -46,7 +46,7 @@ const customStrategyMenu = async (service) => {
   
   if (!allAccounts?.length) { spinner.fail('No accounts found'); await prompts.waitForEnter(); return; }
   
-  // Filter active accounts: status === 0 (ProjectX) OR status === 'active' (Rithmic) OR no status
+  // Filter active accounts: status === 'active' (Rithmic) OR status === 0 OR no status
   const activeAccounts = allAccounts.filter(acc => 
     acc.status === 0 || acc.status === 'active' || acc.status === undefined || acc.status === null
   );
