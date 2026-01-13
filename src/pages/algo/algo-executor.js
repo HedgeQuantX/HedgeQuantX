@@ -93,7 +93,20 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   
   // Handle strategy signals
   strategy.on('signal', async (signal) => {
-    if (!running || pendingOrder || currentPosition !== 0) return;
+    ui.addLog('info', `SIGNAL DETECTED: ${signal.direction?.toUpperCase()}`);
+    
+    if (!running) {
+      ui.addLog('info', 'Signal ignored: not running');
+      return;
+    }
+    if (pendingOrder) {
+      ui.addLog('info', 'Signal ignored: order pending');
+      return;
+    }
+    if (currentPosition !== 0) {
+      ui.addLog('info', `Signal ignored: position open (${currentPosition})`);
+      return;
+    }
     
     let { direction, entry, stopLoss, takeProfit, confidence } = signal;
     let orderSize = contracts;
@@ -185,25 +198,85 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   });
   
   // Handle market data ticks
+  let lastPrice = null;
+  let lastBid = null;
+  let lastAsk = null;
+  let ticksPerSecond = 0;
+  let lastTickSecond = Math.floor(Date.now() / 1000);
+  
   marketFeed.on('tick', (tick) => {
     tickCount++;
     const latencyStart = Date.now();
+    const currentSecond = Math.floor(Date.now() / 1000);
+    
+    // Count ticks per second
+    if (currentSecond === lastTickSecond) {
+      ticksPerSecond++;
+    } else {
+      ticksPerSecond = 1;
+      lastTickSecond = currentSecond;
+    }
     
     aiContext.recentTicks.push(tick);
     if (aiContext.recentTicks.length > aiContext.maxTicks) aiContext.recentTicks.shift();
     
+    // Smart logs for tick flow
+    const price = tick.price || tick.tradePrice;
+    const bid = tick.bid || tick.bidPrice;
+    const ask = tick.ask || tick.askPrice;
+    
+    // Log first tick
+    if (tickCount === 1) {
+      ui.addLog('info', `First tick received @ ${price?.toFixed(2) || 'N/A'}`);
+      ui.addLog('info', `Tick type: ${tick.type || 'unknown'}`);
+    }
+    
+    // Log price changes
+    if (price && lastPrice && price !== lastPrice) {
+      const direction = price > lastPrice ? 'UP' : 'DOWN';
+      const change = Math.abs(price - lastPrice).toFixed(2);
+      if (tickCount <= 10 || tickCount % 50 === 0) {
+        ui.addLog('info', `Price ${direction} ${change} -> ${price.toFixed(2)}`);
+      }
+    }
+    
+    // Log bid/ask spread
+    if (bid && ask && (bid !== lastBid || ask !== lastAsk)) {
+      const spread = (ask - bid).toFixed(2);
+      if (tickCount <= 5) {
+        ui.addLog('info', `Spread: ${spread} (Bid: ${bid.toFixed(2)} / Ask: ${ask.toFixed(2)})`);
+      }
+    }
+    
+    lastPrice = price;
+    lastBid = bid;
+    lastAsk = ask;
+    
     strategy.processTick({
       contractId: tick.contractId || contractId,
-      price: tick.price, bid: tick.bid, ask: tick.ask,
-      volume: tick.volume || 1, side: tick.lastTradeSide || 'unknown',
+      price: price, bid: bid, ask: ask,
+      volume: tick.volume || tick.size || 1, 
+      side: tick.side || tick.lastTradeSide || 'unknown',
       timestamp: tick.timestamp || Date.now()
     });
     
     stats.latency = Date.now() - latencyStart;
-    if (tickCount % 100 === 0) ui.addLog('info', `Tick #${tickCount} @ ${tick.price?.toFixed(2) || 'N/A'}`);
+    
+    // Periodic status logs
+    if (tickCount === 10) ui.addLog('info', `Receiving ticks... (${ticksPerSecond}/sec)`);
+    if (tickCount === 50) ui.addLog('info', `50 ticks processed, strategy analyzing...`);
+    if (tickCount % 200 === 0) {
+      ui.addLog('info', `Tick #${tickCount} @ ${price?.toFixed(2) || 'N/A'} | ${ticksPerSecond}/sec`);
+    }
   });
   
-  marketFeed.on('connected', () => { stats.connected = true; ui.addLog('connected', 'Market data connected!'); });
+  marketFeed.on('connected', () => { 
+    stats.connected = true; 
+    ui.addLog('connected', 'Market data connected!');
+    ui.addLog('info', 'Subscribing to market data...');
+  });
+  marketFeed.on('subscribed', (symbol) => ui.addLog('info', `Subscribed to ${symbol}`));
+  marketFeed.on('debug', (msg) => ui.addLog('info', msg));
   marketFeed.on('error', (err) => ui.addLog('error', `Market: ${err.message}`));
   marketFeed.on('disconnected', () => { stats.connected = false; ui.addLog('error', 'Market disconnected'); });
   
