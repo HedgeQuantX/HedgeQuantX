@@ -240,9 +240,19 @@ const oneAccountMenu = async (service) => {
 const selectSymbol = async (service, account) => {
   const spinner = ora({ text: 'Loading symbols...', color: 'yellow' }).start();
   
+  // Ensure we have a logged-in service
+  if (!service.loginInfo && service.credentials) {
+    spinner.text = 'Reconnecting to broker...';
+    const loginResult = await service.login(service.credentials.username, service.credentials.password);
+    if (!loginResult.success) {
+      spinner.fail(`Login failed: ${loginResult.error}`);
+      return null;
+    }
+  }
+  
   const contractsResult = await service.getContracts();
   if (!contractsResult.success || !contractsResult.contracts?.length) {
-    spinner.fail('Failed to load contracts');
+    spinner.fail(`Failed to load contracts: ${contractsResult.error || 'No contracts'}`);
     return null;
   }
   
