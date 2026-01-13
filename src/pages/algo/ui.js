@@ -35,7 +35,10 @@ const LOG_COLORS = {
   analysis: chalk.blue,
   risk: chalk.yellow,
   system: chalk.blue,
-  debug: chalk.gray
+  debug: chalk.gray,
+  // Market bias
+  bullish: chalk.cyan.bold,
+  bearish: chalk.magenta.bold
 };
 
 // Log type icons - compact HF style
@@ -54,7 +57,9 @@ const LOG_ICONS = {
   analysis: 'ANLZ ',
   risk: 'RISK ',
   system: 'SYS  ',
-  debug: 'DBG  '
+  debug: 'DBG  ',
+  bullish: 'BULL ',
+  bearish: 'BEAR '
 };
 
 /**

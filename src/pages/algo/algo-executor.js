@@ -269,7 +269,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       // Log bias only when it changes or every 10 seconds
       if (bias !== lastBias || currentSecond % 10 === 0) {
         const biasLog = smartLogs.getMarketBiasLog(bias, delta, buyPressure);
-        const biasType = bias === 'LONG' ? 'ready' : bias === 'SHORT' ? 'risk' : 'analysis';
+        const biasType = bias === 'LONG' ? 'bullish' : bias === 'SHORT' ? 'bearish' : 'analysis';
         ui.addLog(biasType, `${biasLog.message} ${biasLog.details || ''}`);
         lastBias = bias;
       }
