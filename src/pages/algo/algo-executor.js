@@ -6,7 +6,7 @@
 
 const readline = require('readline');
 const { AlgoUI, renderSessionSummary } = require('./ui');
-const { M1 } = require('../../lib/m/s1');
+const { loadStrategy } = require('../../lib/m');
 const { MarketDataFeed } = require('../../lib/data');
 const { SupervisionEngine } = require('../../services/ai-supervision');
 
@@ -17,11 +17,18 @@ const { SupervisionEngine } = require('../../services/ai-supervision');
  * @param {Object} params.account - Account object
  * @param {Object} params.contract - Contract object
  * @param {Object} params.config - Algo config (contracts, target, risk, showName)
+ * @param {Object} params.strategy - Strategy info object with id, name
  * @param {Object} params.options - Optional: supervisionConfig for multi-agent AI
  */
-const executeAlgo = async ({ service, account, contract, config, options = {} }) => {
+const executeAlgo = async ({ service, account, contract, config, strategy: strategyInfo, options = {} }) => {
   const { contracts, dailyTarget, maxRisk, showName } = config;
   const { supervisionConfig, subtitle } = options;
+  
+  // Load the selected strategy module dynamically
+  const strategyId = strategyInfo?.id || 'ultra-scalping';
+  const strategyName = strategyInfo?.name || 'HQX Scalping';
+  const strategyModule = loadStrategy(strategyId);
+  const StrategyClass = strategyModule.M1; // loadStrategy normalizes to M1
   
   // Initialize AI Supervision Engine if configured
   const supervisionEnabled = supervisionConfig?.supervisionEnabled && supervisionConfig?.agents?.length > 0;
@@ -35,7 +42,7 @@ const executeAlgo = async ({ service, account, contract, config, options = {} })
   const tickSize = contract.tickSize || 0.25;
   
   const ui = new AlgoUI({ 
-    subtitle: subtitle || (supervisionEnabled ? 'HQX + AI SUPERVISION' : 'HQX Ultra Scalping'), 
+    subtitle: subtitle || (supervisionEnabled ? `${strategyName} + AI` : strategyName), 
     mode: 'one-account' 
   });
   
@@ -67,14 +74,14 @@ const executeAlgo = async ({ service, account, contract, config, options = {} })
   const aiContext = { recentTicks: [], recentSignals: [], recentTrades: [], maxTicks: 100 };
   
   // Initialize Strategy
-  const strategy = new M1({ tickSize });
+  const strategy = new StrategyClass({ tickSize });
   strategy.initialize(contractId, tickSize);
   
   // Initialize Market Data Feed
   const marketFeed = new MarketDataFeed({ propfirm: account.propfirm });
   
   // Log startup
-  ui.addLog('info', `Strategy: ${supervisionEnabled ? 'HQX + AI Supervision' : 'HQX Ultra Scalping'}`);
+  ui.addLog('info', `Strategy: ${strategyName}${supervisionEnabled ? ' + AI' : ''}`);
   ui.addLog('info', `Account: ${accountName}`);
   ui.addLog('info', `Symbol: ${symbolName} | Qty: ${contracts}`);
   ui.addLog('info', `Target: $${dailyTarget} | Risk: $${maxRisk}`);

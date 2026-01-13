@@ -7,14 +7,20 @@ const readline = require('readline');
 const { connections } = require('../../services');
 const { AlgoUI, renderSessionSummary } = require('./ui');
 const { SupervisionEngine } = require('../../services/ai-supervision');
-const { M1 } = require('../../lib/m/s1');
+const { loadStrategy } = require('../../lib/m');
 const { MarketDataFeed } = require('../../lib/data');
 
 /**
  * Launch Copy Trading execution
  */
 const launchCopyTrading = async (config) => {
-  const { lead, followers, contract, dailyTarget, maxRisk, showNames, supervisionConfig } = config;
+  const { lead, followers, contract, dailyTarget, maxRisk, showNames, supervisionConfig, strategy: strategyInfo } = config;
+  
+  // Load the selected strategy module dynamically
+  const strategyId = strategyInfo?.id || 'ultra-scalping';
+  const strategyName = strategyInfo?.name || 'HQX Scalping';
+  const strategyModule = loadStrategy(strategyId);
+  const StrategyClass = strategyModule.M1;
   
   // Initialize AI Supervision if configured
   const supervisionEnabled = supervisionConfig?.supervisionEnabled && supervisionConfig?.agents?.length > 0;
@@ -35,7 +41,7 @@ const launchCopyTrading = async (config) => {
   );
   
   const ui = new AlgoUI({ 
-    subtitle: supervisionEnabled ? 'HQX Copy + AI' : 'HQX Copy Trading', 
+    subtitle: supervisionEnabled ? `${strategyName} Copy + AI` : `${strategyName} Copy`, 
     mode: 'copy-trading' 
   });
   
@@ -68,7 +74,7 @@ const launchCopyTrading = async (config) => {
   let tickCount = 0;
   
   // Initialize Strategy
-  const strategy = new M1({ tickSize });
+  const strategy = new StrategyClass({ tickSize });
   strategy.initialize(contractId, tickSize);
   
   // Initialize Market Data Feed

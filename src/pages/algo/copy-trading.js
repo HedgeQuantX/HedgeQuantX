@@ -13,6 +13,7 @@ const { checkMarketHours } = require('../../services/rithmic/market');
 const { getActiveAgentCount, getSupervisionConfig, getActiveAgents } = require('../ai-agents');
 const { launchCopyTrading } = require('./copy-executor');
 const { runPreflightCheck, formatPreflightResults, getPreflightSummary } = require('../../services/ai-supervision');
+const { getAvailableStrategies } = require('../../lib/m');
 
 /**
  * Copy Trading Menu
@@ -125,6 +126,10 @@ const copyTradingMenu = async () => {
   const contract = await selectSymbol(leadService);
   if (!contract) return;
   
+  // Step 3b: Select Strategy
+  const strategy = await selectStrategy();
+  if (!strategy) return;
+  
   // Step 4: Configure Parameters
   console.log();
   console.log(chalk.cyan.bold('  STEP 4: CONFIGURE PARAMETERS'));
@@ -185,6 +190,7 @@ const copyTradingMenu = async () => {
   // Summary
   console.log();
   console.log(chalk.white.bold('  SUMMARY:'));
+  console.log(chalk.cyan(`  Strategy: ${strategy.name}`));
   console.log(chalk.cyan(`  Symbol: ${contract.name}`));
   console.log(chalk.cyan(`  Lead: ${leadAccount.propfirm} x${leadContracts}`));
   console.log(chalk.yellow(`  Followers (${followers.length}):`));
@@ -202,11 +208,40 @@ const copyTradingMenu = async () => {
     lead: { account: leadAccount, contracts: leadContracts },
     followers: followers.map(f => ({ account: f, contracts: followerContracts })),
     contract,
+    strategy,
     dailyTarget,
     maxRisk,
     showNames,
     supervisionConfig
   });
+};
+
+/**
+ * Select trading strategy
+ */
+const selectStrategy = async () => {
+  console.log();
+  console.log(chalk.cyan('  Select Strategy'));
+  console.log();
+  
+  const strategies = getAvailableStrategies();
+  
+  const options = strategies.map(s => ({
+    label: `${s.name} (${s.backtest.winRate} WR, R:R ${s.params.riskReward})`,
+    value: s
+  }));
+  options.push({ label: chalk.gray('< Back'), value: 'back' });
+  
+  // Show strategy details
+  for (const s of strategies) {
+    console.log(chalk.white(`  ${s.name}`));
+    console.log(chalk.gray(`    Backtest: ${s.backtest.pnl} | ${s.backtest.winRate} WR | ${s.backtest.trades} trades`));
+    console.log(chalk.gray(`    Stop: ${s.params.stopTicks} ticks | Target: ${s.params.targetTicks} ticks | R:R ${s.params.riskReward}`));
+    console.log();
+  }
+  
+  const selected = await prompts.selectOption(chalk.yellow('Select Strategy:'), options);
+  return selected === 'back' || selected === null ? null : selected;
 };
 
 /**
