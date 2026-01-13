@@ -69,8 +69,12 @@ const displayBanner = () => {
   }
   
   console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
-  const tagline = isMobile ? `HQX V${version}` : `PROP FUTURES ALGO TRADING  V${version}`;
-  console.log(chalk.cyan('║') + chalk.yellow(centerText(tagline, innerWidth)) + chalk.cyan('║'));
+  const taglineText = isMobile ? 'HQX' : 'PROP FUTURES ALGO TRADING';
+  const versionText = `V${version}`;
+  const fullTagline = `${taglineText}  ${versionText}`;
+  const taglinePadding = innerWidth - fullTagline.length;
+  const taglineLeftPad = Math.floor(taglinePadding / 2);
+  console.log(chalk.cyan('║') + ' '.repeat(taglineLeftPad) + chalk.yellow(taglineText) + '  ' + chalk.magenta(versionText) + ' '.repeat(taglinePadding - taglineLeftPad) + chalk.cyan('║'));
   
   // ALWAYS close the banner
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));

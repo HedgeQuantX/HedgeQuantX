@@ -135,9 +135,14 @@ class AlgoUI {
     this._line(chalk.cyan(BOX.V) + chalk.cyan(' ██║  ██║███████╗██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ') + chalk.yellow('██╔╝ ██╗') + ' ' + chalk.cyan(BOX.V));
     this._line(chalk.cyan(BOX.V) + chalk.cyan(' ╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ') + chalk.yellow('╚═╝  ╚═╝') + ' ' + chalk.cyan(BOX.V));
     
-    // Separator + title
+    // Separator + title with version in magenta
     this._line(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
-    this._line(chalk.cyan(BOX.V) + chalk.yellow(center(`PROP FUTURES ALGO TRADING  V${version}`, W)) + chalk.cyan(BOX.V));
+    const titleText = 'PROP FUTURES ALGO TRADING';
+    const versionText = `V${version}`;
+    const fullTitle = `${titleText}  ${versionText}`;
+    const titlePad = W - fullTitle.length;
+    const titleLeftPad = Math.floor(titlePad / 2);
+    this._line(chalk.cyan(BOX.V) + ' '.repeat(titleLeftPad) + chalk.yellow(titleText) + '  ' + chalk.magenta(versionText) + ' '.repeat(titlePad - titleLeftPad) + chalk.cyan(BOX.V));
     this._line(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
     this._line(chalk.cyan(BOX.V) + chalk.cyan.bold(center((this.config.subtitle || 'HQX ALGO TRADING').toUpperCase(), W)) + chalk.cyan(BOX.V));
   }
@@ -397,9 +402,14 @@ const renderSessionSummary = (stats, stopReason) => {
   console.log(chalk.cyan(BOX.V) + chalk.cyan(' ██║  ██║███████╗██████╔╝╚██████╔╝███████╗╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ') + chalk.yellow('██╔╝ ██╗') + ' ' + chalk.cyan(BOX.V));
   console.log(chalk.cyan(BOX.V) + chalk.cyan(' ╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝ ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ') + chalk.yellow('╚═╝  ╚═╝') + ' ' + chalk.cyan(BOX.V));
   
-  // Separator + title
+  // Separator + title with version in magenta
   console.log(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
-  console.log(chalk.cyan(BOX.V) + chalk.yellow(center(`PROP FUTURES ALGO TRADING  V${version}`, W)) + chalk.cyan(BOX.V));
+  const sumTitleText = 'PROP FUTURES ALGO TRADING';
+  const sumVersionText = `V${version}`;
+  const sumFullTitle = `${sumTitleText}  ${sumVersionText}`;
+  const sumTitlePad = W - sumFullTitle.length;
+  const sumTitleLeftPad = Math.floor(sumTitlePad / 2);
+  console.log(chalk.cyan(BOX.V) + ' '.repeat(sumTitleLeftPad) + chalk.yellow(sumTitleText) + '  ' + chalk.magenta(sumVersionText) + ' '.repeat(sumTitlePad - sumTitleLeftPad) + chalk.cyan(BOX.V));
   console.log(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
   console.log(chalk.cyan(BOX.V) + chalk.yellow(center('SESSION SUMMARY', W)) + chalk.cyan(BOX.V));
   
