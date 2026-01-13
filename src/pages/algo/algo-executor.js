@@ -274,14 +274,17 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
         lastBias = bias;
       }
       
-      // Model analysis every 5 seconds
-      if (currentSecond % 5 === 0) {
-        const modelValues = strategy.getModelValues?.(contractId);
-        if (modelValues) {
-          barCount = modelValues.bars || barCount;
-          if (barCount >= 50) {
-            const modelLog = smartLogs.getModelAnalysisLog(modelValues);
-            ui.addLog('analysis', `${modelLog.message} ${modelLog.details || ''}`);
+      // Strategy state log every 10 seconds
+      if (currentSecond % 10 === 0) {
+        const state = strategy.getAnalysisState?.(contractId, price);
+        if (state) {
+          if (!state.ready) {
+            ui.addLog('system', state.message);
+          } else {
+            const resStr = state.nearestResistance ? state.nearestResistance.toFixed(2) : '--';
+            const supStr = state.nearestSupport ? state.nearestSupport.toFixed(2) : '--';
+            ui.addLog('analysis', `Bars: ${state.barsProcessed} | Zones: ${state.activeZones} | Swings: ${state.swingsDetected}`);
+            ui.addLog('analysis', `Resistance: ${resStr} | Support: ${supStr}`);
           }
         }
       }
