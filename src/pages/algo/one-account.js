@@ -13,6 +13,7 @@ const { executeAlgo } = require('./algo-executor');
 const { getActiveAgentCount, getSupervisionConfig, getActiveAgents } = require('../ai-agents');
 const { runPreflightCheck, formatPreflightResults, getPreflightSummary } = require('../../services/ai-supervision');
 const { getAvailableStrategies } = require('../../lib/m');
+const { getLastOneAccountConfig, saveOneAccountConfig } = require('../../services/algo-config');
 
 
 
@@ -54,37 +55,112 @@ const oneAccountMenu = async (service) => {
   
   spinner.succeed(`Found ${activeAccounts.length} active account(s)`);
   
-  // Select account - display RAW API fields
-  const options = activeAccounts.map(acc => {
-    // Use what API returns: rithmicAccountId or accountName for Rithmic
-    const name = acc.accountName || acc.rithmicAccountId || acc.accountId;
-    const balance = acc.balance !== null && acc.balance !== undefined 
-      ? ` - $${acc.balance.toLocaleString()}` 
-      : '';
-    return {
-      label: `${name} (${acc.propfirm || acc.platform || 'Unknown'})${balance}`,
-      value: acc
-    };
-  });
-  options.push({ label: '< Back', value: 'back' });
+  // Check for saved config
+  const lastConfig = getLastOneAccountConfig();
+  let selectedAccount = null;
+  let contract = null;
+  let strategy = null;
+  let config = null;
+  let accountService = null;
   
-  const selectedAccount = await prompts.selectOption('Select Account:', options);
-  if (!selectedAccount || selectedAccount === 'back') return;
+  if (lastConfig) {
+    // Try to find matching account and offer to reuse config
+    const matchingAccount = activeAccounts.find(acc => 
+      acc.accountId === lastConfig.accountId || 
+      acc.rithmicAccountId === lastConfig.accountId ||
+      acc.accountName === lastConfig.accountName
+    );
+    
+    if (matchingAccount) {
+      console.log();
+      console.log(chalk.cyan('  Last configuration found:'));
+      console.log(chalk.gray(`    Account: ${lastConfig.accountName} (${lastConfig.propfirm})`));
+      console.log(chalk.gray(`    Symbol: ${lastConfig.symbol}`));
+      console.log(chalk.gray(`    Strategy: ${lastConfig.strategyName}`));
+      console.log(chalk.gray(`    Contracts: ${lastConfig.contracts} | Target: $${lastConfig.dailyTarget} | Risk: $${lastConfig.maxRisk}`));
+      console.log();
+      
+      const reuseConfig = await prompts.confirmPrompt('Use last configuration?', true);
+      
+      if (reuseConfig) {
+        selectedAccount = matchingAccount;
+        accountService = selectedAccount.service || connections.getServiceForAccount(selectedAccount.accountId) || service;
+        
+        // Load contracts to find the saved symbol
+        const contractsResult = await accountService.getContracts();
+        if (contractsResult.success) {
+          contract = contractsResult.contracts.find(c => c.symbol === lastConfig.symbol);
+        }
+        
+        // Find strategy
+        const strategies = getAvailableStrategies();
+        strategy = strategies.find(s => s.id === lastConfig.strategyId);
+        
+        // Restore config
+        if (contract && strategy) {
+          config = {
+            contracts: lastConfig.contracts,
+            dailyTarget: lastConfig.dailyTarget,
+            maxRisk: lastConfig.maxRisk,
+            showName: lastConfig.showName
+          };
+          console.log(chalk.green('  ✓ Configuration loaded'));
+        } else {
+          console.log(chalk.yellow('  Symbol or strategy no longer available, please reconfigure'));
+          selectedAccount = null;
+        }
+      }
+    }
+  }
   
-  // Use the service attached to the account (from getAllAccounts), fallback to getServiceForAccount
-  const accountService = selectedAccount.service || connections.getServiceForAccount(selectedAccount.accountId) || service;
-  
-  // Select symbol
-  const contract = await selectSymbol(accountService, selectedAccount);
-  if (!contract) return;
-  
-  // Select strategy
-  const strategy = await selectStrategy();
-  if (!strategy) return;
-  
-  // Configure algo
-  const config = await configureAlgo(selectedAccount, contract, strategy);
-  if (!config) return;
+  // If no saved config used, go through normal selection
+  if (!selectedAccount) {
+    // Select account - display RAW API fields
+    const options = activeAccounts.map(acc => {
+      // Use what API returns: rithmicAccountId or accountName for Rithmic
+      const name = acc.accountName || acc.rithmicAccountId || acc.accountId;
+      const balance = acc.balance !== null && acc.balance !== undefined 
+        ? ` - $${acc.balance.toLocaleString()}` 
+        : '';
+      return {
+        label: `${name} (${acc.propfirm || acc.platform || 'Unknown'})${balance}`,
+        value: acc
+      };
+    });
+    options.push({ label: '< Back', value: 'back' });
+    
+    selectedAccount = await prompts.selectOption('Select Account:', options);
+    if (!selectedAccount || selectedAccount === 'back') return;
+    
+    // Use the service attached to the account (from getAllAccounts), fallback to getServiceForAccount
+    accountService = selectedAccount.service || connections.getServiceForAccount(selectedAccount.accountId) || service;
+    
+    // Select symbol
+    contract = await selectSymbol(accountService, selectedAccount);
+    if (!contract) return;
+    
+    // Select strategy
+    strategy = await selectStrategy();
+    if (!strategy) return;
+    
+    // Configure algo
+    config = await configureAlgo(selectedAccount, contract, strategy);
+    if (!config) return;
+    
+    // Save config for next time
+    saveOneAccountConfig({
+      accountId: selectedAccount.accountId || selectedAccount.rithmicAccountId,
+      accountName: selectedAccount.accountName || selectedAccount.rithmicAccountId || selectedAccount.accountId,
+      propfirm: selectedAccount.propfirm || selectedAccount.platform || 'Unknown',
+      symbol: contract.symbol,
+      strategyId: strategy.id,
+      strategyName: strategy.name,
+      contracts: config.contracts,
+      dailyTarget: config.dailyTarget,
+      maxRisk: config.maxRisk,
+      showName: config.showName
+    });
+  }
   
   // Check for AI Supervision BEFORE asking to start
   const agentCount = getActiveAgentCount();

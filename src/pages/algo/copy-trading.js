@@ -14,6 +14,7 @@ const { getActiveAgentCount, getSupervisionConfig, getActiveAgents } = require('
 const { launchCopyTrading } = require('./copy-executor');
 const { runPreflightCheck, formatPreflightResults, getPreflightSummary } = require('../../services/ai-supervision');
 const { getAvailableStrategies } = require('../../lib/m');
+const { getLastCopyTradingConfig, saveCopyTradingConfig } = require('../../services/algo-config');
 
 /**
  * Copy Trading Menu
@@ -53,6 +54,98 @@ const copyTradingMenu = async () => {
   }
   
   spinner.succeed(`Found ${activeAccounts.length} active accounts`);
+  
+  // Check for saved config
+  const lastConfig = getLastCopyTradingConfig();
+  
+  if (lastConfig) {
+    // Try to find matching accounts
+    const matchingLead = activeAccounts.find(acc => 
+      acc.accountId === lastConfig.leadAccountId || 
+      acc.accountName === lastConfig.leadAccountName
+    );
+    
+    if (matchingLead && lastConfig.followerAccountIds?.length > 0) {
+      const matchingFollowers = lastConfig.followerAccountIds
+        .map(id => activeAccounts.find(acc => acc.accountId === id || acc.accountName === id))
+        .filter(Boolean);
+      
+      if (matchingFollowers.length > 0) {
+        console.log();
+        console.log(chalk.cyan('  Last configuration found:'));
+        console.log(chalk.gray(`    Lead: ${lastConfig.leadAccountName} (${lastConfig.leadPropfirm})`));
+        console.log(chalk.gray(`    Followers: ${matchingFollowers.length} account(s)`));
+        console.log(chalk.gray(`    Symbol: ${lastConfig.symbol}`));
+        console.log(chalk.gray(`    Strategy: ${lastConfig.strategyName}`));
+        console.log(chalk.gray(`    Lead contracts: ${lastConfig.leadContracts} | Follower: ${lastConfig.followerContracts}`));
+        console.log(chalk.gray(`    Target: $${lastConfig.dailyTarget} | Risk: $${lastConfig.maxRisk}`));
+        console.log();
+        
+        const reuseConfig = await prompts.confirmPrompt('Use last configuration?', true);
+        
+        if (reuseConfig) {
+          // Load contracts to find symbol
+          const leadService = matchingLead.service || connections.getServiceForAccount(matchingLead.accountId);
+          const contractsResult = await leadService.getContracts();
+          const contract = contractsResult.success 
+            ? contractsResult.contracts.find(c => c.symbol === lastConfig.symbol)
+            : null;
+          
+          // Find strategy
+          const strategies = getAvailableStrategies();
+          const strategy = strategies.find(s => s.id === lastConfig.strategyId);
+          
+          if (contract && strategy) {
+            console.log(chalk.green('  ✓ Configuration loaded'));
+            
+            // Check for AI Supervision
+            const agentCount = getActiveAgentCount();
+            let supervisionConfig = null;
+            
+            if (agentCount > 0) {
+              console.log();
+              console.log(chalk.cyan(`  ${agentCount} AI Agent(s) available for supervision`));
+              const enableAI = await prompts.confirmPrompt('Enable AI Supervision?', true);
+              
+              if (enableAI) {
+                const agents = getActiveAgents();
+                const preflightResults = await runPreflightCheck(agents);
+                const lines = formatPreflightResults(preflightResults, 60);
+                for (const line of lines) console.log(line);
+                const summary = getPreflightSummary(preflightResults);
+                console.log();
+                console.log(`  ${summary.text}`);
+                
+                if (!preflightResults.success) {
+                  console.log(chalk.red('  Cannot start algo - fix agent connections first.'));
+                  await prompts.waitForEnter();
+                  return;
+                }
+                supervisionConfig = getSupervisionConfig();
+              }
+            }
+            
+            const confirm = await prompts.confirmPrompt('Start Copy Trading?', true);
+            if (!confirm) return;
+            
+            await launchCopyTrading({
+              lead: { account: matchingLead, contracts: lastConfig.leadContracts },
+              followers: matchingFollowers.map(f => ({ account: f, contracts: lastConfig.followerContracts })),
+              contract,
+              strategy,
+              dailyTarget: lastConfig.dailyTarget,
+              maxRisk: lastConfig.maxRisk,
+              showNames: lastConfig.showNames,
+              supervisionConfig
+            });
+            return;
+          } else {
+            console.log(chalk.yellow('  Symbol or strategy no longer available, please reconfigure'));
+          }
+        }
+      }
+    }
+  }
   
   // Step 1: Select LEAD Account
   console.log();
@@ -203,6 +296,22 @@ const copyTradingMenu = async () => {
   
   const confirm = await prompts.confirmPrompt('Start Copy Trading?', true);
   if (!confirm) return;
+  
+  // Save config for next time
+  saveCopyTradingConfig({
+    leadAccountId: leadAccount.accountId || leadAccount.rithmicAccountId,
+    leadAccountName: leadAccount.accountName || leadAccount.rithmicAccountId || leadAccount.accountId,
+    leadPropfirm: leadAccount.propfirm || leadAccount.platform || 'Unknown',
+    followerAccountIds: followers.map(f => f.accountId || f.rithmicAccountId),
+    symbol: contract.symbol,
+    strategyId: strategy.id,
+    strategyName: strategy.name,
+    leadContracts,
+    followerContracts,
+    dailyTarget,
+    maxRisk,
+    showNames
+  });
   
   await launchCopyTrading({
     lead: { account: leadAccount, contracts: leadContracts },
