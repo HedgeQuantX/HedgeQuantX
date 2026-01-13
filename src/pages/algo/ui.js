@@ -288,10 +288,10 @@ class AlgoUI {
     const { W, logs, maxLogs } = this;
     
     // Activity header - HF style with animated spinner
-    const elapsed = Math.floor((Date.now() - (this.startTime || Date.now())) / 100);
     if (!this.startTime) this.startTime = Date.now();
-    const spinnerIdx = elapsed % SPINNER.length;
-    const spinner = SPINNER[spinnerIdx];
+    if (!this.spinnerFrame) this.spinnerFrame = 0;
+    this.spinnerFrame = (this.spinnerFrame + 1) % SPINNER.length;
+    const spinner = SPINNER[this.spinnerFrame];
     const now = new Date();
     const timeStr = now.toLocaleTimeString('en-US', { hour12: false });
     const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });

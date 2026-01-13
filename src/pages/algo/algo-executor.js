@@ -325,7 +325,16 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       timestamp: tick.timestamp || Date.now()
     });
     
-    stats.latency = Date.now() - latencyStart;
+    // Calculate network latency from tick timestamp (if available)
+    if (tick.timestamp) {
+      const tickTime = typeof tick.timestamp === 'number' ? tick.timestamp : Date.parse(tick.timestamp);
+      if (!isNaN(tickTime)) {
+        stats.latency = Math.max(0, Date.now() - tickTime);
+      }
+    } else {
+      // Fallback: processing latency
+      stats.latency = Date.now() - latencyStart;
+    }
   });
   
   marketFeed.on('connected', () => { 
