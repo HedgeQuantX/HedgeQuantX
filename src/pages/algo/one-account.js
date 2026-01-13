@@ -207,7 +207,6 @@ const selectStrategy = async () => {
   // Show strategy details
   for (const s of strategies) {
     console.log(chalk.white(`  ${s.name}`));
-    console.log(chalk.gray(`    ${s.description}`));
     console.log(chalk.gray(`    Backtest: ${s.backtest.pnl} | ${s.backtest.winRate} WR | ${s.backtest.trades} trades`));
     console.log(chalk.gray(`    Stop: ${s.params.stopTicks} ticks | Target: ${s.params.targetTicks} ticks | R:R ${s.params.riskReward}`));
     console.log();
