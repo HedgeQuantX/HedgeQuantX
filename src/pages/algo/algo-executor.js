@@ -330,11 +330,11 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   
   marketFeed.on('connected', () => { 
     stats.connected = true; 
-    ui.addLog('connected', 'Market data connected!');
-    ui.addLog('info', 'Subscribing to market data...');
+    ui.addLog('connected', 'Market data connected');
   });
-  marketFeed.on('subscribed', (symbol) => ui.addLog('info', `Subscribed to ${symbol}`));
-  marketFeed.on('debug', (msg) => ui.addLog('info', msg));
+  marketFeed.on('subscribed', (symbol) => ui.addLog('system', `Subscribed: ${symbol}`));
+  // Suppress debug logs - not needed in production
+  // marketFeed.on('debug', (msg) => ui.addLog('debug', msg));
   marketFeed.on('error', (err) => ui.addLog('error', `Market: ${err.message}`));
   marketFeed.on('disconnected', () => { stats.connected = false; ui.addLog('error', 'Market disconnected'); });
   
@@ -346,7 +346,6 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     }
     await marketFeed.connect(rithmicCredentials);
     await marketFeed.subscribe(symbolCode, contract.exchange || 'CME');
-    ui.addLog('info', `Symbol code: ${symbolCode}`);
   } catch (e) {
     ui.addLog('error', `Failed to connect: ${e.message}`);
   }
