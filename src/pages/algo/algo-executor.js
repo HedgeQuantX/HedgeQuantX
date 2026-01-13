@@ -71,6 +71,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   let currentPosition = 0;
   let pendingOrder = false;
   let tickCount = 0;
+  let lastBias = 'FLAT';
   
   // Context for AI supervision
   const aiContext = { recentTicks: [], recentSignals: [], recentTrades: [], maxTicks: 100 };
@@ -83,36 +84,36 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   const marketFeed = new MarketDataFeed();
   
   // Log startup
-  ui.addLog('info', `Strategy: ${strategyName}${supervisionEnabled ? ' + AI' : ''}`);
-  ui.addLog('info', `Account: ${accountName}`);
-  ui.addLog('info', `Symbol: ${symbolName} | Qty: ${contracts}`);
-  ui.addLog('info', `Target: $${dailyTarget} | Risk: $${maxRisk}`);
+  ui.addLog('system', `Strategy: ${strategyName}${supervisionEnabled ? ' + AI' : ''}`);
+  ui.addLog('system', `Account: ${accountName}`);
+  ui.addLog('system', `Symbol: ${symbolName} | Qty: ${contracts}`);
+  ui.addLog('risk', `Target: $${dailyTarget} | Risk: $${maxRisk}`);
   if (supervisionEnabled) {
     const agentCount = supervisionEngine.getActiveCount();
-    ui.addLog('info', `AI Agents: ${agentCount} active`);
+    ui.addLog('analysis', `AI Agents: ${agentCount} active`);
   }
-  ui.addLog('info', 'Connecting to market data...');
+  ui.addLog('system', 'Connecting to market data...');
   
   // Handle strategy signals
   strategy.on('signal', async (signal) => {
     const dir = signal.direction?.toUpperCase() || 'UNKNOWN';
     const signalLog = smartLogs.getSignalLog(dir, symbolCode, (signal.confidence || 0) * 100, strategyName);
-    ui.addLog('info', `${signalLog.message}`);
-    ui.addLog('info', signalLog.details);
+    ui.addLog('signal', `${signalLog.message}`);
+    ui.addLog('signal', signalLog.details);
     
     if (!running) {
       const riskLog = smartLogs.getRiskCheckLog(false, 'Algo stopped');
-      ui.addLog('info', riskLog.message);
+      ui.addLog('risk', riskLog.message);
       return;
     }
     if (pendingOrder) {
       const riskLog = smartLogs.getRiskCheckLog(false, 'Order pending');
-      ui.addLog('info', riskLog.message);
+      ui.addLog('risk', riskLog.message);
       return;
     }
     if (currentPosition !== 0) {
       const riskLog = smartLogs.getRiskCheckLog(false, `Position open (${currentPosition})`);
-      ui.addLog('info', riskLog.message);
+      ui.addLog('risk', riskLog.message);
       return;
     }
     
@@ -123,11 +124,11 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     if (aiContext.recentSignals.length > 10) aiContext.recentSignals.shift();
     
     const riskLog = smartLogs.getRiskCheckLog(true, `${direction.toUpperCase()} @ ${entry.toFixed(2)}`);
-    ui.addLog('info', `${riskLog.message} - ${riskLog.details}`);
+    ui.addLog('risk', `${riskLog.message} - ${riskLog.details}`);
     
     // Multi-Agent AI Supervision
     if (supervisionEnabled && supervisionEngine) {
-      ui.addLog('info', 'AI analyzing signal...');
+      ui.addLog('analysis', 'AI analyzing signal...');
       
       const supervisionResult = await supervisionEngine.supervise({
         symbolId: symbolName,
@@ -140,9 +141,9 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       });
       
       if (!supervisionResult.success) {
-        ui.addLog('info', `AI: ${supervisionResult.reason || 'Error'}`);
+        ui.addLog('error', `AI: ${supervisionResult.reason || 'Error'}`);
       } else if (supervisionResult.decision === 'reject') {
-        ui.addLog('info', `AI rejected (${supervisionResult.confidence}%): ${supervisionResult.reason}`);
+        ui.addLog('reject', `AI rejected (${supervisionResult.confidence}%): ${supervisionResult.reason}`);
         return;
       } else {
         // Apply optimizations
@@ -154,14 +155,14 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
           if (opt.size && opt.size !== contracts) orderSize = opt.size;
         }
         const action = supervisionResult.decision === 'modify' ? 'optimized' : 'approved';
-        ui.addLog('info', `AI ${action} (${supervisionResult.confidence}%): ${supervisionResult.reason}`);
+        ui.addLog('ready', `AI ${action} (${supervisionResult.confidence}%): ${supervisionResult.reason}`);
         
         // Check timing
         if (opt.aiTiming === 'wait') {
-          ui.addLog('info', 'AI: Wait for better entry');
+          ui.addLog('analysis', 'AI: Wait for better entry');
           return;
         } else if (opt.aiTiming === 'cancel') {
-          ui.addLog('info', 'AI: Signal cancelled');
+          ui.addLog('reject', 'AI: Signal cancelled');
           return;
         }
       }
@@ -184,7 +185,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
         stats.trades++;
         const entryLog = smartLogs.getEntryLog(direction.toUpperCase(), symbolCode, orderSize, entry);
         ui.addLog('fill_' + (direction === 'long' ? 'buy' : 'sell'), entryLog.message);
-        ui.addLog('info', entryLog.details);
+        ui.addLog('trade', entryLog.details);
         
         // Bracket orders
         if (stopLoss && takeProfit) {
@@ -196,7 +197,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
             accountId: account.accountId, contractId, type: 1,
             side: direction === 'long' ? 1 : 0, size: orderSize, limitPrice: takeProfit
           });
-          ui.addLog('info', `SL: ${stopLoss.toFixed(2)} | TP: ${takeProfit.toFixed(2)}`);
+          ui.addLog('trade', `SL: ${stopLoss.toFixed(2)} | TP: ${takeProfit.toFixed(2)}`);
         }
       } else {
         ui.addLog('error', `Order failed: ${orderResult.error}`);
@@ -252,7 +253,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       ui.addLog('connected', `First tick @ ${price?.toFixed(2) || 'N/A'}`);
     }
     
-    // === SMART LOGS EVERY SECOND ===
+    // === SMART LOGS - REDUCED FREQUENCY ===
     if (currentSecond !== lastLogSecond && tickCount > 1) {
       lastLogSecond = currentSecond;
       
@@ -265,33 +266,36 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       if (buyPressure > 55) bias = 'LONG';
       else if (buyPressure < 45) bias = 'SHORT';
       
-      // Get smart log for market bias
-      const biasLog = smartLogs.getMarketBiasLog(bias, delta, buyPressure);
-      ui.addLog('info', `${biasLog.message} ${biasLog.details || ''}`);
+      // Log bias only when it changes or every 10 seconds
+      if (bias !== lastBias || currentSecond % 10 === 0) {
+        const biasLog = smartLogs.getMarketBiasLog(bias, delta, buyPressure);
+        const biasType = bias === 'LONG' ? 'ready' : bias === 'SHORT' ? 'risk' : 'analysis';
+        ui.addLog(biasType, `${biasLog.message} ${biasLog.details || ''}`);
+        lastBias = bias;
+      }
       
-      // Get model values if available
-      const modelValues = strategy.getModelValues?.(contractId);
-      if (modelValues) {
-        barCount = modelValues.bars || barCount;
-        if (barCount >= 50) {
-          const modelLog = smartLogs.getModelAnalysisLog(modelValues);
-          ui.addLog('info', `${modelLog.message} ${modelLog.details || ''}`);
-        } else {
-          const barLog = smartLogs.getBuildingBarsLog(barCount);
-          ui.addLog('info', `${barLog.message} (${barLog.details})`);
+      // Model analysis every 5 seconds
+      if (currentSecond % 5 === 0) {
+        const modelValues = strategy.getModelValues?.(contractId);
+        if (modelValues) {
+          barCount = modelValues.bars || barCount;
+          if (barCount >= 50) {
+            const modelLog = smartLogs.getModelAnalysisLog(modelValues);
+            ui.addLog('analysis', `${modelLog.message} ${modelLog.details || ''}`);
+          }
         }
       }
       
-      // Scanning log every 3 seconds
-      if (currentSecond % 3 === 0 && currentPosition === 0) {
+      // Scanning log every 7 seconds (when no position)
+      if (currentSecond % 7 === 0 && currentPosition === 0) {
         const scanLog = smartLogs.getScanningLog(true);
-        ui.addLog('info', scanLog.message);
+        ui.addLog('system', scanLog.message);
       }
       
-      // Tick flow log every 5 seconds
-      if (currentSecond % 5 === 0) {
+      // Tick flow log every 15 seconds
+      if (currentSecond % 15 === 0) {
         const tickLog = smartLogs.getTickFlowLog(tickCount, ticksPerSecond);
-        ui.addLog('info', `${tickLog.message} ${tickLog.details}`);
+        ui.addLog('debug', `${tickLog.message} ${tickLog.details}`);
       }
       
       // Reset volume counters
