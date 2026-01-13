@@ -136,8 +136,17 @@ const banner = async () => {
 
   console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
   
-  const tagline = isMobile ? `HQX V${version}` : `PROP FUTURES ALGO TRADING  V${version}`;
-  console.log(chalk.cyan('║') + chalk.yellow(centerText(tagline, innerWidth)) + chalk.cyan('║'));
+  if (isMobile) {
+    const tagline = `HQX V${version}`;
+    console.log(chalk.cyan('║') + chalk.yellow(centerText(tagline, innerWidth)) + chalk.cyan('║'));
+  } else {
+    const taglineBase = 'PROP FUTURES ALGO TRADING  ';
+    const taglineVersion = `V${version}`;
+    const totalLen = taglineBase.length + taglineVersion.length;
+    const padLeft = Math.floor((innerWidth - totalLen) / 2);
+    const padRight = innerWidth - totalLen - padLeft;
+    console.log(chalk.cyan('║') + ' '.repeat(padLeft) + chalk.yellow(taglineBase) + chalk.magenta(taglineVersion) + ' '.repeat(padRight) + chalk.cyan('║'));
+  }
   
   // ALWAYS close the banner
   console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));

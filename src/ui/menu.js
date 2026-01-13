@@ -48,7 +48,12 @@ const createBoxMenu = async (title, items, options = {}) => {
     });
     
     console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
-    console.log(chalk.cyan('║') + chalk.yellow(centerText(`PROP FUTURES ALGO TRADING  V${version}`, innerWidth)) + chalk.cyan('║'));
+    const taglineBase = 'PROP FUTURES ALGO TRADING  ';
+    const taglineVersion = `V${version}`;
+    const totalLen = taglineBase.length + taglineVersion.length;
+    const padLeft = Math.floor((innerWidth - totalLen) / 2);
+    const padRight = innerWidth - totalLen - padLeft;
+    console.log(chalk.cyan('║') + ' '.repeat(padLeft) + chalk.yellow(taglineBase) + chalk.magenta(taglineVersion) + ' '.repeat(padRight) + chalk.cyan('║'));
     
     // Stats bar if provided
     if (options.statsLine) {
