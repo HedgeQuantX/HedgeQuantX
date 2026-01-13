@@ -52,6 +52,19 @@
 - Vérifier que le code fonctionne correctement avec les autres modules
 - S'assurer que les imports/exports sont corrects et fonctionnels
 
+### 7b. Tests Obligatoires Avant Publication (npm publish)
+- **IMPÉRATIF**: Tester EXACTEMENT comme l'utilisateur final (package npm installé globalement)
+- **AVANT** tout commit/push/publish, simuler l'environnement de production:
+  ```bash
+  # Créer un dossier temporaire isolé
+  mkdir -p /tmp/test-hqx && cd /tmp/test-hqx
+  # Copier UNIQUEMENT les fichiers qui seront dans le package npm (voir "files" dans package.json)
+  # Tester depuis ce dossier isolé, PAS depuis /home/hqx/HQX-CLI
+  ```
+- **NE JAMAIS** tester depuis le repo source (il contient des fichiers non publiés comme /private/)
+- **TOUJOURS** vérifier que les chemins relatifs fonctionnent dans le package publié
+- Les tests locaux dans le repo NE GARANTISSENT PAS que le package npm fonctionnera
+
 ### 8. Synchronisation des Repositories
 - **TOUJOURS** vérifier la synchronisation entre `/root/HQX-CLI` et `/home/hqx/HQX-CLI` en début de session
 - **AVANT** toute modification, exécuter:
