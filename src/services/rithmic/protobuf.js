@@ -124,74 +124,78 @@ function skipField(buffer, offset, wireType) {
 
 /**
  * Manually decode AccountPnL from raw bytes
+ * Skips 4-byte length prefix if present
  */
 function decodeAccountPnL(buffer) {
+  // Skip 4-byte length prefix
+  const data = buffer.length > 4 ? buffer.slice(4) : buffer;
+  
   const result = {};
   let offset = 0;
 
-  while (offset < buffer.length) {
+  while (offset < data.length) {
     try {
-      const [tag, tagOffset] = readVarint(buffer, offset);
+      const [tag, tagOffset] = readVarint(data, offset);
       const wireType = tag & 0x7;
       const fieldNumber = tag >>> 3;
       offset = tagOffset;
 
       switch (fieldNumber) {
         case PNL_FIELDS.TEMPLATE_ID:
-          [result.templateId, offset] = readVarint(buffer, offset);
+          [result.templateId, offset] = readVarint(data, offset);
           break;
         case PNL_FIELDS.IS_SNAPSHOT:
-          const [isSnap, snapOffset] = readVarint(buffer, offset);
+          const [isSnap, snapOffset] = readVarint(data, offset);
           result.isSnapshot = isSnap !== 0;
           offset = snapOffset;
           break;
         case PNL_FIELDS.FCM_ID:
-          [result.fcmId, offset] = readLengthDelimited(buffer, offset);
+          [result.fcmId, offset] = readLengthDelimited(data, offset);
           break;
         case PNL_FIELDS.IB_ID:
-          [result.ibId, offset] = readLengthDelimited(buffer, offset);
+          [result.ibId, offset] = readLengthDelimited(data, offset);
           break;
         case PNL_FIELDS.ACCOUNT_ID:
-          [result.accountId, offset] = readLengthDelimited(buffer, offset);
+          [result.accountId, offset] = readLengthDelimited(data, offset);
           break;
         case PNL_FIELDS.ACCOUNT_BALANCE:
-          [result.accountBalance, offset] = readLengthDelimited(buffer, offset);
+          [result.accountBalance, offset] = readLengthDelimited(data, offset);
           break;
         case PNL_FIELDS.CASH_ON_HAND:
-          [result.cashOnHand, offset] = readLengthDelimited(buffer, offset);
+          [result.cashOnHand, offset] = readLengthDelimited(data, offset);
           break;
         case PNL_FIELDS.MARGIN_BALANCE:
-          [result.marginBalance, offset] = readLengthDelimited(buffer, offset);
+          [result.marginBalance, offset] = readLengthDelimited(data, offset);
           break;
         case PNL_FIELDS.MIN_ACCOUNT_BALANCE:
-          [result.minAccountBalance, offset] = readLengthDelimited(buffer, offset);
+          [result.minAccountBalance, offset] = readLengthDelimited(data, offset);
           break;
         case PNL_FIELDS.OPEN_POSITION_PNL:
-          [result.openPositionPnl, offset] = readLengthDelimited(buffer, offset);
+          [result.openPositionPnl, offset] = readLengthDelimited(data, offset);
           break;
         case PNL_FIELDS.CLOSED_POSITION_PNL:
-          [result.closedPositionPnl, offset] = readLengthDelimited(buffer, offset);
+          [result.closedPositionPnl, offset] = readLengthDelimited(data, offset);
           break;
         case PNL_FIELDS.DAY_PNL:
-          [result.dayPnl, offset] = readLengthDelimited(buffer, offset);
+          [result.dayPnl, offset] = readLengthDelimited(data, offset);
           break;
         case PNL_FIELDS.DAY_OPEN_PNL:
-          [result.dayOpenPnl, offset] = readLengthDelimited(buffer, offset);
+          [result.dayOpenPnl, offset] = readLengthDelimited(data, offset);
           break;
         case PNL_FIELDS.DAY_CLOSED_PNL:
-          [result.dayClosedPnl, offset] = readLengthDelimited(buffer, offset);
+          [result.dayClosedPnl, offset] = readLengthDelimited(data, offset);
           break;
         case PNL_FIELDS.AVAILABLE_BUYING_POWER:
-          [result.availableBuyingPower, offset] = readLengthDelimited(buffer, offset);
+          [result.availableBuyingPower, offset] = readLengthDelimited(data, offset);
           break;
         case PNL_FIELDS.SSBOE:
-          [result.ssboe, offset] = readVarint(buffer, offset);
+          [result.ssboe, offset] = readVarint(data, offset);
           break;
         case PNL_FIELDS.USECS:
-          [result.usecs, offset] = readVarint(buffer, offset);
+          [result.usecs, offset] = readVarint(data, offset);
           break;
         default:
-          offset = skipField(buffer, offset, wireType);
+          offset = skipField(data, offset, wireType);
       }
     } catch (error) {
       break;
@@ -203,95 +207,99 @@ function decodeAccountPnL(buffer) {
 
 /**
  * Manually decode InstrumentPnLPositionUpdate from raw bytes
+ * Skips 4-byte length prefix if present
  */
 function decodeInstrumentPnL(buffer) {
+  // Skip 4-byte length prefix
+  const data = buffer.length > 4 ? buffer.slice(4) : buffer;
+  
   const result = {};
   let offset = 0;
 
-  while (offset < buffer.length) {
+  while (offset < data.length) {
     try {
-      const [tag, tagOffset] = readVarint(buffer, offset);
+      const [tag, tagOffset] = readVarint(data, offset);
       const wireType = tag & 0x7;
       const fieldNumber = tag >>> 3;
       offset = tagOffset;
 
       switch (fieldNumber) {
         case INSTRUMENT_PNL_FIELDS.TEMPLATE_ID:
-          [result.templateId, offset] = readVarint(buffer, offset);
+          [result.templateId, offset] = readVarint(data, offset);
           break;
         case INSTRUMENT_PNL_FIELDS.IS_SNAPSHOT:
-          const [isSnap, snapOffset] = readVarint(buffer, offset);
+          const [isSnap, snapOffset] = readVarint(data, offset);
           result.isSnapshot = isSnap !== 0;
           offset = snapOffset;
           break;
         case INSTRUMENT_PNL_FIELDS.FCM_ID:
-          [result.fcmId, offset] = readLengthDelimited(buffer, offset);
+          [result.fcmId, offset] = readLengthDelimited(data, offset);
           break;
         case INSTRUMENT_PNL_FIELDS.IB_ID:
-          [result.ibId, offset] = readLengthDelimited(buffer, offset);
+          [result.ibId, offset] = readLengthDelimited(data, offset);
           break;
         case INSTRUMENT_PNL_FIELDS.ACCOUNT_ID:
-          [result.accountId, offset] = readLengthDelimited(buffer, offset);
+          [result.accountId, offset] = readLengthDelimited(data, offset);
           break;
         case INSTRUMENT_PNL_FIELDS.SYMBOL:
-          [result.symbol, offset] = readLengthDelimited(buffer, offset);
+          [result.symbol, offset] = readLengthDelimited(data, offset);
           break;
         case INSTRUMENT_PNL_FIELDS.EXCHANGE:
-          [result.exchange, offset] = readLengthDelimited(buffer, offset);
+          [result.exchange, offset] = readLengthDelimited(data, offset);
           break;
         case INSTRUMENT_PNL_FIELDS.PRODUCT_CODE:
-          [result.productCode, offset] = readLengthDelimited(buffer, offset);
+          [result.productCode, offset] = readLengthDelimited(data, offset);
           break;
         case INSTRUMENT_PNL_FIELDS.BUY_QTY:
-          [result.buyQty, offset] = readVarint(buffer, offset);
+          [result.buyQty, offset] = readVarint(data, offset);
           break;
         case INSTRUMENT_PNL_FIELDS.SELL_QTY:
-          [result.sellQty, offset] = readVarint(buffer, offset);
+          [result.sellQty, offset] = readVarint(data, offset);
           break;
         case INSTRUMENT_PNL_FIELDS.FILL_BUY_QTY:
-          [result.fillBuyQty, offset] = readVarint(buffer, offset);
+          [result.fillBuyQty, offset] = readVarint(data, offset);
           break;
         case INSTRUMENT_PNL_FIELDS.FILL_SELL_QTY:
-          [result.fillSellQty, offset] = readVarint(buffer, offset);
+          [result.fillSellQty, offset] = readVarint(data, offset);
           break;
         case INSTRUMENT_PNL_FIELDS.NET_QUANTITY:
-          [result.netQuantity, offset] = readVarint(buffer, offset);
+          [result.netQuantity, offset] = readVarint(data, offset);
           break;
         case INSTRUMENT_PNL_FIELDS.OPEN_POSITION_QUANTITY:
-          [result.openPositionQuantity, offset] = readVarint(buffer, offset);
+          [result.openPositionQuantity, offset] = readVarint(data, offset);
           break;
         case INSTRUMENT_PNL_FIELDS.AVG_OPEN_FILL_PRICE:
           // Double is 64-bit fixed
           if (wireType === 1) {
-            result.avgOpenFillPrice = buffer.readDoubleLE(offset);
+            result.avgOpenFillPrice = data.readDoubleLE(offset);
             offset += 8;
           } else {
-            offset = skipField(buffer, offset, wireType);
+            offset = skipField(data, offset, wireType);
           }
           break;
         case INSTRUMENT_PNL_FIELDS.OPEN_POSITION_PNL:
-          [result.openPositionPnl, offset] = readLengthDelimited(buffer, offset);
+          [result.openPositionPnl, offset] = readLengthDelimited(data, offset);
           break;
         case INSTRUMENT_PNL_FIELDS.CLOSED_POSITION_PNL:
-          [result.closedPositionPnl, offset] = readLengthDelimited(buffer, offset);
+          [result.closedPositionPnl, offset] = readLengthDelimited(data, offset);
           break;
         case INSTRUMENT_PNL_FIELDS.DAY_PNL:
-          [result.dayPnl, offset] = readLengthDelimited(buffer, offset);
+          [result.dayPnl, offset] = readLengthDelimited(data, offset);
           break;
         case INSTRUMENT_PNL_FIELDS.DAY_OPEN_PNL:
-          [result.dayOpenPnl, offset] = readLengthDelimited(buffer, offset);
+          [result.dayOpenPnl, offset] = readLengthDelimited(data, offset);
           break;
         case INSTRUMENT_PNL_FIELDS.DAY_CLOSED_PNL:
-          [result.dayClosedPnl, offset] = readLengthDelimited(buffer, offset);
+          [result.dayClosedPnl, offset] = readLengthDelimited(data, offset);
           break;
         case INSTRUMENT_PNL_FIELDS.SSBOE:
-          [result.ssboe, offset] = readVarint(buffer, offset);
+          [result.ssboe, offset] = readVarint(data, offset);
           break;
         case INSTRUMENT_PNL_FIELDS.USECS:
-          [result.usecs, offset] = readVarint(buffer, offset);
+          [result.usecs, offset] = readVarint(data, offset);
           break;
         default:
-          offset = skipField(buffer, offset, wireType);
+          offset = skipField(data, offset, wireType);
       }
     } catch (error) {
       break;

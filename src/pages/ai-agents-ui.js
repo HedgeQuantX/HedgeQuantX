@@ -334,32 +334,43 @@ const drawConnectionTest = async (agents, boxWidth, clearWithBanner) => {
   
   const W = boxWidth - 2;
   
-  // Show loading box with centered spinner text
+  // Show loading box with spinner inside
   clearWithBanner();
   console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
   console.log(chalk.cyan('║') + chalk.yellow.bold(centerText('AI AGENTS CONNECTION TEST', W)) + chalk.cyan('║'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
-  console.log(chalk.cyan('║') + ' '.repeat(W) + chalk.cyan('║'));
-  console.log(chalk.cyan('║') + ' '.repeat(W) + chalk.cyan('║'));
-  console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
-  console.log('');
   
-  // Spinner with text - centered below the box
+  // Spinner inside the box - use custom rendering
+  const spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
   const spinnerText = 'Testing connections...';
-  const spinnerLeftPad = Math.floor((W - spinnerText.length - 2) / 2);
+  let frameIdx = 0;
   
-  const spinner = ora({
-    text: chalk.yellow(spinnerText),
-    spinner: 'dots',
-    color: 'yellow',
-    indent: spinnerLeftPad
-  }).start();
+  const renderSpinnerLine = () => {
+    const frame = spinnerFrames[frameIdx % spinnerFrames.length];
+    const content = chalk.yellow(frame + ' ' + spinnerText);
+    const contentLen = frame.length + 1 + spinnerText.length;
+    const leftPad = Math.floor((W - contentLen) / 2);
+    const rightPad = W - contentLen - leftPad;
+    return chalk.cyan('║') + ' '.repeat(leftPad) + content + ' '.repeat(rightPad) + chalk.cyan('║');
+  };
+  
+  // Initial draw
+  console.log(renderSpinnerLine());
+  console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
+  
+  // Start spinner animation
+  const spinnerInterval = setInterval(() => {
+    frameIdx++;
+    process.stdout.write('\x1b[2A'); // Move up 2 lines
+    console.log(renderSpinnerLine());
+    console.log(chalk.cyan('╚' + '═'.repeat(W) + '╝'));
+  }, 80);
   
   // Run pre-flight check
   const results = await runPreflightCheck(agents);
   
   // Stop spinner
-  spinner.stop();
+  clearInterval(spinnerInterval);
   
   // Clear and redraw with results
   clearWithBanner();
