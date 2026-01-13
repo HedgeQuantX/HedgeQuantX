@@ -364,27 +364,23 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       timestamp: tick.timestamp || Date.now()
     });
     
-    // Calculate latency based on tick timestamp or inter-tick timing
-    if (tick.timestamp) {
-      const tickTime = typeof tick.timestamp === 'number' ? tick.timestamp : Date.parse(tick.timestamp);
-      if (!isNaN(tickTime) && tickTime > 1000000000000) { // Valid millisecond timestamp
-        stats.latency = Math.max(0, now - tickTime);
-      }
-    } else if (tick.ssboe && tick.usecs) {
+    // Calculate latency from Rithmic ssboe/usecs (exchange timestamp)
+    // Priority: ssboe/usecs (real exchange time) > inter-tick timing (fallback)
+    if (tick.ssboe && tick.usecs !== undefined) {
       // Rithmic sends ssboe (seconds since epoch) and usecs (microseconds)
-      const tickTimeMs = tick.ssboe * 1000 + Math.floor(tick.usecs / 1000);
-      stats.latency = Math.max(0, now - tickTimeMs);
-    } else {
-      // Estimate latency from tick frequency - if we're getting real-time data, latency should be low
-      if (lastTickTime > 0) {
-        const timeSinceLastTick = now - lastTickTime;
-        // If ticks are coming frequently, latency is low
-        if (timeSinceLastTick < 100) {
-          tickLatencies.push(timeSinceLastTick);
-          if (tickLatencies.length > 20) tickLatencies.shift();
-          // Average of recent inter-tick times as proxy for latency
-          stats.latency = Math.round(tickLatencies.reduce((a, b) => a + b, 0) / tickLatencies.length);
-        }
+      const tickTimeMs = (tick.ssboe * 1000) + Math.floor(tick.usecs / 1000);
+      const latency = now - tickTimeMs;
+      // Only update if reasonable (0-5000ms) - avoids clock sync issues
+      if (latency >= 0 && latency < 5000) {
+        stats.latency = latency;
+      }
+    } else if (lastTickTime > 0) {
+      // Fallback: estimate from inter-tick timing
+      const timeSinceLastTick = now - lastTickTime;
+      if (timeSinceLastTick < 100) {
+        tickLatencies.push(timeSinceLastTick);
+        if (tickLatencies.length > 20) tickLatencies.shift();
+        stats.latency = Math.round(tickLatencies.reduce((a, b) => a + b, 0) / tickLatencies.length);
       }
     }
     lastTickTime = now;

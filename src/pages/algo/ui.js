@@ -289,8 +289,8 @@ class AlgoUI {
     
     // Activity header - HF style with animated spinner
     if (!this.startTime) this.startTime = Date.now();
-    if (!this.spinnerFrame) this.spinnerFrame = 0;
-    this.spinnerFrame = (this.spinnerFrame + 1) % SPINNER.length;
+    // Increment spinner frame on each render
+    this.spinnerFrame = ((this.spinnerFrame || 0) + 1) % SPINNER.length;
     const spinner = SPINNER[this.spinnerFrame];
     const now = new Date();
     const timeStr = now.toLocaleTimeString('en-US', { hour12: false });
