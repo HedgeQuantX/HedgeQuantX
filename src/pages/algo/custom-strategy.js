@@ -96,7 +96,7 @@ const customStrategyMenu = async (service) => {
   if (aiSupervision) {
     // Run pre-flight check - agent must pass
     console.log();
-    console.log(chalk.yellow('  Running AI pre-flight check...'));
+    console.log(chalk.yellow('  Running AI pre-algo check...'));
     console.log();
     
     const agents = getActiveAgents();

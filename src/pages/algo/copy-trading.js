@@ -255,7 +255,7 @@ const copyTradingMenu = async () => {
     if (enableAI) {
       // Run pre-flight check - ALL agents must pass
       console.log();
-      console.log(chalk.yellow('  Running AI pre-flight check...'));
+      console.log(chalk.yellow('  Running AI pre-algo check...'));
       console.log();
       
       const agents = getActiveAgents();
