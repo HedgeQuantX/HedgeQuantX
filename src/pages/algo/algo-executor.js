@@ -266,16 +266,17 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       if (buyPressure > 55) bias = 'LONG';
       else if (buyPressure < 45) bias = 'SHORT';
       
-      // Log bias only when it changes or every 10 seconds
-      if (bias !== lastBias || currentSecond % 10 === 0) {
+      // Log bias when it changes, or every 5 seconds if strong signal
+      const strongSignal = Math.abs(delta) > 20 || buyPressure > 65 || buyPressure < 35;
+      if (bias !== lastBias || (strongSignal && currentSecond % 5 === 0) || (!strongSignal && currentSecond % 15 === 0)) {
         const biasLog = smartLogs.getMarketBiasLog(bias, delta, buyPressure);
         const biasType = bias === 'LONG' ? 'bullish' : bias === 'SHORT' ? 'bearish' : 'analysis';
         ui.addLog(biasType, `${biasLog.message} ${biasLog.details || ''}`);
         lastBias = bias;
       }
       
-      // Strategy state log every 10 seconds
-      if (currentSecond % 10 === 0) {
+      // Strategy state log every 30 seconds (reduced frequency)
+      if (currentSecond % 30 === 0) {
         const state = strategy.getAnalysisState?.(contractId, price);
         if (state) {
           if (!state.ready) {
@@ -283,42 +284,43 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
           } else {
             const resStr = state.nearestResistance ? state.nearestResistance.toFixed(2) : '--';
             const supStr = state.nearestSupport ? state.nearestSupport.toFixed(2) : '--';
-            ui.addLog('analysis', `Bars: ${state.barsProcessed} | Zones: ${state.activeZones} | Swings: ${state.swingsDetected}`);
-            ui.addLog('analysis', `Resistance: ${resStr} | Support: ${supStr}`);
             
-            // Explain why no trade
+            // Combined single line for zones info
+            ui.addLog('analysis', `Zones: ${state.activeZones} | R: ${resStr} | S: ${supStr} | Swings: ${state.swingsDetected}`);
+            
+            // Strategy status - what we're waiting for
             if (state.activeZones === 0) {
-              ui.addLog('risk', 'No zones detected - waiting for swing points');
+              ui.addLog('risk', 'Scanning for swing points to build liquidity zones...');
             } else if (!state.nearestSupport && !state.nearestResistance) {
-              ui.addLog('risk', 'Zones too far from price - waiting');
+              ui.addLog('risk', 'Zones detected but too far from current price level');
             } else if (!state.nearestSupport) {
-              ui.addLog('risk', 'No support zone - only SHORT sweeps possible');
+              ui.addLog('analysis', 'Watching resistance for HIGH SWEEP entry (SHORT)');
             } else if (!state.nearestResistance) {
-              ui.addLog('risk', 'No resistance zone - only LONG sweeps possible');
+              ui.addLog('analysis', 'Watching support for LOW SWEEP entry (LONG)');
             } else {
-              ui.addLog('ready', 'Zones active - waiting for sweep signal');
+              ui.addLog('ready', 'Both zones active - monitoring for liquidity sweep');
             }
           }
         }
       }
       
-      // Scanning log every 7 seconds (when no position)
-      if (currentSecond % 7 === 0 && currentPosition === 0) {
+      // Scanning log every 20 seconds (when no position)
+      if (currentSecond % 20 === 0 && currentPosition === 0) {
         const scanLog = smartLogs.getScanningLog(true);
         ui.addLog('system', scanLog.message);
       }
       
-      // Tick flow log every 15 seconds
-      if (currentSecond % 15 === 0) {
+      // Tick flow log every 45 seconds (less frequent)
+      if (currentSecond % 45 === 0) {
         const tickLog = smartLogs.getTickFlowLog(tickCount, ticksPerSecond);
         ui.addLog('debug', `${tickLog.message} ${tickLog.details}`);
       }
       
-      // AI Agents status log every 20 seconds
-      if (currentSecond % 20 === 0 && supervisionEnabled && supervisionEngine) {
+      // AI Agents status log every 60 seconds
+      if (currentSecond % 60 === 0 && supervisionEnabled && supervisionEngine) {
         const status = supervisionEngine.getStatus();
         const agentNames = status.agents.map(a => a.name.split(' ')[0]).join(', ');
-        ui.addLog('analysis', `AI Agents (${status.availableAgents}): ${agentNames} - watching...`);
+        ui.addLog('analysis', `AI Supervision active: ${agentNames} (${status.availableAgents} agents monitoring)`);
       }
       
       // Reset volume counters
