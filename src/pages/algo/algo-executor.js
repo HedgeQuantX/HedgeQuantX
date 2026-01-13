@@ -9,6 +9,7 @@ const { AlgoUI, renderSessionSummary } = require('./ui');
 const { loadStrategy } = require('../../lib/m');
 const { MarketDataFeed } = require('../../lib/data');
 const { SupervisionEngine } = require('../../services/ai-supervision');
+const smartLogs = require('../../lib/smart-logs');
 
 /**
  * Execute algo strategy with market data
@@ -37,7 +38,8 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   const accountName = showName 
     ? (account.accountName || account.rithmicAccountId || account.accountId) 
     : 'HQX *****';
-  const symbolName = contract.name;
+  const symbolName = contract.name;  // Display name: "Micro E-mini S&P 500"
+  const symbolCode = contract.symbol || contract.id;  // Rithmic symbol: "MESH6"
   const contractId = contract.id;
   const tickSize = contract.tickSize || 0.25;
   
@@ -93,18 +95,24 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   
   // Handle strategy signals
   strategy.on('signal', async (signal) => {
-    ui.addLog('info', `SIGNAL DETECTED: ${signal.direction?.toUpperCase()}`);
+    const dir = signal.direction?.toUpperCase() || 'UNKNOWN';
+    const signalLog = smartLogs.getSignalLog(dir, symbolCode, (signal.confidence || 0) * 100, strategyName);
+    ui.addLog('info', `${signalLog.message}`);
+    ui.addLog('info', signalLog.details);
     
     if (!running) {
-      ui.addLog('info', 'Signal ignored: not running');
+      const riskLog = smartLogs.getRiskCheckLog(false, 'Algo stopped');
+      ui.addLog('info', riskLog.message);
       return;
     }
     if (pendingOrder) {
-      ui.addLog('info', 'Signal ignored: order pending');
+      const riskLog = smartLogs.getRiskCheckLog(false, 'Order pending');
+      ui.addLog('info', riskLog.message);
       return;
     }
     if (currentPosition !== 0) {
-      ui.addLog('info', `Signal ignored: position open (${currentPosition})`);
+      const riskLog = smartLogs.getRiskCheckLog(false, `Position open (${currentPosition})`);
+      ui.addLog('info', riskLog.message);
       return;
     }
     
@@ -114,7 +122,8 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     aiContext.recentSignals.push({ ...signal, timestamp: Date.now() });
     if (aiContext.recentSignals.length > 10) aiContext.recentSignals.shift();
     
-    ui.addLog('info', `Signal: ${direction.toUpperCase()} @ ${entry.toFixed(2)} (${(confidence * 100).toFixed(0)}%)`);
+    const riskLog = smartLogs.getRiskCheckLog(true, `${direction.toUpperCase()} @ ${entry.toFixed(2)}`);
+    ui.addLog('info', `${riskLog.message} - ${riskLog.details}`);
     
     // Multi-Agent AI Supervision
     if (supervisionEnabled && supervisionEngine) {
@@ -173,8 +182,9 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       if (orderResult.success) {
         currentPosition = direction === 'long' ? orderSize : -orderSize;
         stats.trades++;
-        ui.addLog('fill_' + (direction === 'long' ? 'buy' : 'sell'), 
-          `OPENED ${direction.toUpperCase()} ${orderSize}x @ market`);
+        const entryLog = smartLogs.getEntryLog(direction.toUpperCase(), symbolCode, orderSize, entry);
+        ui.addLog('fill_' + (direction === 'long' ? 'buy' : 'sell'), entryLog.message);
+        ui.addLog('info', entryLog.details);
         
         // Bracket orders
         if (stopLoss && takeProfit) {
@@ -203,6 +213,10 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   let lastAsk = null;
   let ticksPerSecond = 0;
   let lastTickSecond = Math.floor(Date.now() / 1000);
+  let lastLogSecond = 0;
+  let buyVolume = 0;
+  let sellVolume = 0;
+  let barCount = 0;
   
   marketFeed.on('tick', (tick) => {
     tickCount++;
@@ -220,32 +234,69 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     aiContext.recentTicks.push(tick);
     if (aiContext.recentTicks.length > aiContext.maxTicks) aiContext.recentTicks.shift();
     
-    // Smart logs for tick flow
     const price = tick.price || tick.tradePrice;
     const bid = tick.bid || tick.bidPrice;
     const ask = tick.ask || tick.askPrice;
+    const volume = tick.volume || tick.size || 1;
+    
+    // Track buy/sell volume
+    if (tick.side === 'buy' || tick.aggressor === 1) buyVolume += volume;
+    else if (tick.side === 'sell' || tick.aggressor === 2) sellVolume += volume;
+    else if (price && lastPrice) {
+      if (price > lastPrice) buyVolume += volume;
+      else if (price < lastPrice) sellVolume += volume;
+    }
     
     // Log first tick
     if (tickCount === 1) {
-      ui.addLog('info', `First tick received @ ${price?.toFixed(2) || 'N/A'}`);
-      ui.addLog('info', `Tick type: ${tick.type || 'unknown'}`);
+      ui.addLog('connected', `First tick @ ${price?.toFixed(2) || 'N/A'}`);
     }
     
-    // Log price changes
-    if (price && lastPrice && price !== lastPrice) {
-      const direction = price > lastPrice ? 'UP' : 'DOWN';
-      const change = Math.abs(price - lastPrice).toFixed(2);
-      if (tickCount <= 10 || tickCount % 50 === 0) {
-        ui.addLog('info', `Price ${direction} ${change} -> ${price.toFixed(2)}`);
+    // === SMART LOGS EVERY SECOND ===
+    if (currentSecond !== lastLogSecond && tickCount > 1) {
+      lastLogSecond = currentSecond;
+      
+      const totalVol = buyVolume + sellVolume;
+      const buyPressure = totalVol > 0 ? (buyVolume / totalVol) * 100 : 50;
+      const delta = buyVolume - sellVolume;
+      
+      // Determine market bias
+      let bias = 'FLAT';
+      if (buyPressure > 55) bias = 'LONG';
+      else if (buyPressure < 45) bias = 'SHORT';
+      
+      // Get smart log for market bias
+      const biasLog = smartLogs.getMarketBiasLog(bias, delta, buyPressure);
+      ui.addLog('info', `${biasLog.message} ${biasLog.details || ''}`);
+      
+      // Get model values if available
+      const modelValues = strategy.getModelValues?.(contractId);
+      if (modelValues) {
+        barCount = modelValues.bars || barCount;
+        if (barCount >= 50) {
+          const modelLog = smartLogs.getModelAnalysisLog(modelValues);
+          ui.addLog('info', `${modelLog.message} ${modelLog.details || ''}`);
+        } else {
+          const barLog = smartLogs.getBuildingBarsLog(barCount);
+          ui.addLog('info', `${barLog.message} (${barLog.details})`);
+        }
       }
-    }
-    
-    // Log bid/ask spread
-    if (bid && ask && (bid !== lastBid || ask !== lastAsk)) {
-      const spread = (ask - bid).toFixed(2);
-      if (tickCount <= 5) {
-        ui.addLog('info', `Spread: ${spread} (Bid: ${bid.toFixed(2)} / Ask: ${ask.toFixed(2)})`);
+      
+      // Scanning log every 3 seconds
+      if (currentSecond % 3 === 0 && currentPosition === 0) {
+        const scanLog = smartLogs.getScanningLog(true);
+        ui.addLog('info', scanLog.message);
       }
+      
+      // Tick flow log every 5 seconds
+      if (currentSecond % 5 === 0) {
+        const tickLog = smartLogs.getTickFlowLog(tickCount, ticksPerSecond);
+        ui.addLog('info', `${tickLog.message} ${tickLog.details}`);
+      }
+      
+      // Reset volume counters
+      buyVolume = 0;
+      sellVolume = 0;
     }
     
     lastPrice = price;
@@ -255,19 +306,12 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     strategy.processTick({
       contractId: tick.contractId || contractId,
       price: price, bid: bid, ask: ask,
-      volume: tick.volume || tick.size || 1, 
+      volume: volume, 
       side: tick.side || tick.lastTradeSide || 'unknown',
       timestamp: tick.timestamp || Date.now()
     });
     
     stats.latency = Date.now() - latencyStart;
-    
-    // Periodic status logs
-    if (tickCount === 10) ui.addLog('info', `Receiving ticks... (${ticksPerSecond}/sec)`);
-    if (tickCount === 50) ui.addLog('info', `50 ticks processed, strategy analyzing...`);
-    if (tickCount % 200 === 0) {
-      ui.addLog('info', `Tick #${tickCount} @ ${price?.toFixed(2) || 'N/A'} | ${ticksPerSecond}/sec`);
-    }
   });
   
   marketFeed.on('connected', () => { 
@@ -287,7 +331,8 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       throw new Error('Rithmic credentials not available');
     }
     await marketFeed.connect(rithmicCredentials);
-    await marketFeed.subscribe(symbolName, contract.exchange || 'CME');
+    await marketFeed.subscribe(symbolCode, contract.exchange || 'CME');
+    ui.addLog('info', `Symbol code: ${symbolCode}`);
   } catch (e) {
     ui.addLog('error', `Failed to connect: ${e.message}`);
   }
