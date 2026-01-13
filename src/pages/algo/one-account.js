@@ -86,9 +86,10 @@ const oneAccountMenu = async (service) => {
   const config = await configureAlgo(selectedAccount, contract, strategy);
   if (!config) return;
   
-  // Check for AI Supervision
+  // Check for AI Supervision BEFORE asking to start
   const agentCount = getActiveAgentCount();
   let supervisionConfig = null;
+  let aiEnabled = false;
   
   if (agentCount > 0) {
     console.log();
@@ -122,12 +123,15 @@ const oneAccountMenu = async (service) => {
       }
       
       supervisionConfig = getSupervisionConfig();
+      aiEnabled = true;
       console.log(chalk.green(`  ✓ AI Supervision ready with ${agentCount} agent(s)`));
-      
-      const proceedWithAI = await prompts.confirmPrompt('Start algo with AI supervision?', true);
-      if (!proceedWithAI) return;
     }
   }
+  
+  // Final confirmation to start
+  const startPrompt = aiEnabled ? 'Start algo with AI supervision?' : 'Start algo trading?';
+  const proceed = await prompts.confirmPrompt(startPrompt, true);
+  if (!proceed) return;
   
   await executeAlgo({
     service: accountService,
@@ -236,9 +240,6 @@ const configureAlgo = async (account, contract, strategy) => {
   
   const showName = await prompts.confirmPrompt('Show account name?', false);
   if (showName === null) return null;
-  
-  const confirm = await prompts.confirmPrompt('Start algo trading?', true);
-  if (!confirm) return null;
   
   return { contracts, dailyTarget, maxRisk, showName };
 };
