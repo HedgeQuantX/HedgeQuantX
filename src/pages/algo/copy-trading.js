@@ -39,7 +39,10 @@ const copyTradingMenu = async () => {
     return;
   }
   
-  const activeAccounts = allAccounts.filter(acc => acc.status === 0);
+  // Filter active accounts: status === 0 (ProjectX) OR status === 'active' (Rithmic) OR no status
+  const activeAccounts = allAccounts.filter(acc => 
+    acc.status === 0 || acc.status === 'active' || acc.status === undefined || acc.status === null
+  );
   
   if (activeAccounts.length < 2) {
     spinner.fail(`Need at least 2 active accounts (found: ${activeAccounts.length})`);
