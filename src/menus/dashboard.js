@@ -43,7 +43,7 @@ const dashboardMenu = async (service) => {
   
   // New rectangle (banner is always closed)
   console.log(chalk.cyan('╔' + '═'.repeat(W) + '╗'));
-  console.log(makeLine(chalk.yellow.bold('WELCOME, HQX TRADER!'), 'center'));
+  console.log(makeLine(chalk.reset.yellow.bold('WELCOME, HQX TRADER!'), 'center'));
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
   
   // Show connected propfirms
