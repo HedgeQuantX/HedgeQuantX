@@ -28,6 +28,7 @@ const DEFAULT_CONFIG = {
   profitLockPct: 0.5,            // Lock 50% of profit
   minConfidence: 0.55,           // Minimum composite confidence
   cooldownMs: 30000,             // 30 seconds between signals
+  minHoldTimeMs: 10000,          // Minimum 10 seconds hold
 
   // Model Weights (from Python backtest)
   weights: {

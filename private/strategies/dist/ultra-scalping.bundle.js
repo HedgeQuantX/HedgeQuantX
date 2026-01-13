@@ -29,6 +29,8 @@ var require_config = __commonJS({
       // Minimum composite confidence
       cooldownMs: 3e4,
       // 30 seconds between signals
+      minHoldTimeMs: 1e4,
+      // Minimum 10 seconds hold
       // Model Weights (from Python backtest)
       weights: {
         zscore: 0.3,

@@ -89,6 +89,7 @@ class HQXUltraScalping extends EventEmitter {
     this.lossStreak = 0;
     this.lastSignalTime = 0;
     this.cooldownMs = 30000;             // 30 seconds between signals
+    this.minHoldTimeMs = 10000;          // Minimum 10 seconds hold
 
     // === STATS ===
     this.stats = { signals: 0, trades: 0, wins: 0, losses: 0, pnl: 0 };
