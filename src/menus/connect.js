@@ -101,13 +101,50 @@ const rithmicMenu = async () => {
       await new Promise(r => setTimeout(r, 1500));
       return service;
     } else {
-      spinner.fail((result.error || 'AUTHENTICATION FAILED').toUpperCase());
-      await new Promise(r => setTimeout(r, 2000));
+      // Detailed error messages for common Rithmic issues
+      const err = (result.error || '').toLowerCase();
+      let msg = (result.error || 'AUTHENTICATION FAILED').toUpperCase();
+      let help = '';
+      
+      if (err.includes('permission denied')) {
+        msg = 'PERMISSION DENIED';
+        help = 'Session active elsewhere. Wait 5 min or close R|Trader/other apps.';
+      } else if (err.includes('timeout')) {
+        msg = 'CONNECTION TIMEOUT';
+        help = 'Rithmic server not responding. Check internet connection.';
+      } else if (err.includes('invalid') && err.includes('system')) {
+        msg = 'INVALID SYSTEM';
+        help = 'Wrong propfirm. Verify your account type.';
+      } else if (err.includes('password') || err.includes('credential')) {
+        msg = 'INVALID CREDENTIALS';
+        help = 'Check username and password.';
+      }
+      
+      spinner.fail(msg);
+      if (help) console.log(chalk.yellow(`  → ${help}`));
+      await new Promise(r => setTimeout(r, 3000));
       return null;
     }
   } catch (error) {
-    spinner.fail(`CONNECTION ERROR: ${error.message.toUpperCase()}`);
-    await new Promise(r => setTimeout(r, 2000));
+    // Handle network/connection exceptions
+    const err = (error.message || '').toLowerCase();
+    let msg = `CONNECTION ERROR: ${error.message.toUpperCase()}`;
+    let help = '';
+    
+    if (err.includes('enotfound') || err.includes('getaddrinfo')) {
+      msg = 'DNS ERROR - SERVER NOT FOUND';
+      help = 'No internet or Rithmic server down.';
+    } else if (err.includes('econnrefused')) {
+      msg = 'CONNECTION REFUSED';
+      help = 'Rithmic server rejected. Try again later.';
+    } else if (err.includes('timeout') || err.includes('etimedout')) {
+      msg = 'CONNECTION TIMEOUT';
+      help = 'Server not responding. Check firewall.';
+    }
+    
+    spinner.fail(msg);
+    if (help) console.log(chalk.yellow(`  → ${help}`));
+    await new Promise(r => setTimeout(r, 3000));
     return null;
   }
 };
