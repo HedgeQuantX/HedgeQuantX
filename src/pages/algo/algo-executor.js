@@ -292,17 +292,37 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
             // Combined single line for zones info
             ui.addLog('analysis', `Zones: ${state.activeZones} | R: ${resStr} | S: ${supStr} | Swings: ${state.swingsDetected}`);
             
+            // HF-grade proximity logs with precise distance info
+            if (price && state.nearestResistance) {
+              const gapR = state.nearestResistance - price;
+              const ticksR = Math.round(gapR / tickSize);
+              const dirR = gapR > 0 ? 'below' : 'above';
+              const absTicksR = Math.abs(ticksR);
+              if (absTicksR <= 50) { // Only show if within 50 ticks
+                ui.addLog('analysis', `PROX R: ${Math.abs(gapR).toFixed(2)} pts (${absTicksR} ticks ${dirR}) | Trigger: price must sweep ABOVE then reject`);
+              }
+            }
+            if (price && state.nearestSupport) {
+              const gapS = price - state.nearestSupport;
+              const ticksS = Math.round(gapS / tickSize);
+              const dirS = gapS > 0 ? 'above' : 'below';
+              const absTicksS = Math.abs(ticksS);
+              if (absTicksS <= 50) { // Only show if within 50 ticks
+                ui.addLog('analysis', `PROX S: ${Math.abs(gapS).toFixed(2)} pts (${absTicksS} ticks ${dirS}) | Trigger: price must sweep BELOW then reject`);
+              }
+            }
+            
             // Strategy status - what we're waiting for
             if (state.activeZones === 0) {
-              ui.addLog('risk', 'Scanning for swing points to build liquidity zones...');
+              ui.addLog('risk', 'Building liquidity map - scanning swing points for zone formation...');
             } else if (!state.nearestSupport && !state.nearestResistance) {
-              ui.addLog('risk', 'Zones detected but too far from current price level');
+              ui.addLog('risk', 'Zones detected but outside proximity range - waiting for price approach');
             } else if (!state.nearestSupport) {
-              ui.addLog('analysis', 'Watching resistance for HIGH SWEEP entry (SHORT)');
+              ui.addLog('analysis', 'Monitoring resistance for HIGH SWEEP opportunity (SHORT entry on rejection)');
             } else if (!state.nearestResistance) {
-              ui.addLog('analysis', 'Watching support for LOW SWEEP entry (LONG)');
+              ui.addLog('analysis', 'Monitoring support for LOW SWEEP opportunity (LONG entry on rejection)');
             } else {
-              ui.addLog('ready', 'Both zones active - monitoring for liquidity sweep');
+              ui.addLog('ready', 'Both zones active - monitoring for liquidity sweep with rejection confirmation');
             }
           }
         }
@@ -437,31 +457,20 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   const pnlInterval = setInterval(() => { if (running) pollPnL(); }, 2000);
   pollPnL();
   
-  // Keyboard handler
+  // Keyboard handler for exit (X or Ctrl+C)
   const setupKeyHandler = () => {
     if (!process.stdin.isTTY) return;
     readline.emitKeypressEvents(process.stdin);
     process.stdin.setRawMode(true);
     process.stdin.resume();
-    
-    const onKey = (str, key) => {
-      if (key && (key.name === 'x' || key.name === 'X' || (key.ctrl && key.name === 'c'))) {
-        running = false; stopReason = 'manual';
-      }
-    };
+    const onKey = (str, key) => { if (key && (key.name === 'x' || key.name === 'X' || (key.ctrl && key.name === 'c'))) { running = false; stopReason = 'manual'; } };
     process.stdin.on('keypress', onKey);
-    return () => {
-      process.stdin.removeListener('keypress', onKey);
-      if (process.stdin.isTTY) process.stdin.setRawMode(false);
-    };
+    return () => { process.stdin.removeListener('keypress', onKey); if (process.stdin.isTTY) process.stdin.setRawMode(false); };
   };
-  
   const cleanupKeys = setupKeyHandler();
   
-  // Wait for stop
-  await new Promise(resolve => {
-    const check = setInterval(() => { if (!running) { clearInterval(check); resolve(); } }, 100);
-  });
+  // Wait for stop signal
+  await new Promise(resolve => { const check = setInterval(() => { if (!running) { clearInterval(check); resolve(); } }, 100); });
   
   // Cleanup
   clearInterval(refreshInterval);
@@ -469,19 +478,14 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   await marketFeed.disconnect();
   if (cleanupKeys) cleanupKeys();
   ui.cleanup();
-  
   if (process.stdin.isTTY) process.stdin.setRawMode(false);
   process.stdin.resume();
   
-  // Duration
+  // Duration and summary
   const durationMs = Date.now() - stats.startTime;
-  const hours = Math.floor(durationMs / 3600000);
-  const minutes = Math.floor((durationMs % 3600000) / 60000);
-  const seconds = Math.floor((durationMs % 60000) / 1000);
-  stats.duration = hours > 0 ? `${hours}h ${minutes}m ${seconds}s` : minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
-  
+  const h = Math.floor(durationMs / 3600000), m = Math.floor((durationMs % 3600000) / 60000), s = Math.floor((durationMs % 60000) / 1000);
+  stats.duration = h > 0 ? `${h}h ${m}m ${s}s` : m > 0 ? `${m}m ${s}s` : `${s}s`;
   renderSessionSummary(stats, stopReason);
-  
   console.log('\n  Returning to menu in 3 seconds...');
   await new Promise(resolve => setTimeout(resolve, 3000));
 };
