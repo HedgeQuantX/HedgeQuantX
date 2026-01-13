@@ -37,8 +37,13 @@ const extractJSON = (text) => {
     } catch (e) { /* continue */ }
   }
 
-  // Remove <think>...</think> tags (MiniMax)
-  let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  // Remove <think>...</think> tags (MiniMax) - multiple patterns
+  let cleaned = text
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '')
+    .replace(/<analysis>[\s\S]*?<\/analysis>/gi, '')
+    .trim();
   
   // Try to parse cleaned text
   try {
@@ -50,19 +55,55 @@ const extractJSON = (text) => {
   if (startIdx !== -1) {
     let depth = 0;
     let endIdx = -1;
+    let inString = false;
+    let escapeNext = false;
+    
     for (let i = startIdx; i < cleaned.length; i++) {
-      if (cleaned[i] === '{') depth++;
-      if (cleaned[i] === '}') depth--;
-      if (depth === 0) {
-        endIdx = i;
-        break;
+      const char = cleaned[i];
+      
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+      
+      if (char === '\\') {
+        escapeNext = true;
+        continue;
+      }
+      
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      
+      if (!inString) {
+        if (char === '{') depth++;
+        if (char === '}') depth--;
+        if (depth === 0) {
+          endIdx = i;
+          break;
+        }
       }
     }
+    
     if (endIdx !== -1) {
       try {
         return JSON.parse(cleaned.substring(startIdx, endIdx + 1));
       } catch (e) { /* continue */ }
     }
+  }
+
+  // Try to extract just decision/confidence/reason pattern
+  const decisionMatch = cleaned.match(/"decision"\s*:\s*"(approve|reject|modify)"/i);
+  const confidenceMatch = cleaned.match(/"confidence"\s*:\s*(\d+)/);
+  const reasonMatch = cleaned.match(/"reason"\s*:\s*"([^"]+)"/);
+  
+  if (decisionMatch && confidenceMatch) {
+    return {
+      decision: decisionMatch[1].toLowerCase(),
+      confidence: parseInt(confidenceMatch[1]),
+      reason: reasonMatch ? reasonMatch[1] : 'Extracted from partial response'
+    };
   }
 
   // Last resort: try to find JSON object pattern with "decision"

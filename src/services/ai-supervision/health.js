@@ -113,50 +113,75 @@ const testApiKeyConnection = async (agent) => {
 
 /**
  * Test a single agent connection and response format
+ * Includes retry logic for non-deterministic agents (like MiniMax)
  * @param {Object} agent - Agent config { id, provider, modelId, connectionType, apiKey, ... }
+ * @param {number} maxRetries - Maximum retry attempts (default 2)
  * @returns {Promise<Object>} { success, latency, formatValid, error }
  */
-const testAgentConnection = async (agent) => {
-  const startTime = Date.now();
+const testAgentConnection = async (agent, maxRetries = 2) => {
+  let lastResult = null;
   
-  try {
-    // Route based on connection type
-    if (agent.connectionType === 'apikey') {
-      return await testApiKeyConnection(agent);
-    }
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const startTime = Date.now();
     
-    // CLIProxy connection
-    const result = await cliproxy.chat(agent.provider, agent.modelId, TEST_PROMPT, AGENT_TIMEOUT);
-    const latency = Date.now() - startTime;
-    
-    if (!result.success) {
-      return {
+    try {
+      // Route based on connection type
+      if (agent.connectionType === 'apikey') {
+        lastResult = await testApiKeyConnection(agent);
+      } else {
+        // CLIProxy connection
+        const result = await cliproxy.chat(agent.provider, agent.modelId, TEST_PROMPT, AGENT_TIMEOUT);
+        const latency = Date.now() - startTime;
+        
+        if (!result.success) {
+          lastResult = {
+            success: false,
+            latency,
+            formatValid: false,
+            error: result.error || 'No response from agent'
+          };
+        } else {
+          // Validate response format
+          const formatResult = validateResponseFormat(result.content);
+          
+          lastResult = {
+            success: formatResult.valid,
+            latency,
+            formatValid: formatResult.valid,
+            error: formatResult.valid ? null : formatResult.error,
+            response: result.content
+          };
+        }
+      }
+      
+      // If successful, return immediately
+      if (lastResult.success) {
+        return lastResult;
+      }
+      
+      // Only retry on format errors (not connection errors)
+      if (lastResult.error && !lastResult.error.includes('valid JSON') && 
+          !lastResult.error.includes('Missing') && !lastResult.error.includes('Invalid')) {
+        // Connection error - don't retry
+        return lastResult;
+      }
+      
+      // Wait a bit before retry
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, 500));
+      }
+      
+    } catch (error) {
+      lastResult = {
         success: false,
-        latency,
+        latency: Date.now() - startTime,
         formatValid: false,
-        error: result.error || 'No response from agent'
+        error: error.message || 'Connection failed'
       };
     }
-    
-    // Validate response format
-    const formatResult = validateResponseFormat(result.content);
-    
-    return {
-      success: formatResult.valid,
-      latency,
-      formatValid: formatResult.valid,
-      error: formatResult.valid ? null : formatResult.error,
-      response: result.content
-    };
-    
-  } catch (error) {
-    return {
-      success: false,
-      latency: Date.now() - startTime,
-      formatValid: false,
-      error: error.message || 'Connection failed'
-    };
   }
+  
+  return lastResult;
 };
 
 /**

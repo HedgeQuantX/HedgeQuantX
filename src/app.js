@@ -77,7 +77,10 @@ const refreshStats = async () => {
 
   try {
     const allAccounts = await connections.getAllAccounts();
-    const activeAccounts = allAccounts.filter(acc => acc.status === 0);
+    // Filter active accounts: status === 0 (ProjectX) OR status === 'active' (Rithmic) OR no status
+    const activeAccounts = allAccounts.filter(acc => 
+      acc.status === 0 || acc.status === 'active' || acc.status === undefined || acc.status === null
+    );
 
     let totalBalance = null;
     let totalPnl = null;
