@@ -3,10 +3,40 @@
  * @module utils/prompts
  * 
  * Uses native readline for reliable stdin handling
+ * Yellow spinner shows activity while waiting for user input
  */
 
 const inquirer = require('inquirer');
 const readline = require('readline');
+const chalk = require('chalk');
+
+// Spinner characters for yellow waiting indicator
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+let spinnerInterval = null;
+let spinnerFrame = 0;
+
+/**
+ * Start yellow spinner to show we're waiting for user input
+ */
+const startSpinner = () => {
+  if (spinnerInterval) return;
+  spinnerFrame = 0;
+  spinnerInterval = setInterval(() => {
+    spinnerFrame = (spinnerFrame + 1) % SPINNER_FRAMES.length;
+    process.stdout.write(`\r${chalk.yellow(SPINNER_FRAMES[spinnerFrame])} `);
+  }, 80);
+};
+
+/**
+ * Stop spinner and clear line
+ */
+const stopSpinner = () => {
+  if (spinnerInterval) {
+    clearInterval(spinnerInterval);
+    spinnerInterval = null;
+    process.stdout.write('\r  \r'); // Clear spinner
+  }
+};
 
 /** @type {readline.Interface|null} */
 let rl = null;
@@ -79,27 +109,27 @@ const nativePrompt = (message) => {
 };
 
 /**
- * Wait for Enter key
+ * Wait for Enter key + yellow spinner
  * @param {string} [message='Press Enter to continue...'] - Message to display
  * @returns {Promise<void>}
  */
 const waitForEnter = async (message = 'Press Enter to continue...') => {
-  await nativePrompt(message);
+  await nativePrompt(`${chalk.yellow('⠋')} ${message}`);
 };
 
 /**
- * Text input
+ * Text input + yellow spinner
  * @param {string} message - Prompt message
  * @param {string} [defaultVal=''] - Default value
  * @returns {Promise<string>}
  */
 const textInput = async (message, defaultVal = '') => {
-  const value = await nativePrompt(message);
+  const value = await nativePrompt(`${chalk.yellow('⠋')} ${message}`);
   return value || defaultVal;
 };
 
 /**
- * Password input (masked)
+ * Password input (masked) + yellow spinner
  * @param {string} message - Prompt message
  * @returns {Promise<string>}
  */
@@ -110,7 +140,7 @@ const passwordInput = async (message) => {
   const { value } = await inquirer.prompt([{
     type: 'password',
     name: 'value',
-    message,
+    message: `${chalk.yellow('⠋')} ${message}`,
     mask: '*',
     prefix: '',
   }]);
@@ -119,7 +149,7 @@ const passwordInput = async (message) => {
 };
 
 /**
- * Confirm prompt with arrow keys
+ * Confirm prompt with arrow keys + yellow spinner
  * @param {string} message - Prompt message
  * @param {boolean} [defaultVal=true] - Default value
  * @returns {Promise<boolean>}
@@ -135,7 +165,7 @@ const confirmPrompt = async (message, defaultVal = true) => {
   const { value } = await inquirer.prompt([{
     type: 'list',
     name: 'value',
-    message,
+    message: `${chalk.yellow('⠋')} ${message}`,
     choices,
     prefix: '',
     loop: false,
@@ -145,7 +175,7 @@ const confirmPrompt = async (message, defaultVal = true) => {
 };
 
 /**
- * Number input with validation
+ * Number input with validation + yellow spinner
  * @param {string} message - Prompt message
  * @param {number} [defaultVal=1] - Default value
  * @param {number} [min=1] - Minimum value
@@ -159,7 +189,7 @@ const numberInput = async (message, defaultVal = 1, min = 1, max = 1000) => {
   const { value } = await inquirer.prompt([{
     type: 'input',
     name: 'value',
-    message,
+    message: `${chalk.yellow('⠋')} ${message}`,
     default: String(defaultVal),
     prefix: '',
     validate: (v) => {
@@ -175,7 +205,7 @@ const numberInput = async (message, defaultVal = 1, min = 1, max = 1000) => {
 };
 
 /**
- * Select from options with arrow keys
+ * Select from options with arrow keys + yellow spinner
  * @param {string} message - Prompt message
  * @param {Array<{label: string, value: any, disabled?: boolean}>} options - Options
  * @returns {Promise<any>}
@@ -194,7 +224,7 @@ const selectOption = async (message, options) => {
   const { value } = await inquirer.prompt([{
     type: 'list',
     name: 'value',
-    message,
+    message: `${chalk.yellow('⠋')} ${message}`,
     choices,
     prefix: '',
     loop: false,
