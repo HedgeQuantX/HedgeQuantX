@@ -292,33 +292,64 @@ const getOrderHistory = async (service, date) => {
 };
 
 /**
- * Get full trade history for multiple dates
+ * Get full trade history (fills) from ORDER_PLANT
  * @param {RithmicService} service - The Rithmic service instance
- * @param {number} days - Number of days to fetch (default 30)
+ * @param {number} days - Number of days to fetch (default 7, max 14)
  * @returns {Promise<{success: boolean, trades: Array}>}
  */
-const getTradeHistoryFull = async (service, days = 30) => {
+const getTradeHistoryFull = async (service, days = 7) => {
   if (!service.orderConn || !service.loginInfo) {
     return { success: false, trades: [] };
   }
 
-  // Get available dates
-  const { dates } = await getOrderHistoryDates(service);
+  // Get available dates with timeout
+  let dates;
+  try {
+    const datesPromise = getOrderHistoryDates(service);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Timeout')), 5000)
+    );
+    const result = await Promise.race([datesPromise, timeoutPromise]);
+    dates = result.dates;
+  } catch (e) {
+    return { success: true, trades: [] };
+  }
+  
   if (!dates || dates.length === 0) {
     return { success: true, trades: [] };
   }
 
-  // Sort dates descending and limit to requested days
-  const sortedDates = dates.sort((a, b) => b.localeCompare(a)).slice(0, days);
+  // Filter to recent dates only (last N days from today)
+  const today = new Date();
+  const cutoffDate = new Date(today.getTime() - (Math.min(days, 14) * 24 * 60 * 60 * 1000));
+  const cutoffStr = cutoffDate.toISOString().slice(0, 10).replace(/-/g, '');
+  
+  // Sort dates descending and filter to recent only
+  const recentDates = dates
+    .filter(d => d >= cutoffStr)
+    .sort((a, b) => b.localeCompare(a))
+    .slice(0, 7); // Max 7 dates to avoid long waits
+  
+  if (recentDates.length === 0) {
+    return { success: true, trades: [] };
+  }
   
   const allTrades = [];
   
-  // Fetch history for each date
-  for (const date of sortedDates) {
-    const { orders } = await getOrderHistory(service, date);
-    // Filter only fills (notifyType 5)
-    const fills = orders.filter(o => o.notifyType === 5 || o.fillPrice);
-    allTrades.push(...fills);
+  // Fetch history for each date with short timeout
+  for (const date of recentDates) {
+    try {
+      const histPromise = getOrderHistory(service, date);
+      const timeoutPromise = new Promise((resolve) => 
+        setTimeout(() => resolve({ orders: [] }), 3000)
+      );
+      const { orders } = await Promise.race([histPromise, timeoutPromise]);
+      // Filter only fills (notifyType 5)
+      const fills = (orders || []).filter(o => o.notifyType === 5 || o.fillPrice);
+      allTrades.push(...fills);
+    } catch (e) {
+      // Skip failed dates
+    }
   }
 
   return { success: true, trades: allTrades };
