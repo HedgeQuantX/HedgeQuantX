@@ -228,10 +228,10 @@ const configureAlgo = async (account, contract, strategy) => {
   const contracts = await prompts.numberInput('Number of contracts:', 1, 1, 10);
   if (contracts === null) return null;
   
-  const dailyTarget = await prompts.numberInput('Daily target ($):', 200, 1, 10000);
+  const dailyTarget = await prompts.numberInput('Daily target ($):', 1000, 1, 10000);
   if (dailyTarget === null) return null;
   
-  const maxRisk = await prompts.numberInput('Max risk ($):', 100, 1, 5000);
+  const maxRisk = await prompts.numberInput('Max risk ($):', 500, 1, 5000);
   if (maxRisk === null) return null;
   
   const showName = await prompts.confirmPrompt('Show account name?', false);
