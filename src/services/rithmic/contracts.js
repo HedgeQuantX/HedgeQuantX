@@ -176,10 +176,13 @@ const fetchAllFrontMonths = (service) => {
 
 /**
  * Decode ProductCodes response
- * @param {Buffer} buffer - Protobuf buffer
+ * @param {Buffer} buffer - Protobuf buffer (with 4-byte length prefix)
  * @returns {Object} Decoded product data
  */
 const decodeProductCodes = (buffer) => {
+  // Skip 4-byte length prefix
+  const data = buffer.length > 4 ? buffer.slice(4) : buffer;
+  
   const result = {};
   let offset = 0;
 
@@ -200,18 +203,18 @@ const decodeProductCodes = (buffer) => {
     return [buf.slice(newOff, newOff + len).toString('utf8'), newOff + len];
   };
 
-  while (offset < buffer.length) {
+  while (offset < data.length) {
     try {
-      const [tag, tagOff] = readVarint(buffer, offset);
+      const [tag, tagOff] = readVarint(data, offset);
       const wireType = tag & 0x7;
       const fieldNumber = tag >>> 3;
       offset = tagOff;
 
       if (wireType === 0) {
-        const [, newOff] = readVarint(buffer, offset);
+        const [, newOff] = readVarint(data, offset);
         offset = newOff;
       } else if (wireType === 2) {
-        const [val, newOff] = readString(buffer, offset);
+        const [val, newOff] = readString(data, offset);
         offset = newOff;
         if (fieldNumber === 110101) result.exchange = val;
         if (fieldNumber === 100749) result.productCode = val;

@@ -459,44 +459,48 @@ function decodeProductCodes(buffer) {
 
 /**
  * Decode ResponseFrontMonthContract (template 114) - current tradeable contract
+ * Skips 4-byte length prefix if present
  */
 function decodeFrontMonthContract(buffer) {
+  // Skip 4-byte length prefix
+  const data = buffer.length > 4 ? buffer.slice(4) : buffer;
+  
   const result = { rpCode: [] };
   let offset = 0;
 
-  while (offset < buffer.length) {
+  while (offset < data.length) {
     try {
-      const [tag, tagOffset] = readVarint(buffer, offset);
+      const [tag, tagOffset] = readVarint(data, offset);
       const wireType = tag & 0x7;
       const fieldNumber = tag >>> 3;
       offset = tagOffset;
 
       switch (fieldNumber) {
         case SYMBOL_FIELDS.TEMPLATE_ID:
-          [result.templateId, offset] = readVarint(buffer, offset);
+          [result.templateId, offset] = readVarint(data, offset);
           break;
         case SYMBOL_FIELDS.RP_CODE:
           let rpCode;
-          [rpCode, offset] = readLengthDelimited(buffer, offset);
+          [rpCode, offset] = readLengthDelimited(data, offset);
           result.rpCode.push(rpCode);
           break;
         case SYMBOL_FIELDS.SYMBOL:
-          [result.symbol, offset] = readLengthDelimited(buffer, offset);
+          [result.symbol, offset] = readLengthDelimited(data, offset);
           break;
         case SYMBOL_FIELDS.EXCHANGE:
-          [result.exchange, offset] = readLengthDelimited(buffer, offset);
+          [result.exchange, offset] = readLengthDelimited(data, offset);
           break;
         case SYMBOL_FIELDS.TRADING_SYMBOL:
-          [result.tradingSymbol, offset] = readLengthDelimited(buffer, offset);
+          [result.tradingSymbol, offset] = readLengthDelimited(data, offset);
           break;
         case SYMBOL_FIELDS.DESCRIPTION:
-          [result.description, offset] = readLengthDelimited(buffer, offset);
+          [result.description, offset] = readLengthDelimited(data, offset);
           break;
         case SYMBOL_FIELDS.USER_MSG:
-          [result.userMsg, offset] = readLengthDelimited(buffer, offset);
+          [result.userMsg, offset] = readLengthDelimited(data, offset);
           break;
         default:
-          offset = skipField(buffer, offset, wireType);
+          offset = skipField(data, offset, wireType);
       }
     } catch (error) {
       break;

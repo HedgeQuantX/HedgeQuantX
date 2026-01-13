@@ -1,5 +1,5 @@
 /**
- * One Account Mode - HQX Ultra Scalping
+ * One Account Mode - Trading with Strategy Selection
  * Supports multi-agent AI supervision
  */
 
@@ -12,6 +12,7 @@ const { checkMarketHours } = require('../../services/rithmic/market');
 const { executeAlgo } = require('./algo-executor');
 const { getActiveAgentCount, getSupervisionConfig, getActiveAgents } = require('../ai-agents');
 const { runPreflightCheck, formatPreflightResults, getPreflightSummary } = require('../../services/ai-supervision');
+const { getAvailableStrategies } = require('../../lib/m');
 
 
 
@@ -77,8 +78,12 @@ const oneAccountMenu = async (service) => {
   const contract = await selectSymbol(accountService, selectedAccount);
   if (!contract) return;
   
+  // Select strategy
+  const strategy = await selectStrategy();
+  if (!strategy) return;
+  
   // Configure algo
-  const config = await configureAlgo(selectedAccount, contract);
+  const config = await configureAlgo(selectedAccount, contract, strategy);
   if (!config) return;
   
   // Check for AI Supervision
@@ -129,6 +134,7 @@ const oneAccountMenu = async (service) => {
     account: selectedAccount,
     contract,
     config,
+    strategy,
     options: { supervisionConfig }
   });
 };
@@ -183,11 +189,41 @@ const selectSymbol = async (service, account) => {
 };
 
 /**
+ * Select trading strategy
+ */
+const selectStrategy = async () => {
+  console.log();
+  console.log(chalk.cyan('  Select Strategy'));
+  console.log();
+  
+  const strategies = getAvailableStrategies();
+  
+  const options = strategies.map(s => ({
+    label: `${s.name} (${s.backtest.winRate} WR, R:R ${s.params.riskReward})`,
+    value: s
+  }));
+  options.push({ label: chalk.gray('< Back'), value: 'back' });
+  
+  // Show strategy details
+  for (const s of strategies) {
+    console.log(chalk.white(`  ${s.name}`));
+    console.log(chalk.gray(`    ${s.description}`));
+    console.log(chalk.gray(`    Backtest: ${s.backtest.pnl} | ${s.backtest.winRate} WR | ${s.backtest.trades} trades`));
+    console.log(chalk.gray(`    Stop: ${s.params.stopTicks} ticks | Target: ${s.params.targetTicks} ticks | R:R ${s.params.riskReward}`));
+    console.log();
+  }
+  
+  const selected = await prompts.selectOption(chalk.yellow('Select Strategy:'), options);
+  return selected === 'back' || selected === null ? null : selected;
+};
+
+/**
  * Configure algo
  */
-const configureAlgo = async (account, contract) => {
+const configureAlgo = async (account, contract, strategy) => {
   console.log();
   console.log(chalk.cyan('  Configure Algo Parameters'));
+  console.log(chalk.gray(`  Strategy: ${strategy.name}`));
   console.log();
   
   const contracts = await prompts.numberInput('Number of contracts:', 1, 1, 10);
