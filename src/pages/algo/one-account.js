@@ -75,7 +75,7 @@ const oneAccountMenu = async (service) => {
       console.log();
       console.log(chalk.cyan('  Last configuration found:'));
       console.log(chalk.gray(`    Account: ${lastConfig.accountName} (${lastConfig.propfirm})`));
-      console.log(chalk.gray(`    Symbol: ${lastConfig.symbol}`));
+      console.log(chalk.gray(`    Symbol: ${lastConfig.baseSymbol || lastConfig.symbol} (${lastConfig.symbol})`));
       console.log(chalk.gray(`    Strategy: ${lastConfig.strategyName}`));
       console.log(chalk.gray(`    Contracts: ${lastConfig.contracts} | Target: $${lastConfig.dailyTarget} | Risk: $${lastConfig.maxRisk}`));
       console.log();
@@ -86,10 +86,15 @@ const oneAccountMenu = async (service) => {
         selectedAccount = matchingAccount;
         accountService = selectedAccount.service || connections.getServiceForAccount(selectedAccount.accountId) || service;
         
-        // Load contracts to find the saved symbol
+        // Load contracts to find the saved symbol (match by baseSymbol first, then exact symbol)
         const contractsResult = await accountService.getContracts();
         if (contractsResult.success) {
-          contract = contractsResult.contracts.find(c => c.symbol === lastConfig.symbol);
+          // Try baseSymbol match first (more stable across contract rolls)
+          contract = contractsResult.contracts.find(c => c.baseSymbol === lastConfig.baseSymbol);
+          // Fall back to exact symbol match
+          if (!contract) {
+            contract = contractsResult.contracts.find(c => c.symbol === lastConfig.symbol);
+          }
         }
         
         // Find strategy
@@ -147,12 +152,13 @@ const oneAccountMenu = async (service) => {
     config = await configureAlgo(selectedAccount, contract, strategy);
     if (!config) return;
     
-    // Save config for next time
+    // Save config for next time (include baseSymbol for stable matching across contract rolls)
     saveOneAccountConfig({
       accountId: selectedAccount.accountId || selectedAccount.rithmicAccountId,
       accountName: selectedAccount.accountName || selectedAccount.rithmicAccountId || selectedAccount.accountId,
       propfirm: selectedAccount.propfirm || selectedAccount.platform || 'Unknown',
       symbol: contract.symbol,
+      baseSymbol: contract.baseSymbol,
       strategyId: strategy.id,
       strategyName: strategy.name,
       contracts: config.contracts,
