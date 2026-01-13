@@ -298,6 +298,13 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
         ui.addLog('debug', `${tickLog.message} ${tickLog.details}`);
       }
       
+      // AI Agents status log every 20 seconds
+      if (currentSecond % 20 === 0 && supervisionEnabled && supervisionEngine) {
+        const status = supervisionEngine.getStatus();
+        const agentNames = status.agents.map(a => a.name.split(' ')[0]).join(', ');
+        ui.addLog('analysis', `AI Agents (${status.availableAgents}): ${agentNames} - watching...`);
+      }
+      
       // Reset volume counters
       buyVolume = 0;
       sellVolume = 0;
