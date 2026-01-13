@@ -285,6 +285,19 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
             const supStr = state.nearestSupport ? state.nearestSupport.toFixed(2) : '--';
             ui.addLog('analysis', `Bars: ${state.barsProcessed} | Zones: ${state.activeZones} | Swings: ${state.swingsDetected}`);
             ui.addLog('analysis', `Resistance: ${resStr} | Support: ${supStr}`);
+            
+            // Explain why no trade
+            if (state.activeZones === 0) {
+              ui.addLog('risk', 'No zones detected - waiting for swing points');
+            } else if (!state.nearestSupport && !state.nearestResistance) {
+              ui.addLog('risk', 'Zones too far from price - waiting');
+            } else if (!state.nearestSupport) {
+              ui.addLog('risk', 'No support zone - only SHORT sweeps possible');
+            } else if (!state.nearestResistance) {
+              ui.addLog('risk', 'No resistance zone - only LONG sweeps possible');
+            } else {
+              ui.addLog('ready', 'Zones active - waiting for sweep signal');
+            }
           }
         }
       }
