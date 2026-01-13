@@ -15,7 +15,7 @@ const BOX = {
 // Spinner characters
 const SPINNER = ['\u280B', '\u2819', '\u2839', '\u2838', '\u283C', '\u2834', '\u2826', '\u2827', '\u2807', '\u280F'];
 
-// Log type colors - HF grade
+// Log type colors - HF grade with variety
 const LOG_COLORS = {
   // Executions
   fill_buy: chalk.green.bold,
@@ -23,14 +23,19 @@ const LOG_COLORS = {
   fill_win: chalk.green.bold,
   fill_loss: chalk.red.bold,
   // Status
-  connected: chalk.green,
+  connected: chalk.green.bold,
   ready: chalk.cyan,
   // Errors
   error: chalk.red.bold,
   reject: chalk.red,
-  // Info
-  info: chalk.gray,
-  system: chalk.blue
+  // Info - varied colors
+  info: chalk.white,
+  signal: chalk.yellow.bold,
+  trade: chalk.magenta.bold,
+  analysis: chalk.blue,
+  risk: chalk.yellow,
+  system: chalk.blue,
+  debug: chalk.gray
 };
 
 // Log type icons - compact HF style
@@ -44,7 +49,12 @@ const LOG_ICONS = {
   error: 'ERR  ',
   reject: 'REJ  ',
   info: 'INFO ',
-  system: 'SYS  '
+  signal: 'SIG  ',
+  trade: 'TRADE',
+  analysis: 'ANLZ ',
+  risk: 'RISK ',
+  system: 'SYS  ',
+  debug: 'DBG  '
 };
 
 /**
@@ -129,7 +139,7 @@ class AlgoUI {
     this._line(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
     this._line(chalk.cyan(BOX.V) + chalk.yellow(center(`PROP FUTURES ALGO TRADING  V${version}`, W)) + chalk.cyan(BOX.V));
     this._line(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
-    this._line(chalk.cyan(BOX.V) + chalk.yellow(center((this.config.subtitle || 'HQX ALGO TRADING').toUpperCase(), W)) + chalk.cyan(BOX.V));
+    this._line(chalk.cyan(BOX.V) + chalk.cyan.bold(center((this.config.subtitle || 'HQX ALGO TRADING').toUpperCase(), W)) + chalk.cyan(BOX.V));
   }
 
   _drawStats(stats) {
@@ -199,7 +209,7 @@ class AlgoUI {
     
     // Row 5: Connection | Propfirm
     const connection = stats.platform || 'Rithmic';
-    const r5c1 = buildCell('Connection', connection, chalk.white, colL);
+    const r5c1 = buildCell('Connection', connection, chalk.cyan, colL);
     const r5c2 = buildCell('Propfirm', stats.propfirm || 'N/A', chalk.cyan, colR);
     row(r5c1.padded, r5c2.padded);
     
@@ -267,9 +277,11 @@ class AlgoUI {
   _drawLogs() {
     const { W, logs, maxLogs } = this;
     
-    // Activity header - HF style
-    this.spinnerFrame = (this.spinnerFrame + 1) % SPINNER.length;
-    const spinner = SPINNER[this.spinnerFrame];
+    // Activity header - HF style with animated spinner
+    const elapsed = Math.floor((Date.now() - (this.startTime || Date.now())) / 100);
+    if (!this.startTime) this.startTime = Date.now();
+    const spinnerIdx = elapsed % SPINNER.length;
+    const spinner = SPINNER[spinnerIdx];
     const now = new Date();
     const timeStr = now.toLocaleTimeString('en-US', { hour12: false });
     const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
