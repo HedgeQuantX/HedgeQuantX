@@ -1,0 +1,256 @@
+/**
+ * =============================================================================
+ * HQX-2B LIQUIDITY SWEEP STRATEGY - Core Engine
+ * =============================================================================
+ * 2B Pattern with Liquidity Zone Sweeps
+ * 
+ * DO NOT MODIFY LOGIC - validated by backtest
+ */
+
+const EventEmitter = require('events');
+const { DEFAULT_CONFIG, ZoneType } = require('./config');
+const { generateSignal } = require('./signal');
+const { detectSwings, updateZones, detectSweep } = require('./detection');
+
+/**
+ * Deep merge config objects
+ */
+function mergeConfig(defaults, custom) {
+  const result = { ...defaults };
+  for (const key in custom) {
+    if (typeof custom[key] === 'object' && !Array.isArray(custom[key]) && custom[key] !== null) {
+      result[key] = { ...defaults[key], ...custom[key] };
+    } else {
+      result[key] = custom[key];
+    }
+  }
+  return result;
+}
+
+class HQX2BLiquiditySweep extends EventEmitter {
+  constructor(config = {}) {
+    super();
+
+    // Merge config with defaults
+    this.config = mergeConfig(DEFAULT_CONFIG, config);
+    this.tickSize = this.config.tickSize;
+    this.tickValue = this.config.tickValue;
+
+    // State
+    this.barHistory = new Map();      // contractId -> Bar[]
+    this.swingPoints = new Map();     // contractId -> SwingPoint[]
+    this.liquidityZones = new Map();  // contractId -> LiquidityZone[]
+
+    // Tracking
+    this.lastSignalTime = 0;
+    this.stats = { signals: 0, trades: 0, wins: 0, losses: 0, pnl: 0 };
+    this.recentTrades = [];
+  }
+
+  initialize(contractId, tickSize = 0.25, tickValue = 5.0) {
+    this.tickSize = tickSize;
+    this.tickValue = tickValue;
+    this.config.tickSize = tickSize;
+    this.config.tickValue = tickValue;
+
+    this.barHistory.set(contractId, []);
+    this.swingPoints.set(contractId, []);
+    this.liquidityZones.set(contractId, []);
+
+    this.emit('log', {
+      type: 'info',
+      message: `[HQX-2B] Initialized for ${contractId}: tick=${tickSize}, value=${tickValue}`
+    });
+    this.emit('log', {
+      type: 'info',
+      message: `[HQX-2B] Params: Stop=${this.config.execution.stopTicks}t, Target=${this.config.execution.targetTicks}t, BE=${this.config.execution.breakevenTicks}t, Trail=${this.config.execution.trailTriggerTicks}/${this.config.execution.trailDistanceTicks}`
+    });
+  }
+
+  processTick(tick) {
+    const { contractId, price, volume, timestamp } = tick;
+    const bar = {
+      timestamp: timestamp || Date.now(),
+      open: price,
+      high: price,
+      low: price,
+      close: price,
+      volume: volume || 1
+    };
+    return this.processBar(contractId, bar);
+  }
+
+  onTick(tick) {
+    return this.processTick(tick);
+  }
+
+  onTrade(trade) {
+    return this.processTick({
+      contractId: trade.contractId || trade.symbol,
+      price: trade.price,
+      volume: trade.size || trade.volume || 1,
+      timestamp: trade.timestamp || Date.now()
+    });
+  }
+
+  processBar(contractId, bar) {
+    // Get or initialize history
+    let bars = this.barHistory.get(contractId);
+    if (!bars) {
+      this.initialize(contractId);
+      bars = this.barHistory.get(contractId);
+    }
+
+    // Add bar to history
+    bars.push(bar);
+    if (bars.length > 500) bars.shift();
+
+    const currentIndex = bars.length - 1;
+
+    // Need minimum data
+    if (bars.length < this.config.swing.lookbackBars * 3) {
+      return null;
+    }
+
+    // 1. Detect new swing points
+    const swings = this.swingPoints.get(contractId);
+    const updatedSwings = detectSwings(
+      bars, 
+      currentIndex, 
+      swings, 
+      this.config.swing,
+      this.config.zone.maxZoneAgeBars
+    );
+    this.swingPoints.set(contractId, updatedSwings);
+
+    // 2. Update liquidity zones from swings
+    const zones = this.liquidityZones.get(contractId);
+    const updatedZones = updateZones(
+      updatedSwings,
+      zones,
+      currentIndex,
+      this.config.zone,
+      this.tickSize
+    );
+    this.liquidityZones.set(contractId, updatedZones);
+
+    // 3. Detect sweeps of zones
+    const sweep = detectSweep(
+      updatedZones,
+      bars,
+      currentIndex,
+      this.config.sweep,
+      this.config.zone,
+      this.tickSize
+    );
+
+    // 4. If valid sweep completed, generate signal
+    if (sweep && sweep.isValid) {
+      // Cooldown check
+      if (Date.now() - this.lastSignalTime < this.config.execution.cooldownMs) {
+        return null;
+      }
+
+      const signal = generateSignal({
+        contractId,
+        currentBar: bar,
+        currentIndex,
+        sweep,
+        config: this.config,
+        tickSize: this.tickSize
+      });
+
+      if (signal) {
+        this.lastSignalTime = Date.now();
+        this.stats.signals++;
+
+        // Emit signal
+        this.emit('signal', {
+          side: signal.direction === 'long' ? 'buy' : 'sell',
+          action: 'open',
+          reason: `2B ${sweep.sweepType} | Pen:${sweep.penetrationTicks.toFixed(1)}t | Vol:${sweep.volumeRatio.toFixed(1)}x | Q:${(sweep.qualityScore * 100).toFixed(0)}%`,
+          ...signal
+        });
+
+        this.emit('log', {
+          type: 'info',
+          message: `[HQX-2B] SIGNAL: ${signal.direction.toUpperCase()} @ ${bar.close.toFixed(2)} | ${sweep.sweepType} | Pen:${sweep.penetrationTicks.toFixed(1)}t Vol:${sweep.volumeRatio.toFixed(1)}x | Conf:${(signal.confidence * 100).toFixed(0)}%`
+        });
+
+        return signal;
+      }
+    }
+
+    return null;
+  }
+
+  getAnalysisState(contractId, currentPrice) {
+    const bars = this.barHistory.get(contractId) || [];
+    const zones = this.liquidityZones.get(contractId) || [];
+    const swings = this.swingPoints.get(contractId) || [];
+
+    if (bars.length < 20) {
+      return { ready: false, message: `Collecting data... ${bars.length}/20 bars` };
+    }
+
+    // Find nearest zones
+    const sortedZones = zones
+      .map(z => ({ zone: z, distance: Math.abs(currentPrice - z.getLevel()) }))
+      .sort((a, b) => a.distance - b.distance);
+
+    const nearestResistance = sortedZones.find(z => z.zone.type === ZoneType.RESISTANCE);
+    const nearestSupport = sortedZones.find(z => z.zone.type === ZoneType.SUPPORT);
+
+    return {
+      ready: true,
+      barsProcessed: bars.length,
+      swingsDetected: swings.length,
+      activeZones: zones.length,
+      nearestResistance: nearestResistance ? nearestResistance.zone.getLevel() : null,
+      nearestSupport: nearestSupport ? nearestSupport.zone.getLevel() : null,
+      stopTicks: this.config.execution.stopTicks,
+      targetTicks: this.config.execution.targetTicks,
+      strategy: 'HQX-2B Liquidity Sweep (Optimized)'
+    };
+  }
+
+  recordTradeResult(pnl) {
+    this.recentTrades.push({ netPnl: pnl, timestamp: Date.now() });
+    if (this.recentTrades.length > 100) this.recentTrades.shift();
+
+    if (pnl > 0) {
+      this.stats.wins++;
+    } else {
+      this.stats.losses++;
+    }
+
+    this.stats.trades++;
+    this.stats.pnl += pnl;
+
+    this.emit('log', {
+      type: 'debug',
+      message: `[HQX-2B] Trade result: ${pnl > 0 ? 'WIN' : 'LOSS'} $${pnl.toFixed(2)}`
+    });
+  }
+
+  getBarHistory(contractId) {
+    return this.barHistory.get(contractId) || [];
+  }
+
+  getStats() {
+    return this.stats;
+  }
+
+  reset(contractId) {
+    this.barHistory.set(contractId, []);
+    this.swingPoints.set(contractId, []);
+    this.liquidityZones.set(contractId, []);
+
+    this.emit('log', {
+      type: 'info',
+      message: `[HQX-2B] Reset state for ${contractId}`
+    });
+  }
+}
+
+module.exports = { HQX2BLiquiditySweep };
