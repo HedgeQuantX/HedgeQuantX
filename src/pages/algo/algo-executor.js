@@ -411,19 +411,21 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     await marketFeed.connect(rithmicCredentials);
     await marketFeed.subscribe(symbolCode, contract.exchange || 'CME');
     
-    // Preload historical bars for instant strategy warmup
-    ui.addLog('system', 'Loading historical data...');
-    try {
-      const historicalBars = await marketFeed.getHistoricalBars(symbolCode, contract.exchange || 'CME', 30);
-      if (historicalBars && historicalBars.length > 0 && strategy.preloadBars) {
-        strategy.preloadBars(contractId, historicalBars);
-        ui.addLog('system', `Loaded ${historicalBars.length} historical bars - strategy ready!`);
-      } else {
-        ui.addLog('system', 'No historical bars available - collecting live data...');
+    // Preload historical bars for HQX-2B strategy only (bar-based strategy)
+    if (strategyId === 'hqx-2b' && strategy.preloadBars) {
+      ui.addLog('system', 'Loading historical bars...');
+      try {
+        const historicalBars = await marketFeed.getHistoricalBars(symbolCode, contract.exchange || 'CME', 30);
+        if (historicalBars && historicalBars.length > 0) {
+          strategy.preloadBars(contractId, historicalBars);
+          ui.addLog('system', `Loaded ${historicalBars.length} bars - strategy ready!`);
+        } else {
+          ui.addLog('system', 'No historical bars - collecting live data...');
+        }
+      } catch (histErr) {
+        ui.addLog('debug', `Historical data unavailable: ${histErr.message}`);
+        ui.addLog('system', 'Collecting live data...');
       }
-    } catch (histErr) {
-      ui.addLog('debug', `Historical data unavailable: ${histErr.message}`);
-      ui.addLog('system', 'Collecting live data...');
     }
   } catch (e) {
     ui.addLog('error', `Failed to connect: ${e.message}`);
