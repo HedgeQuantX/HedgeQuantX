@@ -41,6 +41,10 @@ class HQX2BLiquiditySweep extends EventEmitter {
     this.swingPoints = new Map();     // contractId -> SwingPoint[]
     this.liquidityZones = new Map();  // contractId -> LiquidityZone[]
 
+    // Bar aggregation (1-minute bars from ticks)
+    this.currentBar = new Map();      // contractId -> { open, high, low, close, volume, startTime }
+    this.barIntervalMs = 60000;       // 1 minute = 60000ms
+
     // Tracking
     this.lastSignalTime = 0;
     this.stats = { signals: 0, trades: 0, wins: 0, losses: 0, pnl: 0 };
@@ -56,10 +60,11 @@ class HQX2BLiquiditySweep extends EventEmitter {
     this.barHistory.set(contractId, []);
     this.swingPoints.set(contractId, []);
     this.liquidityZones.set(contractId, []);
+    this.currentBar.delete(contractId); // Reset bar aggregation
 
     this.emit('log', {
       type: 'info',
-      message: `[HQX-2B] Initialized for ${contractId}: tick=${tickSize}, value=${tickValue}`
+      message: `[HQX-2B] Initialized for ${contractId}: tick=${tickSize}, value=${tickValue}, TF=1min`
     });
     this.emit('log', {
       type: 'info',
@@ -67,17 +72,68 @@ class HQX2BLiquiditySweep extends EventEmitter {
     });
   }
 
+  /**
+   * Process incoming tick and aggregate into 1-minute bars
+   * Only calls processBar() when a bar closes (every 60 seconds)
+   */
   processTick(tick) {
     const { contractId, price, volume, timestamp } = tick;
-    const bar = {
-      timestamp: timestamp || Date.now(),
-      open: price,
-      high: price,
-      low: price,
-      close: price,
-      volume: volume || 1
-    };
-    return this.processBar(contractId, bar);
+    const ts = timestamp || Date.now();
+    const vol = volume || 1;
+
+    // Get current bar for this contract
+    let bar = this.currentBar.get(contractId);
+    
+    // Calculate bar start time (floor to minute)
+    const barStartTime = Math.floor(ts / this.barIntervalMs) * this.barIntervalMs;
+
+    if (!bar || bar.startTime !== barStartTime) {
+      // New bar period - close previous bar first if exists
+      if (bar) {
+        // Close the previous bar and process it
+        const closedBar = {
+          timestamp: bar.startTime,
+          open: bar.open,
+          high: bar.high,
+          low: bar.low,
+          close: bar.close,
+          volume: bar.volume
+        };
+        
+        // Process the closed bar through strategy logic
+        const signal = this.processBar(contractId, closedBar);
+        
+        // Start new bar
+        this.currentBar.set(contractId, {
+          startTime: barStartTime,
+          open: price,
+          high: price,
+          low: price,
+          close: price,
+          volume: vol
+        });
+        
+        return signal; // Return signal from closed bar
+      } else {
+        // First bar ever
+        this.currentBar.set(contractId, {
+          startTime: barStartTime,
+          open: price,
+          high: price,
+          low: price,
+          close: price,
+          volume: vol
+        });
+        return null;
+      }
+    } else {
+      // Same bar period - update OHLC
+      bar.high = Math.max(bar.high, price);
+      bar.low = Math.min(bar.low, price);
+      bar.close = price;
+      bar.volume += vol;
+      return null; // No signal until bar closes
+    }
   }
 
   onTick(tick) {
@@ -245,6 +301,7 @@ class HQX2BLiquiditySweep extends EventEmitter {
     this.barHistory.set(contractId, []);
     this.swingPoints.set(contractId, []);
     this.liquidityZones.set(contractId, []);
+    this.currentBar.delete(contractId); // Reset bar aggregation
 
     this.emit('log', {
       type: 'info',

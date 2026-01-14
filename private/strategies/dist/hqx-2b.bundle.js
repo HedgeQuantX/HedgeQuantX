@@ -463,6 +463,8 @@ var require_core = __commonJS({
         this.barHistory = /* @__PURE__ */ new Map();
         this.swingPoints = /* @__PURE__ */ new Map();
         this.liquidityZones = /* @__PURE__ */ new Map();
+        this.currentBar = /* @__PURE__ */ new Map();
+        this.barIntervalMs = 6e4;
         this.lastSignalTime = 0;
         this.stats = { signals: 0, trades: 0, wins: 0, losses: 0, pnl: 0 };
         this.recentTrades = [];
@@ -475,26 +477,64 @@ var require_core = __commonJS({
         this.barHistory.set(contractId, []);
         this.swingPoints.set(contractId, []);
         this.liquidityZones.set(contractId, []);
+        this.currentBar.delete(contractId);
         this.emit("log", {
           type: "info",
-          message: `[HQX-2B] Initialized for ${contractId}: tick=${tickSize}, value=${tickValue}`
+          message: `[HQX-2B] Initialized for ${contractId}: tick=${tickSize}, value=${tickValue}, TF=1min`
         });
         this.emit("log", {
           type: "info",
           message: `[HQX-2B] Params: Stop=${this.config.execution.stopTicks}t, Target=${this.config.execution.targetTicks}t, BE=${this.config.execution.breakevenTicks}t, Trail=${this.config.execution.trailTriggerTicks}/${this.config.execution.trailDistanceTicks}`
         });
       }
+      /**
+       * Process incoming tick and aggregate into 1-minute bars
+       * Only calls processBar() when a bar closes (every 60 seconds)
+       */
       processTick(tick) {
         const { contractId, price, volume, timestamp } = tick;
-        const bar = {
-          timestamp: timestamp || Date.now(),
-          open: price,
-          high: price,
-          low: price,
-          close: price,
-          volume: volume || 1
-        };
-        return this.processBar(contractId, bar);
+        const ts = timestamp || Date.now();
+        const vol = volume || 1;
+        let bar = this.currentBar.get(contractId);
+        const barStartTime = Math.floor(ts / this.barIntervalMs) * this.barIntervalMs;
+        if (!bar || bar.startTime !== barStartTime) {
+          if (bar) {
+            const closedBar = {
+              timestamp: bar.startTime,
+              open: bar.open,
+              high: bar.high,
+              low: bar.low,
+              close: bar.close,
+              volume: bar.volume
+            };
+            const signal = this.processBar(contractId, closedBar);
+            this.currentBar.set(contractId, {
+              startTime: barStartTime,
+              open: price,
+              high: price,
+              low: price,
+              close: price,
+              volume: vol
+            });
+            return signal;
+          } else {
+            this.currentBar.set(contractId, {
+              startTime: barStartTime,
+              open: price,
+              high: price,
+              low: price,
+              close: price,
+              volume: vol
+            });
+            return null;
+          }
+        } else {
+          bar.high = Math.max(bar.high, price);
+          bar.low = Math.min(bar.low, price);
+          bar.close = price;
+          bar.volume += vol;
+          return null;
+        }
       }
       onTick(tick) {
         return this.processTick(tick);
@@ -622,6 +662,7 @@ var require_core = __commonJS({
         this.barHistory.set(contractId, []);
         this.swingPoints.set(contractId, []);
         this.liquidityZones.set(contractId, []);
+        this.currentBar.delete(contractId);
         this.emit("log", {
           type: "info",
           message: `[HQX-2B] Reset state for ${contractId}`
