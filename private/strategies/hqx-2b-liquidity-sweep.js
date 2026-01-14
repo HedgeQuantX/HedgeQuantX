@@ -805,8 +805,9 @@ class HQX2BLiquiditySweep extends EventEmitter {
     const zones = this.liquidityZones.get(contractId) || [];
     const swings = this.swingPoints.get(contractId) || [];
 
-    if (bars.length < 20) {
-      return { ready: false, message: `Collecting data... ${bars.length}/20 bars` };
+    // Minimum 5 bars to start (reduced from 20 for faster warmup)
+    if (bars.length < 5) {
+      return { ready: false, message: `Collecting data... ${bars.length}/5 bars` };
     }
 
     // Find nearest zones

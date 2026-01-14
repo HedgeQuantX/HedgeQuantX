@@ -412,19 +412,20 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     await marketFeed.subscribe(symbolCode, contract.exchange || 'CME');
     
     // Preload historical bars for HQX-2B strategy only (bar-based strategy)
+    // Note: HISTORY_PLANT may not be available on all accounts (e.g., paper trading)
     if (strategyId === 'hqx-2b' && strategy.preloadBars) {
-      ui.addLog('system', 'Loading historical bars...');
       try {
+        ui.addLog('system', 'Loading historical bars...');
         const historicalBars = await marketFeed.getHistoricalBars(symbolCode, contract.exchange || 'CME', 30);
         if (historicalBars && historicalBars.length > 0) {
           strategy.preloadBars(contractId, historicalBars);
-          ui.addLog('system', `Loaded ${historicalBars.length} bars - strategy ready!`);
+          ui.addLog('system', `Loaded ${historicalBars.length} bars - ready!`);
         } else {
-          ui.addLog('system', 'No historical bars - collecting live data...');
+          ui.addLog('system', 'No historical data - warming up with live bars...');
         }
       } catch (histErr) {
-        ui.addLog('debug', `Historical data unavailable: ${histErr.message}`);
-        ui.addLog('system', 'Collecting live data...');
+        // HISTORY_PLANT not available (common on paper accounts)
+        ui.addLog('system', 'Historical data not available - warming up with live bars...');
       }
     }
   } catch (e) {

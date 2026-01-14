@@ -687,8 +687,8 @@ var require_core = __commonJS({
         const bars = this.barHistory.get(contractId) || [];
         const zones = this.liquidityZones.get(contractId) || [];
         const swings = this.swingPoints.get(contractId) || [];
-        if (bars.length < 20) {
-          return { ready: false, message: `Collecting data... ${bars.length}/20 bars` };
+        if (bars.length < 5) {
+          return { ready: false, message: `Collecting data... ${bars.length}/5 bars` };
         }
         const sortedZones = zones.map((z) => ({ zone: z, distance: Math.abs(currentPrice - z.getLevel()) })).sort((a, b) => a.distance - b.distance);
         const nearestResistance = sortedZones.find((z) => z.zone.type === ZoneType2.RESISTANCE);
