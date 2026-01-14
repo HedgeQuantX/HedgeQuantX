@@ -94,9 +94,13 @@ const DEFAULT_CONFIG = {
     commissionPerSide: 2.0    // $4 round-trip
   },
 
-  // Session (Futures Market Hours - Sunday 18:00 to Friday 17:00 EST)
+  // Session filter (US Regular Hours only - matches backtest)
   session: {
-    enabled: false,           // Trade anytime markets are open
+    enabled: true,            // MUST be enabled to match backtest results
+    startHour: 9,             // 9:30 AM EST
+    startMinute: 30,
+    endHour: 16,              // 4:00 PM EST
+    endMinute: 0,
     timezone: 'America/New_York'
   }
 };
@@ -206,6 +210,41 @@ class HQX2BLiquiditySweep extends EventEmitter {
   }
 
   // ===========================================================================
+  // SESSION FILTER
+  // ===========================================================================
+
+  /**
+   * Check if current time is within trading session (9:30-16:00 EST)
+   */
+  isWithinSession(timestamp) {
+    if (!this.config.session.enabled) return true;
+    
+    const date = new Date(timestamp);
+    // Convert to EST (UTC-5, or UTC-4 during DST)
+    const estOffset = this.isDST(date) ? -4 : -5;
+    const utcHours = date.getUTCHours();
+    const utcMinutes = date.getUTCMinutes();
+    const estHours = (utcHours + estOffset + 24) % 24;
+    
+    const { startHour, startMinute, endHour, endMinute } = this.config.session;
+    const currentMins = estHours * 60 + utcMinutes;
+    const startMins = startHour * 60 + startMinute;
+    const endMins = endHour * 60 + endMinute;
+    
+    return currentMins >= startMins && currentMins < endMins;
+  }
+
+  /**
+   * Check if date is in US Daylight Saving Time
+   */
+  isDST(date) {
+    const jan = new Date(date.getFullYear(), 0, 1);
+    const jul = new Date(date.getFullYear(), 6, 1);
+    const stdOffset = Math.max(jan.getTimezoneOffset(), jul.getTimezoneOffset());
+    return date.getTimezoneOffset() < stdOffset;
+  }
+
+  // ===========================================================================
   // INITIALIZATION
   // ===========================================================================
 
@@ -243,6 +282,11 @@ class HQX2BLiquiditySweep extends EventEmitter {
     const { contractId, price, volume, timestamp } = tick;
     const ts = timestamp || Date.now();
     const vol = volume || 1;
+
+    // Session filter - only process during US regular hours (9:30-16:00 EST)
+    if (!this.isWithinSession(ts)) {
+      return null;
+    }
 
     // Get current bar for this contract
     let bar = this.currentBar.get(contractId);

@@ -61,9 +61,13 @@ const DEFAULT_CONFIG = {
     commissionPerSide: 2.0    // $4 round-trip
   },
 
-  // Session (Futures Market Hours - Sunday 18:00 to Friday 17:00 EST)
+  // Session filter (US Regular Hours only - matches backtest)
   session: {
-    enabled: false,           // Trade anytime markets are open
+    enabled: true,            // MUST be enabled to match backtest results
+    startHour: 9,             // 9:30 AM EST
+    startMinute: 30,
+    endHour: 16,              // 4:00 PM EST
+    endMinute: 0,
     timezone: 'America/New_York'
   }
 };

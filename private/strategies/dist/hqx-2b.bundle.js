@@ -65,10 +65,16 @@ var require_config = __commonJS({
         commissionPerSide: 2
         // $4 round-trip
       },
-      // Session (Futures Market Hours - Sunday 18:00 to Friday 17:00 EST)
+      // Session filter (US Regular Hours only - matches backtest)
       session: {
-        enabled: false,
-        // Trade anytime markets are open
+        enabled: true,
+        // MUST be enabled to match backtest results
+        startHour: 9,
+        // 9:30 AM EST
+        startMinute: 30,
+        endHour: 16,
+        // 4:00 PM EST
+        endMinute: 0,
         timezone: "America/New_York"
       }
     };
@@ -488,6 +494,31 @@ var require_core = __commonJS({
         });
       }
       /**
+       * Check if current time is within trading session (9:30-16:00 EST)
+       */
+      isWithinSession(timestamp) {
+        if (!this.config.session.enabled) return true;
+        const date = new Date(timestamp);
+        const estOffset = this.isDST(date) ? -4 : -5;
+        const utcHours = date.getUTCHours();
+        const utcMinutes = date.getUTCMinutes();
+        const estHours = (utcHours + estOffset + 24) % 24;
+        const { startHour, startMinute, endHour, endMinute } = this.config.session;
+        const currentMins = estHours * 60 + utcMinutes;
+        const startMins = startHour * 60 + startMinute;
+        const endMins = endHour * 60 + endMinute;
+        return currentMins >= startMins && currentMins < endMins;
+      }
+      /**
+       * Check if date is in US Daylight Saving Time
+       */
+      isDST(date) {
+        const jan = new Date(date.getFullYear(), 0, 1);
+        const jul = new Date(date.getFullYear(), 6, 1);
+        const stdOffset = Math.max(jan.getTimezoneOffset(), jul.getTimezoneOffset());
+        return date.getTimezoneOffset() < stdOffset;
+      }
+      /**
        * Process incoming tick and aggregate into 1-minute bars
        * Only calls processBar() when a bar closes (every 60 seconds)
        */
@@ -495,6 +526,9 @@ var require_core = __commonJS({
         const { contractId, price, volume, timestamp } = tick;
         const ts = timestamp || Date.now();
         const vol = volume || 1;
+        if (!this.isWithinSession(ts)) {
+          return null;
+        }
         let bar = this.currentBar.get(contractId);
         const barStartTime = Math.floor(ts / this.barIntervalMs) * this.barIntervalMs;
         if (!bar || bar.startTime !== barStartTime) {
