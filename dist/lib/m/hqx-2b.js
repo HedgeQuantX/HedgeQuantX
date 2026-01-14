@@ -1,1 +1,695 @@
-const _0x344fde=_0x4752;function _0x4752(_0x295d46,_0x27822c){_0x295d46=_0x295d46-0xe8;const _0x31abd5=_0x31ab();let _0x475228=_0x31abd5[_0x295d46];return _0x475228;}(function(_0x675959,_0x304a92){const _0x264c38=_0x4752,_0x2afbd2=_0x675959();while(!![]){try{const _0x4176b2=-parseInt(_0x264c38(0x140))/0x1+parseInt(_0x264c38(0x144))/0x2*(parseInt(_0x264c38(0x11a))/0x3)+parseInt(_0x264c38(0x111))/0x4+-parseInt(_0x264c38(0x142))/0x5+-parseInt(_0x264c38(0x106))/0x6*(-parseInt(_0x264c38(0x113))/0x7)+-parseInt(_0x264c38(0x117))/0x8*(parseInt(_0x264c38(0x14c))/0x9)+parseInt(_0x264c38(0x101))/0xa;if(_0x4176b2===_0x304a92)break;else _0x2afbd2['push'](_0x2afbd2['shift']());}catch(_0x3301da){_0x2afbd2['push'](_0x2afbd2['shift']());}}}(_0x31ab,0xabf78));const EventEmitter=require(_0x344fde(0x122)),{v4:uuidv4}=require(_0x344fde(0x10c)),OrderSide={'BID':0x0,'ASK':0x1},SignalStrength={'WEAK':0x1,'MODERATE':0x2,'STRONG':0x3,'VERY_STRONG':0x4},SweepType={'HIGH_SWEEP':'high','LOW_SWEEP':_0x344fde(0x100)},ZoneType={'RESISTANCE':'resistance','SUPPORT':'support'},DEFAULT_CONFIG={'tickSize':0.25,'tickValue':0x5,'swing':{'lookbackBars':0x2,'minStrength':0x2,'confirmationBars':0x1},'zone':{'clusterToleranceTicks':0x4,'minTouches':0x1,'maxZoneAgeBars':0xc8,'maxZoneDistanceTicks':0x28,'cooldownBars':0xa},'sweep':{'minPenetrationTicks':0x1,'maxPenetrationTicks':0xc,'maxDurationBars':0x5,'minQualityScore':0.4,'minVolumeRatio':0.8,'minBodyRatio':0.2},'execution':{'stopTicks':0xa,'targetTicks':0x28,'breakevenTicks':0x4,'trailTriggerTicks':0x8,'trailDistanceTicks':0x4,'cooldownMs':0x7530,'minHoldTimeMs':0x2710,'slippageTicks':0x1,'commissionPerSide':0x2},'session':{'enabled':![],'timezone':'America/New_York'}};class SwingPoint{constructor(_0x251145,_0xdc1525,_0x39a033,_0x51c1cc,_0x467304=0x1){const _0x2dbb35=_0x344fde;this[_0x2dbb35(0x104)]=_0x251145,this['price']=_0xdc1525,this[_0x2dbb35(0x15f)]=_0x39a033,this['timestamp']=_0x51c1cc,this[_0x2dbb35(0x107)]=_0x467304;}}class LiquidityZone{constructor(_0x10372b,_0x3ee5dd,_0x37fcec,_0x28d53d,_0x29fe00){const _0x22ea39=_0x344fde;this['id']=uuidv4(),this[_0x22ea39(0x104)]=_0x10372b,this[_0x22ea39(0xea)]=_0x3ee5dd,this['priceLow']=_0x37fcec,this[_0x22ea39(0x146)]=_0x28d53d,this['barIndex']=_0x29fe00,this['touches']=0x1,this['swept']=![],this[_0x22ea39(0x137)]=null,this['lastUsedBarIndex']=-0x3e7,this['qualityScore']=0.5;}['containsPrice'](_0x18e28f,_0x2a9ff8,_0x514d82){const _0x50d117=_0x2a9ff8*_0x514d82;return _0x18e28f>=this['priceLow']-_0x50d117&&_0x18e28f<=this['priceHigh']+_0x50d117;}['getLevel'](){const _0x5a24aa=_0x344fde;return(this['priceHigh']+this[_0x5a24aa(0x167)])/0x2;}}class SweepEvent{constructor(_0x2d3119,_0x2a3cb4,_0x78f9a1,_0x577896,_0x42d20e){const _0x439783=_0x344fde;this[_0x439783(0x157)]=_0x2d3119,this[_0x439783(0x14d)]=_0x2a3cb4,this[_0x439783(0x115)]=_0x78f9a1,this[_0x439783(0xfe)]=_0x577896,this['extremePrice']=_0x42d20e,this['exitBarIndex']=null,this['isValid']=![],this['qualityScore']=0x0,this[_0x439783(0x10a)]=0x0,this[_0x439783(0x166)]=0x0,this['volumeRatio']=0x1;}}class HQX2BLiquiditySweep extends EventEmitter{constructor(_0x433a6a={}){const _0x278aed=_0x344fde;super(),this[_0x278aed(0x163)]=this['_mergeConfig'](DEFAULT_CONFIG,_0x433a6a),this[_0x278aed(0x112)]=this['config'][_0x278aed(0x112)],this[_0x278aed(0xff)]=this[_0x278aed(0x163)][_0x278aed(0xff)],this[_0x278aed(0x150)]=new Map(),this[_0x278aed(0xec)]=new Map(),this['liquidityZones']=new Map(),this['activeSweeps']=new Map(),this[_0x278aed(0x13a)]=0x0,this[_0x278aed(0x108)]={'signals':0x0,'trades':0x0,'wins':0x0,'losses':0x0,'pnl':0x0},this['recentTrades']=[];}['_mergeConfig'](_0x28deb1,_0x2ae4db){const _0x2df59c=_0x344fde,_0x45f8f0={..._0x28deb1};for(const _0x48f57e in _0x2ae4db){typeof _0x2ae4db[_0x48f57e]==='object'&&!Array[_0x2df59c(0xf0)](_0x2ae4db[_0x48f57e])?_0x45f8f0[_0x48f57e]={..._0x28deb1[_0x48f57e],..._0x2ae4db[_0x48f57e]}:_0x45f8f0[_0x48f57e]=_0x2ae4db[_0x48f57e];}return _0x45f8f0;}[_0x344fde(0x12b)](_0x38e2fd,_0x1daee8=0.25,_0x1a2b44=0x5){const _0x4d610e=_0x344fde;this[_0x4d610e(0x112)]=_0x1daee8,this[_0x4d610e(0xff)]=_0x1a2b44,this['config']['tickSize']=_0x1daee8,this['config'][_0x4d610e(0xff)]=_0x1a2b44,this['barHistory'][_0x4d610e(0x114)](_0x38e2fd,[]),this['swingPoints']['set'](_0x38e2fd,[]),this[_0x4d610e(0xf4)][_0x4d610e(0x114)](_0x38e2fd,[]),this['activeSweeps']['set'](_0x38e2fd,[]),this[_0x4d610e(0x134)]('log',{'type':_0x4d610e(0x160),'message':_0x4d610e(0x109)+_0x38e2fd+':\x20tick='+_0x1daee8+',\x20value='+_0x1a2b44}),this[_0x4d610e(0x134)](_0x4d610e(0x16a),{'type':_0x4d610e(0x160),'message':_0x4d610e(0x121)+this[_0x4d610e(0x163)][_0x4d610e(0x138)]['stopTicks']+_0x4d610e(0x135)+this[_0x4d610e(0x163)]['execution'][_0x4d610e(0x129)]+_0x4d610e(0x118)+this['config']['execution']['breakevenTicks']+_0x4d610e(0x147)+this['config'][_0x4d610e(0x138)]['trailTriggerTicks']+'/'+this[_0x4d610e(0x163)][_0x4d610e(0x138)]['trailDistanceTicks']});}[_0x344fde(0x116)](_0xf9fdbc){const _0x361f74=_0x344fde,{contractId:_0xa0b782,price:_0x50d682,volume:_0x330cd2,timestamp:_0x2000e1}=_0xf9fdbc,_0x14d66e={'timestamp':_0x2000e1||Date[_0x361f74(0xef)](),'open':_0x50d682,'high':_0x50d682,'low':_0x50d682,'close':_0x50d682,'volume':_0x330cd2||0x1};return this['processBar'](_0xa0b782,_0x14d66e);}[_0x344fde(0x13d)](_0x29b449){return this['processTick'](_0x29b449);}['onTrade'](_0x4d0678){const _0x5062fd=_0x344fde;return this[_0x5062fd(0x116)]({'contractId':_0x4d0678[_0x5062fd(0x13c)]||_0x4d0678['symbol'],'price':_0x4d0678['price'],'volume':_0x4d0678[_0x5062fd(0xeb)]||_0x4d0678[_0x5062fd(0x13b)]||0x1,'timestamp':_0x4d0678[_0x5062fd(0xf3)]||Date['now']()});}[_0x344fde(0x119)](_0x195427,_0x2b933f){const _0x1a856=_0x344fde;let _0x2d6610=this[_0x1a856(0x150)][_0x1a856(0x102)](_0x195427);!_0x2d6610&&(this['initialize'](_0x195427),_0x2d6610=this['barHistory']['get'](_0x195427));_0x2d6610[_0x1a856(0xed)](_0x2b933f);if(_0x2d6610[_0x1a856(0x148)]>0x1f4)_0x2d6610[_0x1a856(0xf8)]();const _0xea05d1=_0x2d6610['length']-0x1;if(_0x2d6610[_0x1a856(0x148)]<this[_0x1a856(0x163)][_0x1a856(0x155)]['lookbackBars']*0x3)return null;this[_0x1a856(0x12d)](_0x195427,_0x2d6610,_0xea05d1),this[_0x1a856(0x15e)](_0x195427,_0xea05d1);const _0x82f029=this['_detectSweep'](_0x195427,_0x2d6610,_0xea05d1);if(_0x82f029&&_0x82f029[_0x1a856(0x16b)])return this['_generateSignal'](_0x195427,_0x2b933f,_0xea05d1,_0x82f029);return null;}['_detectSwings'](_0x4b875a,_0xaf5c13,_0x333731){const _0x40675a=_0x344fde,_0x45f8c3=this[_0x40675a(0x163)][_0x40675a(0x155)][_0x40675a(0x10d)],_0x3afd0c=this['config'][_0x40675a(0x155)][_0x40675a(0xf5)];if(_0x333731<_0x45f8c3*0x2)return;const _0x8f7b25=this[_0x40675a(0xec)]['get'](_0x4b875a),_0x1bd8eb=_0x333731-_0x45f8c3,_0x35164f=_0xaf5c13[_0x1bd8eb];let _0x5f0d8b=!![],_0x3df7f4=0x0;for(let _0x36327f=_0x1bd8eb-_0x45f8c3;_0x36327f<=_0x1bd8eb+_0x45f8c3;_0x36327f++){if(_0x36327f===_0x1bd8eb||_0x36327f<0x0||_0x36327f>=_0xaf5c13['length'])continue;if(_0xaf5c13[_0x36327f]['high']>=_0x35164f[_0x40675a(0x11d)]){_0x5f0d8b=![];break;}_0x3df7f4++;}if(_0x5f0d8b&&_0x3df7f4>=_0x3afd0c){const _0x33b2c6=_0x8f7b25['find'](_0x21607b=>_0x21607b['barIndex']===_0x1bd8eb&&_0x21607b['type']==='high');!_0x33b2c6&&_0x8f7b25['push'](new SwingPoint('high',_0x35164f[_0x40675a(0x11d)],_0x1bd8eb,_0x35164f['timestamp'],_0x3df7f4));}let _0x3511eb=!![],_0x253561=0x0;for(let _0x2714c1=_0x1bd8eb-_0x45f8c3;_0x2714c1<=_0x1bd8eb+_0x45f8c3;_0x2714c1++){if(_0x2714c1===_0x1bd8eb||_0x2714c1<0x0||_0x2714c1>=_0xaf5c13['length'])continue;if(_0xaf5c13[_0x2714c1][_0x40675a(0x100)]<=_0x35164f['low']){_0x3511eb=![];break;}_0x253561++;}if(_0x3511eb&&_0x253561>=_0x3afd0c){const _0x53f8aa=_0x8f7b25['find'](_0x54059d=>_0x54059d['barIndex']===_0x1bd8eb&&_0x54059d[_0x40675a(0x104)]==='low');!_0x53f8aa&&_0x8f7b25[_0x40675a(0xed)](new SwingPoint('low',_0x35164f['low'],_0x1bd8eb,_0x35164f['timestamp'],_0x253561));}const _0xf6854c=this[_0x40675a(0x163)][_0x40675a(0x14d)]['maxZoneAgeBars'];while(_0x8f7b25['length']>0x0&&_0x8f7b25[0x0][_0x40675a(0x15f)]<_0x333731-_0xf6854c){_0x8f7b25[_0x40675a(0xf8)]();}}['_updateZones'](_0x15994a,_0x59a7ad){const _0x4f0646=_0x344fde,_0x3b23fd=this[_0x4f0646(0xec)]['get'](_0x15994a),_0x2ee5b2=this[_0x4f0646(0xf4)][_0x4f0646(0x102)](_0x15994a),_0x29628a=this[_0x4f0646(0x163)][_0x4f0646(0x14d)][_0x4f0646(0x103)]*this[_0x4f0646(0x112)],_0x3018d2=this[_0x4f0646(0x163)][_0x4f0646(0x14d)]['maxZoneAgeBars'];for(let _0x3e18d1=_0x2ee5b2[_0x4f0646(0x148)]-0x1;_0x3e18d1>=0x0;_0x3e18d1--){_0x59a7ad-_0x2ee5b2[_0x3e18d1]['barIndex']>_0x3018d2&&_0x2ee5b2[_0x4f0646(0x124)](_0x3e18d1,0x1);}for(const _0x414177 of _0x3b23fd){let _0x30fc47=null;for(const _0x83f79e of _0x2ee5b2){if(_0x83f79e[_0x4f0646(0xfb)](_0x414177['price'],this[_0x4f0646(0x163)]['zone'][_0x4f0646(0x103)],this['tickSize'])){_0x30fc47=_0x83f79e;break;}}if(_0x30fc47){_0x30fc47[_0x4f0646(0xf9)]++;if(_0x414177['price']>_0x30fc47[_0x4f0646(0xea)])_0x30fc47['priceHigh']=_0x414177[_0x4f0646(0xee)];if(_0x414177[_0x4f0646(0xee)]<_0x30fc47[_0x4f0646(0x167)])_0x30fc47[_0x4f0646(0x167)]=_0x414177[_0x4f0646(0xee)];_0x30fc47[_0x4f0646(0x149)]=Math['min'](0x1,0.3+_0x30fc47['touches']*0.15);}else{const _0x11a684=_0x414177[_0x4f0646(0x104)]===_0x4f0646(0x11d)?ZoneType['RESISTANCE']:ZoneType[_0x4f0646(0x15c)],_0x272b42=new LiquidityZone(_0x11a684,_0x414177['price']+_0x29628a/0x2,_0x414177['price']-_0x29628a/0x2,_0x414177[_0x4f0646(0xf3)],_0x414177['barIndex']);_0x272b42[_0x4f0646(0x149)]=0.3+_0x414177[_0x4f0646(0x107)]*0.1,_0x2ee5b2[_0x4f0646(0xed)](_0x272b42);}}}[_0x344fde(0x164)](_0x329a9d,_0x135355,_0x4fcc51){const _0x8fbaea=_0x344fde,_0x4ebda6=this[_0x8fbaea(0xf4)]['get'](_0x329a9d),_0x44f746=_0x135355[_0x4fcc51],_0x13eedb=_0x44f746[_0x8fbaea(0x110)],_0x466227=this[_0x8fbaea(0x163)]['sweep'],_0x39d9fc=this['config']['zone'];for(const _0x3f9a83 of _0x4ebda6){if(_0x3f9a83[_0x8fbaea(0x151)]>=0x0&&_0x4fcc51-_0x3f9a83[_0x8fbaea(0x151)]<_0x39d9fc['cooldownBars'])continue;const _0x373346=_0x3f9a83['getLevel'](),_0x2f7a39=Math['abs'](_0x13eedb-_0x373346)/this['tickSize'];if(_0x2f7a39>_0x39d9fc[_0x8fbaea(0x145)])continue;const _0x15d861=Math['max'](0x0,_0x4fcc51-_0x466227['maxDurationBars']*0x2);for(let _0x31a778=_0x15d861;_0x31a778<_0x4fcc51;_0x31a778++){const _0x27c64a=_0x135355[_0x31a778];if(_0x3f9a83['type']===ZoneType['RESISTANCE']){const _0x152bf5=(_0x27c64a['high']-_0x3f9a83[_0x8fbaea(0xea)])/this['tickSize'];if(_0x152bf5>=_0x466227[_0x8fbaea(0x15a)]&&_0x152bf5<=_0x466227['maxPenetrationTicks']){if(_0x13eedb<_0x3f9a83[_0x8fbaea(0xea)]){const _0x17d705=_0x27c64a['high']-_0x27c64a[_0x8fbaea(0x100)],_0x51923b=Math[_0x8fbaea(0x12f)](_0x27c64a[_0x8fbaea(0x110)]-_0x27c64a['open']),_0x426775=_0x17d705>0x0?_0x51923b/_0x17d705:0x0;if(_0x426775>=_0x466227['minBodyRatio']){const _0x411934=this[_0x8fbaea(0x14f)](_0x135355,_0x31a778,0x14);if(_0x411934>=_0x466227[_0x8fbaea(0x131)]){const _0x19efae=new SweepEvent(SweepType[_0x8fbaea(0x12a)],_0x3f9a83,_0x31a778,_0x31a778,_0x27c64a[_0x8fbaea(0x11d)]);_0x19efae['exitBarIndex']=_0x4fcc51,_0x19efae[_0x8fbaea(0x10a)]=_0x152bf5,_0x19efae['durationBars']=_0x4fcc51-_0x31a778,_0x19efae['volumeRatio']=_0x411934,_0x19efae['qualityScore']=this[_0x8fbaea(0x162)](_0x19efae,_0x426775),_0x19efae['isValid']=_0x19efae[_0x8fbaea(0x149)]>=_0x466227['minQualityScore'];if(_0x19efae['isValid'])return _0x19efae;}}}}}if(_0x3f9a83[_0x8fbaea(0x104)]===ZoneType['SUPPORT']){const _0xbd3d2d=(_0x3f9a83['priceLow']-_0x27c64a[_0x8fbaea(0x100)])/this['tickSize'];if(_0xbd3d2d>=_0x466227[_0x8fbaea(0x15a)]&&_0xbd3d2d<=_0x466227['maxPenetrationTicks']){if(_0x13eedb>_0x3f9a83['priceLow']){const _0x597a9c=_0x27c64a[_0x8fbaea(0x11d)]-_0x27c64a['low'],_0x9d26e2=Math[_0x8fbaea(0x12f)](_0x27c64a[_0x8fbaea(0x110)]-_0x27c64a[_0x8fbaea(0x14a)]),_0x2ab029=_0x597a9c>0x0?_0x9d26e2/_0x597a9c:0x0;if(_0x2ab029>=_0x466227['minBodyRatio']){const _0x2e6df4=this['_getVolumeRatio'](_0x135355,_0x31a778,0x14);if(_0x2e6df4>=_0x466227[_0x8fbaea(0x131)]){const _0x381909=new SweepEvent(SweepType[_0x8fbaea(0x153)],_0x3f9a83,_0x31a778,_0x31a778,_0x27c64a[_0x8fbaea(0x100)]);_0x381909['exitBarIndex']=_0x4fcc51,_0x381909['penetrationTicks']=_0xbd3d2d,_0x381909[_0x8fbaea(0x166)]=_0x4fcc51-_0x31a778,_0x381909['volumeRatio']=_0x2e6df4,_0x381909['qualityScore']=this['_scoreSweep'](_0x381909,_0x2ab029),_0x381909[_0x8fbaea(0x16b)]=_0x381909[_0x8fbaea(0x149)]>=_0x466227[_0x8fbaea(0xf2)];if(_0x381909['isValid'])return _0x381909;}}}}}}}return null;}['_getVolumeRatio'](_0x4e28ff,_0x334631,_0x1dadef){const _0x4559f5=_0x344fde,_0x8b7671=Math['max'](0x0,_0x334631-_0x1dadef),_0x47bea6=_0x4e28ff['slice'](_0x8b7671,_0x334631);if(_0x47bea6[_0x4559f5(0x148)]===0x0)return 0x1;const _0x3b2043=_0x47bea6['map'](_0x365a7c=>_0x365a7c['volume'])[_0x4559f5(0xe8)]((_0x229bea,_0x15c7fc)=>_0x229bea-_0x15c7fc),_0x2e3edb=Math[_0x4559f5(0x11f)](_0x3b2043['length']/0x2),_0x579a09=_0x3b2043[_0x2e3edb]||0x1;return _0x4e28ff[_0x334631]['volume']/_0x579a09;}['_scoreSweep'](_0x5989b8,_0x3ef6c4){const _0x157505=_0x344fde;let _0x426dca=0x0;const _0x385423=0x4,_0x229d6b=Math[_0x157505(0x12f)](_0x5989b8[_0x157505(0x10a)]-_0x385423);return _0x426dca+=Math[_0x157505(0xfa)](0x0,0.3-_0x229d6b*0.03),_0x426dca+=Math[_0x157505(0xfa)](0x0,0.25-_0x5989b8[_0x157505(0x166)]*0.05),_0x426dca+=Math[_0x157505(0x105)](0.25,_0x5989b8[_0x157505(0x15d)]*0.1),_0x426dca+=Math['min'](0.2,_0x3ef6c4*0.4),Math['min'](0x1,_0x426dca);}[_0x344fde(0x10e)](_0x2dc239,_0x5d3113,_0x23ec82,_0x24ed2c){const _0x742c42=_0x344fde;if(Date[_0x742c42(0xef)]()-this[_0x742c42(0x13a)]<this[_0x742c42(0x163)]['execution'][_0x742c42(0x133)])return null;const _0x5e6309=this[_0x742c42(0x163)]['execution'],_0x2b7867=_0x5d3113[_0x742c42(0x110)],_0x1496f5=_0x24ed2c[_0x742c42(0x157)]===SweepType['HIGH_SWEEP']?_0x742c42(0xe9):_0x742c42(0x14e);let _0x14b604,_0x2cddc2,_0x3fe5fb,_0x1a30c2;_0x1496f5===_0x742c42(0x14e)?(_0x14b604=_0x2b7867-_0x5e6309['stopTicks']*this[_0x742c42(0x112)],_0x2cddc2=_0x2b7867+_0x5e6309['targetTicks']*this[_0x742c42(0x112)],_0x3fe5fb=_0x2b7867+_0x5e6309[_0x742c42(0x165)]*this[_0x742c42(0x112)],_0x1a30c2=_0x2b7867+_0x5e6309[_0x742c42(0x11b)]*this[_0x742c42(0x112)]):(_0x14b604=_0x2b7867+_0x5e6309[_0x742c42(0xf7)]*this['tickSize'],_0x2cddc2=_0x2b7867-_0x5e6309['targetTicks']*this['tickSize'],_0x3fe5fb=_0x2b7867-_0x5e6309[_0x742c42(0x165)]*this['tickSize'],_0x1a30c2=_0x2b7867-_0x5e6309['trailTriggerTicks']*this['tickSize']);const _0x1166da=_0x5e6309['targetTicks']/_0x5e6309[_0x742c42(0xf7)],_0x2ce4f4=Math[_0x742c42(0x105)](0x1,_0x24ed2c['qualityScore']*0.5+_0x24ed2c[_0x742c42(0x14d)][_0x742c42(0x149)]*0.3+(_0x24ed2c['volumeRatio']>1.5?0.2:_0x24ed2c['volumeRatio']*0.1));let _0x4c5b55=SignalStrength['MODERATE'];if(_0x2ce4f4>=0.8)_0x4c5b55=SignalStrength['VERY_STRONG'];else{if(_0x2ce4f4>=0.65)_0x4c5b55=SignalStrength[_0x742c42(0x12c)];else{if(_0x2ce4f4<0.5)_0x4c5b55=SignalStrength['WEAK'];}}const _0x375c79=0.5+(_0x2ce4f4-0.5)*0.4,_0x24ca2a=_0x375c79*Math[_0x742c42(0x12f)](_0x2cddc2-_0x2b7867)-(0x1-_0x375c79)*Math['abs'](_0x2b7867-_0x14b604);_0x24ed2c[_0x742c42(0x14d)]['lastUsedBarIndex']=_0x23ec82,_0x24ed2c['zone'][_0x742c42(0x158)]=!![],_0x24ed2c['zone']['sweptAt']=new Date(_0x5d3113['timestamp']),this[_0x742c42(0x13a)]=Date[_0x742c42(0xef)](),this[_0x742c42(0x108)][_0x742c42(0x11e)]++;const _0x39ac0e={'id':uuidv4(),'timestamp':Date['now'](),'symbol':_0x2dc239[_0x742c42(0xfc)]('.')[0x0]||_0x2dc239,'contractId':_0x2dc239,'side':_0x1496f5==='long'?OrderSide[_0x742c42(0x130)]:OrderSide['ASK'],'direction':_0x1496f5,'strategy':'HQX_2B_LIQUIDITY_SWEEP','strength':_0x4c5b55,'edge':_0x24ca2a,'confidence':_0x2ce4f4,'entry':_0x2b7867,'entryPrice':_0x2b7867,'stopLoss':_0x14b604,'takeProfit':_0x2cddc2,'riskReward':_0x1166da,'stopTicks':_0x5e6309[_0x742c42(0xf7)],'targetTicks':_0x5e6309[_0x742c42(0x129)],'breakevenTicks':_0x5e6309[_0x742c42(0x165)],'trailTriggerTicks':_0x5e6309[_0x742c42(0x11b)],'trailDistanceTicks':_0x5e6309[_0x742c42(0x139)],'beLevel':_0x3fe5fb,'trailTrigger':_0x1a30c2,'sweepType':_0x24ed2c[_0x742c42(0x157)],'penetrationTicks':_0x24ed2c['penetrationTicks'],'sweepDurationBars':_0x24ed2c['durationBars'],'sweepQuality':_0x24ed2c[_0x742c42(0x149)],'volumeRatio':_0x24ed2c['volumeRatio'],'zoneType':_0x24ed2c['zone'][_0x742c42(0x104)],'zoneLevel':_0x24ed2c[_0x742c42(0x14d)]['getLevel'](),'zoneTouches':_0x24ed2c[_0x742c42(0x14d)][_0x742c42(0xf9)],'zoneQuality':_0x24ed2c[_0x742c42(0x14d)]['qualityScore'],'expires':Date[_0x742c42(0xef)]()+0xea60};return this['emit'](_0x742c42(0x156),{'side':_0x1496f5===_0x742c42(0x14e)?_0x742c42(0xf1):'sell','action':_0x742c42(0x14a),'reason':'2B\x20'+_0x24ed2c[_0x742c42(0x157)]+_0x742c42(0x136)+_0x24ed2c['penetrationTicks']['toFixed'](0x1)+'t\x20|\x20Vol:'+_0x24ed2c['volumeRatio']['toFixed'](0x1)+'x\x20|\x20Q:'+(_0x24ed2c[_0x742c42(0x149)]*0x64)['toFixed'](0x0)+'%',..._0x39ac0e}),this['emit']('log',{'type':_0x742c42(0x160),'message':_0x742c42(0x10f)+_0x1496f5['toUpperCase']()+'\x20@\x20'+_0x2b7867[_0x742c42(0x152)](0x2)+'\x20|\x20'+_0x24ed2c['sweepType']+_0x742c42(0x136)+_0x24ed2c[_0x742c42(0x10a)][_0x742c42(0x152)](0x1)+_0x742c42(0x120)+_0x24ed2c['volumeRatio']['toFixed'](0x1)+_0x742c42(0x15b)+(_0x2ce4f4*0x64)[_0x742c42(0x152)](0x0)+'%'}),_0x39ac0e;}['getAnalysisState'](_0x2c8cbe,_0x250870){const _0x1ef392=_0x344fde,_0x78ce70=this[_0x1ef392(0x150)][_0x1ef392(0x102)](_0x2c8cbe)||[],_0x56b900=this[_0x1ef392(0xf4)]['get'](_0x2c8cbe)||[],_0x105f36=this[_0x1ef392(0xec)]['get'](_0x2c8cbe)||[];if(_0x78ce70['length']<0x14)return{'ready':![],'message':'Collecting\x20data...\x20'+_0x78ce70['length']+_0x1ef392(0xf6)};const _0x3bf479=_0x56b900[_0x1ef392(0x13e)](_0x612c64=>({'zone':_0x612c64,'distance':Math[_0x1ef392(0x12f)](_0x250870-_0x612c64['getLevel']())}))[_0x1ef392(0xe8)]((_0x3eab0d,_0x5c82a3)=>_0x3eab0d['distance']-_0x5c82a3['distance']),_0x6462a2=_0x3bf479['find'](_0x42a0d0=>_0x42a0d0['zone'][_0x1ef392(0x104)]===ZoneType['RESISTANCE']),_0x1d330e=_0x3bf479[_0x1ef392(0x125)](_0x22879a=>_0x22879a[_0x1ef392(0x14d)]['type']===ZoneType[_0x1ef392(0x15c)]);return{'ready':!![],'barsProcessed':_0x78ce70[_0x1ef392(0x148)],'swingsDetected':_0x105f36['length'],'activeZones':_0x56b900[_0x1ef392(0x148)],'nearestResistance':_0x6462a2?_0x6462a2[_0x1ef392(0x14d)][_0x1ef392(0xfd)]():null,'nearestSupport':_0x1d330e?_0x1d330e[_0x1ef392(0x14d)]['getLevel']():null,'stopTicks':this['config'][_0x1ef392(0x138)]['stopTicks'],'targetTicks':this['config'][_0x1ef392(0x138)]['targetTicks'],'strategy':_0x1ef392(0x123)};}[_0x344fde(0x159)](_0x5042ae){const _0x4156b0=_0x344fde;this[_0x4156b0(0x14b)][_0x4156b0(0xed)]({'netPnl':_0x5042ae,'timestamp':Date['now']()});if(this[_0x4156b0(0x14b)][_0x4156b0(0x148)]>0x64)this[_0x4156b0(0x14b)][_0x4156b0(0xf8)]();_0x5042ae>0x0?this[_0x4156b0(0x108)]['wins']++:this[_0x4156b0(0x108)][_0x4156b0(0x127)]++,this['stats']['trades']++,this[_0x4156b0(0x108)][_0x4156b0(0x168)]+=_0x5042ae,this['emit'](_0x4156b0(0x16a),{'type':_0x4156b0(0x12e),'message':_0x4156b0(0x13f)+(_0x5042ae>0x0?'WIN':_0x4156b0(0x161))+'\x20$'+_0x5042ae['toFixed'](0x2)});}[_0x344fde(0x11c)](_0x275010){const _0x51d5df=_0x344fde;return this[_0x51d5df(0x150)]['get'](_0x275010)||[];}['getStats'](){return this['stats'];}[_0x344fde(0x141)](_0x379e60){const _0x2ba6bb=_0x344fde;this[_0x2ba6bb(0x150)][_0x2ba6bb(0x114)](_0x379e60,[]),this[_0x2ba6bb(0xec)]['set'](_0x379e60,[]),this[_0x2ba6bb(0xf4)][_0x2ba6bb(0x114)](_0x379e60,[]),this[_0x2ba6bb(0x169)]['set'](_0x379e60,[]),this[_0x2ba6bb(0x134)](_0x2ba6bb(0x16a),{'type':'info','message':_0x2ba6bb(0x132)+_0x379e60});}}class HQX2BStrategy extends EventEmitter{constructor(_0x506c08={}){const _0x4e7b4c=_0x344fde;super(),this['config']=_0x506c08,this[_0x4e7b4c(0x143)]=new HQX2BLiquiditySweep(_0x506c08),this['strategy']['on']('signal',_0x2c7435=>this[_0x4e7b4c(0x134)](_0x4e7b4c(0x156),_0x2c7435)),this['strategy']['on']('log',_0x48ca94=>this[_0x4e7b4c(0x134)]('log',_0x48ca94));}[_0x344fde(0x116)](_0x5aaa50){return this['strategy']['processTick'](_0x5aaa50);}[_0x344fde(0x13d)](_0xdbe743){return this['strategy']['onTick'](_0xdbe743);}['onTrade'](_0x5334f0){const _0x2a4208=_0x344fde;return this['strategy'][_0x2a4208(0x128)](_0x5334f0);}[_0x344fde(0x119)](_0x514e07,_0x4d1ab6){const _0x4207a1=_0x344fde;return this[_0x4207a1(0x143)][_0x4207a1(0x119)](_0x514e07,_0x4d1ab6);}['initialize'](_0x57b0ba,_0x139161,_0x76515a){const _0x495bd0=_0x344fde;return this[_0x495bd0(0x143)][_0x495bd0(0x12b)](_0x57b0ba,_0x139161,_0x76515a);}[_0x344fde(0x154)](_0x478865,_0x1e51ed){const _0x25dc2d=_0x344fde;return this['strategy'][_0x25dc2d(0x154)](_0x478865,_0x1e51ed);}[_0x344fde(0x159)](_0x3fb341){const _0x44d0a6=_0x344fde;return this[_0x44d0a6(0x143)][_0x44d0a6(0x159)](_0x3fb341);}['reset'](_0x4b424e){const _0x2c60bd=_0x344fde;return this[_0x2c60bd(0x143)]['reset'](_0x4b424e);}[_0x344fde(0x126)](){const _0x4e147c=_0x344fde;return this[_0x4e147c(0x143)]['getStats']();}['getBarHistory'](_0x322616){const _0x5a2f94=_0x344fde;return this[_0x5a2f94(0x143)]['getBarHistory'](_0x322616);}['generateSignal'](_0x343b8a){return null;}}module[_0x344fde(0x10b)]={'HQX2BLiquiditySweep':HQX2BLiquiditySweep,'HQX2BStrategy':HQX2BStrategy,'M2':HQX2BStrategy,'S2':HQX2BLiquiditySweep,'OrderSide':OrderSide,'SignalStrength':SignalStrength,'SweepType':SweepType,'ZoneType':ZoneType,'DEFAULT_CONFIG':DEFAULT_CONFIG};function _0x31ab(){const _0x2068f5=['find','getStats','losses','onTrade','targetTicks','HIGH_SWEEP','initialize','STRONG','_detectSwings','debug','abs','BID','minVolumeRatio','[HQX-2B]\x20Reset\x20state\x20for\x20','cooldownMs','emit','t,\x20Target=','\x20|\x20Pen:','sweptAt','execution','trailDistanceTicks','lastSignalTime','volume','contractId','onTick','map','[HQX-2B]\x20Trade\x20result:\x20','452803FLuEym','reset','6360580TeFprc','strategy','1403666IRZbzt','maxZoneDistanceTicks','createdAt','t,\x20Trail=','length','qualityScore','open','recentTrades','9UMRmxi','zone','long','_getVolumeRatio','barHistory','lastUsedBarIndex','toFixed','LOW_SWEEP','getAnalysisState','swing','signal','sweepType','swept','recordTradeResult','minPenetrationTicks','x\x20|\x20Conf:','SUPPORT','volumeRatio','_updateZones','barIndex','info','LOSS','_scoreSweep','config','_detectSweep','breakevenTicks','durationBars','priceLow','pnl','activeSweeps','log','isValid','sort','short','priceHigh','size','swingPoints','push','price','now','isArray','buy','minQualityScore','timestamp','liquidityZones','minStrength','/20\x20bars','stopTicks','shift','touches','max','containsPrice','split','getLevel','extremeBarIndex','tickValue','low','11508580FNGdCh','get','clusterToleranceTicks','type','min','113766RvAvbN','strength','stats','[HQX-2B]\x20Initialized\x20for\x20','penetrationTicks','exports','uuid','lookbackBars','_generateSignal','[HQX-2B]\x20SIGNAL:\x20','close','4096960UugIad','tickSize','77AgvQkZ','set','entryBarIndex','processTick','5249656kdotoV','t,\x20BE=','processBar','3taXcSl','trailTriggerTicks','getBarHistory','high','signals','floor','t\x20Vol:','[HQX-2B]\x20Params:\x20Stop=','events','HQX-2B\x20Liquidity\x20Sweep\x20(Optimized)','splice'];_0x31ab=function(){return _0x2068f5;};return _0x31ab();}
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __commonJS = (cb, mod) => function __require() {
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+};
+
+// hqx-2b/config.js
+var require_config = __commonJS({
+  "hqx-2b/config.js"(exports2, module2) {
+    var SweepType2 = { HIGH_SWEEP: "high", LOW_SWEEP: "low" };
+    var ZoneType2 = { RESISTANCE: "resistance", SUPPORT: "support" };
+    var DEFAULT_CONFIG2 = {
+      // Instrument
+      tickSize: 0.25,
+      tickValue: 5,
+      // Swing Detection (ULTRA AGGRESSIVE)
+      swing: {
+        lookbackBars: 2,
+        // Reduced for more swings
+        minStrength: 2,
+        // More permissive
+        confirmationBars: 1
+        // Faster confirmation
+      },
+      // Zone Detection (ULTRA AGGRESSIVE)
+      zone: {
+        clusterToleranceTicks: 4,
+        minTouches: 1,
+        // Allow single-touch zones
+        maxZoneAgeBars: 200,
+        // Fresher zones only
+        maxZoneDistanceTicks: 40,
+        cooldownBars: 10
+        // Bars before zone can be reused
+      },
+      // Sweep Detection (ULTRA AGGRESSIVE)
+      sweep: {
+        minPenetrationTicks: 1,
+        // Very permissive
+        maxPenetrationTicks: 12,
+        // Tighter range
+        maxDurationBars: 5,
+        minQualityScore: 0.4,
+        minVolumeRatio: 0.8,
+        // >= 0.8x median volume
+        minBodyRatio: 0.2
+        // Minimum body/range ratio
+      },
+      // Execution (OPTIMIZED 4:1 R:R)
+      execution: {
+        stopTicks: 10,
+        // $50 stop
+        targetTicks: 40,
+        // $200 target (4:1 R:R)
+        breakevenTicks: 4,
+        // Move to BE at +4 ticks
+        trailTriggerTicks: 8,
+        // Activate trailing at +8 ticks
+        trailDistanceTicks: 4,
+        // Trail by 4 ticks
+        cooldownMs: 3e4,
+        // 30 seconds between signals
+        minHoldTimeMs: 1e4,
+        // Minimum 10 seconds hold
+        slippageTicks: 1,
+        commissionPerSide: 2
+        // $4 round-trip
+      },
+      // Session (Futures Market Hours - Sunday 18:00 to Friday 17:00 EST)
+      session: {
+        enabled: false,
+        // Trade anytime markets are open
+        timezone: "America/New_York"
+      }
+    };
+    module2.exports = { DEFAULT_CONFIG: DEFAULT_CONFIG2, SweepType: SweepType2, ZoneType: ZoneType2 };
+  }
+});
+
+// common/types.js
+var require_types = __commonJS({
+  "common/types.js"(exports2, module2) {
+    var OrderSide2 = { BID: 0, ASK: 1 };
+    var SignalStrength2 = { WEAK: 1, MODERATE: 2, STRONG: 3, VERY_STRONG: 4 };
+    module2.exports = { OrderSide: OrderSide2, SignalStrength: SignalStrength2 };
+  }
+});
+
+// hqx-2b/signal.js
+var require_signal = __commonJS({
+  "hqx-2b/signal.js"(exports2, module2) {
+    var { v4: uuidv4 } = require("uuid");
+    var { OrderSide: OrderSide2, SignalStrength: SignalStrength2 } = require_types();
+    var { SweepType: SweepType2 } = require_config();
+    function generateSignal(params) {
+      const {
+        contractId,
+        currentBar,
+        currentIndex,
+        sweep,
+        config,
+        tickSize
+      } = params;
+      const exec = config.execution;
+      const currentPrice = currentBar.close;
+      const direction = sweep.sweepType === SweepType2.HIGH_SWEEP ? "short" : "long";
+      let stopLoss, takeProfit, beLevel, trailTrigger;
+      if (direction === "long") {
+        stopLoss = currentPrice - exec.stopTicks * tickSize;
+        takeProfit = currentPrice + exec.targetTicks * tickSize;
+        beLevel = currentPrice + exec.breakevenTicks * tickSize;
+        trailTrigger = currentPrice + exec.trailTriggerTicks * tickSize;
+      } else {
+        stopLoss = currentPrice + exec.stopTicks * tickSize;
+        takeProfit = currentPrice - exec.targetTicks * tickSize;
+        beLevel = currentPrice - exec.breakevenTicks * tickSize;
+        trailTrigger = currentPrice - exec.trailTriggerTicks * tickSize;
+      }
+      const riskReward = exec.targetTicks / exec.stopTicks;
+      const confidence = Math.min(
+        1,
+        sweep.qualityScore * 0.5 + sweep.zone.qualityScore * 0.3 + (sweep.volumeRatio > 1.5 ? 0.2 : sweep.volumeRatio * 0.1)
+      );
+      let strength = SignalStrength2.MODERATE;
+      if (confidence >= 0.8) strength = SignalStrength2.VERY_STRONG;
+      else if (confidence >= 0.65) strength = SignalStrength2.STRONG;
+      else if (confidence < 0.5) strength = SignalStrength2.WEAK;
+      const winProb = 0.5 + (confidence - 0.5) * 0.4;
+      const edge = winProb * Math.abs(takeProfit - currentPrice) - (1 - winProb) * Math.abs(currentPrice - stopLoss);
+      sweep.zone.lastUsedBarIndex = currentIndex;
+      sweep.zone.swept = true;
+      sweep.zone.sweptAt = new Date(currentBar.timestamp);
+      return {
+        id: uuidv4(),
+        timestamp: Date.now(),
+        symbol: contractId.split(".")[0] || contractId,
+        contractId,
+        side: direction === "long" ? OrderSide2.BID : OrderSide2.ASK,
+        direction,
+        strategy: "HQX_2B_LIQUIDITY_SWEEP",
+        strength,
+        edge,
+        confidence,
+        entry: currentPrice,
+        entryPrice: currentPrice,
+        stopLoss,
+        takeProfit,
+        riskReward,
+        stopTicks: exec.stopTicks,
+        targetTicks: exec.targetTicks,
+        breakevenTicks: exec.breakevenTicks,
+        trailTriggerTicks: exec.trailTriggerTicks,
+        trailDistanceTicks: exec.trailDistanceTicks,
+        beLevel,
+        trailTrigger,
+        // Sweep details
+        sweepType: sweep.sweepType,
+        penetrationTicks: sweep.penetrationTicks,
+        sweepDurationBars: sweep.durationBars,
+        sweepQuality: sweep.qualityScore,
+        volumeRatio: sweep.volumeRatio,
+        // Zone details
+        zoneType: sweep.zone.type,
+        zoneLevel: sweep.zone.getLevel(),
+        zoneTouches: sweep.zone.touches,
+        zoneQuality: sweep.zone.qualityScore,
+        expires: Date.now() + 6e4
+      };
+    }
+    module2.exports = { generateSignal };
+  }
+});
+
+// hqx-2b/detection/swings.js
+var require_swings = __commonJS({
+  "hqx-2b/detection/swings.js"(exports2, module2) {
+    var SwingPoint = class {
+      constructor(type, price, barIndex, timestamp, strength = 1) {
+        this.type = type;
+        this.price = price;
+        this.barIndex = barIndex;
+        this.timestamp = timestamp;
+        this.strength = strength;
+      }
+    };
+    function detectSwings(bars, currentIndex, existingSwings, config, maxAge) {
+      const { lookbackBars, minStrength } = config;
+      const swings = [...existingSwings];
+      if (currentIndex < lookbackBars * 2) return swings;
+      const pivotIndex = currentIndex - lookbackBars;
+      const pivotBar = bars[pivotIndex];
+      let isSwingHigh = true;
+      let highStrength = 0;
+      for (let i = pivotIndex - lookbackBars; i <= pivotIndex + lookbackBars; i++) {
+        if (i === pivotIndex || i < 0 || i >= bars.length) continue;
+        if (bars[i].high >= pivotBar.high) {
+          isSwingHigh = false;
+          break;
+        }
+        highStrength++;
+      }
+      if (isSwingHigh && highStrength >= minStrength) {
+        const existing = swings.find((s) => s.barIndex === pivotIndex && s.type === "high");
+        if (!existing) {
+          swings.push(new SwingPoint("high", pivotBar.high, pivotIndex, pivotBar.timestamp, highStrength));
+        }
+      }
+      let isSwingLow = true;
+      let lowStrength = 0;
+      for (let i = pivotIndex - lookbackBars; i <= pivotIndex + lookbackBars; i++) {
+        if (i === pivotIndex || i < 0 || i >= bars.length) continue;
+        if (bars[i].low <= pivotBar.low) {
+          isSwingLow = false;
+          break;
+        }
+        lowStrength++;
+      }
+      if (isSwingLow && lowStrength >= minStrength) {
+        const existing = swings.find((s) => s.barIndex === pivotIndex && s.type === "low");
+        if (!existing) {
+          swings.push(new SwingPoint("low", pivotBar.low, pivotIndex, pivotBar.timestamp, lowStrength));
+        }
+      }
+      while (swings.length > 0 && swings[0].barIndex < currentIndex - maxAge) {
+        swings.shift();
+      }
+      return swings;
+    }
+    module2.exports = { SwingPoint, detectSwings };
+  }
+});
+
+// hqx-2b/detection/zones.js
+var require_zones = __commonJS({
+  "hqx-2b/detection/zones.js"(exports2, module2) {
+    var { v4: uuidv4 } = require("uuid");
+    var { ZoneType: ZoneType2 } = require_config();
+    var LiquidityZone = class {
+      constructor(type, priceHigh, priceLow, createdAt, barIndex) {
+        this.id = uuidv4();
+        this.type = type;
+        this.priceHigh = priceHigh;
+        this.priceLow = priceLow;
+        this.createdAt = createdAt;
+        this.barIndex = barIndex;
+        this.touches = 1;
+        this.swept = false;
+        this.sweptAt = null;
+        this.lastUsedBarIndex = -999;
+        this.qualityScore = 0.5;
+      }
+      containsPrice(price, toleranceTicks, tickSize) {
+        const tolerance = toleranceTicks * tickSize;
+        return price >= this.priceLow - tolerance && price <= this.priceHigh + tolerance;
+      }
+      getLevel() {
+        return (this.priceHigh + this.priceLow) / 2;
+      }
+    };
+    function updateZones(swings, existingZones, currentIndex, config, tickSize) {
+      const { clusterToleranceTicks, maxZoneAgeBars } = config;
+      const zones = [...existingZones];
+      const tolerance = clusterToleranceTicks * tickSize;
+      for (let i = zones.length - 1; i >= 0; i--) {
+        if (currentIndex - zones[i].barIndex > maxZoneAgeBars) {
+          zones.splice(i, 1);
+        }
+      }
+      for (const swing of swings) {
+        let foundZone = null;
+        for (const zone of zones) {
+          if (zone.containsPrice(swing.price, clusterToleranceTicks, tickSize)) {
+            foundZone = zone;
+            break;
+          }
+        }
+        if (foundZone) {
+          foundZone.touches++;
+          if (swing.price > foundZone.priceHigh) foundZone.priceHigh = swing.price;
+          if (swing.price < foundZone.priceLow) foundZone.priceLow = swing.price;
+          foundZone.qualityScore = Math.min(1, 0.3 + foundZone.touches * 0.15);
+        } else {
+          const zoneType = swing.type === "high" ? ZoneType2.RESISTANCE : ZoneType2.SUPPORT;
+          const newZone = new LiquidityZone(
+            zoneType,
+            swing.price + tolerance / 2,
+            swing.price - tolerance / 2,
+            swing.timestamp,
+            swing.barIndex
+          );
+          newZone.qualityScore = 0.3 + swing.strength * 0.1;
+          zones.push(newZone);
+        }
+      }
+      return zones;
+    }
+    module2.exports = { LiquidityZone, updateZones };
+  }
+});
+
+// hqx-2b/detection/sweeps.js
+var require_sweeps = __commonJS({
+  "hqx-2b/detection/sweeps.js"(exports2, module2) {
+    var { SweepType: SweepType2, ZoneType: ZoneType2 } = require_config();
+    var SweepEvent = class {
+      constructor(sweepType, zone, entryBarIndex, extremeBarIndex, extremePrice) {
+        this.sweepType = sweepType;
+        this.zone = zone;
+        this.entryBarIndex = entryBarIndex;
+        this.extremeBarIndex = extremeBarIndex;
+        this.extremePrice = extremePrice;
+        this.exitBarIndex = null;
+        this.isValid = false;
+        this.qualityScore = 0;
+        this.penetrationTicks = 0;
+        this.durationBars = 0;
+        this.volumeRatio = 1;
+      }
+    };
+    function getVolumeRatio(bars, index, lookback) {
+      const start = Math.max(0, index - lookback);
+      const recentBars = bars.slice(start, index);
+      if (recentBars.length === 0) return 1;
+      const volumes = recentBars.map((b) => b.volume).sort((a, b) => a - b);
+      const medianIdx = Math.floor(volumes.length / 2);
+      const medianVolume = volumes[medianIdx] || 1;
+      return bars[index].volume / medianVolume;
+    }
+    function scoreSweep(sweep, bodyRatio) {
+      let score = 0;
+      const optimalPen = 4;
+      const penDiff = Math.abs(sweep.penetrationTicks - optimalPen);
+      score += Math.max(0, 0.3 - penDiff * 0.03);
+      score += Math.max(0, 0.25 - sweep.durationBars * 0.05);
+      score += Math.min(0.25, sweep.volumeRatio * 0.1);
+      score += Math.min(0.2, bodyRatio * 0.4);
+      return Math.min(1, score);
+    }
+    function detectSweep(zones, bars, currentIndex, sweepConfig, zoneConfig, tickSize) {
+      const currentBar = bars[currentIndex];
+      const currentPrice = currentBar.close;
+      const cfg = sweepConfig;
+      for (const zone of zones) {
+        if (zone.lastUsedBarIndex >= 0 && currentIndex - zone.lastUsedBarIndex < zoneConfig.cooldownBars) {
+          continue;
+        }
+        const zoneLevel = zone.getLevel();
+        const distanceTicks = Math.abs(currentPrice - zoneLevel) / tickSize;
+        if (distanceTicks > zoneConfig.maxZoneDistanceTicks) continue;
+        const lookbackStart = Math.max(0, currentIndex - cfg.maxDurationBars * 2);
+        for (let i = lookbackStart; i < currentIndex; i++) {
+          const bar = bars[i];
+          if (zone.type === ZoneType2.RESISTANCE) {
+            const penetration = (bar.high - zone.priceHigh) / tickSize;
+            if (penetration >= cfg.minPenetrationTicks && penetration <= cfg.maxPenetrationTicks) {
+              if (currentPrice < zone.priceHigh) {
+                const barRange = bar.high - bar.low;
+                const bodySize = Math.abs(bar.close - bar.open);
+                const bodyRatio = barRange > 0 ? bodySize / barRange : 0;
+                if (bodyRatio >= cfg.minBodyRatio) {
+                  const volumeRatio = getVolumeRatio(bars, i, 20);
+                  if (volumeRatio >= cfg.minVolumeRatio) {
+                    const sweep = new SweepEvent(
+                      SweepType2.HIGH_SWEEP,
+                      zone,
+                      i,
+                      i,
+                      bar.high
+                    );
+                    sweep.exitBarIndex = currentIndex;
+                    sweep.penetrationTicks = penetration;
+                    sweep.durationBars = currentIndex - i;
+                    sweep.volumeRatio = volumeRatio;
+                    sweep.qualityScore = scoreSweep(sweep, bodyRatio);
+                    sweep.isValid = sweep.qualityScore >= cfg.minQualityScore;
+                    if (sweep.isValid) {
+                      return sweep;
+                    }
+                  }
+                }
+              }
+            }
+          }
+          if (zone.type === ZoneType2.SUPPORT) {
+            const penetration = (zone.priceLow - bar.low) / tickSize;
+            if (penetration >= cfg.minPenetrationTicks && penetration <= cfg.maxPenetrationTicks) {
+              if (currentPrice > zone.priceLow) {
+                const barRange = bar.high - bar.low;
+                const bodySize = Math.abs(bar.close - bar.open);
+                const bodyRatio = barRange > 0 ? bodySize / barRange : 0;
+                if (bodyRatio >= cfg.minBodyRatio) {
+                  const volumeRatio = getVolumeRatio(bars, i, 20);
+                  if (volumeRatio >= cfg.minVolumeRatio) {
+                    const sweep = new SweepEvent(
+                      SweepType2.LOW_SWEEP,
+                      zone,
+                      i,
+                      i,
+                      bar.low
+                    );
+                    sweep.exitBarIndex = currentIndex;
+                    sweep.penetrationTicks = penetration;
+                    sweep.durationBars = currentIndex - i;
+                    sweep.volumeRatio = volumeRatio;
+                    sweep.qualityScore = scoreSweep(sweep, bodyRatio);
+                    sweep.isValid = sweep.qualityScore >= cfg.minQualityScore;
+                    if (sweep.isValid) {
+                      return sweep;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      return null;
+    }
+    module2.exports = { SweepEvent, detectSweep, getVolumeRatio, scoreSweep };
+  }
+});
+
+// hqx-2b/detection/index.js
+var require_detection = __commonJS({
+  "hqx-2b/detection/index.js"(exports2, module2) {
+    var { SwingPoint, detectSwings } = require_swings();
+    var { LiquidityZone, updateZones } = require_zones();
+    var { SweepEvent, detectSweep } = require_sweeps();
+    module2.exports = {
+      SwingPoint,
+      detectSwings,
+      LiquidityZone,
+      updateZones,
+      SweepEvent,
+      detectSweep
+    };
+  }
+});
+
+// hqx-2b/core.js
+var require_core = __commonJS({
+  "hqx-2b/core.js"(exports2, module2) {
+    var EventEmitter2 = require("events");
+    var { DEFAULT_CONFIG: DEFAULT_CONFIG2, ZoneType: ZoneType2 } = require_config();
+    var { generateSignal } = require_signal();
+    var { detectSwings, updateZones, detectSweep } = require_detection();
+    function mergeConfig(defaults, custom) {
+      const result = { ...defaults };
+      for (const key in custom) {
+        if (typeof custom[key] === "object" && !Array.isArray(custom[key]) && custom[key] !== null) {
+          result[key] = { ...defaults[key], ...custom[key] };
+        } else {
+          result[key] = custom[key];
+        }
+      }
+      return result;
+    }
+    var HQX2BLiquiditySweep2 = class extends EventEmitter2 {
+      constructor(config = {}) {
+        super();
+        this.config = mergeConfig(DEFAULT_CONFIG2, config);
+        this.tickSize = this.config.tickSize;
+        this.tickValue = this.config.tickValue;
+        this.barHistory = /* @__PURE__ */ new Map();
+        this.swingPoints = /* @__PURE__ */ new Map();
+        this.liquidityZones = /* @__PURE__ */ new Map();
+        this.lastSignalTime = 0;
+        this.stats = { signals: 0, trades: 0, wins: 0, losses: 0, pnl: 0 };
+        this.recentTrades = [];
+      }
+      initialize(contractId, tickSize = 0.25, tickValue = 5) {
+        this.tickSize = tickSize;
+        this.tickValue = tickValue;
+        this.config.tickSize = tickSize;
+        this.config.tickValue = tickValue;
+        this.barHistory.set(contractId, []);
+        this.swingPoints.set(contractId, []);
+        this.liquidityZones.set(contractId, []);
+        this.emit("log", {
+          type: "info",
+          message: `[HQX-2B] Initialized for ${contractId}: tick=${tickSize}, value=${tickValue}`
+        });
+        this.emit("log", {
+          type: "info",
+          message: `[HQX-2B] Params: Stop=${this.config.execution.stopTicks}t, Target=${this.config.execution.targetTicks}t, BE=${this.config.execution.breakevenTicks}t, Trail=${this.config.execution.trailTriggerTicks}/${this.config.execution.trailDistanceTicks}`
+        });
+      }
+      processTick(tick) {
+        const { contractId, price, volume, timestamp } = tick;
+        const bar = {
+          timestamp: timestamp || Date.now(),
+          open: price,
+          high: price,
+          low: price,
+          close: price,
+          volume: volume || 1
+        };
+        return this.processBar(contractId, bar);
+      }
+      onTick(tick) {
+        return this.processTick(tick);
+      }
+      onTrade(trade) {
+        return this.processTick({
+          contractId: trade.contractId || trade.symbol,
+          price: trade.price,
+          volume: trade.size || trade.volume || 1,
+          timestamp: trade.timestamp || Date.now()
+        });
+      }
+      processBar(contractId, bar) {
+        let bars = this.barHistory.get(contractId);
+        if (!bars) {
+          this.initialize(contractId);
+          bars = this.barHistory.get(contractId);
+        }
+        bars.push(bar);
+        if (bars.length > 500) bars.shift();
+        const currentIndex = bars.length - 1;
+        if (bars.length < this.config.swing.lookbackBars * 3) {
+          return null;
+        }
+        const swings = this.swingPoints.get(contractId);
+        const updatedSwings = detectSwings(
+          bars,
+          currentIndex,
+          swings,
+          this.config.swing,
+          this.config.zone.maxZoneAgeBars
+        );
+        this.swingPoints.set(contractId, updatedSwings);
+        const zones = this.liquidityZones.get(contractId);
+        const updatedZones = updateZones(
+          updatedSwings,
+          zones,
+          currentIndex,
+          this.config.zone,
+          this.tickSize
+        );
+        this.liquidityZones.set(contractId, updatedZones);
+        const sweep = detectSweep(
+          updatedZones,
+          bars,
+          currentIndex,
+          this.config.sweep,
+          this.config.zone,
+          this.tickSize
+        );
+        if (sweep && sweep.isValid) {
+          if (Date.now() - this.lastSignalTime < this.config.execution.cooldownMs) {
+            return null;
+          }
+          const signal = generateSignal({
+            contractId,
+            currentBar: bar,
+            currentIndex,
+            sweep,
+            config: this.config,
+            tickSize: this.tickSize
+          });
+          if (signal) {
+            this.lastSignalTime = Date.now();
+            this.stats.signals++;
+            this.emit("signal", {
+              side: signal.direction === "long" ? "buy" : "sell",
+              action: "open",
+              reason: `2B ${sweep.sweepType} | Pen:${sweep.penetrationTicks.toFixed(1)}t | Vol:${sweep.volumeRatio.toFixed(1)}x | Q:${(sweep.qualityScore * 100).toFixed(0)}%`,
+              ...signal
+            });
+            this.emit("log", {
+              type: "info",
+              message: `[HQX-2B] SIGNAL: ${signal.direction.toUpperCase()} @ ${bar.close.toFixed(2)} | ${sweep.sweepType} | Pen:${sweep.penetrationTicks.toFixed(1)}t Vol:${sweep.volumeRatio.toFixed(1)}x | Conf:${(signal.confidence * 100).toFixed(0)}%`
+            });
+            return signal;
+          }
+        }
+        return null;
+      }
+      getAnalysisState(contractId, currentPrice) {
+        const bars = this.barHistory.get(contractId) || [];
+        const zones = this.liquidityZones.get(contractId) || [];
+        const swings = this.swingPoints.get(contractId) || [];
+        if (bars.length < 20) {
+          return { ready: false, message: `Collecting data... ${bars.length}/20 bars` };
+        }
+        const sortedZones = zones.map((z) => ({ zone: z, distance: Math.abs(currentPrice - z.getLevel()) })).sort((a, b) => a.distance - b.distance);
+        const nearestResistance = sortedZones.find((z) => z.zone.type === ZoneType2.RESISTANCE);
+        const nearestSupport = sortedZones.find((z) => z.zone.type === ZoneType2.SUPPORT);
+        return {
+          ready: true,
+          barsProcessed: bars.length,
+          swingsDetected: swings.length,
+          activeZones: zones.length,
+          nearestResistance: nearestResistance ? nearestResistance.zone.getLevel() : null,
+          nearestSupport: nearestSupport ? nearestSupport.zone.getLevel() : null,
+          stopTicks: this.config.execution.stopTicks,
+          targetTicks: this.config.execution.targetTicks,
+          strategy: "HQX-2B Liquidity Sweep (Optimized)"
+        };
+      }
+      recordTradeResult(pnl) {
+        this.recentTrades.push({ netPnl: pnl, timestamp: Date.now() });
+        if (this.recentTrades.length > 100) this.recentTrades.shift();
+        if (pnl > 0) {
+          this.stats.wins++;
+        } else {
+          this.stats.losses++;
+        }
+        this.stats.trades++;
+        this.stats.pnl += pnl;
+        this.emit("log", {
+          type: "debug",
+          message: `[HQX-2B] Trade result: ${pnl > 0 ? "WIN" : "LOSS"} $${pnl.toFixed(2)}`
+        });
+      }
+      getBarHistory(contractId) {
+        return this.barHistory.get(contractId) || [];
+      }
+      getStats() {
+        return this.stats;
+      }
+      reset(contractId) {
+        this.barHistory.set(contractId, []);
+        this.swingPoints.set(contractId, []);
+        this.liquidityZones.set(contractId, []);
+        this.emit("log", {
+          type: "info",
+          message: `[HQX-2B] Reset state for ${contractId}`
+        });
+      }
+    };
+    module2.exports = { HQX2BLiquiditySweep: HQX2BLiquiditySweep2 };
+  }
+});
+
+// hqx-2b/index.js
+var EventEmitter = require("events");
+var { HQX2BLiquiditySweep } = require_core();
+var { OrderSide, SignalStrength } = require_types();
+var { SweepType, ZoneType, DEFAULT_CONFIG } = require_config();
+var HQX2BStrategy = class extends EventEmitter {
+  constructor(config = {}) {
+    super();
+    this.config = config;
+    this.strategy = new HQX2BLiquiditySweep(config);
+    this.strategy.on("signal", (sig) => this.emit("signal", sig));
+    this.strategy.on("log", (log) => this.emit("log", log));
+  }
+  // Interface methods (compatible with M1)
+  processTick(tick) {
+    return this.strategy.processTick(tick);
+  }
+  onTick(tick) {
+    return this.strategy.onTick(tick);
+  }
+  onTrade(trade) {
+    return this.strategy.onTrade(trade);
+  }
+  processBar(contractId, bar) {
+    return this.strategy.processBar(contractId, bar);
+  }
+  initialize(contractId, tickSize, tickValue) {
+    return this.strategy.initialize(contractId, tickSize, tickValue);
+  }
+  getAnalysisState(contractId, price) {
+    return this.strategy.getAnalysisState(contractId, price);
+  }
+  recordTradeResult(pnl) {
+    return this.strategy.recordTradeResult(pnl);
+  }
+  reset(contractId) {
+    return this.strategy.reset(contractId);
+  }
+  getStats() {
+    return this.strategy.getStats();
+  }
+  getBarHistory(contractId) {
+    return this.strategy.getBarHistory(contractId);
+  }
+  generateSignal(params) {
+    return null;
+  }
+  // Signals come from processBar
+};
+module.exports = {
+  HQX2BLiquiditySweep,
+  HQX2BStrategy,
+  // Aliases
+  M2: HQX2BStrategy,
+  S2: HQX2BLiquiditySweep,
+  OrderSide,
+  SignalStrength,
+  SweepType,
+  ZoneType,
+  DEFAULT_CONFIG
+};
