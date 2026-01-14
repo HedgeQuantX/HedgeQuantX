@@ -594,6 +594,7 @@ var require_core = __commonJS({
           return null;
         }
         const swings = this.swingPoints.get(contractId);
+        const prevSwingCount = swings.length;
         const updatedSwings = detectSwings(
           bars,
           currentIndex,
@@ -602,7 +603,15 @@ var require_core = __commonJS({
           this.config.zone.maxZoneAgeBars
         );
         this.swingPoints.set(contractId, updatedSwings);
+        if (updatedSwings.length > prevSwingCount) {
+          const newSwing = updatedSwings[updatedSwings.length - 1];
+          this.emit("log", {
+            type: "debug",
+            message: `[2B] NEW SWING ${newSwing.type.toUpperCase()} @ ${newSwing.price.toFixed(2)} | Total: ${updatedSwings.length}`
+          });
+        }
         const zones = this.liquidityZones.get(contractId);
+        const prevZoneCount = zones.length;
         const updatedZones = updateZones(
           updatedSwings,
           zones,
@@ -611,6 +620,13 @@ var require_core = __commonJS({
           this.tickSize
         );
         this.liquidityZones.set(contractId, updatedZones);
+        if (updatedZones.length > prevZoneCount) {
+          const newZone = updatedZones[updatedZones.length - 1];
+          this.emit("log", {
+            type: "debug",
+            message: `[2B] NEW ZONE ${newZone.type.toUpperCase()} @ ${newZone.getLevel().toFixed(2)} | Total: ${updatedZones.length}`
+          });
+        }
         const sweep = detectSweep(
           updatedZones,
           bars,
@@ -619,6 +635,12 @@ var require_core = __commonJS({
           this.config.zone,
           this.tickSize
         );
+        if (sweep) {
+          this.emit("log", {
+            type: "debug",
+            message: `[2B] SWEEP ${sweep.sweepType} | Valid: ${sweep.isValid} | Pen: ${sweep.penetrationTicks.toFixed(1)}t | Q: ${(sweep.qualityScore * 100).toFixed(0)}%`
+          });
+        }
         if (sweep && sweep.isValid) {
           if (Date.now() - this.lastSignalTime < this.config.execution.cooldownMs) {
             return null;

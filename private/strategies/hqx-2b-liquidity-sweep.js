@@ -380,13 +380,43 @@ class HQX2BLiquiditySweep extends EventEmitter {
     }
 
     // 1. Detect new swing points
+    const prevSwingCount = this.swingPoints.get(contractId).length;
     this._detectSwings(contractId, bars, currentIndex);
+    const swings = this.swingPoints.get(contractId);
+    
+    // Debug: Log new swing detection
+    if (swings.length > prevSwingCount) {
+      const newSwing = swings[swings.length - 1];
+      this.emit('log', {
+        type: 'debug',
+        message: `[2B] NEW SWING ${newSwing.type.toUpperCase()} @ ${newSwing.price.toFixed(2)} | Total: ${swings.length}`
+      });
+    }
 
     // 2. Update liquidity zones from swings
+    const prevZoneCount = this.liquidityZones.get(contractId).length;
     this._updateZones(contractId, currentIndex);
+    const zones = this.liquidityZones.get(contractId);
+    
+    // Debug: Log new zone formation
+    if (zones.length > prevZoneCount) {
+      const newZone = zones[zones.length - 1];
+      this.emit('log', {
+        type: 'debug',
+        message: `[2B] NEW ZONE ${newZone.type.toUpperCase()} @ ${newZone.getLevel().toFixed(2)} | Total: ${zones.length}`
+      });
+    }
 
     // 3. Detect sweeps of zones
     const sweep = this._detectSweep(contractId, bars, currentIndex);
+    
+    // Debug: Log sweep detection
+    if (sweep) {
+      this.emit('log', {
+        type: 'debug',
+        message: `[2B] SWEEP ${sweep.sweepType} | Valid: ${sweep.isValid} | Pen: ${sweep.penetrationTicks.toFixed(1)}t | Q: ${(sweep.qualityScore * 100).toFixed(0)}%`
+      });
+    }
 
     // 4. If valid sweep completed, generate signal
     if (sweep && sweep.isValid) {

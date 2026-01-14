@@ -206,6 +206,7 @@ class HQX2BLiquiditySweep extends EventEmitter {
 
     // 1. Detect new swing points
     const swings = this.swingPoints.get(contractId);
+    const prevSwingCount = swings.length;
     const updatedSwings = detectSwings(
       bars, 
       currentIndex, 
@@ -215,8 +216,18 @@ class HQX2BLiquiditySweep extends EventEmitter {
     );
     this.swingPoints.set(contractId, updatedSwings);
 
+    // Debug: Log new swing detection
+    if (updatedSwings.length > prevSwingCount) {
+      const newSwing = updatedSwings[updatedSwings.length - 1];
+      this.emit('log', {
+        type: 'debug',
+        message: `[2B] NEW SWING ${newSwing.type.toUpperCase()} @ ${newSwing.price.toFixed(2)} | Total: ${updatedSwings.length}`
+      });
+    }
+
     // 2. Update liquidity zones from swings
     const zones = this.liquidityZones.get(contractId);
+    const prevZoneCount = zones.length;
     const updatedZones = updateZones(
       updatedSwings,
       zones,
@@ -225,6 +236,15 @@ class HQX2BLiquiditySweep extends EventEmitter {
       this.tickSize
     );
     this.liquidityZones.set(contractId, updatedZones);
+
+    // Debug: Log new zone formation
+    if (updatedZones.length > prevZoneCount) {
+      const newZone = updatedZones[updatedZones.length - 1];
+      this.emit('log', {
+        type: 'debug',
+        message: `[2B] NEW ZONE ${newZone.type.toUpperCase()} @ ${newZone.getLevel().toFixed(2)} | Total: ${updatedZones.length}`
+      });
+    }
 
     // 3. Detect sweeps of zones
     const sweep = detectSweep(
@@ -235,6 +255,14 @@ class HQX2BLiquiditySweep extends EventEmitter {
       this.config.zone,
       this.tickSize
     );
+
+    // Debug: Log sweep detection attempts
+    if (sweep) {
+      this.emit('log', {
+        type: 'debug',
+        message: `[2B] SWEEP ${sweep.sweepType} | Valid: ${sweep.isValid} | Pen: ${sweep.penetrationTicks.toFixed(1)}t | Q: ${(sweep.qualityScore * 100).toFixed(0)}%`
+      });
+    }
 
     // 4. If valid sweep completed, generate signal
     if (sweep && sweep.isValid) {
