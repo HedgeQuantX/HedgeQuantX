@@ -647,8 +647,16 @@ var require_core = __commonJS({
         }
         if (sweep && sweep.isValid) {
           if (Date.now() - this.lastSignalTime < this.config.execution.cooldownMs) {
+            this.emit("log", {
+              type: "debug",
+              message: `[2B] COOLDOWN - waiting ${Math.ceil((this.config.execution.cooldownMs - (Date.now() - this.lastSignalTime)) / 1e3)}s`
+            });
             return null;
           }
+          this.emit("log", {
+            type: "debug",
+            message: `[2B] GENERATING SIGNAL from ${sweep.sweepType} sweep...`
+          });
           const signal = generateSignal({
             contractId,
             currentBar: bar,

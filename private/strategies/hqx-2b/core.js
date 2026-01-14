@@ -268,8 +268,17 @@ class HQX2BLiquiditySweep extends EventEmitter {
     if (sweep && sweep.isValid) {
       // Cooldown check
       if (Date.now() - this.lastSignalTime < this.config.execution.cooldownMs) {
+        this.emit('log', {
+          type: 'debug',
+          message: `[2B] COOLDOWN - waiting ${Math.ceil((this.config.execution.cooldownMs - (Date.now() - this.lastSignalTime)) / 1000)}s`
+        });
         return null;
       }
+
+      this.emit('log', {
+        type: 'debug',
+        message: `[2B] GENERATING SIGNAL from ${sweep.sweepType} sweep...`
+      });
 
       const signal = generateSignal({
         contractId,
