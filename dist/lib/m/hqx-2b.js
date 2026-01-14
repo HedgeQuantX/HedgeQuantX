@@ -12,38 +12,42 @@ var require_config = __commonJS({
       // Instrument
       tickSize: 0.25,
       tickValue: 5,
-      // Swing Detection (ULTRA AGGRESSIVE)
+      // Swing Detection (HYPER AGGRESSIVE)
       swing: {
-        lookbackBars: 2,
-        // Reduced for more swings
-        minStrength: 2,
-        // More permissive
+        lookbackBars: 1,
+        // Minimum lookback - detect swings faster
+        minStrength: 1,
+        // Any swing counts
         confirmationBars: 1
-        // Faster confirmation
+        // Immediate confirmation
       },
-      // Zone Detection (ULTRA AGGRESSIVE)
+      // Zone Detection (HYPER AGGRESSIVE)
       zone: {
-        clusterToleranceTicks: 4,
+        clusterToleranceTicks: 8,
+        // Wider tolerance for zone clustering
         minTouches: 1,
-        // Allow single-touch zones
-        maxZoneAgeBars: 200,
-        // Fresher zones only
-        maxZoneDistanceTicks: 40,
-        cooldownBars: 10
-        // Bars before zone can be reused
+        // Single-touch zones OK
+        maxZoneAgeBars: 500,
+        // Keep zones longer
+        maxZoneDistanceTicks: 80,
+        // Look for zones further away
+        cooldownBars: 3
+        // Quick zone reuse (was 10)
       },
-      // Sweep Detection (ULTRA AGGRESSIVE)
+      // Sweep Detection (HYPER AGGRESSIVE)
       sweep: {
-        minPenetrationTicks: 1,
-        // Very permissive
-        maxPenetrationTicks: 12,
-        // Tighter range
-        maxDurationBars: 5,
-        minQualityScore: 0.4,
-        minVolumeRatio: 0.8,
-        // >= 0.8x median volume
-        minBodyRatio: 0.2
-        // Minimum body/range ratio
+        minPenetrationTicks: 0.5,
+        // Even tiny penetration counts
+        maxPenetrationTicks: 20,
+        // Allow deeper sweeps
+        maxDurationBars: 10,
+        // Allow slower sweeps
+        minQualityScore: 0.2,
+        // Lower quality threshold (was 0.40)
+        minVolumeRatio: 0.5,
+        // Lower volume requirement (was 0.8)
+        minBodyRatio: 0.1
+        // Lower body ratio (was 0.2)
       },
       // Execution (OPTIMIZED 4:1 R:R)
       execution: {
@@ -57,10 +61,10 @@ var require_config = __commonJS({
         // Activate trailing at +8 ticks
         trailDistanceTicks: 4,
         // Trail by 4 ticks
-        cooldownMs: 3e4,
-        // 30 seconds between signals
-        minHoldTimeMs: 1e4,
-        // Minimum 10 seconds hold
+        cooldownMs: 15e3,
+        // 15 seconds between signals (was 30)
+        minHoldTimeMs: 5e3,
+        // 5 seconds min hold (was 10)
         slippageTicks: 1,
         commissionPerSide: 2
         // $4 round-trip
