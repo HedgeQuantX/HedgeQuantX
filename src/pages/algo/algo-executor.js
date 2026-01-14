@@ -80,6 +80,12 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   const strategy = new StrategyClass({ tickSize });
   strategy.initialize(contractId, tickSize);
   
+  // Handle strategy debug logs
+  strategy.on('log', (log) => {
+    const type = log.type === 'debug' ? 'debug' : log.type === 'info' ? 'analysis' : 'system';
+    ui.addLog(type, log.message);
+  });
+  
   // Initialize Market Data Feed (Rithmic TICKER_PLANT)
   const marketFeed = new MarketDataFeed();
   
