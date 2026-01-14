@@ -60,6 +60,7 @@ const REQ = {
   MARKET_DATA: 100,
   PRODUCT_CODES: 111,
   FRONT_MONTH_CONTRACT: 113,
+  TICK_BAR_REPLAY: 200,    // History plant - request bar data
   LOGIN_INFO: 300,
   ACCOUNT_LIST: 302,
   ACCOUNT_RMS: 304,
@@ -88,6 +89,7 @@ const RES = {
   MARKET_DATA: 101,
   PRODUCT_CODES: 112,
   FRONT_MONTH_CONTRACT: 114,
+  TICK_BAR_REPLAY: 201,    // History plant - bar data response
   LOGIN_INFO: 301,
   ACCOUNT_LIST: 303,
   ACCOUNT_RMS: 305,
@@ -134,6 +136,8 @@ const PROTO_FILES = [
   'response_login_info.proto',
   'request_account_list.proto',
   'response_account_list.proto',
+  'request_tick_bar_replay.proto',
+  'response_tick_bar_replay.proto',
   'request_trade_routes.proto',
   'response_trade_routes.proto',
   'request_subscribe_for_order_updates.proto',

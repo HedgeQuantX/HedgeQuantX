@@ -736,6 +736,47 @@ var require_core = __commonJS({
           message: `[HQX-2B] Reset state for ${contractId}`
         });
       }
+      /**
+       * Preload historical bars to warm up the strategy
+       * @param {string} contractId - Contract ID
+       * @param {Array} bars - Array of bars {timestamp, open, high, low, close, volume}
+       */
+      preloadBars(contractId, bars) {
+        if (!bars || bars.length === 0) {
+          this.emit("log", {
+            type: "debug",
+            message: `[HQX-2B] No historical bars to preload`
+          });
+          return;
+        }
+        if (!this.barHistory.has(contractId)) {
+          this.initialize(contractId);
+        }
+        const sortedBars = [...bars].sort((a, b) => a.timestamp - b.timestamp);
+        this.emit("log", {
+          type: "info",
+          message: `[HQX-2B] Preloading ${sortedBars.length} historical bars...`
+        });
+        let signalCount = 0;
+        for (const bar of sortedBars) {
+          const signal = this.processBar(contractId, bar);
+          if (signal) signalCount++;
+        }
+        const history = this.barHistory.get(contractId) || [];
+        const swings = this.swingPoints.get(contractId) || [];
+        const zones = this.liquidityZones.get(contractId) || [];
+        this.emit("log", {
+          type: "info",
+          message: `[HQX-2B] Preload complete: ${history.length} bars, ${swings.length} swings, ${zones.length} zones`
+        });
+        if (signalCount > 0) {
+          this.emit("log", {
+            type: "debug",
+            message: `[HQX-2B] ${signalCount} historical signals detected (ignored)`
+          });
+        }
+        this.lastSignalTime = 0;
+      }
     };
     module2.exports = { HQX2BLiquiditySweep: HQX2BLiquiditySweep2 };
   }
