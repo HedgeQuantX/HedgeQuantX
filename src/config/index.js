@@ -17,6 +17,8 @@ const {
   ORDER_STATUS,
   ORDER_TYPE,
   ORDER_SIDE,
+  CONTRACT_DESCRIPTIONS,
+  getContractDescription,
 } = require('./constants');
 
 const {
@@ -43,6 +45,8 @@ module.exports = {
   ORDER_STATUS,
   ORDER_TYPE,
   ORDER_SIDE,
+  CONTRACT_DESCRIPTIONS,
+  getContractDescription,
 
   // Settings
   TIMEOUTS,

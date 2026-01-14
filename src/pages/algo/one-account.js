@@ -8,6 +8,7 @@ const ora = require('ora');
 
 const { connections } = require('../../services');
 const { prompts } = require('../../utils');
+const { getContractDescription } = require('../../config');
 const { checkMarketHours } = require('../../services/rithmic/market');
 const { executeAlgo } = require('./algo-executor');
 const { getActiveAgentCount, getSupervisionConfig, getActiveAgents } = require('../ai-agents');
@@ -281,11 +282,15 @@ const selectSymbol = async (service, account) => {
   
   spinner.succeed(`Found ${contracts.length} contracts`);
   
-  // Display sorted contracts from API: symbol - name (exchange)
-  const options = contracts.map(c => ({
-    label: `${c.symbol} - ${c.name} (${c.exchange})`,
-    value: c
-  }));
+  // Display sorted contracts with full description
+  const options = contracts.map(c => {
+    const desc = getContractDescription(c.baseSymbol || c.name);
+    const isMicro = desc.toLowerCase().includes('micro');
+    const label = isMicro 
+      ? `${c.symbol} - ${chalk.cyan(desc)} (${c.exchange})`
+      : `${c.symbol} - ${desc} (${c.exchange})`;
+    return { label, value: c };
+  });
   
   options.push({ label: chalk.gray('< Back'), value: 'back' });
   

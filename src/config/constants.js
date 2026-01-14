@@ -51,10 +51,46 @@ const ORDER_SIDE = {
 
 // All symbols/contracts come from Rithmic API (TICKER_PLANT)
 
+// Contract descriptions for display (API only returns short codes)
+const CONTRACT_DESCRIPTIONS = {
+  // Equity Index Futures
+  ES: 'E-mini S&P 500', MES: 'Micro E-mini S&P 500',
+  NQ: 'E-mini Nasdaq 100', MNQ: 'Micro E-mini Nasdaq',
+  RTY: 'E-mini Russell 2000', M2K: 'Micro E-mini Russell',
+  YM: 'E-mini Dow $5', MYM: 'Micro E-mini Dow',
+  EMD: 'E-mini S&P MidCap', NKD: 'Nikkei 225',
+  // Metals
+  GC: 'Gold', MGC: 'Micro Gold', '1OZ': 'Micro Gold (1oz)',
+  SI: 'Silver', SIL: 'Micro Silver', HG: 'Copper', MHG: 'Micro Copper',
+  PL: 'Platinum', PA: 'Palladium',
+  // Energy
+  CL: 'Crude Oil WTI', MCL: 'Micro Crude Oil', NG: 'Natural Gas',
+  BZ: 'Brent Crude', RB: 'RBOB Gasoline', HO: 'Heating Oil',
+  // Currencies
+  '6E': 'Euro FX', M6E: 'Micro Euro', '6B': 'British Pound', M6B: 'Micro GBP',
+  '6A': 'Australian $', M6A: 'Micro AUD', '6J': 'Japanese Yen',
+  '6C': 'Canadian $', '6S': 'Swiss Franc', '6N': 'New Zealand $',
+  '6M': 'Mexican Peso', E7: 'E-mini Euro',
+  // Crypto
+  BTC: 'Bitcoin', MBT: 'Micro Bitcoin', ETH: 'Ether', MET: 'Micro Ether',
+  // Treasuries
+  ZB: '30Y T-Bond', ZN: '10Y T-Note', ZF: '5Y T-Note', ZT: '2Y T-Note',
+  ZQ: '30-Day Fed Funds', TN: 'Ultra 10Y',
+  // Grains
+  ZC: 'Corn', ZS: 'Soybeans', ZW: 'Wheat', ZM: 'Soybean Meal',
+  ZL: 'Soybean Oil', ZO: 'Oats',
+  // Livestock
+  LE: 'Live Cattle', HE: 'Lean Hogs', GF: 'Feeder Cattle',
+};
+
+const getContractDescription = (baseSymbol) => CONTRACT_DESCRIPTIONS[baseSymbol] || baseSymbol;
+
 module.exports = {
   ACCOUNT_STATUS,
   ACCOUNT_TYPE,
   ORDER_STATUS,
   ORDER_TYPE,
-  ORDER_SIDE
+  ORDER_SIDE,
+  CONTRACT_DESCRIPTIONS,
+  getContractDescription,
 };

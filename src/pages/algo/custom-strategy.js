@@ -12,6 +12,7 @@ const ora = require('ora');
 const { getLogoWidth, centerText, displayBanner , clearScreen } = require('../../ui');
 const { prompts } = require('../../utils');
 const { connections } = require('../../services');
+const { getContractDescription } = require('../../config');
 const { getActiveProvider, getActiveAgents } = require('../ai-agents');
 const cliproxy = require('../../services/cliproxy');
 const { runPreflightCheck, formatPreflightResults, getPreflightSummary } = require('../../services/ai-supervision');
@@ -146,7 +147,14 @@ const selectSymbol = async (service) => {
   
   spinner.succeed(`Found ${result.contracts.length} contracts`);
   
-  const options = result.contracts.map(c => ({ label: `${c.symbol} - ${c.name} (${c.exchange})`, value: c }));
+  const options = result.contracts.map(c => {
+    const desc = getContractDescription(c.baseSymbol || c.name);
+    const isMicro = desc.toLowerCase().includes('micro');
+    const label = isMicro 
+      ? `${c.symbol} - ${chalk.cyan(desc)} (${c.exchange})`
+      : `${c.symbol} - ${desc} (${c.exchange})`;
+    return { label, value: c };
+  });
   options.push({ label: chalk.gray('< Back'), value: 'back' });
   
   const selected = await prompts.selectOption(chalk.yellow('Select Symbol:'), options);
