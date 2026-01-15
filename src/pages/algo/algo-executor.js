@@ -413,6 +413,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     
     // Preload historical bars for HQX-2B strategy only (bar-based strategy)
     // Note: HISTORY_PLANT may not be available on all accounts (e.g., paper trading)
+    ui.addLog('debug', `Strategy: ${strategyId}, preloadBars: ${typeof strategy.preloadBars}`);
     if (strategyId === 'hqx-2b' && strategy.preloadBars) {
       try {
         ui.addLog('system', 'Loading historical bars...');
@@ -425,7 +426,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
         }
       } catch (histErr) {
         // HISTORY_PLANT not available (common on paper accounts)
-        ui.addLog('system', 'Historical data not available - warming up with live bars...');
+        ui.addLog('system', `Historical data error: ${histErr.message}`);
       }
     }
   } catch (e) {
