@@ -47,6 +47,7 @@ class HQX2BStrategy extends EventEmitter {
   getStats() { return this.strategy.getStats(); }
   getBarHistory(contractId) { return this.strategy.getBarHistory(contractId); }
   preloadBars(contractId, bars) { return this.strategy.preloadBars(contractId, bars); }
+  getHealthStatus(contractId) { return this.strategy.getHealthStatus(contractId); }
   generateSignal(params) { return null; } // Signals come from processBar
 }
 

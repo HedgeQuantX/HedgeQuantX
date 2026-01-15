@@ -47,6 +47,7 @@ class HQX2BLiquiditySweep extends EventEmitter {
 
     // Tracking
     this.lastSignalTime = 0;
+    this.startTime = Date.now();
     this.stats = { signals: 0, trades: 0, wins: 0, losses: 0, pnl: 0 };
     this.recentTrades = [];
   }
@@ -369,6 +370,45 @@ class HQX2BLiquiditySweep extends EventEmitter {
 
   getStats() {
     return this.stats;
+  }
+
+  /**
+   * Get detailed health status to confirm strategy is working
+   * @param {string} contractId - Contract ID
+   * @returns {Object} Health status with diagnostic info
+   */
+  getHealthStatus(contractId) {
+    const bars = this.barHistory.get(contractId) || [];
+    const zones = this.liquidityZones.get(contractId) || [];
+    const swings = this.swingPoints.get(contractId) || [];
+    const currentBar = this.currentBar.get(contractId);
+    
+    // Calculate time since last bar
+    const lastBar = bars[bars.length - 1];
+    const timeSinceLastBar = lastBar ? Date.now() - lastBar.timestamp : null;
+    
+    // Count zone types
+    const resistanceZones = zones.filter(z => z.type === ZoneType.RESISTANCE).length;
+    const supportZones = zones.filter(z => z.type === ZoneType.SUPPORT).length;
+    
+    // Check if actively aggregating ticks
+    const isAggregating = currentBar && currentBar.tickCount > 0;
+    
+    return {
+      healthy: bars.length >= 5,
+      barsTotal: bars.length,
+      barsLast5Min: bars.filter(b => Date.now() - b.timestamp < 5 * 60 * 1000).length,
+      swingsTotal: swings.length,
+      zonesResistance: resistanceZones,
+      zonesSupport: supportZones,
+      zonesTotal: zones.length,
+      currentBarTicks: currentBar ? currentBar.tickCount : 0,
+      isAggregating: isAggregating,
+      timeSinceLastBarMs: timeSinceLastBar,
+      lastSignalTime: this.lastSignalTime,
+      signalCooldownMs: this.config.execution.cooldownMs,
+      uptime: Date.now() - (this.startTime || Date.now())
+    };
   }
 
   reset(contractId) {

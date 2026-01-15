@@ -193,6 +193,7 @@ class HQX2BLiquiditySweep extends EventEmitter {
 
     // Tracking
     this.lastSignalTime = 0;
+    this.startTime = Date.now();
     this.stats = { signals: 0, trades: 0, wins: 0, losses: 0, pnl: 0 };
     this.recentTrades = [];
   }
@@ -858,6 +859,38 @@ class HQX2BLiquiditySweep extends EventEmitter {
     return this.stats;
   }
 
+  /**
+   * Get detailed health status to confirm strategy is working
+   */
+  getHealthStatus(contractId) {
+    const bars = this.barHistory.get(contractId) || [];
+    const zones = this.liquidityZones.get(contractId) || [];
+    const swings = this.swingPoints.get(contractId) || [];
+    const currentBar = this.currentBar.get(contractId);
+    
+    const lastBar = bars[bars.length - 1];
+    const timeSinceLastBar = lastBar ? Date.now() - lastBar.timestamp : null;
+    
+    const resistanceZones = zones.filter(z => z.type === ZoneType.RESISTANCE).length;
+    const supportZones = zones.filter(z => z.type === ZoneType.SUPPORT).length;
+    
+    return {
+      healthy: bars.length >= 5,
+      barsTotal: bars.length,
+      barsLast5Min: bars.filter(b => Date.now() - b.timestamp < 5 * 60 * 1000).length,
+      swingsTotal: swings.length,
+      zonesResistance: resistanceZones,
+      zonesSupport: supportZones,
+      zonesTotal: zones.length,
+      currentBarTicks: currentBar ? currentBar.tickCount : 0,
+      isAggregating: currentBar && currentBar.tickCount > 0,
+      timeSinceLastBarMs: timeSinceLastBar,
+      lastSignalTime: this.lastSignalTime,
+      signalCooldownMs: this.config.execution.cooldownMs,
+      uptime: Date.now() - (this.startTime || Date.now())
+    };
+  }
+
   reset(contractId) {
     this.barHistory.set(contractId, []);
     this.swingPoints.set(contractId, []);
@@ -953,6 +986,7 @@ class HQX2BStrategy extends EventEmitter {
   getStats() { return this.strategy.getStats(); }
   getBarHistory(contractId) { return this.strategy.getBarHistory(contractId); }
   preloadBars(contractId, bars) { return this.strategy.preloadBars(contractId, bars); }
+  getHealthStatus(contractId) { return this.strategy.getHealthStatus(contractId); }
   generateSignal(params) { return null; } // Signals come from processBar
 }
 

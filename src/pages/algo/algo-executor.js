@@ -1,9 +1,6 @@
 /**
- * Algo Executor - Shared execution engine for all algo modes
- * Handles market data, signals, orders, and P&L tracking
- * Supports multi-agent AI supervision for signal optimization
+ * Algo Executor - Execution engine for algo modes with AI supervision
  */
-
 const readline = require('readline');
 const { AlgoUI, renderSessionSummary } = require('./ui');
 const { loadStrategy } = require('../../lib/m');
@@ -25,13 +22,11 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   const { contracts, dailyTarget, maxRisk, showName } = config;
   const { supervisionConfig, subtitle } = options;
   
-  // Load the selected strategy module dynamically
   const strategyId = strategyInfo?.id || 'ultra-scalping';
   const strategyName = strategyInfo?.name || 'HQX Scalping';
   const strategyModule = loadStrategy(strategyId);
   const StrategyClass = strategyModule.M1; // loadStrategy normalizes to M1
   
-  // Initialize AI Supervision Engine if configured
   const supervisionEnabled = supervisionConfig?.supervisionEnabled && supervisionConfig?.agents?.length > 0;
   const supervisionEngine = supervisionEnabled ? new SupervisionEngine(supervisionConfig) : null;
   
@@ -73,23 +68,18 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   let tickCount = 0;
   let lastBias = 'FLAT';
   
-  // Context for AI supervision
   const aiContext = { recentTicks: [], recentSignals: [], recentTrades: [], maxTicks: 100 };
   
-  // Initialize Strategy
   const strategy = new StrategyClass({ tickSize });
   strategy.initialize(contractId, tickSize);
   
-  // Handle strategy debug logs
   strategy.on('log', (log) => {
     const type = log.type === 'debug' ? 'debug' : log.type === 'info' ? 'analysis' : 'system';
     ui.addLog(type, log.message);
   });
   
-  // Initialize Market Data Feed (Rithmic TICKER_PLANT)
   const marketFeed = new MarketDataFeed();
   
-  // Log startup
   ui.addLog('system', `Strategy: ${strategyName}${supervisionEnabled ? ' + AI' : ''}`);
   ui.addLog('system', `Account: ${accountName}`);
   ui.addLog('system', `Symbol: ${symbolName} | Qty: ${contracts}`);
@@ -100,7 +90,6 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   }
   ui.addLog('system', 'Connecting to market data...');
   
-  // Handle strategy signals
   strategy.on('signal', async (signal) => {
     const dir = signal.direction?.toUpperCase() || 'UNKNOWN';
     const signalLog = smartLogs.getSignalLog(dir, symbolCode, (signal.confidence || 0) * 100, strategyName);
@@ -214,7 +203,6 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     pendingOrder = false;
   });
   
-  // Handle market data ticks
   let lastPrice = null;
   let lastBid = null;
   let lastAsk = null;
@@ -225,7 +213,6 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   let sellVolume = 0;
   let barCount = 0;
   
-  // Track tick arrival times for latency estimation
   let lastTickTime = 0;
   let tickLatencies = [];
   
@@ -353,6 +340,14 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
         ui.addLog('analysis', `AI Supervision active: ${agentNames} (${status.availableAgents} agents monitoring)`);
       }
       
+      // Strategy health status every 2 minutes (confirms strategy is working)
+      if (currentSecond % 120 === 0 && strategy.getHealthStatus) {
+        const health = strategy.getHealthStatus(contractId);
+        const uptime = Math.floor(health.uptime / 60000);
+        const status = health.healthy ? 'OK' : 'WARMING';
+        ui.addLog('ready', `HEALTH: ${status} | Bars: ${health.barsTotal} | Zones: ${health.zonesTotal} (R:${health.zonesResistance}/S:${health.zonesSupport}) | Swings: ${health.swingsTotal} | Uptime: ${uptime}m`);
+      }
+      
       // Reset volume counters
       buyVolume = 0;
       sellVolume = 0;
@@ -397,12 +392,9 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     ui.addLog('connected', 'Market data connected');
   });
   marketFeed.on('subscribed', (symbol) => ui.addLog('system', `Subscribed: ${symbol}`));
-  // Suppress debug logs - not needed in production
-  // marketFeed.on('debug', (msg) => ui.addLog('debug', msg));
   marketFeed.on('error', (err) => ui.addLog('error', `Market: ${err.message}`));
   marketFeed.on('disconnected', () => { stats.connected = false; ui.addLog('error', 'Market disconnected'); });
   
-  // Connect to market data (Rithmic TICKER_PLANT)
   try {
     const rithmicCredentials = service.getRithmicCredentials?.();
     if (!rithmicCredentials) {
@@ -432,7 +424,6 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     ui.addLog('error', `Failed to connect: ${e.message}`);
   }
   
-  // Poll P&L
   const pollPnL = async () => {
     try {
       const accountResult = await service.getTradingAccounts();
@@ -472,12 +463,10 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     } catch (e) { /* silent */ }
   };
   
-  // Start loops
   const refreshInterval = setInterval(() => { if (running) ui.render(stats); }, 250);
   const pnlInterval = setInterval(() => { if (running) pollPnL(); }, 2000);
   pollPnL();
   
-  // Keyboard handler for exit (X or Ctrl+C)
   const setupKeyHandler = () => {
     if (!process.stdin.isTTY) return;
     readline.emitKeypressEvents(process.stdin);
@@ -489,10 +478,8 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   };
   const cleanupKeys = setupKeyHandler();
   
-  // Wait for stop signal
   await new Promise(resolve => { const check = setInterval(() => { if (!running) { clearInterval(check); resolve(); } }, 100); });
   
-  // Cleanup
   clearInterval(refreshInterval);
   clearInterval(pnlInterval);
   await marketFeed.disconnect();
@@ -501,7 +488,6 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   if (process.stdin.isTTY) process.stdin.setRawMode(false);
   process.stdin.resume();
   
-  // Duration and summary
   const durationMs = Date.now() - stats.startTime;
   const h = Math.floor(durationMs / 3600000), m = Math.floor((durationMs % 3600000) / 60000), s = Math.floor((durationMs % 60000) / 1000);
   stats.duration = h > 0 ? `${h}h ${m}m ${s}s` : m > 0 ? `${m}m ${s}s` : `${s}s`;
