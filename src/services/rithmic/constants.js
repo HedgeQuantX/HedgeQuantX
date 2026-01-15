@@ -60,7 +60,7 @@ const REQ = {
   MARKET_DATA: 100,
   PRODUCT_CODES: 111,
   FRONT_MONTH_CONTRACT: 113,
-  TICK_BAR_REPLAY: 200,    // History plant - request bar data
+  TICK_BAR_REPLAY: 206,    // History plant - request tick bar replay
   LOGIN_INFO: 300,
   ACCOUNT_LIST: 302,
   ACCOUNT_RMS: 304,
@@ -89,7 +89,7 @@ const RES = {
   MARKET_DATA: 101,
   PRODUCT_CODES: 112,
   FRONT_MONTH_CONTRACT: 114,
-  TICK_BAR_REPLAY: 201,    // History plant - bar data response
+  TICK_BAR_REPLAY: 207,    // History plant - tick bar replay response
   LOGIN_INFO: 301,
   ACCOUNT_LIST: 303,
   ACCOUNT_RMS: 305,
