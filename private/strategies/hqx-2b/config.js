@@ -61,9 +61,9 @@ const DEFAULT_CONFIG = {
     commissionPerSide: 2.0    // $4 round-trip
   },
 
-  // Session filter (US Regular Hours only - matches backtest)
+  // Session filter (DISABLED for 24/7 trading)
   session: {
-    enabled: true,            // MUST be enabled to match backtest results
+    enabled: false,           // Disabled to allow trading outside US hours
     startHour: 9,             // 9:30 AM EST
     startMinute: 30,
     endHour: 16,              // 4:00 PM EST
