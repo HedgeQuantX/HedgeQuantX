@@ -71,14 +71,14 @@ const DEFAULT_CONFIG = {
     cooldownBars: 3            // Quick zone reuse (was 10)
   },
 
-  // Sweep Detection (HYPER AGGRESSIVE)
+  // Sweep Detection (ULTRA AGGRESSIVE - TEST MODE)
   sweep: {
-    minPenetrationTicks: 0.5,  // Even tiny penetration counts
+    minPenetrationTicks: 0.25, // Micro penetration counts (was 0.5)
     maxPenetrationTicks: 20,   // Allow deeper sweeps
     maxDurationBars: 10,       // Allow slower sweeps
-    minQualityScore: 0.20,     // Lower quality threshold (was 0.40)
-    minVolumeRatio: 0.5,       // Lower volume requirement (was 0.8)
-    minBodyRatio: 0.1          // Lower body ratio (was 0.2)
+    minQualityScore: 0.10,     // Very low threshold for testing (was 0.20)
+    minVolumeRatio: 0.3,       // Lower volume requirement (was 0.5)
+    minBodyRatio: 0.05         // Lower body ratio (was 0.1)
   },
 
   // Execution (OPTIMIZED 4:1 R:R)
@@ -88,8 +88,8 @@ const DEFAULT_CONFIG = {
     breakevenTicks: 4,        // Move to BE at +4 ticks
     trailTriggerTicks: 8,     // Activate trailing at +8 ticks
     trailDistanceTicks: 4,    // Trail by 4 ticks
-    cooldownMs: 15000,        // 15 seconds between signals (was 30)
-    minHoldTimeMs: 5000,      // 5 seconds min hold (was 10)
+    cooldownMs: 5000,         // 5 seconds between signals (was 15)
+    minHoldTimeMs: 5000,      // 5 seconds min hold
     slippageTicks: 1,
     commissionPerSide: 2.0    // $4 round-trip
   },
