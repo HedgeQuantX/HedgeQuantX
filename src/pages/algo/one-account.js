@@ -197,11 +197,13 @@ const oneAccountMenu = async (service) => {
     if (enableAI) {
       // Run pre-flight check - ALL agents must pass
       console.log();
-      console.log(chalk.yellow('  Running AI pre-algo check...'));
-      console.log();
+      const aiSpinner = ora({ text: 'Running AI pre-algo check...', color: 'yellow' }).start();
       
       const agents = getActiveAgents();
       const preflightResults = await runPreflightCheck(agents);
+      
+      aiSpinner.stop();
+      console.log();
       
       // Display results
       const lines = formatPreflightResults(preflightResults, 60);
