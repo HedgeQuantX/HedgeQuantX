@@ -73,6 +73,9 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   const strategy = new StrategyClass({ tickSize });
   strategy.initialize(contractId, tickSize);
   
+  // Set strategy for context-aware smart logs
+  smartLogs.setStrategy(strategyId);
+  
   strategy.on('log', (log) => {
     const type = log.type === 'debug' ? 'debug' : log.type === 'info' ? 'analysis' : 'system';
     ui.addLog(type, log.message);
