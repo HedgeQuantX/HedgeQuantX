@@ -38,14 +38,14 @@ const DEFAULT_CONFIG = {
     cooldownBars: 3            // Quick zone reuse (was 10)
   },
 
-  // Sweep Detection (ULTRA AGGRESSIVE - TEST MODE)
+  // Sweep Detection (HYPER AGGRESSIVE - TEST MODE)
   sweep: {
-    minPenetrationTicks: 0.25, // Micro penetration counts (was 0.5)
-    maxPenetrationTicks: 20,   // Allow deeper sweeps
-    maxDurationBars: 10,       // Allow slower sweeps
-    minQualityScore: 0.10,     // Very low threshold for testing (was 0.20)
-    minVolumeRatio: 0.3,       // Lower volume requirement (was 0.5)
-    minBodyRatio: 0.05         // Lower body ratio (was 0.1)
+    minPenetrationTicks: 0.1,  // Near-touch counts as sweep (was 0.25)
+    maxPenetrationTicks: 30,   // Allow very deep sweeps
+    maxDurationBars: 15,       // Allow slower sweeps
+    minQualityScore: 0.05,     // Minimal threshold for testing (was 0.10)
+    minVolumeRatio: 0.2,       // Very low volume requirement (was 0.3)
+    minBodyRatio: 0.01         // Almost any candle works (was 0.05)
   },
 
   // Execution (OPTIMIZED 4:1 R:R)
