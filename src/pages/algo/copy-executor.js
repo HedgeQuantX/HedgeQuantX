@@ -255,8 +255,14 @@ const launchCopyTrading = async (config) => {
   
   renderSessionSummary(stats, stopReason);
   
-  console.log('\n  Returning to menu in 3 seconds...');
-  await new Promise(resolve => setTimeout(resolve, 3000));
+  const readline = require('readline');
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  await new Promise(resolve => {
+    rl.question('\n  Press Enter to return to menu...', () => {
+      rl.close();
+      resolve();
+    });
+  });
 };
 
 /**
