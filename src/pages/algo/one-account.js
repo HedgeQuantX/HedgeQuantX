@@ -233,6 +233,12 @@ const oneAccountMenu = async (service) => {
   const proceed = await prompts.confirmPrompt(startPrompt, true);
   if (!proceed) return;
   
+  const startSpinner = ora({ text: 'Initializing algo trading...', color: 'cyan' }).start();
+  
+  // Small delay to show spinner then stop before executeAlgo takes over the screen
+  await new Promise(resolve => setTimeout(resolve, 500));
+  startSpinner.succeed('Algo initialized');
+  
   await executeAlgo({
     service: accountService,
     account: selectedAccount,
