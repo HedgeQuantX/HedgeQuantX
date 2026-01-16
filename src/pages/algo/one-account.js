@@ -235,17 +235,13 @@ const oneAccountMenu = async (service) => {
   
   const startSpinner = ora({ text: 'Initializing algo trading...', color: 'cyan' }).start();
   
-  // Small delay to show spinner then stop before executeAlgo takes over the screen
-  await new Promise(resolve => setTimeout(resolve, 500));
-  startSpinner.succeed('Algo initialized');
-  
   await executeAlgo({
     service: accountService,
     account: selectedAccount,
     contract,
     config,
     strategy,
-    options: { supervisionConfig }
+    options: { supervisionConfig, startSpinner }
   });
 };
 

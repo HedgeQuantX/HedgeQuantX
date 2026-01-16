@@ -20,7 +20,7 @@ const smartLogs = require('../../lib/smart-logs');
  */
 const executeAlgo = async ({ service, account, contract, config, strategy: strategyInfo, options = {} }) => {
   const { contracts, dailyTarget, maxRisk, showName } = config;
-  const { supervisionConfig, subtitle } = options;
+  const { supervisionConfig, subtitle, startSpinner } = options;
   
   const strategyId = strategyInfo?.id || 'ultra-scalping';
   const strategyName = strategyInfo?.name || 'HQX Scalping';
@@ -82,6 +82,9 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   });
   
   const marketFeed = new MarketDataFeed();
+  
+  // Stop the initialization spinner before UI takes over
+  if (startSpinner) startSpinner.succeed('Algo initialized');
   
   ui.addLog('system', `Strategy: ${strategyName}${supervisionEnabled ? ' + AI' : ''}`);
   ui.addLog('system', `Account: ${accountName}`);
@@ -471,13 +474,23 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   pollPnL();
   
   const setupKeyHandler = () => {
-    if (!process.stdin.isTTY) return;
+    if (!process.stdin.isTTY) return null;
     readline.emitKeypressEvents(process.stdin);
     process.stdin.setRawMode(true);
     process.stdin.resume();
-    const onKey = (str, key) => { if (key && (key.name === 'x' || key.name === 'X' || (key.ctrl && key.name === 'c'))) { running = false; stopReason = 'manual'; } };
+    const onKey = (str, key) => {
+      // Handle 'x', 'X', or Ctrl+C to stop
+      const keyName = key?.name?.toLowerCase();
+      if (keyName === 'x' || (key?.ctrl && keyName === 'c')) {
+        running = false;
+        stopReason = 'manual';
+      }
+    };
     process.stdin.on('keypress', onKey);
-    return () => { process.stdin.removeListener('keypress', onKey); if (process.stdin.isTTY) process.stdin.setRawMode(false); };
+    return () => {
+      process.stdin.removeListener('keypress', onKey);
+      if (process.stdin.isTTY) process.stdin.setRawMode(false);
+    };
   };
   const cleanupKeys = setupKeyHandler();
   
@@ -496,7 +509,6 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   stats.duration = h > 0 ? `${h}h ${m}m ${s}s` : m > 0 ? `${m}m ${s}s` : `${s}s`;
   renderSessionSummary(stats, stopReason);
   
-  const readline = require('readline');
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   await new Promise(resolve => {
     rl.question('\n  Press Enter to return to menu...', () => {

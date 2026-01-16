@@ -329,7 +329,9 @@ const setupKeyHandler = (onStop) => {
   process.stdin.resume();
   
   const onKey = (str, key) => {
-    if (key && (key.name === 'x' || key.name === 'X' || (key.ctrl && key.name === 'c'))) {
+    // Handle 'x', 'X', or Ctrl+C to stop
+    const keyName = key?.name?.toLowerCase();
+    if (keyName === 'x' || (key?.ctrl && keyName === 'c')) {
       onStop();
     }
   };
