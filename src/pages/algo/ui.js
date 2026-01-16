@@ -113,6 +113,7 @@ class AlgoUI {
     this.firstDraw = true;
     this.isDrawing = false;
     this.buffer = '';
+    this.startTime = Date.now(); // Initialize start time for spinner
   }
 
   addLog(type, message) {
