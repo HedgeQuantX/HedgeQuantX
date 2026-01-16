@@ -469,7 +469,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     } catch (e) { /* silent */ }
   };
   
-  const refreshInterval = setInterval(() => { if (running) ui.render(stats); }, 250);
+  const refreshInterval = setInterval(() => { if (running) ui.render(stats); }, 100);
   const pnlInterval = setInterval(() => { if (running) pollPnL(); }, 2000);
   pollPnL();
   
