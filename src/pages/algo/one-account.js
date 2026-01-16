@@ -108,28 +108,28 @@ const oneAccountMenu = async (service) => {
               contract = contractsResult.contracts.find(c => c.baseSymbol === extractedBase);
             }
           }
-        }
-        
-        // Find strategy
-        const strategies = getAvailableStrategies();
-        strategy = strategies.find(s => s.id === lastConfig.strategyId);
-        
-        // Restore config
-        if (contract && strategy) {
-          config = {
-            contracts: lastConfig.contracts,
-            dailyTarget: lastConfig.dailyTarget,
-            maxRisk: lastConfig.maxRisk,
-            showName: lastConfig.showName
-          };
-          loadSpinner.succeed('Configuration loaded');
+          
+          // Find strategy
+          const strategies = getAvailableStrategies();
+          strategy = strategies.find(s => s.id === lastConfig.strategyId);
+          
+          // Restore config
+          if (contract && strategy) {
+            config = {
+              contracts: lastConfig.contracts,
+              dailyTarget: lastConfig.dailyTarget,
+              maxRisk: lastConfig.maxRisk,
+              showName: lastConfig.showName
+            };
+            loadSpinner.succeed('Configuration loaded');
+          } else {
+            loadSpinner.fail('Symbol or strategy no longer available, please reconfigure');
+            selectedAccount = null;
+          }
         } else {
-          loadSpinner.fail('Symbol or strategy no longer available, please reconfigure');
+          loadSpinner.fail('Failed to load contracts');
           selectedAccount = null;
         }
-      } else {
-        loadSpinner.fail('Failed to load contracts');
-        selectedAccount = null;
       }
     }
   }
