@@ -87,6 +87,9 @@ const oneAccountMenu = async (service) => {
         selectedAccount = matchingAccount;
         accountService = selectedAccount.service || connections.getServiceForAccount(selectedAccount.accountId) || service;
         
+        // Show spinner while loading
+        const loadSpinner = ora({ text: 'Loading configuration...', color: 'yellow' }).start();
+        
         // Load contracts to find the saved symbol (match by baseSymbol first, then exact symbol)
         const contractsResult = await accountService.getContracts();
         if (contractsResult.success && contractsResult.contracts.length > 0) {
@@ -119,11 +122,14 @@ const oneAccountMenu = async (service) => {
             maxRisk: lastConfig.maxRisk,
             showName: lastConfig.showName
           };
-          console.log(chalk.green('  ✓ Configuration loaded'));
+          loadSpinner.succeed('Configuration loaded');
         } else {
-          console.log(chalk.yellow('  Symbol or strategy no longer available, please reconfigure'));
+          loadSpinner.fail('Symbol or strategy no longer available, please reconfigure');
           selectedAccount = null;
         }
+      } else {
+        loadSpinner.fail('Failed to load contracts');
+        selectedAccount = null;
       }
     }
   }
