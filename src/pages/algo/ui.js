@@ -289,10 +289,8 @@ class AlgoUI {
     const { W, logs, maxLogs } = this;
     
     // Activity header - HF style with animated spinner
-    if (!this.startTime) this.startTime = Date.now();
-    // Increment spinner frame based on time (100ms per frame = visible rotation)
-    const elapsed = Date.now() - this.startTime;
-    this.spinnerFrame = Math.floor(elapsed / 100) % SPINNER.length;
+    // Increment spinner frame each render (250ms interval = visible rotation)
+    this.spinnerFrame = (this.spinnerFrame + 1) % SPINNER.length;
     const spinner = SPINNER[this.spinnerFrame];
     const now = new Date();
     const timeStr = now.toLocaleTimeString('en-US', { hour12: false });
