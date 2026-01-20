@@ -81,35 +81,62 @@
 - **NE JAMAIS** faire de git pull sans vérifier les conséquences
 - **NE JAMAIS** écraser les modifications locales
 
-### 9. Protection des Fichiers Sources (Proprietary Code)
+### 9. Protection des Fichiers Sensibles (CRITIQUE)
 
-Certains répertoires contiennent du code propriétaire protégé et sont **exclus de git** via `.gitignore`:
+**AUCUN fichier sensible ne doit être publié, ni sur npm, ni sur GitHub.**
 
-**Répertoires protégés (non versionnés sur git):**
-- `src/lib/` - Librairies internes, stratégies, modules de données
-- `scripts/` - Scripts de build et déploiement
+#### Fichiers/Dossiers INTERDITS de publication :
 
-**Workflow de publication:**
-- Ces fichiers sont **exclus de git** mais **inclus dans npm publish**
-- Voir `package.json` → `"files"` pour la liste des fichiers publiés
-- Les modifications dans `src/lib/` sont publiées via `npm publish` mais pas commitées sur GitHub
-- Cela protège le code source propriétaire tout en permettant la distribution via npm
+| Dossier/Fichier | Contenu | Protection |
+|-----------------|---------|------------|
+| `private/` | Code source des stratégies | `.gitignore` + exclus de `package.json files` |
+| `src/lib/` | Librairies internes | `.gitignore` |
+| `scripts/` | Scripts de build/obfuscation | `.gitignore` |
+| `.env` | Variables d'environnement | `.gitignore` |
+| `*credentials*` | Identifiants | `.gitignore` |
+| `*.key`, `*.pem` (privés) | Clés privées | `.gitignore` |
 
-**Structure de protection:**
+#### Ce qui EST publié :
+
+| Destination | Fichiers autorisés |
+|-------------|-------------------|
+| **npm** | `dist/lib/` (code obfusqué + bytecode `.jsc`) |
+| **GitHub** | Code non-sensible uniquement |
+
+#### Workflow de protection :
+
 ```
-.gitignore:
-  src/lib/     # Code propriétaire (stratégies, algos)
-  scripts/     # Scripts de build
-
-package.json "files":
-  src/lib/     # Inclus dans npm (distribué aux utilisateurs)
-  dist/lib/    # Versions compilées (bytenode)
+SOURCES (private/)           OBFUSCATION              PUBLICATION
+─────────────────────────────────────────────────────────────────
+private/strategies/*.js  →  scripts/obfuscate  →  dist/lib/m/*.js
+                                                  dist/lib/m/*.jsc
+                         
+Local uniquement            Local uniquement        npm + GitHub OK
+JAMAIS sur git              JAMAIS sur git          (code illisible)
+JAMAIS sur npm              JAMAIS sur npm
 ```
 
-**Important:**
-- **NE JAMAIS** retirer `src/lib/` du `.gitignore`
-- **NE JAMAIS** forcer l'ajout avec `git add -f` pour ces répertoires
-- Le code source propriétaire reste local et sur npm uniquement
+#### Vérifications OBLIGATOIRES avant CPP :
+
+```bash
+# Vérifier que private/ n'est pas tracké
+git ls-files | grep private    # Doit retourner VIDE
+
+# Vérifier le .gitignore
+cat .gitignore | grep -E "(private|src/lib|scripts)"
+
+# Vérifier ce qui sera publié sur npm
+npm pack --dry-run 2>&1 | grep -E "(private|secret|credential)"  # Doit retourner VIDE
+```
+
+#### Règles ABSOLUES :
+
+- **NE JAMAIS** retirer `private/` du `.gitignore`
+- **NE JAMAIS** ajouter `private/` dans `package.json files`
+- **NE JAMAIS** utiliser `git add -f` sur des fichiers sensibles
+- **NE JAMAIS** commit des credentials, clés API, ou tokens
+- **TOUJOURS** vérifier avec `git status` avant de commit
+- **TOUJOURS** utiliser l'obfuscation pour les stratégies publiées
 
 ---
 
@@ -158,4 +185,4 @@ la réponse contient `"model": "MiniMax-M2.1"` pour confirmer le bon modèle.
 
 ---
 
-*Dernière mise à jour: 13 Janvier 2026*
+*Dernière mise à jour: 20 Janvier 2026*
