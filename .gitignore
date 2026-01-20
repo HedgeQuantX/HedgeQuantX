@@ -18,3 +18,6 @@ test-*.js
 
 # Config
 .config/
+
+# Private strategies (source code)
+private/
