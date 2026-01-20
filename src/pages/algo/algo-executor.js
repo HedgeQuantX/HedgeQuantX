@@ -409,22 +409,11 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     await marketFeed.connect(rithmicCredentials);
     await marketFeed.subscribe(symbolCode, contract.exchange || 'CME');
     
-    // Preload historical bars for HQX-2B strategy only (bar-based strategy)
-    // Note: HISTORY_PLANT may not be available on all accounts (e.g., paper trading)
-    if (strategyId === 'hqx-2b' && strategy.preloadBars) {
-      try {
-        ui.addLog('system', 'Loading historical bars...');
-        const historicalBars = await marketFeed.getHistoricalBars(symbolCode, contract.exchange || 'CME', 30);
-        if (historicalBars && historicalBars.length > 0) {
-          strategy.preloadBars(contractId, historicalBars);
-          ui.addLog('system', `Loaded ${historicalBars.length} bars - ready!`);
-        } else {
-          ui.addLog('system', 'No historical data - warming up with live bars...');
-        }
-      } catch (histErr) {
-        // HISTORY_PLANT not available (common on paper accounts)
-        ui.addLog('system', 'Historical data not available - warming up with live bars...');
-      }
+    // HQX-2B strategy warmup message
+    // Note: HISTORY_PLANT returns limited ticks (10k max = ~1 second of data)
+    // which is not enough for 1-min bar aggregation. Strategy warms up with live data.
+    if (strategyId === 'hqx-2b') {
+      ui.addLog('system', 'HQX-2B warming up - needs ~3 min for first signals...');
     }
   } catch (e) {
     ui.addLog('error', `Failed to connect: ${e.message}`);
