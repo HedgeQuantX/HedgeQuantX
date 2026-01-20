@@ -172,11 +172,13 @@ class RithmicConnection extends EventEmitter {
 
       if (res.rpCode?.[0] === '0') {
         this.state = 'LOGGED_IN';
-        this.startHeartbeat(res.heartbeatInterval || 60);
+        // Use heartbeat interval from server, minimum 10s, default 30s
+        const hbInterval = Math.max(10, res.heartbeatInterval || 30);
+        this.startHeartbeat(hbInterval);
         this.emit('loggedIn', {
           fcmId: res.fcmId,
           ibId: res.ibId,
-          heartbeatInterval: res.heartbeatInterval,
+          heartbeatInterval: hbInterval,
         });
       } else {
         const errorCode = res.rpCode?.[0] || 'UNKNOWN';
@@ -202,13 +204,23 @@ class RithmicConnection extends EventEmitter {
 
   startHeartbeat(intervalSec) {
     this.stopHeartbeat();
+    // Send heartbeat at half the interval to be safe (minimum every 5 seconds)
+    const hbMs = Math.max(5000, Math.floor(intervalSec * 1000 / 2));
     this.heartbeatTimer = setInterval(() => {
       try {
-        this.send('RequestHeartbeat', { templateId: REQ.HEARTBEAT });
+        if (this.ws?.readyState === WebSocket.OPEN) {
+          this.send('RequestHeartbeat', { templateId: REQ.HEARTBEAT });
+        }
       } catch (e) {
-        // Ignore
+        // Ignore heartbeat errors
       }
-    }, (intervalSec - 5) * 1000);
+    }, hbMs);
+    // Send first heartbeat immediately
+    try {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.send('RequestHeartbeat', { templateId: REQ.HEARTBEAT });
+      }
+    } catch (e) {}
   }
 
   stopHeartbeat() {
