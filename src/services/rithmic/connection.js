@@ -124,7 +124,7 @@ class RithmicConnection extends EventEmitter {
       appVersion: this.config.appVersion || '1.0.0',
       systemName: this.config.systemName,
       infraType: INFRA_TYPE[infraType],
-      macAddr: ['00:00:00:00:00:00'],
+      macAddr: [getMacAddress()],
       osVersion: os.release(),
       osPlatform: os.platform(),
     });
