@@ -34,9 +34,9 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   const accountName = showName 
     ? (account.accountName || account.rithmicAccountId || account.accountId) 
     : 'HQX *****';
-  const symbolName = contract.name;  // Display name: "Micro E-mini S&P 500"
-  const symbolCode = contract.symbol || contract.id;  // Rithmic symbol: "MESH6"
-  const contractId = contract.id;
+  const symbolName = contract.name || contract.baseSymbol || 'Unknown';
+  const symbolCode = contract.symbol || contract.baseSymbol || contract.id;  // Rithmic symbol for subscription
+  const contractId = contract.symbol || contract.baseSymbol || contract.id;  // For strategy tracking
   const tickSize = contract.tickSize || 0.25;
   
   const ui = new AlgoUI({ 
@@ -86,6 +86,10 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     target: dailyTarget,
     risk: maxRisk
   });
+  
+  // Log detailed contract info for debugging
+  sessionLogger.log('CONFIG', `symbolCode=${symbolCode} contractId=${contractId} exchange=${contract.exchange} tickSize=${tickSize}`);
+  sessionLogger.log('CONFIG', `account=${account.accountId} rithmicId=${account.rithmicAccountId || 'N/A'}`);
   
   strategy.on('log', (log) => {
     const type = log.type === 'debug' ? 'debug' : log.type === 'info' ? 'analysis' : 'system';
@@ -243,6 +247,12 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     const now = Date.now();
     const currentSecond = Math.floor(now / 1000);
     
+    // Debug first 5 ticks to verify data
+    if (tickCount <= 5) {
+      const p = Number(tick.price) || Number(tick.tradePrice) || 'NULL';
+      sessionLogger.log('TICK', `#${tickCount} price=${p} symbol=${tick.symbol || tick.contractId || 'N/A'}`);
+    }
+    
     // Count ticks per second
     if (currentSecond === lastTickSecond) {
       ticksPerSecond++;
@@ -347,13 +357,16 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     lastBid = bid;
     lastAsk = ask;
     
-    strategy.processTick({
-      contractId: tick.contractId || contractId,
-      price: price, bid: bid, ask: ask,
-      volume: volume, 
-      side: tick.side || tick.lastTradeSide || 'unknown',
-      timestamp: tick.timestamp || Date.now()
-    });
+    // Only process tick if we have a valid price
+    if (price && price > 0) {
+      strategy.processTick({
+        contractId: tick.contractId || contractId,
+        price: price, bid: bid, ask: ask,
+        volume: volume, 
+        side: tick.side || tick.lastTradeSide || 'unknown',
+        timestamp: tick.timestamp || Date.now()
+      });
+    }
     
     // Calculate latency from Rithmic ssboe/usecs or inter-tick timing
     if (tick.ssboe && tick.usecs !== undefined) {
