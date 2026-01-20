@@ -7,6 +7,7 @@ const { loadStrategy } = require('../../lib/m');
 const { MarketDataFeed } = require('../../lib/data');
 const { SupervisionEngine } = require('../../services/ai-supervision');
 const smartLogs = require('../../lib/smart-logs');
+const { sessionLogger } = require('../../services/session-logger');
 
 /**
  * Execute algo strategy with market data
@@ -76,9 +77,20 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   // Set strategy for context-aware smart logs
   smartLogs.setStrategy(strategyId);
   
+  // Start session logger for persistent logs
+  const logFile = sessionLogger.start({
+    strategy: strategyId,
+    account: accountName,
+    symbol: symbolName,
+    contracts,
+    target: dailyTarget,
+    risk: maxRisk
+  });
+  
   strategy.on('log', (log) => {
     const type = log.type === 'debug' ? 'debug' : log.type === 'info' ? 'analysis' : 'system';
     ui.addLog(type, log.message);
+    sessionLogger.log(type.toUpperCase(), log.message);
   });
   
   const marketFeed = new MarketDataFeed();
@@ -101,6 +113,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     const signalLog = smartLogs.getSignalLog(dir, symbolCode, (signal.confidence || 0) * 100, strategyName);
     ui.addLog('signal', `${signalLog.message}`);
     ui.addLog('signal', signalLog.details);
+    sessionLogger.signal(dir, signal.entry, signal.confidence, signalLog.details);
     
     if (!running) {
       const riskLog = smartLogs.getRiskCheckLog(false, 'Algo stopped');
@@ -187,6 +200,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
         const entryLog = smartLogs.getEntryLog(direction.toUpperCase(), symbolCode, orderSize, entry);
         ui.addLog('fill_' + (direction === 'long' ? 'buy' : 'sell'), entryLog.message);
         ui.addLog('trade', entryLog.details);
+        sessionLogger.trade('ENTRY', direction.toUpperCase(), entry, orderSize, orderResult.orderId);
         
         // Bracket orders
         if (stopLoss && takeProfit) {
@@ -202,9 +216,11 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
         }
       } else {
         ui.addLog('error', `Order failed: ${orderResult.error}`);
+        sessionLogger.error('Order failed', orderResult.error);
       }
     } catch (e) {
       ui.addLog('error', `Order error: ${e.message}`);
+      sessionLogger.error('Order exception', e);
     }
     pendingOrder = false;
   });
@@ -264,12 +280,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       const buyPressure = totalVol > 0 ? (buyVolume / totalVol) * 100 : 50;
       const delta = buyVolume - sellVolume;
       
-      // Determine market bias
-      let bias = 'FLAT';
-      if (buyPressure > 55) bias = 'LONG';
-      else if (buyPressure < 45) bias = 'SHORT';
-      
-      // Log bias when it changes, or every 5 seconds if strong signal
+      let bias = buyPressure > 55 ? 'LONG' : buyPressure < 45 ? 'SHORT' : 'FLAT';
       const strongSignal = Math.abs(delta) > 20 || buyPressure > 65 || buyPressure < 35;
       if (bias !== lastBias || (strongSignal && currentSecond % 5 === 0) || (!strongSignal && currentSecond % 15 === 0)) {
         const biasLog = smartLogs.getMarketBiasLog(bias, delta, buyPressure);
@@ -282,64 +293,36 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       if (currentSecond % 30 === 0) {
         const state = strategy.getAnalysisState?.(contractId, price);
         if (state) {
+          sessionLogger.state(state.activeZones || 0, state.swingsDetected || 0, barCount, lastBias);
           if (!state.ready) {
             ui.addLog('system', state.message);
           } else {
             const resStr = state.nearestResistance ? state.nearestResistance.toFixed(2) : '--';
             const supStr = state.nearestSupport ? state.nearestSupport.toFixed(2) : '--';
             
-            // Combined single line for zones info
             ui.addLog('analysis', `Zones: ${state.activeZones} | R: ${resStr} | S: ${supStr} | Swings: ${state.swingsDetected}`);
-            
-            // HF-grade proximity logs with precise distance info
             if (price && state.nearestResistance) {
-              const gapR = state.nearestResistance - price;
-              const ticksR = Math.round(gapR / tickSize);
-              const dirR = gapR > 0 ? 'below' : 'above';
-              const absTicksR = Math.abs(ticksR);
-              if (absTicksR <= 50) { // Only show if within 50 ticks
-                ui.addLog('analysis', `PROX R: ${Math.abs(gapR).toFixed(2)} pts (${absTicksR} ticks ${dirR}) | Trigger: price must sweep ABOVE then reject`);
-              }
+              const gapR = state.nearestResistance - price, ticksR = Math.abs(Math.round(gapR / tickSize));
+              if (ticksR <= 50) ui.addLog('analysis', `PROX R: ${Math.abs(gapR).toFixed(2)} pts (${ticksR} ticks) | Sweep ABOVE then reject`);
             }
             if (price && state.nearestSupport) {
-              const gapS = price - state.nearestSupport;
-              const ticksS = Math.round(gapS / tickSize);
-              const dirS = gapS > 0 ? 'above' : 'below';
-              const absTicksS = Math.abs(ticksS);
-              if (absTicksS <= 50) { // Only show if within 50 ticks
-                ui.addLog('analysis', `PROX S: ${Math.abs(gapS).toFixed(2)} pts (${absTicksS} ticks ${dirS}) | Trigger: price must sweep BELOW then reject`);
-              }
+              const gapS = price - state.nearestSupport, ticksS = Math.abs(Math.round(gapS / tickSize));
+              if (ticksS <= 50) ui.addLog('analysis', `PROX S: ${Math.abs(gapS).toFixed(2)} pts (${ticksS} ticks) | Sweep BELOW then reject`);
             }
-            
-            // Strategy status - what we're waiting for
-            if (state.activeZones === 0) {
-              ui.addLog('risk', 'Building liquidity map - scanning swing points for zone formation...');
-            } else if (!state.nearestSupport && !state.nearestResistance) {
-              ui.addLog('risk', 'Zones detected but outside proximity range - waiting for price approach');
-            } else if (!state.nearestSupport) {
-              ui.addLog('analysis', 'Monitoring resistance for HIGH SWEEP opportunity (SHORT entry on rejection)');
-            } else if (!state.nearestResistance) {
-              ui.addLog('analysis', 'Monitoring support for LOW SWEEP opportunity (LONG entry on rejection)');
-            } else {
-              ui.addLog('ready', 'Both zones active - monitoring for liquidity sweep with rejection confirmation');
-            }
+            if (state.activeZones === 0) ui.addLog('risk', 'Building liquidity map...');
+            else if (!state.nearestSupport && !state.nearestResistance) ui.addLog('risk', 'Zones outside range');
+            else if (!state.nearestSupport) ui.addLog('analysis', 'Monitoring R for SHORT sweep');
+            else if (!state.nearestResistance) ui.addLog('analysis', 'Monitoring S for LONG sweep');
+            else ui.addLog('ready', 'Both zones active - awaiting sweep');
           }
         }
       }
       
-      // Scanning log every 20 seconds (when no position)
-      if (currentSecond % 20 === 0 && currentPosition === 0) {
-        const scanLog = smartLogs.getScanningLog(true);
-        ui.addLog('system', scanLog.message);
-      }
-      
-      // Tick flow log every 45 seconds (less frequent)
-      if (currentSecond % 45 === 0) {
-        const tickLog = smartLogs.getTickFlowLog(tickCount, ticksPerSecond);
-        ui.addLog('debug', `${tickLog.message} ${tickLog.details}`);
-      }
-      
-      // AI Agents status log every 60 seconds
+      // Scanning log every 20 seconds
+      if (currentSecond % 20 === 0 && currentPosition === 0) ui.addLog('system', smartLogs.getScanningLog(true).message);
+      // Tick flow log every 45 seconds
+      if (currentSecond % 45 === 0) { const t = smartLogs.getTickFlowLog(tickCount, ticksPerSecond); ui.addLog('debug', `${t.message} ${t.details}`); }
+      // AI Agents status every 60 seconds
       if (currentSecond % 60 === 0 && supervisionEnabled && supervisionEngine) {
         const status = supervisionEngine.getStatus();
         const agentNames = status.agents.map(a => a.name.split(' ')[0]).join(', ');
@@ -371,18 +354,12 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       timestamp: tick.timestamp || Date.now()
     });
     
-    // Calculate latency from Rithmic ssboe/usecs (exchange timestamp)
-    // Priority: ssboe/usecs (real exchange time) > inter-tick timing (fallback)
+    // Calculate latency from Rithmic ssboe/usecs or inter-tick timing
     if (tick.ssboe && tick.usecs !== undefined) {
-      // Rithmic sends ssboe (seconds since epoch) and usecs (microseconds)
       const tickTimeMs = (tick.ssboe * 1000) + Math.floor(tick.usecs / 1000);
       const latency = now - tickTimeMs;
-      // Only update if reasonable (0-5000ms) - avoids clock sync issues
-      if (latency >= 0 && latency < 5000) {
-        stats.latency = latency;
-      }
+      if (latency >= 0 && latency < 5000) stats.latency = latency;
     } else if (lastTickTime > 0) {
-      // Fallback: estimate from inter-tick timing
       const timeSinceLastTick = now - lastTickTime;
       if (timeSinceLastTick < 100) {
         tickLatencies.push(timeSinceLastTick);
@@ -393,10 +370,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     lastTickTime = now;
   });
   
-  marketFeed.on('connected', () => { 
-    stats.connected = true; 
-    ui.addLog('connected', 'Market data connected');
-  });
+  marketFeed.on('connected', () => { stats.connected = true; ui.addLog('connected', 'Market data connected'); });
   marketFeed.on('subscribed', (symbol) => ui.addLog('system', `Subscribed: ${symbol}`));
   marketFeed.on('error', (err) => ui.addLog('error', `Market: ${err.message}`));
   marketFeed.on('disconnected', () => { stats.connected = false; ui.addLog('error', 'Market disconnected'); });
@@ -451,10 +425,14 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       if (stats.pnl >= dailyTarget) {
         stopReason = 'target'; running = false;
         ui.addLog('fill_win', `TARGET REACHED! +$${stats.pnl.toFixed(2)}`);
+        sessionLogger.log('TARGET', `Daily target reached: +$${stats.pnl.toFixed(2)}`);
       } else if (stats.pnl <= -maxRisk) {
         stopReason = 'risk'; running = false;
         ui.addLog('fill_loss', `MAX RISK! -$${Math.abs(stats.pnl).toFixed(2)}`);
+        sessionLogger.log('RISK', `Max risk hit: -$${Math.abs(stats.pnl).toFixed(2)}`);
       }
+      // Log P&L every poll
+      sessionLogger.pnl(stats.pnl, 0, currentPosition);
     } catch (e) { /* silent */ }
   };
   
@@ -496,7 +474,13 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   const durationMs = Date.now() - stats.startTime;
   const h = Math.floor(durationMs / 3600000), m = Math.floor((durationMs % 3600000) / 60000), s = Math.floor((durationMs % 60000) / 1000);
   stats.duration = h > 0 ? `${h}h ${m}m ${s}s` : m > 0 ? `${m}m ${s}s` : `${s}s`;
+  
+  // End session logger and get log file path
+  const sessionLogPath = sessionLogger.end(stats, stopReason?.toUpperCase() || 'MANUAL');
   renderSessionSummary(stats, stopReason);
+  if (sessionLogPath) {
+    console.log(`\n  Session log: ${sessionLogPath}`);
+  }
   
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   await new Promise(resolve => {
