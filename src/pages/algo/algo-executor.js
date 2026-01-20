@@ -233,7 +233,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   let lastLogSecond = 0;
   let buyVolume = 0;
   let sellVolume = 0;
-  let barCount = 0;
+  
   
   let lastTickTime = 0;
   let tickLatencies = [];
@@ -293,9 +293,10 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       if (currentSecond % 30 === 0) {
         const state = strategy.getAnalysisState?.(contractId, price);
         if (state) {
-          sessionLogger.state(state.activeZones || 0, state.swingsDetected || 0, barCount, lastBias);
+          const bars = state.barsProcessed || 0;
+          sessionLogger.state(state.activeZones || 0, state.swingsDetected || 0, bars, lastBias);
           if (!state.ready) {
-            ui.addLog('system', state.message);
+            ui.addLog('system', `${state.message} (${bars} bars)`);
           } else {
             const resStr = state.nearestResistance ? state.nearestResistance.toFixed(2) : '--';
             const supStr = state.nearestSupport ? state.nearestSupport.toFixed(2) : '--';
