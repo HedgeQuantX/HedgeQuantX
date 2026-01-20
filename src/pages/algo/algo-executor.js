@@ -395,11 +395,22 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     await marketFeed.connect(rithmicCredentials);
     await marketFeed.subscribe(symbolCode, contract.exchange || 'CME');
     
-    // HQX-2B strategy warmup message
-    // Note: HISTORY_PLANT returns limited ticks (10k max = ~1 second of data)
-    // which is not enough for 1-min bar aggregation. Strategy warms up with live data.
-    if (strategyId === 'hqx-2b') {
-      ui.addLog('system', 'HQX-2B warming up - needs ~3 min for first signals...');
+    // Load historical bars for instant warmup
+    if (strategy.preloadBars) {
+      ui.addLog('system', 'Loading historical data...');
+      try {
+        const histBars = await marketFeed.getHistoricalBars(symbolCode, contract.exchange || 'CME', 30);
+        if (histBars && histBars.length > 0) {
+          strategy.preloadBars(contractId, histBars);
+          ui.addLog('system', `Loaded ${histBars.length} historical bars - ready to trade!`);
+          sessionLogger.log('HISTORY', `Preloaded ${histBars.length} bars`);
+        } else {
+          ui.addLog('system', 'No history available - warming up with live data...');
+        }
+      } catch (histErr) {
+        ui.addLog('system', `History load failed: ${histErr.message} - using live data`);
+        sessionLogger.log('HISTORY', `Failed: ${histErr.message}`);
+      }
     }
   } catch (e) {
     ui.addLog('error', `Failed to connect: ${e.message}`);
