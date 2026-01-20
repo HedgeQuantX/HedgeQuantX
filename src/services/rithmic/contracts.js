@@ -8,6 +8,7 @@
 const { decodeFrontMonthContract } = require('./protobuf');
 const { TIMEOUTS, CACHE } = require('../../config/settings');
 const { logger } = require('../../utils/logger');
+const { getContractDescription, getTickSize } = require('../../config/constants');
 
 const log = logger.scope('Rithmic:Contracts');
 
@@ -155,12 +156,15 @@ const fetchAllFrontMonths = (service) => {
           const productKey = `${baseSymbol}:${contract.exchange}`;
           const product = productsToCheck.get(productKey);
 
-          // 100% API data - no static symbol info
+          // Use our descriptions for better display names
+          const apiName = product?.productName || baseSymbol;
+          const displayName = getContractDescription(baseSymbol) || apiName;
           results.push({
             symbol: contract.symbol,
             baseSymbol,
-            name: product?.productName || baseSymbol,
+            name: displayName,
             exchange: contract.exchange,
+            tickSize: getTickSize(baseSymbol),
           });
         }
 

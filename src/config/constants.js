@@ -85,6 +85,29 @@ const CONTRACT_DESCRIPTIONS = {
 
 const getContractDescription = (baseSymbol) => CONTRACT_DESCRIPTIONS[baseSymbol] || baseSymbol;
 
+// Tick sizes for common contracts (used when API doesn't provide)
+const CONTRACT_TICK_SIZES = {
+  // Equity Index
+  ES: 0.25, MES: 0.25, NQ: 0.25, MNQ: 0.25,
+  RTY: 0.10, M2K: 0.10, YM: 1.00, MYM: 1.00,
+  // Metals
+  GC: 0.10, MGC: 0.10, '1OZ': 0.10, SI: 0.005, SIL: 0.001,
+  HG: 0.0005, MHG: 0.0005, PL: 0.10, PA: 0.10,
+  // Energy
+  CL: 0.01, MCL: 0.01, NG: 0.001, BZ: 0.01,
+  // Currencies
+  '6E': 0.00005, M6E: 0.0001, '6B': 0.0001, '6J': 0.0000005,
+  '6A': 0.0001, '6C': 0.00005, '6S': 0.0001,
+  // Crypto
+  BTC: 5.00, MBT: 5.00, ETH: 0.50, MET: 0.50,
+  // Treasuries
+  ZB: 0.03125, ZN: 0.015625, ZF: 0.0078125, ZT: 0.0078125,
+  // Grains
+  ZC: 0.25, ZS: 0.25, ZW: 0.25,
+};
+
+const getTickSize = (baseSymbol) => CONTRACT_TICK_SIZES[baseSymbol] || 0.25;
+
 module.exports = {
   ACCOUNT_STATUS,
   ACCOUNT_TYPE,
@@ -92,5 +115,7 @@ module.exports = {
   ORDER_TYPE,
   ORDER_SIDE,
   CONTRACT_DESCRIPTIONS,
+  CONTRACT_TICK_SIZES,
   getContractDescription,
+  getTickSize,
 };
