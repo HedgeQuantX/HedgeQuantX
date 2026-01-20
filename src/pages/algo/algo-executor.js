@@ -277,9 +277,16 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       else if (price < lastPrice) sellVolume += volume;
     }
     
-    // Log first tick
+    // Log first tick and periodic tick count
     if (tickCount === 1) {
       ui.addLog('connected', `First tick @ ${price?.toFixed(2) || 'N/A'}`);
+    }
+    
+    // Log tick count every 10 seconds to confirm data flow
+    if (tickCount % 1000 === 0 || (currentSecond % 10 === 0 && currentSecond !== lastLogSecond)) {
+      const state = strategy.getAnalysisState?.(contractId, price);
+      const bars = state?.barsProcessed || 0;
+      ui.addLog('debug', `Ticks: ${tickCount} | Bars: ${bars} | Price: ${price?.toFixed(2)}`);
     }
     
     // === SMART LOGS - REDUCED FREQUENCY ===
@@ -291,12 +298,15 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       const delta = buyVolume - sellVolume;
       
       let bias = buyPressure > 55 ? 'LONG' : buyPressure < 45 ? 'SHORT' : 'FLAT';
-      const strongSignal = Math.abs(delta) > 20 || buyPressure > 65 || buyPressure < 35;
-      if (bias !== lastBias || (strongSignal && currentSecond % 5 === 0) || (!strongSignal && currentSecond % 15 === 0)) {
+      // Log bias every 5 seconds or when it changes
+      if (bias !== lastBias || currentSecond % 5 === 0) {
         const biasLog = smartLogs.getMarketBiasLog(bias, delta, buyPressure);
         const biasType = bias === 'LONG' ? 'bullish' : bias === 'SHORT' ? 'bearish' : 'analysis';
         ui.addLog(biasType, `${biasLog.message} ${biasLog.details || ''}`);
         lastBias = bias;
+        // Reset volume after logging
+        buyVolume = 0;
+        sellVolume = 0;
       }
       
       // Strategy state log every 30 seconds (reduced frequency)
@@ -329,28 +339,8 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
         }
       }
       
-      // Scanning log every 20 seconds
-      if (currentSecond % 20 === 0 && currentPosition === 0) ui.addLog('system', smartLogs.getScanningLog(true).message);
-      // Tick flow log every 45 seconds
-      if (currentSecond % 45 === 0) { const t = smartLogs.getTickFlowLog(tickCount, ticksPerSecond); ui.addLog('debug', `${t.message} ${t.details}`); }
-      // AI Agents status every 60 seconds
-      if (currentSecond % 60 === 0 && supervisionEnabled && supervisionEngine) {
-        const status = supervisionEngine.getStatus();
-        const agentNames = status.agents.map(a => a.name.split(' ')[0]).join(', ');
-        ui.addLog('analysis', `AI Supervision active: ${agentNames} (${status.availableAgents} agents monitoring)`);
-      }
-      
-      // Strategy health status every 2 minutes (confirms strategy is working)
-      if (currentSecond % 120 === 0 && strategy.getHealthStatus) {
-        const health = strategy.getHealthStatus(contractId);
-        const uptime = Math.floor(health.uptime / 60000);
-        const status = health.healthy ? 'OK' : 'WARMING';
-        ui.addLog('ready', `HEALTH: ${status} | Bars: ${health.barsTotal} | Zones: ${health.zonesTotal} (R:${health.zonesResistance}/S:${health.zonesSupport}) | Swings: ${health.swingsTotal} | Uptime: ${uptime}m`);
-      }
-      
-      // Reset volume counters
-      buyVolume = 0;
-      sellVolume = 0;
+      // AI status every 60s
+      if (currentSecond % 60 === 0 && supervisionEnabled && supervisionEngine) ui.addLog('analysis', `AI: ${supervisionEngine.getStatus().agents.map(a => a.name.split(' ')[0]).join(', ')}`);
     }
     
     lastPrice = price;
