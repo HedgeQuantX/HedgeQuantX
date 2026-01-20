@@ -234,7 +234,9 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   let lastAsk = null;
   let ticksPerSecond = 0;
   let lastTickSecond = Math.floor(Date.now() / 1000);
-  let lastLogSecond = 0;
+  let lastBiasLogSecond = 0;
+  let lastDebugLogSecond = 0;
+  let lastStateLogSecond = 0;
   let buyVolume = 0;
   let sellVolume = 0;
   
@@ -283,64 +285,66 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     }
     
     // Log tick count every 10 seconds to confirm data flow
-    if (tickCount % 1000 === 0 || (currentSecond % 10 === 0 && currentSecond !== lastLogSecond)) {
+    if (currentSecond - lastDebugLogSecond >= 10) {
+      lastDebugLogSecond = currentSecond;
       const state = strategy.getAnalysisState?.(contractId, price);
       const bars = state?.barsProcessed || 0;
       ui.addLog('debug', `Ticks: ${tickCount} | Bars: ${bars} | Price: ${price?.toFixed(2)}`);
     }
     
     // === SMART LOGS - REDUCED FREQUENCY ===
-    if (currentSecond !== lastLogSecond && tickCount > 1) {
-      lastLogSecond = currentSecond;
+    // Log bias every 5 seconds
+    if (currentSecond - lastBiasLogSecond >= 5 && tickCount > 1) {
+      lastBiasLogSecond = currentSecond;
       
       const totalVol = buyVolume + sellVolume;
       const buyPressure = totalVol > 0 ? (buyVolume / totalVol) * 100 : 50;
       const delta = buyVolume - sellVolume;
       
       let bias = buyPressure > 55 ? 'LONG' : buyPressure < 45 ? 'SHORT' : 'FLAT';
-      // Log bias every 5 seconds or when it changes
-      if (bias !== lastBias || currentSecond % 5 === 0) {
-        const biasLog = smartLogs.getMarketBiasLog(bias, delta, buyPressure);
-        const biasType = bias === 'LONG' ? 'bullish' : bias === 'SHORT' ? 'bearish' : 'analysis';
-        ui.addLog(biasType, `${biasLog.message} ${biasLog.details || ''}`);
-        lastBias = bias;
-        // Reset volume after logging
-        buyVolume = 0;
-        sellVolume = 0;
-      }
-      
-      // Strategy state log every 30 seconds (reduced frequency)
-      if (currentSecond % 30 === 0) {
-        const state = strategy.getAnalysisState?.(contractId, price);
-        if (state) {
-          const bars = state.barsProcessed || 0;
-          sessionLogger.state(state.activeZones || 0, state.swingsDetected || 0, bars, lastBias);
-          if (!state.ready) {
-            ui.addLog('system', `${state.message} (${bars} bars)`);
-          } else {
-            const resStr = state.nearestResistance ? state.nearestResistance.toFixed(2) : '--';
-            const supStr = state.nearestSupport ? state.nearestSupport.toFixed(2) : '--';
-            
-            ui.addLog('analysis', `Zones: ${state.activeZones} | R: ${resStr} | S: ${supStr} | Swings: ${state.swingsDetected}`);
-            if (price && state.nearestResistance) {
-              const gapR = state.nearestResistance - price, ticksR = Math.abs(Math.round(gapR / tickSize));
-              if (ticksR <= 50) ui.addLog('analysis', `PROX R: ${Math.abs(gapR).toFixed(2)} pts (${ticksR} ticks) | Sweep ABOVE then reject`);
-            }
-            if (price && state.nearestSupport) {
-              const gapS = price - state.nearestSupport, ticksS = Math.abs(Math.round(gapS / tickSize));
-              if (ticksS <= 50) ui.addLog('analysis', `PROX S: ${Math.abs(gapS).toFixed(2)} pts (${ticksS} ticks) | Sweep BELOW then reject`);
-            }
-            if (state.activeZones === 0) ui.addLog('risk', 'Building liquidity map...');
-            else if (!state.nearestSupport && !state.nearestResistance) ui.addLog('risk', 'Zones outside range');
-            else if (!state.nearestSupport) ui.addLog('analysis', 'Monitoring R for SHORT sweep');
-            else if (!state.nearestResistance) ui.addLog('analysis', 'Monitoring S for LONG sweep');
-            else ui.addLog('ready', 'Both zones active - awaiting sweep');
+      const biasLog = smartLogs.getMarketBiasLog(bias, delta, buyPressure);
+      const biasType = bias === 'LONG' ? 'bullish' : bias === 'SHORT' ? 'bearish' : 'analysis';
+      ui.addLog(biasType, `${biasLog.message} ${biasLog.details || ''}`);
+      lastBias = bias;
+      // Reset volume after logging to avoid accumulation
+      buyVolume = 0;
+      sellVolume = 0;
+    }
+    
+    // Strategy state log every 30 seconds
+    if (currentSecond - lastStateLogSecond >= 30 && tickCount > 1) {
+      lastStateLogSecond = currentSecond;
+      const state = strategy.getAnalysisState?.(contractId, price);
+      if (state) {
+        const bars = state.barsProcessed || 0;
+        sessionLogger.state(state.activeZones || 0, state.swingsDetected || 0, bars, lastBias);
+        if (!state.ready) {
+          ui.addLog('system', `${state.message} (${bars} bars)`);
+        } else {
+          const resStr = state.nearestResistance ? state.nearestResistance.toFixed(2) : '--';
+          const supStr = state.nearestSupport ? state.nearestSupport.toFixed(2) : '--';
+          
+          ui.addLog('analysis', `Zones: ${state.activeZones} | R: ${resStr} | S: ${supStr} | Swings: ${state.swingsDetected}`);
+          if (price && state.nearestResistance) {
+            const gapR = state.nearestResistance - price, ticksR = Math.abs(Math.round(gapR / tickSize));
+            if (ticksR <= 50) ui.addLog('analysis', `PROX R: ${Math.abs(gapR).toFixed(2)} pts (${ticksR} ticks) | Sweep ABOVE then reject`);
           }
+          if (price && state.nearestSupport) {
+            const gapS = price - state.nearestSupport, ticksS = Math.abs(Math.round(gapS / tickSize));
+            if (ticksS <= 50) ui.addLog('analysis', `PROX S: ${Math.abs(gapS).toFixed(2)} pts (${ticksS} ticks) | Sweep BELOW then reject`);
+          }
+          if (state.activeZones === 0) ui.addLog('risk', 'Building liquidity map...');
+          else if (!state.nearestSupport && !state.nearestResistance) ui.addLog('risk', 'Zones outside range');
+          else if (!state.nearestSupport) ui.addLog('analysis', 'Monitoring R for SHORT sweep');
+          else if (!state.nearestResistance) ui.addLog('analysis', 'Monitoring S for LONG sweep');
+          else ui.addLog('ready', 'Both zones active - awaiting sweep');
         }
       }
-      
-      // AI status every 60s
-      if (currentSecond % 60 === 0 && supervisionEnabled && supervisionEngine) ui.addLog('analysis', `AI: ${supervisionEngine.getStatus().agents.map(a => a.name.split(' ')[0]).join(', ')}`);
+    }
+    
+    // AI status every 60s
+    if (currentSecond % 60 === 0 && supervisionEnabled && supervisionEngine) {
+      ui.addLog('analysis', `AI: ${supervisionEngine.getStatus().agents.map(a => a.name.split(' ')[0]).join(', ')}`);
     }
     
     lastPrice = price;
