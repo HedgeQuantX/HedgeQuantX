@@ -388,6 +388,10 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     if (!rithmicCredentials) {
       throw new Error('Rithmic credentials not available');
     }
+    // Disconnect service's TICKER_PLANT to avoid conflict (Rithmic allows only 1 TICKER connection per user)
+    if (service.disconnectTicker) {
+      await service.disconnectTicker();
+    }
     await marketFeed.connect(rithmicCredentials);
     await marketFeed.subscribe(symbolCode, contract.exchange || 'CME');
     

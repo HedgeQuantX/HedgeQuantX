@@ -207,6 +207,12 @@ class RithmicService extends EventEmitter {
 
   async connectTicker(username, password) {
     try {
+      // Clean up existing connection first
+      if (this.tickerConn) {
+        this.tickerConn.removeAllListeners();
+        try { await this.tickerConn.disconnect(); } catch (_) {}
+      }
+      
       this.tickerConn = new RithmicConnection();
       
       const config = {
@@ -220,12 +226,8 @@ class RithmicService extends EventEmitter {
 
       await this.tickerConn.connect(config);
       
-      // Auto-reconnect Ticker on disconnect
-      this.tickerConn.on('disconnected', ({ code }) => {
-        if (this.credentials && code !== 1000) {
-          setTimeout(() => this.connectTicker(this.credentials.username, this.credentials.password), 3000);
-        }
-      });
+      // NO auto-reconnect for tickerConn - it's only used for contract search
+      // MarketDataFeed handles its own TICKER_PLANT connection for algo trading
 
       return new Promise((resolve) => {
         const timeout = setTimeout(() => {
@@ -249,6 +251,17 @@ class RithmicService extends EventEmitter {
     } catch (err) {
       log.warn('TICKER connection error', { error: err.message });
       return false;
+    }
+  }
+  
+  /**
+   * Disconnect TICKER_PLANT to allow MarketDataFeed to use it exclusively
+   */
+  async disconnectTicker() {
+    if (this.tickerConn) {
+      this.tickerConn.removeAllListeners();
+      try { await this.tickerConn.disconnect(); } catch (_) {}
+      this.tickerConn = null;
     }
   }
 
