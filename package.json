@@ -1,6 +1,6 @@
 {
   "name": "hedgequantx",
-  "version": "2.9.122",
+  "version": "2.9.123",
   "description": "HedgeQuantX - Prop Futures Trading CLI",
   "main": "src/app.js",
   "bin": {

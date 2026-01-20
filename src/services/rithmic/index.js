@@ -98,6 +98,18 @@ class RithmicService extends EventEmitter {
 
       await this.orderConn.connect(config);
       this.orderConn.on('message', createOrderHandler(this));
+      
+      // Auto-reconnect on disconnect
+      this.orderConn.on('disconnected', async ({ code, reason }) => {
+        log.warn('ORDER_PLANT disconnected', { code, reason });
+        this.emit('disconnected', { plant: 'ORDER', code, reason });
+        
+        // Auto-reconnect if we have credentials (not manual disconnect)
+        if (this.credentials && code !== 1000) {
+          log.info('Attempting auto-reconnect in 3s...');
+          setTimeout(() => this._autoReconnect(), 3000);
+        }
+      });
 
       return new Promise((resolve) => {
         const timeout = setTimeout(() => {
@@ -163,6 +175,13 @@ class RithmicService extends EventEmitter {
 
       await this.pnlConn.connect(config);
       this.pnlConn.on('message', createPnLHandler(this));
+      
+      // Auto-reconnect PnL on disconnect
+      this.pnlConn.on('disconnected', ({ code }) => {
+        if (this.credentials && code !== 1000) {
+          setTimeout(() => this.connectPnL(this.credentials.username, this.credentials.password), 3000);
+        }
+      });
 
       return new Promise((resolve) => {
         const timeout = setTimeout(() => resolve(false), TIMEOUTS.RITHMIC_PNL);
@@ -200,6 +219,13 @@ class RithmicService extends EventEmitter {
       };
 
       await this.tickerConn.connect(config);
+      
+      // Auto-reconnect Ticker on disconnect
+      this.tickerConn.on('disconnected', ({ code }) => {
+        if (this.credentials && code !== 1000) {
+          setTimeout(() => this.connectTicker(this.credentials.username, this.credentials.password), 3000);
+        }
+      });
 
       return new Promise((resolve) => {
         const timeout = setTimeout(() => {
@@ -383,9 +409,42 @@ class RithmicService extends EventEmitter {
     return { isOpen: true, message: 'Market is open' };
   }
 
+  // ==================== AUTO-RECONNECT ====================
+
+  async _autoReconnect() {
+    if (!this.credentials) {
+      log.warn('Cannot auto-reconnect: no credentials');
+      return;
+    }
+    
+    const { username, password } = this.credentials;
+    log.info('Auto-reconnecting...');
+    this.emit('reconnecting');
+    
+    try {
+      const result = await this.login(username, password);
+      if (result.success) {
+        log.info('Auto-reconnect successful');
+        this.emit('reconnected', { accounts: result.accounts });
+      } else {
+        log.warn('Auto-reconnect failed', { error: result.error });
+        this.emit('reconnectFailed', { error: result.error });
+        // Retry in 10s
+        setTimeout(() => this._autoReconnect(), 10000);
+      }
+    } catch (err) {
+      log.error('Auto-reconnect error', { error: err.message });
+      this.emit('reconnectFailed', { error: err.message });
+      // Retry in 10s
+      setTimeout(() => this._autoReconnect(), 10000);
+    }
+  }
+
   // ==================== CLEANUP ====================
 
   async disconnect() {
+    // Clear credentials to prevent auto-reconnect on manual disconnect
+    this.credentials = null;
     const connections = [this.orderConn, this.pnlConn, this.tickerConn];
     
     for (const conn of connections) {
