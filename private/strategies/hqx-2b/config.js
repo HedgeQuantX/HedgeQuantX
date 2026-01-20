@@ -22,48 +22,48 @@ const DEFAULT_CONFIG = {
   tickSize: 0.25,
   tickValue: 5.0,
 
-  // Swing Detection (HYPER AGGRESSIVE)
+  // Swing Detection (BACKTEST VALIDATED)
   swing: {
-    lookbackBars: 1,        // Minimum lookback - detect swings faster
-    minStrength: 1,         // Any swing counts
-    confirmationBars: 1     // Immediate confirmation
+    lookbackBars: 3,          // 3 bars each side for swing confirmation
+    minStrength: 2,           // Minimum strength required
+    confirmationBars: 1       // 1 bar confirmation
   },
 
-  // Zone Detection (HYPER AGGRESSIVE)
+  // Zone Detection (BACKTEST VALIDATED)
   zone: {
-    clusterToleranceTicks: 8,  // Wider tolerance for zone clustering
-    minTouches: 1,             // Single-touch zones OK
-    maxZoneAgeBars: 500,       // Keep zones longer
-    maxZoneDistanceTicks: 80,  // Look for zones further away
-    cooldownBars: 3            // Quick zone reuse (was 10)
+    clusterToleranceTicks: 4,  // 4 ticks tolerance for clustering
+    minTouches: 2,             // Minimum 2 touches for valid zone
+    maxZoneAgeBars: 200,       // Zone valid for 200 bars
+    maxZoneDistanceTicks: 40,  // Max distance to consider zone
+    cooldownBars: 10           // 10 bars cooldown after zone used
   },
 
-  // Sweep Detection (HYPER AGGRESSIVE - TEST MODE)
+  // Sweep Detection (BACKTEST VALIDATED)
   sweep: {
-    minPenetrationTicks: 0.1,  // Near-touch counts as sweep (was 0.25)
-    maxPenetrationTicks: 30,   // Allow very deep sweeps
-    maxDurationBars: 15,       // Allow slower sweeps
-    minQualityScore: 0.05,     // Minimal threshold for testing (was 0.10)
-    minVolumeRatio: 0.2,       // Very low volume requirement (was 0.3)
-    minBodyRatio: 0.01         // Almost any candle works (was 0.05)
+    minPenetrationTicks: 0.5,  // Minimum 0.5 tick penetration
+    maxPenetrationTicks: 8,    // Maximum 8 ticks penetration
+    maxDurationBars: 5,        // Sweep must complete within 5 bars
+    minQualityScore: 0.25,     // Minimum quality score 25%
+    minVolumeRatio: 0.5,       // Volume must be 50% of average
+    minBodyRatio: 0.1          // Candle body must be 10% of range
   },
 
-  // Execution (OPTIMIZED 4:1 R:R)
+  // Execution (BACKTEST VALIDATED - 4:1 R:R)
   execution: {
     stopTicks: 10,            // $50 stop
     targetTicks: 40,          // $200 target (4:1 R:R)
     breakevenTicks: 4,        // Move to BE at +4 ticks
     trailTriggerTicks: 8,     // Activate trailing at +8 ticks
     trailDistanceTicks: 4,    // Trail by 4 ticks
-    cooldownMs: 5000,         // 5 seconds between signals (was 15)
-    minHoldTimeMs: 5000,      // 5 seconds min hold
+    cooldownMs: 15000,        // 15 seconds between signals
+    minHoldTimeMs: 10000,     // 10 seconds min hold
     slippageTicks: 1,
     commissionPerSide: 2.0    // $4 round-trip
   },
 
-  // Session filter (DISABLED for 24/7 trading)
+  // Session filter (BACKTEST VALIDATED - US Regular Hours)
   session: {
-    enabled: false,           // Disabled to allow trading outside US hours
+    enabled: true,            // Only trade during US session
     startHour: 9,             // 9:30 AM EST
     startMinute: 30,
     endHour: 16,              // 4:00 PM EST

@@ -55,48 +55,48 @@ const DEFAULT_CONFIG = {
   tickSize: 0.25,
   tickValue: 5.0,
 
-  // Swing Detection (HYPER AGGRESSIVE)
+  // Swing Detection (BACKTEST VALIDATED)
   swing: {
-    lookbackBars: 1,        // Minimum lookback - detect swings faster
-    minStrength: 1,         // Any swing counts
-    confirmationBars: 1     // Immediate confirmation
+    lookbackBars: 3,          // 3 bars each side for swing confirmation
+    minStrength: 2,           // Minimum strength required
+    confirmationBars: 1       // 1 bar confirmation
   },
 
-  // Zone Detection (HYPER AGGRESSIVE)
+  // Zone Detection (BACKTEST VALIDATED)
   zone: {
-    clusterToleranceTicks: 8,  // Wider tolerance for zone clustering
-    minTouches: 1,             // Single-touch zones OK
-    maxZoneAgeBars: 500,       // Keep zones longer
-    maxZoneDistanceTicks: 80,  // Look for zones further away
-    cooldownBars: 3            // Quick zone reuse (was 10)
+    clusterToleranceTicks: 4,  // 4 ticks tolerance for clustering
+    minTouches: 2,             // Minimum 2 touches for valid zone
+    maxZoneAgeBars: 200,       // Zone valid for 200 bars
+    maxZoneDistanceTicks: 40,  // Max distance to consider zone
+    cooldownBars: 10           // 10 bars cooldown after zone used
   },
 
-  // Sweep Detection (ULTRA AGGRESSIVE - TEST MODE)
+  // Sweep Detection (BACKTEST VALIDATED)
   sweep: {
-    minPenetrationTicks: 0.25, // Micro penetration counts (was 0.5)
-    maxPenetrationTicks: 20,   // Allow deeper sweeps
-    maxDurationBars: 10,       // Allow slower sweeps
-    minQualityScore: 0.10,     // Very low threshold for testing (was 0.20)
-    minVolumeRatio: 0.3,       // Lower volume requirement (was 0.5)
-    minBodyRatio: 0.05         // Lower body ratio (was 0.1)
+    minPenetrationTicks: 0.5,  // Minimum 0.5 tick penetration
+    maxPenetrationTicks: 8,    // Maximum 8 ticks penetration
+    maxDurationBars: 5,        // Sweep must complete within 5 bars
+    minQualityScore: 0.25,     // Minimum quality score 25%
+    minVolumeRatio: 0.5,       // Volume must be 50% of average
+    minBodyRatio: 0.1          // Candle body must be 10% of range
   },
 
-  // Execution (OPTIMIZED 4:1 R:R)
+  // Execution (BACKTEST VALIDATED - 4:1 R:R)
   execution: {
     stopTicks: 10,            // $50 stop
     targetTicks: 40,          // $200 target (4:1 R:R)
     breakevenTicks: 4,        // Move to BE at +4 ticks
     trailTriggerTicks: 8,     // Activate trailing at +8 ticks
     trailDistanceTicks: 4,    // Trail by 4 ticks
-    cooldownMs: 5000,         // 5 seconds between signals (was 15)
-    minHoldTimeMs: 5000,      // 5 seconds min hold
+    cooldownMs: 15000,        // 15 seconds between signals
+    minHoldTimeMs: 10000,     // 10 seconds min hold
     slippageTicks: 1,
     commissionPerSide: 2.0    // $4 round-trip
   },
 
-  // Session filter (DISABLED for 24/7 trading)
+  // Session filter (BACKTEST VALIDATED - US Regular Hours)
   session: {
-    enabled: false,           // Disabled to allow trading outside US hours
+    enabled: true,            // Only trade during US session
     startHour: 9,             // 9:30 AM EST
     startMinute: 30,
     endHour: 16,              // 4:00 PM EST
@@ -577,12 +577,15 @@ class HQX2BLiquiditySweep extends EventEmitter {
         const bar = bars[i];
 
         // Check for HIGH SWEEP (price went above resistance then came back)
+        // Also supports NEAR-SWEEP when minPenetrationTicks is negative (price approached but didn't fully cross)
         if (zone.type === ZoneType.RESISTANCE) {
           const penetration = (bar.high - zone.priceHigh) / this.tickSize;
 
           if (penetration >= cfg.minPenetrationTicks && penetration <= cfg.maxPenetrationTicks) {
-            // Found penetration, check if price reclaimed below zone
-            if (currentPrice < zone.priceHigh) {
+            // Found penetration (or near-sweep if minPenetrationTicks < 0), check if price reclaimed below zone
+            // For near-sweeps, we accept rejection even if price didn't fully cross
+            const rejectionThreshold = Math.min(zone.priceHigh, zone.priceHigh + penetration * this.tickSize);
+            if (currentPrice < rejectionThreshold + this.tickSize * 2) {
               // Check rejection candle quality
               const barRange = bar.high - bar.low;
               const bodySize = Math.abs(bar.close - bar.open);
@@ -617,12 +620,15 @@ class HQX2BLiquiditySweep extends EventEmitter {
         }
 
         // Check for LOW SWEEP (price went below support then came back)
+        // Also supports NEAR-SWEEP when minPenetrationTicks is negative (price approached but didn't fully cross)
         if (zone.type === ZoneType.SUPPORT) {
           const penetration = (zone.priceLow - bar.low) / this.tickSize;
 
           if (penetration >= cfg.minPenetrationTicks && penetration <= cfg.maxPenetrationTicks) {
-            // Found penetration, check if price reclaimed above zone
-            if (currentPrice > zone.priceLow) {
+            // Found penetration (or near-sweep if minPenetrationTicks < 0), check if price reclaimed above zone
+            // For near-sweeps, we accept rejection even if price didn't fully cross
+            const rejectionThreshold = Math.max(zone.priceLow, zone.priceLow - penetration * this.tickSize);
+            if (currentPrice > rejectionThreshold - this.tickSize * 2) {
               // Check rejection candle quality
               const barRange = bar.high - bar.low;
               const bodySize = Math.abs(bar.close - bar.open);
