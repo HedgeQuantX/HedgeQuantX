@@ -3,7 +3,7 @@
  * Single TICKER_PLANT connection, multiple strategy instances
  */
 const readline = require('readline');
-const { AlgoUI } = require('./ui');
+const { AlgoUI, renderSessionSummary } = require('./ui');
 const { loadStrategy } = require('../../lib/m');
 const { MarketDataFeed } = require('../../lib/data');
 const smartLogs = require('../../lib/smart-logs');
@@ -357,20 +357,16 @@ const executeMultiSymbol = async ({ service, account, contracts, config, strateg
   const s = Math.floor((durationMs % 60000) / 1000);
   globalStats.duration = h > 0 ? `${h}h ${m}m ${s}s` : m > 0 ? `${m}m ${s}s` : `${s}s`;
   
-  sessionLogger.end(globalStats, stopReason?.toUpperCase() || 'MANUAL');
+  const sessionLogPath = sessionLogger.end(globalStats, stopReason?.toUpperCase() || 'MANUAL');
   
-  console.log('\n');
-  console.log('  Multi-Symbol Session Summary');
-  console.log('  ────────────────────────────');
-  console.log(`  Symbols: ${globalStats.symbols}`);
-  console.log(`  Duration: ${globalStats.duration}`);
-  console.log(`  Trades: ${globalStats.trades} | P&L: $${globalStats.pnl.toFixed(2)}`);
-  console.log(`  Stop: ${stopReason || 'manual'}`);
-  console.log();
+  renderSessionSummary(globalStats, stopReason);
+  if (sessionLogPath) {
+    console.log(`\n  Session log: ${sessionLogPath}`);
+  }
   
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   await new Promise(resolve => {
-    rl.question('  Press Enter to return to menu...', () => { rl.close(); resolve(); });
+    rl.question('\n  Press Enter to return to menu...', () => { rl.close(); resolve(); });
   });
 };
 
