@@ -7,6 +7,7 @@ const { loadStrategy } = require('../../lib/m');
 const { MarketDataFeed } = require('../../lib/data');
 const { SupervisionEngine } = require('../../services/ai-supervision');
 const smartLogs = require('../../lib/smart-logs');
+const { createEngine: createLogsEngine } = require('../../lib/smart-logs-engine');
 const { sessionLogger } = require('../../services/session-logger');
 
 /**
@@ -45,29 +46,13 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   });
   
   const stats = {
-    accountName,
-    symbol: symbolName,
-    qty: contracts,
-    target: dailyTarget,
-    risk: maxRisk,
-    propfirm: account.propfirm || 'Unknown',
-    platform: account.platform || 'Rithmic',
-    pnl: 0,
-    trades: 0,
-    wins: 0,
-    losses: 0,
-    latency: 0,
-    connected: false,
-    startTime: Date.now()
+    accountName, symbol: symbolName, qty: contracts, target: dailyTarget, risk: maxRisk,
+    propfirm: account.propfirm || 'Unknown', platform: account.platform || 'Rithmic',
+    pnl: 0, trades: 0, wins: 0, losses: 0, latency: 0, connected: false, startTime: Date.now()
   };
   
-  let running = true;
-  let stopReason = null;
-  let startingPnL = null;
-  let currentPosition = 0;
-  let pendingOrder = false;
-  let tickCount = 0;
-  let lastBias = 'FLAT';
+  let running = true, stopReason = null, startingPnL = null;
+  let currentPosition = 0, pendingOrder = false, tickCount = 0, lastBias = 'FLAT';
   
   const aiContext = { recentTicks: [], recentSignals: [], recentTrades: [], maxTicks: 100 };
   
@@ -76,6 +61,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   
   // Set strategy for context-aware smart logs
   smartLogs.setStrategy(strategyId);
+  const logsEngine = createLogsEngine(strategyId);
   
   // Start session logger for persistent logs
   const logFile = sessionLogger.start({
@@ -234,28 +220,18 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     pendingOrder = false;
   });
   
-  let lastPrice = null;
-  let lastBid = null;
-  let lastAsk = null;
-  let ticksPerSecond = 0;
-  let lastTickSecond = Math.floor(Date.now() / 1000);
-  let lastBiasLogSecond = 0;
-  let lastDebugLogSecond = 0;
-  let lastStateLogSecond = 0;
-  let buyVolume = 0;
-  let sellVolume = 0;
-  
-  
-  let lastTickTime = 0;
-  let tickLatencies = [];
+  let lastPrice = null, lastBid = null, lastAsk = null;
+  let ticksPerSecond = 0, lastTickSecond = Math.floor(Date.now() / 1000);
+  let lastBiasLogSecond = 0, lastStateLogSecond = 0;
+  let buyVolume = 0, sellVolume = 0, lastTickTime = 0, tickLatencies = [];
   
   marketFeed.on('tick', (tick) => {
     tickCount++;
     const now = Date.now();
     const currentSecond = Math.floor(now / 1000);
     
-    // Debug first 5 ticks to verify data
-    if (tickCount <= 5) {
+    // Debug first tick
+    if (tickCount === 1) {
       const p = Number(tick.price) || Number(tick.tradePrice) || 'NULL';
       sessionLogger.log('TICK', `#${tickCount} price=${p} symbol=${tick.symbol || tick.contractId || 'N/A'}`);
     }
@@ -284,66 +260,27 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       else if (price < lastPrice) sellVolume += volume;
     }
     
-    // Log first tick and periodic tick count
+    // Log first tick
     if (tickCount === 1) {
       ui.addLog('connected', `First tick @ ${price?.toFixed(2) || 'N/A'}`);
     }
     
-    // Log tick count every 60 seconds to confirm data flow
-    if (currentSecond - lastDebugLogSecond >= 60) {
-      lastDebugLogSecond = currentSecond;
-      const state = strategy.getAnalysisState?.(contractId, price);
-      const bars = state?.barsProcessed || 0;
-      ui.addLog('debug', `Ticks: ${tickCount} | Bars: ${bars} | Price: ${price?.toFixed(2)}`);
-    }
-    
-    // === SMART LOGS - REDUCED FREQUENCY ===
-    // Log bias every 30 seconds (was 5s - too verbose)
+    // Update bias from volume + log tick stats (every 30s)
     if (currentSecond - lastBiasLogSecond >= 30 && tickCount > 1) {
       lastBiasLogSecond = currentSecond;
-      
       const totalVol = buyVolume + sellVolume;
       const buyPressure = totalVol > 0 ? (buyVolume / totalVol) * 100 : 50;
-      const delta = buyVolume - sellVolume;
-      
-      let bias = buyPressure > 55 ? 'LONG' : buyPressure < 45 ? 'SHORT' : 'FLAT';
-      const biasLog = smartLogs.getMarketBiasLog(bias, delta, buyPressure);
-      const biasType = bias === 'LONG' ? 'bullish' : bias === 'SHORT' ? 'bearish' : 'analysis';
-      ui.addLog(biasType, `${biasLog.message} ${biasLog.details || ''}`);
-      lastBias = bias;
-      // Reset volume after logging to avoid accumulation
-      buyVolume = 0;
-      sellVolume = 0;
+      lastBias = buyPressure > 55 ? 'LONG' : buyPressure < 45 ? 'SHORT' : 'FLAT';
+      sessionLogger.log('TICK', `count=${tickCount} last=${price?.toFixed(2)} bias=${lastBias} vol=${totalVol}`);
+      buyVolume = 0; sellVolume = 0;
     }
     
-    // Strategy state log every 60 seconds (was 30s - too verbose)
+    // Strategy state log for session logger (every 60s)
     if (currentSecond - lastStateLogSecond >= 60 && tickCount > 1) {
       lastStateLogSecond = currentSecond;
       const state = strategy.getAnalysisState?.(contractId, price);
       if (state) {
-        const bars = state.barsProcessed || 0;
-        sessionLogger.state(state.activeZones || 0, state.swingsDetected || 0, bars, lastBias);
-        if (!state.ready) {
-          ui.addLog('system', `${state.message} (${bars} bars)`);
-        } else {
-          const resStr = state.nearestResistance ? state.nearestResistance.toFixed(2) : '--';
-          const supStr = state.nearestSupport ? state.nearestSupport.toFixed(2) : '--';
-          
-          ui.addLog('analysis', `Zones: ${state.activeZones} | R: ${resStr} | S: ${supStr} | Swings: ${state.swingsDetected}`);
-          if (price && state.nearestResistance) {
-            const gapR = state.nearestResistance - price, ticksR = Math.abs(Math.round(gapR / tickSize));
-            if (ticksR <= 50) ui.addLog('analysis', `PROX R: ${Math.abs(gapR).toFixed(2)} pts (${ticksR} ticks) | Sweep ABOVE then reject`);
-          }
-          if (price && state.nearestSupport) {
-            const gapS = price - state.nearestSupport, ticksS = Math.abs(Math.round(gapS / tickSize));
-            if (ticksS <= 50) ui.addLog('analysis', `PROX S: ${Math.abs(gapS).toFixed(2)} pts (${ticksS} ticks) | Sweep BELOW then reject`);
-          }
-          if (state.activeZones === 0) ui.addLog('risk', 'Building liquidity map...');
-          else if (!state.nearestSupport && !state.nearestResistance) ui.addLog('risk', 'Zones outside range');
-          else if (!state.nearestSupport) ui.addLog('analysis', 'Monitoring R for SHORT sweep');
-          else if (!state.nearestResistance) ui.addLog('analysis', 'Monitoring S for LONG sweep');
-          else ui.addLog('ready', 'Both zones active - awaiting sweep');
-        }
+        sessionLogger.state(state.activeZones || 0, state.swingsDetected || 0, state.barsProcessed || 0, lastBias);
       }
     }
     
@@ -468,6 +405,32 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   const pnlInterval = setInterval(() => { if (running) pollPnL(); }, 2000);
   pollPnL();
   
+  // Live analysis logs every 1 second
+  let lastLiveLogSecond = 0;
+  const liveLogInterval = setInterval(() => {
+    if (!running) return;
+    const now = Math.floor(Date.now() / 1000);
+    if (now === lastLiveLogSecond) return;
+    lastLiveLogSecond = now;
+    
+    // Get strategy state for context
+    const state = strategy.getAnalysisState?.(contractId, lastPrice);
+    const logState = {
+      bars: state?.barsProcessed || 0,
+      swings: state?.swingsDetected || 0,
+      zones: state?.activeZones || 0,
+      trend: lastBias === 'LONG' ? 'bullish' : lastBias === 'SHORT' ? 'bearish' : 'neutral',
+      nearZone: (state?.nearestSupport || state?.nearestResistance) ? true : false,
+      setupForming: state?.ready && state?.activeZones > 0,
+      position: currentPosition,
+      price: lastPrice || 0,
+    };
+    
+    const log = logsEngine.getLog(logState);
+    ui.addLog(log.type, log.message);
+    if (log.logToSession) sessionLogger.log('ANALYSIS', log.message);
+  }, 1000);
+  
   const setupKeyHandler = () => {
     if (!process.stdin.isTTY) return null;
     readline.emitKeypressEvents(process.stdin);
@@ -493,6 +456,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   
   clearInterval(refreshInterval);
   clearInterval(pnlInterval);
+  clearInterval(liveLogInterval);
   await marketFeed.disconnect();
   if (cleanupKeys) cleanupKeys();
   ui.cleanup();

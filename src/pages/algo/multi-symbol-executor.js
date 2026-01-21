@@ -7,6 +7,7 @@ const { AlgoUI, renderSessionSummary } = require('./ui');
 const { loadStrategy } = require('../../lib/m');
 const { MarketDataFeed } = require('../../lib/data');
 const smartLogs = require('../../lib/smart-logs');
+const { createEngine: createLogsEngine } = require('../../lib/smart-logs-engine');
 const { sessionLogger } = require('../../services/session-logger');
 
 /**
@@ -106,6 +107,7 @@ const executeMultiSymbol = async ({ service, account, contracts, config, strateg
   });
   
   smartLogs.setStrategy(strategyId);
+  const logsEngine = createLogsEngine(strategyId);
   
   // Start session logger
   const logFile = sessionLogger.start({
@@ -212,6 +214,7 @@ const executeMultiSymbol = async ({ service, account, contracts, config, strateg
     
     if (data.stats.tickCount === 1) {
       ui.addLog('connected', `[${symbolCode}] First tick @ ${price?.toFixed(2) || 'N/A'}`);
+      sessionLogger.log('TICK', `[${symbolCode}] #1 price=${price} symbol=${symbolCode}`);
     }
     
     data.stats.lastPrice = price;
@@ -237,23 +240,24 @@ const executeMultiSymbol = async ({ service, account, contracts, config, strateg
     }
   });
   
-  // Log aggregated stats periodically (every 3 minutes)
+  // Log aggregated stats periodically (every 30s to session, every 3min to UI)
   const logInterval = setInterval(() => {
     const now = Math.floor(Date.now() / 1000);
-    if (now - lastLogSecond >= 180) {
-      lastLogSecond = now;
-      let totalTicks = 0;
-      let totalBars = 0;
-      let totalZones = 0;
-      let totalSwings = 0;
-      for (const [sym, data] of symbolData) {
-        totalTicks += data.stats.tickCount;
-        const state = data.strategy.getAnalysisState?.(sym, data.stats.lastPrice);
-        totalBars += state?.barsProcessed || 0;
-        totalZones += state?.activeZones || 0;
-        totalSwings += state?.swingsDetected || 0;
+    let totalTicks = 0, totalBars = 0, totalZones = 0, totalSwings = 0;
+    for (const [sym, data] of symbolData) {
+      totalTicks += data.stats.tickCount;
+      const state = data.strategy.getAnalysisState?.(sym, data.stats.lastPrice);
+      totalBars += state?.barsProcessed || 0;
+      totalZones += state?.activeZones || 0;
+      totalSwings += state?.swingsDetected || 0;
+    }
+    // Session log every 30s
+    if (now - lastLogSecond >= 30) {
+      sessionLogger.log('TICK', `count=${totalTicks} bars=${totalBars} zones=${totalZones} swings=${totalSwings}`);
+      if (now - lastLogSecond >= 180) {
+        ui.addLog('analysis', `Stats: ${totalTicks} ticks | ${totalBars} bars | ${totalZones} zones | ${totalSwings} swings`);
       }
-      ui.addLog('analysis', `Stats: ${totalTicks} ticks | ${totalBars} bars | ${totalZones} zones | ${totalSwings} swings`);
+      lastLogSecond = now;
     }
   }, 10000);
   
@@ -314,6 +318,42 @@ const executeMultiSymbol = async ({ service, account, contracts, config, strateg
   const pnlInterval = setInterval(() => { if (running) pollPnL(); }, 2000);
   pollPnL();
   
+  // Live analysis logs every 1 second (rotates through symbols)
+  let liveLogSymbolIndex = 0;
+  let lastLiveLogSecond = 0;
+  const liveLogInterval = setInterval(() => {
+    if (!running) return;
+    const now = Math.floor(Date.now() / 1000);
+    if (now === lastLiveLogSecond) return;
+    lastLiveLogSecond = now;
+    
+    // Get a symbol to log (rotate through all)
+    const symbolCodes = Array.from(symbolData.keys());
+    if (symbolCodes.length === 0) return;
+    
+    const symbolCode = symbolCodes[liveLogSymbolIndex % symbolCodes.length];
+    liveLogSymbolIndex++;
+    
+    const data = symbolData.get(symbolCode);
+    if (!data) return;
+    
+    const state = data.strategy.getAnalysisState?.(symbolCode, data.stats.lastPrice);
+    const logState = {
+      bars: state?.barsProcessed || 0,
+      swings: state?.swingsDetected || 0,
+      zones: state?.activeZones || 0,
+      trend: 'neutral',
+      nearZone: (state?.nearestSupport || state?.nearestResistance) ? true : false,
+      setupForming: state?.ready && state?.activeZones > 0,
+      position: data.stats.position || 0,
+      price: data.stats.lastPrice || 0,
+    };
+    
+    const log = logsEngine.getLog(logState);
+    ui.addLog(log.type, `[${symbolCode}] ${log.message}`);
+    if (log.logToSession) sessionLogger.log('ANALYSIS', `[${symbolCode}] ${log.message}`);
+  }, 1000);
+  
   // Key handler
   const setupKeyHandler = () => {
     if (!process.stdin.isTTY) return null;
@@ -344,6 +384,7 @@ const executeMultiSymbol = async ({ service, account, contracts, config, strateg
   clearInterval(refreshInterval);
   clearInterval(pnlInterval);
   clearInterval(logInterval);
+  clearInterval(liveLogInterval);
   await marketFeed.disconnect();
   if (cleanupKeys) cleanupKeys();
   ui.cleanup();
