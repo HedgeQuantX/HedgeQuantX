@@ -191,8 +191,9 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     try {
       const orderSide = direction === 'long' ? 0 : 1;
       const orderResult = await service.placeOrder({
-        accountId: account.accountId,
-        contractId: contractId,
+        accountId: account.rithmicAccountId || account.accountId,
+        symbol: symbolCode,
+        exchange: contract.exchange || 'CME',
         type: 2,
         side: orderSide,
         size: orderSize
@@ -209,12 +210,16 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
         // Bracket orders
         if (stopLoss && takeProfit) {
           await service.placeOrder({
-            accountId: account.accountId, contractId, type: 4,
-            side: direction === 'long' ? 1 : 0, size: orderSize, stopPrice: stopLoss
+            accountId: account.rithmicAccountId || account.accountId,
+            symbol: symbolCode, exchange: contract.exchange || 'CME',
+            type: 4, side: direction === 'long' ? 1 : 0,
+            size: orderSize, price: stopLoss
           });
           await service.placeOrder({
-            accountId: account.accountId, contractId, type: 1,
-            side: direction === 'long' ? 1 : 0, size: orderSize, limitPrice: takeProfit
+            accountId: account.rithmicAccountId || account.accountId,
+            symbol: symbolCode, exchange: contract.exchange || 'CME',
+            type: 1, side: direction === 'long' ? 1 : 0,
+            size: orderSize, price: takeProfit
           });
           ui.addLog('trade', `SL: ${stopLoss.toFixed(2)} | TP: ${takeProfit.toFixed(2)}`);
         }
