@@ -284,8 +284,8 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       ui.addLog('connected', `First tick @ ${price?.toFixed(2) || 'N/A'}`);
     }
     
-    // Log tick count every 10 seconds to confirm data flow
-    if (currentSecond - lastDebugLogSecond >= 10) {
+    // Log tick count every 60 seconds to confirm data flow
+    if (currentSecond - lastDebugLogSecond >= 60) {
       lastDebugLogSecond = currentSecond;
       const state = strategy.getAnalysisState?.(contractId, price);
       const bars = state?.barsProcessed || 0;
@@ -293,8 +293,8 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     }
     
     // === SMART LOGS - REDUCED FREQUENCY ===
-    // Log bias every 5 seconds
-    if (currentSecond - lastBiasLogSecond >= 5 && tickCount > 1) {
+    // Log bias every 30 seconds (was 5s - too verbose)
+    if (currentSecond - lastBiasLogSecond >= 30 && tickCount > 1) {
       lastBiasLogSecond = currentSecond;
       
       const totalVol = buyVolume + sellVolume;
@@ -311,8 +311,8 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       sellVolume = 0;
     }
     
-    // Strategy state log every 30 seconds
-    if (currentSecond - lastStateLogSecond >= 30 && tickCount > 1) {
+    // Strategy state log every 60 seconds (was 30s - too verbose)
+    if (currentSecond - lastStateLogSecond >= 60 && tickCount > 1) {
       lastStateLogSecond = currentSecond;
       const state = strategy.getAnalysisState?.(contractId, price);
       if (state) {
