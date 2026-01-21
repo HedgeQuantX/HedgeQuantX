@@ -287,15 +287,24 @@ const executeMultiSymbol = async ({ service, account, contracts, config, strateg
     try {
       const accountResult = await service.getTradingAccounts();
       if (accountResult.success && accountResult.accounts) {
-        const acc = accountResult.accounts.find(a => a.accountId === account.accountId);
+        // Match by rithmicAccountId (original) or accountId (hashed)
+        const accId = account.rithmicAccountId || account.accountId;
+        const acc = accountResult.accounts.find(a => 
+          a.rithmicAccountId === accId || a.accountId === account.accountId
+        );
         if (acc && acc.profitAndLoss !== undefined) {
-          // For multi-symbol, we track total P&L
-          globalStats.pnl = acc.profitAndLoss;
+          // Track session P&L (relative to start)
+          const data = symbolData.values().next().value;
+          if (data && data.startingPnL === null) {
+            data.startingPnL = acc.profitAndLoss;
+          }
+          const startPnL = data?.startingPnL || 0;
+          globalStats.pnl = acc.profitAndLoss - startPnL;
         }
       }
       
       // Check positions per symbol
-      const posResult = await service.getPositions(account.accountId);
+      const posResult = await service.getPositions(account.rithmicAccountId || account.accountId);
       if (posResult.success && posResult.positions) {
         for (const [sym, data] of symbolData) {
           const pos = posResult.positions.find(p => (p.contractId || p.symbol || '').includes(sym));

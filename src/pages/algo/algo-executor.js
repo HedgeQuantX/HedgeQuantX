@@ -362,7 +362,11 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     try {
       const accountResult = await service.getTradingAccounts();
       if (accountResult.success && accountResult.accounts) {
-        const acc = accountResult.accounts.find(a => a.accountId === account.accountId);
+        // Match by rithmicAccountId (original) or accountId (hashed)
+        const accId = account.rithmicAccountId || account.accountId;
+        const acc = accountResult.accounts.find(a => 
+          a.rithmicAccountId === accId || a.accountId === account.accountId
+        );
         if (acc && acc.profitAndLoss !== undefined) {
           if (startingPnL === null) startingPnL = acc.profitAndLoss;
           stats.pnl = acc.profitAndLoss - startingPnL;
@@ -370,7 +374,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
         }
       }
       
-      const posResult = await service.getPositions(account.accountId);
+      const posResult = await service.getPositions(account.rithmicAccountId || account.accountId);
       if (posResult.success && posResult.positions) {
         const pos = posResult.positions.find(p => {
           const sym = p.contractId || p.symbol || '';
