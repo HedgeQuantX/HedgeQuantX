@@ -185,17 +185,21 @@ class AlgoUI {
     
     this._line(chalk.cyan(GT));
     
-    // Row 1: Account | Symbol
+    // Row 1: Account | Symbol(s)
     const accountName = String(stats.accountName || 'N/A').substring(0, 40);
-    const symbol = String(stats.symbol || 'N/A').substring(0, 35);
+    const isMultiSymbol = stats.symbolCount && stats.symbolCount > 1;
+    const symbolDisplay = isMultiSymbol 
+      ? `${stats.symbolCount} symbols` 
+      : String(stats.symbol || stats.symbols || 'N/A').substring(0, 35);
     const r1c1 = buildCell('Account', accountName, chalk.cyan, colL);
-    const r1c2 = buildCell('Symbol', symbol, chalk.yellow, colR);
+    const r1c2 = buildCell(isMultiSymbol ? 'Symbols' : 'Symbol', symbolDisplay, chalk.yellow, colR);
     row(r1c1.padded, r1c2.padded);
     
     this._line(chalk.cyan(GM));
     
     // Row 2: Qty | P&L
-    const r2c1 = buildCell('Qty', (stats.qty || '1').toString(), chalk.cyan, colL);
+    const qtyLabel = isMultiSymbol ? 'Qty/Symbol' : 'Qty';
+    const r2c1 = buildCell(qtyLabel, (stats.qty || '1').toString(), chalk.cyan, colL);
     const r2c2 = buildCell('P&L', pnlStr, pnlColor, colR);
     row(r2c1.padded, r2c2.padded);
     
