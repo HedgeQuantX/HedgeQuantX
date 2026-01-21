@@ -61,7 +61,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   
   // Set strategy for context-aware smart logs
   smartLogs.setStrategy(strategyId);
-  const logsEngine = createLogsEngine(strategyId);
+  const logsEngine = createLogsEngine(strategyId, symbolCode);
   
   // Start session logger for persistent logs
   const logFile = sessionLogger.start({
@@ -424,6 +424,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       setupForming: state?.ready && state?.activeZones > 0,
       position: currentPosition,
       price: lastPrice || 0,
+      tickCount,
     };
     
     const log = logsEngine.getLog(logState);

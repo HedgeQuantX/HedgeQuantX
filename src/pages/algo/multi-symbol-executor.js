@@ -347,10 +347,12 @@ const executeMultiSymbol = async ({ service, account, contracts, config, strateg
       setupForming: state?.ready && state?.activeZones > 0,
       position: data.stats.position || 0,
       price: data.stats.lastPrice || 0,
+      tickCount: data.stats.tickCount || 0,
     };
     
+    logsEngine.setSymbol(symbolCode);
     const log = logsEngine.getLog(logState);
-    ui.addLog(log.type, `[${symbolCode}] ${log.message}`);
+    ui.addLog(log.type, log.message);
     if (log.logToSession) sessionLogger.log('ANALYSIS', `[${symbolCode}] ${log.message}`);
   }, 1000);
   
