@@ -11,12 +11,27 @@ const { prompts } = require('../../utils');
 const { getContractDescription } = require('../../config');
 const { checkMarketHours } = require('../../services/rithmic/market');
 const { executeAlgo } = require('./algo-executor');
+const { executeMultiSymbol } = require('./multi-symbol-executor');
 const { getActiveAgentCount, getSupervisionConfig, getActiveAgents } = require('../ai-agents');
 const { runPreflightCheck, formatPreflightResults, getPreflightSummary } = require('../../services/ai-supervision');
 const { getAvailableStrategies } = require('../../lib/m');
 const { getLastOneAccountConfig, saveOneAccountConfig } = require('../../services/algo-config');
 
+// Popular symbols for sorting
+const POPULAR_PREFIXES = ['ES', 'NQ', 'MES', 'MNQ', 'M2K', 'RTY', 'YM', 'MYM', 'NKD', 'GC', 'SI', 'CL'];
 
+const sortContracts = (contracts) => {
+  return contracts.sort((a, b) => {
+    const baseA = a.baseSymbol || a.symbol || '';
+    const baseB = b.baseSymbol || b.symbol || '';
+    const idxA = POPULAR_PREFIXES.findIndex(p => baseA === p || baseA.startsWith(p));
+    const idxB = POPULAR_PREFIXES.findIndex(p => baseB === p || baseB.startsWith(p));
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return baseA.localeCompare(baseB);
+  });
+};
 
 /**
  * One Account Menu
@@ -135,6 +150,9 @@ const oneAccountMenu = async (service) => {
   }
   
   // If no saved config used, go through normal selection
+  let isMultiSymbol = false;
+  let multiContracts = [];
+  
   if (!selectedAccount) {
     // Select account - display RAW API fields
     const options = activeAccounts.map(acc => {
@@ -156,32 +174,52 @@ const oneAccountMenu = async (service) => {
     // Use the service attached to the account (from getAllAccounts), fallback to getServiceForAccount
     accountService = selectedAccount.service || connections.getServiceForAccount(selectedAccount.accountId) || service;
     
-    // Select symbol
-    contract = await selectSymbol(accountService, selectedAccount);
-    if (!contract) return;
+    // Ask for trading mode
+    const modeOptions = [
+      { label: 'Single Symbol', value: 'single' },
+      { label: 'Multi-Symbol (up to 5)', value: 'multi' },
+      { label: chalk.gray('< Back'), value: 'back' }
+    ];
+    const mode = await prompts.selectOption('Trading Mode:', modeOptions);
+    if (mode === 'back' || !mode) return;
+    
+    isMultiSymbol = mode === 'multi';
+    
+    if (isMultiSymbol) {
+      // Multi-symbol selection
+      multiContracts = await selectMultipleSymbols(accountService, selectedAccount);
+      if (!multiContracts || multiContracts.length === 0) return;
+      contract = multiContracts[0]; // For strategy selection display
+    } else {
+      // Single symbol selection
+      contract = await selectSymbol(accountService, selectedAccount);
+      if (!contract) return;
+    }
     
     // Select strategy
     strategy = await selectStrategy();
     if (!strategy) return;
     
     // Configure algo
-    config = await configureAlgo(selectedAccount, contract, strategy);
+    config = await configureAlgo(selectedAccount, contract, strategy, isMultiSymbol);
     if (!config) return;
     
-    // Save config for next time (include baseSymbol for stable matching across contract rolls)
-    saveOneAccountConfig({
-      accountId: selectedAccount.accountId || selectedAccount.rithmicAccountId,
-      accountName: selectedAccount.accountName || selectedAccount.rithmicAccountId || selectedAccount.accountId,
-      propfirm: selectedAccount.propfirm || selectedAccount.platform || 'Unknown',
-      symbol: contract.symbol,
-      baseSymbol: contract.baseSymbol,
-      strategyId: strategy.id,
-      strategyName: strategy.name,
-      contracts: config.contracts,
-      dailyTarget: config.dailyTarget,
-      maxRisk: config.maxRisk,
-      showName: config.showName
-    });
+    // Save config for next time (only for single symbol mode)
+    if (!isMultiSymbol) {
+      saveOneAccountConfig({
+        accountId: selectedAccount.accountId || selectedAccount.rithmicAccountId,
+        accountName: selectedAccount.accountName || selectedAccount.rithmicAccountId || selectedAccount.accountId,
+        propfirm: selectedAccount.propfirm || selectedAccount.platform || 'Unknown',
+        symbol: contract.symbol,
+        baseSymbol: contract.baseSymbol,
+        strategyId: strategy.id,
+        strategyName: strategy.name,
+        contracts: config.contracts,
+        dailyTarget: config.dailyTarget,
+        maxRisk: config.maxRisk,
+        showName: config.showName
+      });
+    }
   }
   
   // Check for AI Supervision BEFORE asking to start
@@ -235,14 +273,114 @@ const oneAccountMenu = async (service) => {
   
   const startSpinner = ora({ text: 'Initializing algo trading...', color: 'cyan' }).start();
   
-  await executeAlgo({
-    service: accountService,
-    account: selectedAccount,
-    contract,
-    config,
-    strategy,
-    options: { supervisionConfig, startSpinner }
-  });
+  if (isMultiSymbol && multiContracts.length > 0) {
+    // Multi-symbol execution
+    await executeMultiSymbol({
+      service: accountService,
+      account: selectedAccount,
+      contracts: multiContracts,
+      config,
+      strategy,
+      options: { supervisionConfig, startSpinner }
+    });
+  } else {
+    // Single symbol execution
+    await executeAlgo({
+      service: accountService,
+      account: selectedAccount,
+      contract,
+      config,
+      strategy,
+      options: { supervisionConfig, startSpinner }
+    });
+  }
+};
+
+/**
+ * Multi-symbol selection - select up to 5 symbols
+ */
+const selectMultipleSymbols = async (service, account) => {
+  const spinner = ora({ text: 'Loading symbols...', color: 'yellow' }).start();
+  
+  // Ensure we have a logged-in service
+  if (!service.loginInfo && service.credentials) {
+    spinner.text = 'Reconnecting to broker...';
+    const loginResult = await service.login(service.credentials.username, service.credentials.password);
+    if (!loginResult.success) {
+      spinner.fail(`Login failed: ${loginResult.error}`);
+      return null;
+    }
+  }
+  
+  const contractsResult = await service.getContracts();
+  if (!contractsResult.success || !contractsResult.contracts?.length) {
+    spinner.fail(`Failed to load contracts: ${contractsResult.error || 'No contracts'}`);
+    return null;
+  }
+  
+  const contracts = sortContracts(contractsResult.contracts);
+  spinner.succeed(`Found ${contracts.length} contracts`);
+  
+  console.log();
+  console.log(chalk.cyan('  Select up to 5 symbols (one at a time)'));
+  console.log(chalk.gray('  Select "Done" when finished'));
+  console.log();
+  
+  const selectedContracts = [];
+  const maxSymbols = 5;
+  
+  while (selectedContracts.length < maxSymbols) {
+    const remaining = maxSymbols - selectedContracts.length;
+    const selectedSymbols = selectedContracts.map(c => c.symbol);
+    
+    // Filter out already selected
+    const availableContracts = contracts.filter(c => !selectedSymbols.includes(c.symbol));
+    
+    const options = availableContracts.map(c => {
+      const desc = getContractDescription(c.baseSymbol || c.name);
+      const isMicro = desc.toLowerCase().includes('micro');
+      const label = isMicro 
+        ? `${c.symbol} - ${chalk.cyan(desc)} (${c.exchange})`
+        : `${c.symbol} - ${desc} (${c.exchange})`;
+      return { label, value: c };
+    });
+    
+    // Add done/back options
+    if (selectedContracts.length > 0) {
+      options.unshift({ label: chalk.green(`✓ Done (${selectedContracts.length} selected)`), value: 'done' });
+    }
+    options.push({ label: chalk.gray('< Cancel'), value: 'back' });
+    
+    const promptText = selectedContracts.length === 0 
+      ? `Select Symbol 1/${maxSymbols}:` 
+      : `Select Symbol ${selectedContracts.length + 1}/${maxSymbols} (${remaining} remaining):`;
+    
+    const selection = await prompts.selectOption(chalk.yellow(promptText), options);
+    
+    if (selection === 'back' || selection === null) {
+      return null;
+    }
+    if (selection === 'done') {
+      break;
+    }
+    
+    selectedContracts.push(selection);
+    console.log(chalk.green(`  ✓ Added: ${selection.symbol}`));
+  }
+  
+  if (selectedContracts.length === 0) {
+    return null;
+  }
+  
+  // Display summary
+  console.log();
+  console.log(chalk.cyan(`  Selected ${selectedContracts.length} symbol(s):`));
+  for (const c of selectedContracts) {
+    console.log(chalk.white(`    - ${c.symbol} (${c.baseSymbol || c.name})`));
+  }
+  console.log();
+  
+  return selectedContracts;
 };
 
 /**
@@ -267,29 +405,7 @@ const selectSymbol = async (service, account) => {
     return null;
   }
   
-  let contracts = contractsResult.contracts;
-  
-  // Sort: Popular indices first (ES, NQ, MES, MNQ, RTY, YM, etc.)
-  const popularPrefixes = ['ES', 'NQ', 'MES', 'MNQ', 'M2K', 'RTY', 'YM', 'MYM', 'NKD', 'GC', 'SI', 'CL'];
-  
-  contracts.sort((a, b) => {
-    const baseA = a.baseSymbol || a.symbol || '';
-    const baseB = b.baseSymbol || b.symbol || '';
-    
-    // Check if baseSymbol matches popular prefixes
-    const idxA = popularPrefixes.findIndex(p => baseA === p || baseA.startsWith(p));
-    const idxB = popularPrefixes.findIndex(p => baseB === p || baseB.startsWith(p));
-    
-    // Both are popular - sort by popularity order
-    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-    // Only A is popular - A first
-    if (idxA !== -1) return -1;
-    // Only B is popular - B first
-    if (idxB !== -1) return 1;
-    // Neither - alphabetical by baseSymbol
-    return baseA.localeCompare(baseB);
-  });
-  
+  const contracts = sortContracts(contractsResult.contracts);
   spinner.succeed(`Found ${contracts.length} contracts`);
   
   // Display sorted contracts with full description
@@ -339,13 +455,17 @@ const selectStrategy = async () => {
 /**
  * Configure algo
  */
-const configureAlgo = async (account, contract, strategy) => {
+const configureAlgo = async (account, contract, strategy, isMultiSymbol = false) => {
   console.log();
   console.log(chalk.cyan('  Configure Algo Parameters'));
   console.log(chalk.gray(`  Strategy: ${strategy.name}`));
+  if (isMultiSymbol) {
+    console.log(chalk.gray(`  Mode: Multi-Symbol`));
+  }
   console.log();
   
-  const contracts = await prompts.numberInput('Number of contracts:', 1, 1, 10);
+  const contractsLabel = isMultiSymbol ? 'Contracts per symbol:' : 'Number of contracts:';
+  const contracts = await prompts.numberInput(contractsLabel, 1, 1, 10);
   if (contracts === null) return null;
   
   const dailyTarget = await prompts.numberInput('Daily target ($):', 1000, 1, 10000);
@@ -356,6 +476,11 @@ const configureAlgo = async (account, contract, strategy) => {
   
   const showName = await prompts.confirmPrompt('Show account name?', false);
   if (showName === null) return null;
+  
+  // Return different config shape for multi-symbol
+  if (isMultiSymbol) {
+    return { contractsPerSymbol: contracts, dailyTarget, maxRisk, showName };
+  }
   
   return { contracts, dailyTarget, maxRisk, showName };
 };
