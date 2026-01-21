@@ -66,9 +66,16 @@ const executeMultiSymbol = async ({ service, account, contracts, config, strateg
       await handleSignal(symbolCode, signal);
     });
     
+    // Filter logs - only show important events (swings, zones, signals)
     strategy.on('log', (log) => {
+      const msg = log.message || '';
+      // Skip bar close logs (too noisy with 5 symbols)
+      if (msg.includes('[BAR]')) return;
+      // Skip routine pivot checks
+      if (msg.includes('Checking pivot')) return;
+      // Show swing and zone events
       const prefix = `[${symbolCode}] `;
-      ui.addLog(log.type === 'debug' ? 'debug' : 'analysis', prefix + log.message);
+      ui.addLog(log.type === 'debug' ? 'debug' : 'analysis', prefix + msg);
     });
   }
   
@@ -230,29 +237,25 @@ const executeMultiSymbol = async ({ service, account, contracts, config, strateg
     }
   });
   
-  // Log aggregated stats periodically
+  // Log aggregated stats periodically (every 3 minutes)
   const logInterval = setInterval(() => {
     const now = Math.floor(Date.now() / 1000);
-    if (now - lastLogSecond >= 60) {
+    if (now - lastLogSecond >= 180) {
       lastLogSecond = now;
       let totalTicks = 0;
       let totalBars = 0;
+      let totalZones = 0;
+      let totalSwings = 0;
       for (const [sym, data] of symbolData) {
         totalTicks += data.stats.tickCount;
         const state = data.strategy.getAnalysisState?.(sym, data.stats.lastPrice);
         totalBars += state?.barsProcessed || 0;
+        totalZones += state?.activeZones || 0;
+        totalSwings += state?.swingsDetected || 0;
       }
-      ui.addLog('debug', `Total: ${totalTicks} ticks | ${totalBars} bars | ${contracts.length} symbols`);
-      
-      // Log per-symbol state
-      for (const [sym, data] of symbolData) {
-        const state = data.strategy.getAnalysisState?.(sym, data.stats.lastPrice);
-        if (state?.ready) {
-          ui.addLog('analysis', `[${sym}] Zones: ${state.activeZones} | Swings: ${state.swingsDetected}`);
-        }
-      }
+      ui.addLog('analysis', `Stats: ${totalTicks} ticks | ${totalBars} bars | ${totalZones} zones | ${totalSwings} swings`);
     }
-  }, 5000);
+  }, 10000);
   
   marketFeed.on('connected', () => { globalStats.connected = true; ui.addLog('connected', 'Market data connected'); });
   marketFeed.on('error', (err) => ui.addLog('error', `Market: ${err.message}`));
