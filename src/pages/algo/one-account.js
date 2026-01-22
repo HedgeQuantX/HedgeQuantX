@@ -302,6 +302,9 @@ const oneAccountMenu = async (service) => {
 const selectMultipleSymbols = async (service, account) => {
   const spinner = ora({ text: 'Loading symbols...', color: 'yellow' }).start();
   
+  // Debug: log service type
+  const serviceType = service.constructor?.name || 'Unknown';
+  
   // Ensure we have a logged-in service
   if (!service.loginInfo && service.credentials) {
     spinner.text = 'Reconnecting to broker...';
@@ -312,19 +315,24 @@ const selectMultipleSymbols = async (service, account) => {
     }
   }
   
-  const contractsResult = await service.getContracts();
+  let contractsResult;
+  try {
+    contractsResult = await service.getContracts();
+  } catch (err) {
+    spinner.fail(`getContracts exception: ${err.message}`);
+    console.log(chalk.gray(`  Service: ${serviceType} | Tip: Try "hqx login"`));
+    return null;
+  }
   if (!contractsResult.success || !contractsResult.contracts?.length) {
     spinner.fail(`Failed to load contracts: ${contractsResult.error || 'No contracts'}`);
+    console.log(chalk.gray(`  Service: ${serviceType} | Tip: Try "hqx login"`));
     return null;
   }
   
   const contracts = sortContracts(contractsResult.contracts);
   spinner.succeed(`Found ${contracts.length} contracts`);
-  
-  console.log();
-  console.log(chalk.cyan('  Select up to 5 symbols (one at a time)'));
-  console.log(chalk.gray('  Select "Done" when finished'));
-  console.log();
+  console.log(chalk.cyan('\n  Select up to 5 symbols (one at a time)'));
+  console.log(chalk.gray('  Select "Done" when finished\n'));
   
   const selectedContracts = [];
   const maxSymbols = 5;
@@ -356,30 +364,17 @@ const selectMultipleSymbols = async (service, account) => {
       : `Select Symbol ${selectedContracts.length + 1}/${maxSymbols} (${remaining} remaining):`;
     
     const selection = await prompts.selectOption(chalk.yellow(promptText), options);
-    
-    if (selection === 'back' || selection === null) {
-      return null;
-    }
-    if (selection === 'done') {
-      break;
-    }
-    
+    if (selection === 'back' || selection === null) return null;
+    if (selection === 'done') break;
     selectedContracts.push(selection);
     console.log(chalk.green(`  ✓ Added: ${selection.symbol}`));
   }
-  
-  if (selectedContracts.length === 0) {
-    return null;
-  }
+  if (selectedContracts.length === 0) return null;
   
   // Display summary
+  console.log(chalk.cyan(`\n  Selected ${selectedContracts.length} symbol(s):`));
+  for (const c of selectedContracts) console.log(chalk.white(`    - ${c.symbol} (${c.baseSymbol || c.name})`));
   console.log();
-  console.log(chalk.cyan(`  Selected ${selectedContracts.length} symbol(s):`));
-  for (const c of selectedContracts) {
-    console.log(chalk.white(`    - ${c.symbol} (${c.baseSymbol || c.name})`));
-  }
-  console.log();
-  
   return selectedContracts;
 };
 
@@ -388,6 +383,9 @@ const selectMultipleSymbols = async (service, account) => {
  */
 const selectSymbol = async (service, account) => {
   const spinner = ora({ text: 'Loading symbols...', color: 'yellow' }).start();
+  
+  // Debug: log service type
+  const serviceType = service.constructor?.name || 'Unknown';
   
   // Ensure we have a logged-in service (for direct RithmicService, not BrokerClient)
   if (!service.loginInfo && service.credentials && typeof service.login === 'function') {
@@ -399,12 +397,17 @@ const selectSymbol = async (service, account) => {
     }
   }
   
-  const contractsResult = await service.getContracts();
-  
+  let contractsResult;
+  try {
+    contractsResult = await service.getContracts();
+  } catch (err) {
+    spinner.fail(`getContracts exception: ${err.message}`);
+    console.log(chalk.gray(`  Service: ${serviceType} | Tip: Try "hqx login"`));
+    return null;
+  }
   if (!contractsResult.success || !contractsResult.contracts?.length) {
-    const errorMsg = contractsResult.error || 'No contracts available';
-    spinner.fail(`Failed to load contracts: ${errorMsg}`);
-    console.log(chalk.gray('  Tip: Try reconnecting with "hqx login"'));
+    spinner.fail(`Failed to load contracts: ${contractsResult.error || 'No contracts available'}`);
+    console.log(chalk.gray(`  Service: ${serviceType} | Tip: Try "hqx login"`));
     return null;
   }
   

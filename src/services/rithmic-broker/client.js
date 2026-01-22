@@ -211,7 +211,13 @@ class RithmicBrokerClient extends EventEmitter {
    */
   async getContracts() {
     const result = await this._request('getContracts', { propfirmKey: this.propfirmKey });
-    if (result.error) return { success: false, contracts: [], error: result.error };
+    if (result.error) {
+      // Debug: show exactly what error came from daemon
+      if (process.env.HQX_DEBUG === '1') {
+        console.log('[BrokerClient] getContracts error:', result.error, 'propfirmKey:', this.propfirmKey);
+      }
+      return { success: false, contracts: [], error: result.error };
+    }
     return result.payload || { success: true, contracts: [] };
   }
 
