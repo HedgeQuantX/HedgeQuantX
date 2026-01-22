@@ -269,6 +269,23 @@ class RithmicService extends EventEmitter {
 
   async getTradingAccounts() { return getTradingAccounts(this); }
   async getPositions() { return getPositions(this); }
+  
+  /**
+   * Get cached P&L for an account (NO API CALL - from PNL_PLANT stream cache)
+   * @param {string} accountId - Account ID (rithmicAccountId)
+   * @returns {Object} { pnl, openPnl, closedPnl, balance }
+   */
+  getAccountPnL(accountId) {
+    const pnlData = this.accountPnL.get(accountId);
+    if (!pnlData) return { pnl: null, openPnl: null, closedPnl: null, balance: null };
+    return {
+      pnl: pnlData.dayPnl !== undefined ? pnlData.dayPnl : 
+           ((pnlData.openPositionPnl || 0) + (pnlData.closedPositionPnl || 0)),
+      openPnl: pnlData.openPositionPnl || 0,
+      closedPnl: pnlData.closedPositionPnl || 0,
+      balance: pnlData.accountBalance || null,
+    };
+  }
   async getOrders() { return getOrders(this); }
   async getOrderHistory(date) { return getOrderHistory(this, date); }
   async getOrderHistoryDates() { return getOrderHistoryDates(this); }
@@ -381,44 +398,26 @@ class RithmicService extends EventEmitter {
     return { success: true, stats };
   }
 
-  async getMarketStatus() {
-    const status = this.checkMarketHours();
-    return { success: true, isOpen: status.isOpen, message: status.message };
-  }
-
+  async getMarketStatus() { return { success: true, ...this.checkMarketHours() }; }
   getToken() { return this.loginInfo ? 'connected' : null; }
   getPropfirm() { return this.propfirmKey || 'apex'; }
-
   getRithmicCredentials() {
     if (!this.credentials) return null;
-    return {
-      userId: this.credentials.username,
-      password: this.credentials.password,
-      systemName: this.propfirm.systemName,
-      gateway: this.propfirm.gateway || RITHMIC_ENDPOINTS.CHICAGO,
-    };
+    return { userId: this.credentials.username, password: this.credentials.password,
+      systemName: this.propfirm.systemName, gateway: this.propfirm.gateway || RITHMIC_ENDPOINTS.CHICAGO };
   }
 
-  // ==================== MARKET HOURS ====================
-
   checkMarketHours() {
-    const now = new Date();
-    const utcDay = now.getUTCDay();
-    const utcHour = now.getUTCHours();
-
+    const now = new Date(), utcDay = now.getUTCDay(), utcHour = now.getUTCHours();
     const isDST = now.getTimezoneOffset() < Math.max(
       new Date(now.getFullYear(), 0, 1).getTimezoneOffset(),
-      new Date(now.getFullYear(), 6, 1).getTimezoneOffset()
-    );
-    const ctOffset = isDST ? 5 : 6;
-    const ctHour = (utcHour - ctOffset + 24) % 24;
+      new Date(now.getFullYear(), 6, 1).getTimezoneOffset());
+    const ctOffset = isDST ? 5 : 6, ctHour = (utcHour - ctOffset + 24) % 24;
     const ctDay = utcHour < ctOffset ? (utcDay + 6) % 7 : utcDay;
-
     if (ctDay === 6) return { isOpen: false, message: 'Market closed (Saturday)' };
-    if (ctDay === 0 && ctHour < 17) return { isOpen: false, message: 'Market opens Sunday 5:00 PM CT' };
-    if (ctDay === 5 && ctHour >= 16) return { isOpen: false, message: 'Market closed (Friday after 4PM CT)' };
-    if (ctHour === 16 && ctDay >= 1 && ctDay <= 4) return { isOpen: false, message: 'Daily maintenance (4:00-5:00 PM CT)' };
-    
+    if (ctDay === 0 && ctHour < 17) return { isOpen: false, message: 'Market opens Sunday 5PM CT' };
+    if (ctDay === 5 && ctHour >= 16) return { isOpen: false, message: 'Market closed (Friday 4PM CT)' };
+    if (ctHour === 16 && ctDay >= 1 && ctDay <= 4) return { isOpen: false, message: 'Daily maintenance' };
     return { isOpen: true, message: 'Market is open' };
   }
 

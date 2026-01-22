@@ -84,11 +84,11 @@ const storage = {
   },
 };
 
-// Lazy load RithmicService to avoid circular dependencies
-let RithmicService;
+// Lazy load services to avoid circular dependencies
+let RithmicBrokerClient, brokerManager;
 const loadServices = () => {
-  if (!RithmicService) {
-    ({ RithmicService } = require('./rithmic'));
+  if (!RithmicBrokerClient) {
+    ({ RithmicBrokerClient, manager: brokerManager } = require('./rithmic-broker'));
   }
 };
 
@@ -130,16 +130,44 @@ const connections = {
 
   async restoreFromStorage() {
     loadServices();
-    const sessions = storage.load();
     
-    // Filter only Rithmic sessions (AI sessions are managed by ai-agents.js)
+    // Check if daemon is already running with active connections
+    const daemonStatus = await brokerManager.getStatus();
+    
+    if (daemonStatus.running && daemonStatus.connections?.length > 0) {
+      // Daemon has active connections - just create clients (NO API calls)
+      log.info('Daemon active, restoring from broker', { connections: daemonStatus.connections.length });
+      
+      for (const conn of daemonStatus.connections) {
+        const client = new RithmicBrokerClient(conn.propfirmKey);
+        await client.connect();
+        
+        // Get accounts from daemon cache
+        const accountsResult = await client.getTradingAccounts();
+        client.accounts = accountsResult.accounts || [];
+        
+        this.services.push({
+          type: 'rithmic',
+          service: client,
+          propfirm: conn.propfirm,
+          propfirmKey: conn.propfirmKey,
+          connectedAt: new Date(conn.connectedAt),
+        });
+        log.debug('Restored from broker', { propfirm: conn.propfirmKey });
+      }
+      
+      return this.services.length > 0;
+    }
+    
+    // Daemon not running or no connections - check local storage
+    const sessions = storage.load();
     const rithmicSessions = sessions.filter(s => s.type === 'rithmic');
     
     if (!rithmicSessions.length) {
       return false;
     }
     
-    log.info('Restoring sessions', { count: rithmicSessions.length });
+    log.info('Restoring sessions via broker', { count: rithmicSessions.length });
     
     for (const session of rithmicSessions) {
       try {
@@ -155,20 +183,20 @@ const connections = {
   async _restoreSession(session) {
     const { type, propfirm, propfirmKey } = session;
     
-    // Only restore Rithmic sessions
+    // Use broker client (daemon handles persistence)
     if (type === 'rithmic' && session.credentials) {
-      const service = new RithmicService(propfirmKey || 'apex_rithmic');
-      const result = await service.login(session.credentials.username, session.credentials.password);
+      const client = new RithmicBrokerClient(propfirmKey || 'apex_rithmic');
+      const result = await client.login(session.credentials.username, session.credentials.password);
       
       if (result.success) {
         this.services.push({
           type,
-          service,
+          service: client,
           propfirm,
           propfirmKey,
           connectedAt: new Date(),
         });
-        log.debug('Rithmic session restored');
+        log.debug('Rithmic session restored via broker');
       }
     }
   },
@@ -251,14 +279,22 @@ const connections = {
     return this.services.length > 0;
   },
 
-  disconnectAll() {
+  async disconnectAll() {
+    loadServices();
+    
+    // Stop the broker daemon (closes all Rithmic connections)
+    try {
+      await brokerManager.stop();
+      log.info('Broker daemon stopped');
+    } catch (err) {
+      log.warn('Broker stop failed', { error: err.message });
+    }
+    
+    // Disconnect local clients
     for (const conn of this.services) {
       try {
         if (conn.service?.disconnect) {
           conn.service.disconnect();
-        }
-        if (conn.service?.credentials) {
-          conn.service.credentials = null;
         }
       } catch (err) {
         log.warn('Disconnect failed', { type: conn.type, error: err.message });

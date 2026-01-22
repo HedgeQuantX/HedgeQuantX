@@ -282,33 +282,27 @@ const executeMultiSymbol = async ({ service, account, contracts, config, strateg
     ui.addLog('error', `Failed to connect: ${e.message}`);
   }
   
-  // P&L polling
+  // P&L polling - uses CACHED data (NO API CALLS)
+  let startingPnL = null;
   const pollPnL = async () => {
     try {
-      const accountResult = await service.getTradingAccounts();
-      if (accountResult.success && accountResult.accounts) {
-        // Match by rithmicAccountId (original) or accountId (hashed)
-        const accId = account.rithmicAccountId || account.accountId;
-        const acc = accountResult.accounts.find(a => 
-          a.rithmicAccountId === accId || a.accountId === account.accountId
-        );
-        if (acc && acc.profitAndLoss !== undefined) {
-          // Track session P&L (relative to start)
-          const data = symbolData.values().next().value;
-          if (data && data.startingPnL === null) {
-            data.startingPnL = acc.profitAndLoss;
-          }
-          const startPnL = data?.startingPnL || 0;
-          globalStats.pnl = acc.profitAndLoss - startPnL;
-        }
+      // Get P&L from cache (no API call)
+      const accId = account.rithmicAccountId || account.accountId;
+      const pnlData = service.getAccountPnL ? service.getAccountPnL(accId) : null;
+      
+      if (pnlData && pnlData.pnl !== null) {
+        if (startingPnL === null) startingPnL = pnlData.pnl;
+        globalStats.pnl = pnlData.pnl - startingPnL;
       }
       
-      // Check positions per symbol
-      const posResult = await service.getPositions(account.rithmicAccountId || account.accountId);
-      if (posResult.success && posResult.positions) {
-        for (const [sym, data] of symbolData) {
-          const pos = posResult.positions.find(p => (p.contractId || p.symbol || '').includes(sym));
-          data.stats.position = pos?.quantity || 0;
+      // Check positions (less frequent - every 10s instead of 2s)
+      if (Date.now() % 10000 < 2000) {
+        const posResult = await service.getPositions(accId);
+        if (posResult.success && posResult.positions) {
+          for (const [sym, data] of symbolData) {
+            const pos = posResult.positions.find(p => (p.contractId || p.symbol || '').includes(sym));
+            data.stats.position = pos?.quantity || 0;
+          }
         }
       }
       

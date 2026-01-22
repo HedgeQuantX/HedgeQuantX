@@ -358,36 +358,36 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     ui.addLog('error', `Failed to connect: ${e.message}`);
   }
   
+  // P&L polling - uses CACHED data (NO API CALLS to avoid Rithmic rate limits)
   const pollPnL = async () => {
     try {
-      const accountResult = await service.getTradingAccounts();
-      if (accountResult.success && accountResult.accounts) {
-        // Match by rithmicAccountId (original) or accountId (hashed)
-        const accId = account.rithmicAccountId || account.accountId;
-        const acc = accountResult.accounts.find(a => 
-          a.rithmicAccountId === accId || a.accountId === account.accountId
-        );
-        if (acc && acc.profitAndLoss !== undefined) {
-          if (startingPnL === null) startingPnL = acc.profitAndLoss;
-          stats.pnl = acc.profitAndLoss - startingPnL;
-          if (stats.pnl !== 0) strategy.recordTradeResult(stats.pnl);
-        }
+      // Get P&L from cache (no API call)
+      const accId = account.rithmicAccountId || account.accountId;
+      const pnlData = service.getAccountPnL ? service.getAccountPnL(accId) : null;
+      
+      if (pnlData && pnlData.pnl !== null) {
+        if (startingPnL === null) startingPnL = pnlData.pnl;
+        stats.pnl = pnlData.pnl - startingPnL;
+        if (stats.pnl !== 0) strategy.recordTradeResult(stats.pnl);
       }
       
-      const posResult = await service.getPositions(account.rithmicAccountId || account.accountId);
-      if (posResult.success && posResult.positions) {
-        const pos = posResult.positions.find(p => {
-          const sym = p.contractId || p.symbol || '';
-          return sym.includes(contract.name) || sym.includes(contractId);
-        });
-        
-        if (pos && pos.quantity !== 0) {
-          currentPosition = pos.quantity;
-          const pnl = pos.profitAndLoss || 0;
-          if (pnl > 0) stats.wins = Math.max(stats.wins, 1);
-          else if (pnl < 0) stats.losses = Math.max(stats.losses, 1);
-        } else {
-          currentPosition = 0;
+      // Check positions (less frequent - every 10s to reduce API calls)
+      if (Date.now() % 10000 < 2000) {
+        const posResult = await service.getPositions(accId);
+        if (posResult.success && posResult.positions) {
+          const pos = posResult.positions.find(p => {
+            const sym = p.contractId || p.symbol || '';
+            return sym.includes(contract.name) || sym.includes(contractId);
+          });
+          
+          if (pos && pos.quantity !== 0) {
+            currentPosition = pos.quantity;
+            const pnl = pos.profitAndLoss || 0;
+            if (pnl > 0) stats.wins = Math.max(stats.wins, 1);
+            else if (pnl < 0) stats.losses = Math.max(stats.losses, 1);
+          } else {
+            currentPosition = 0;
+          }
         }
       }
       
