@@ -326,14 +326,11 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   marketFeed.on('disconnected', () => { stats.connected = false; ui.addLog('error', 'Market disconnected'); });
   
   try {
-    const rithmicCredentials = service.getRithmicCredentials?.();
-    if (!rithmicCredentials) {
-      throw new Error('Rithmic credentials not available');
-    }
-    // Disconnect service's TICKER_PLANT to avoid conflict (Rithmic allows only 1 TICKER connection per user)
-    if (service.disconnectTicker) {
-      await service.disconnectTicker();
-    }
+    // Try sync (RithmicService) then async (BrokerClient)
+    let rithmicCredentials = service.getRithmicCredentials?.();
+    if (!rithmicCredentials && service.getRithmicCredentialsAsync) rithmicCredentials = await service.getRithmicCredentialsAsync();
+    if (!rithmicCredentials) throw new Error('Rithmic credentials not available - try "hqx login"');
+    if (service.disconnectTicker) await service.disconnectTicker(); // Avoid TICKER conflict
     await marketFeed.connect(rithmicCredentials);
     await marketFeed.subscribe(symbolCode, contract.exchange || 'CME');
     

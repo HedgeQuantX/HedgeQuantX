@@ -188,9 +188,13 @@ const launchCopyTrading = async (config) => {
   
   // Connect to market data (Rithmic TICKER_PLANT)
   try {
-    const rithmicCredentials = leadService.getRithmicCredentials?.();
+    // Try sync first (RithmicService), then async (RithmicBrokerClient)
+    let rithmicCredentials = leadService.getRithmicCredentials?.();
+    if (!rithmicCredentials && leadService.getRithmicCredentialsAsync) {
+      rithmicCredentials = await leadService.getRithmicCredentialsAsync();
+    }
     if (!rithmicCredentials) {
-      throw new Error('Rithmic credentials not available');
+      throw new Error('Rithmic credentials not available - try "hqx login"');
     }
     await marketFeed.connect(rithmicCredentials);
     await marketFeed.subscribe(symbolName, contract.exchange || 'CME');

@@ -267,8 +267,12 @@ const executeMultiSymbol = async ({ service, account, contracts, config, strateg
   
   // Connect and subscribe to all symbols
   try {
-    const rithmicCredentials = service.getRithmicCredentials?.();
-    if (!rithmicCredentials) throw new Error('Rithmic credentials not available');
+    // Try sync first (RithmicService), then async (RithmicBrokerClient)
+    let rithmicCredentials = service.getRithmicCredentials?.();
+    if (!rithmicCredentials && service.getRithmicCredentialsAsync) {
+      rithmicCredentials = await service.getRithmicCredentialsAsync();
+    }
+    if (!rithmicCredentials) throw new Error('Rithmic credentials not available - try "hqx login"');
     
     if (service.disconnectTicker) await service.disconnectTicker();
     await marketFeed.connect(rithmicCredentials);
