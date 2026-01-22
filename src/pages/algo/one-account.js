@@ -301,12 +301,13 @@ const oneAccountMenu = async (service) => {
  */
 const selectMultipleSymbols = async (service, account) => {
   const spinner = ora({ text: 'Loading symbols...', color: 'yellow' }).start();
-  
-  // Debug: log service type
   const serviceType = service.constructor?.name || 'Unknown';
   
-  // Ensure we have a logged-in service
-  if (!service.loginInfo && service.credentials) {
+  // Check if service needs reconnection:
+  // - RithmicService: check loginInfo
+  // - RithmicBrokerClient: check connected (already connected to daemon)
+  const needsReconnect = !service.loginInfo && !service.connected && service.credentials;
+  if (needsReconnect) {
     spinner.text = 'Reconnecting to broker...';
     const loginResult = await service.login(service.credentials.username, service.credentials.password);
     if (!loginResult.success) {
@@ -383,12 +384,13 @@ const selectMultipleSymbols = async (service, account) => {
  */
 const selectSymbol = async (service, account) => {
   const spinner = ora({ text: 'Loading symbols...', color: 'yellow' }).start();
-  
-  // Debug: log service type
   const serviceType = service.constructor?.name || 'Unknown';
   
-  // Ensure we have a logged-in service (for direct RithmicService, not BrokerClient)
-  if (!service.loginInfo && service.credentials && typeof service.login === 'function') {
+  // Check if service needs reconnection:
+  // - RithmicService: check loginInfo
+  // - RithmicBrokerClient: check connected (already connected to daemon)
+  const needsReconnect = !service.loginInfo && !service.connected && service.credentials;
+  if (needsReconnect && typeof service.login === 'function') {
     spinner.text = 'Reconnecting to broker...';
     const loginResult = await service.login(service.credentials.username, service.credentials.password);
     if (!loginResult.success) {
