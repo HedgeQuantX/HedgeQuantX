@@ -191,7 +191,11 @@ const launchCopyTrading = async (config) => {
     // Try sync first (RithmicService), then async (RithmicBrokerClient)
     let rithmicCredentials = leadService.getRithmicCredentials?.();
     if (!rithmicCredentials && leadService.getRithmicCredentialsAsync) {
-      rithmicCredentials = await leadService.getRithmicCredentialsAsync();
+      try {
+        rithmicCredentials = await leadService.getRithmicCredentialsAsync();
+      } catch (credErr) {
+        throw new Error(`Broker error: ${credErr.message} - try "hqx login"`);
+      }
     }
     if (!rithmicCredentials) {
       throw new Error('Rithmic credentials not available - try "hqx login"');

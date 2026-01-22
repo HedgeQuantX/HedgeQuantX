@@ -146,6 +146,17 @@ const connections = {
         const accountsResult = await client.getTradingAccounts();
         client.accounts = accountsResult.accounts || [];
         
+        // Cache credentials locally for sync access (fetch from daemon)
+        try {
+          const creds = await client.getRithmicCredentialsAsync();
+          if (creds && creds.userId && creds.password) {
+            client.credentials = { username: creds.userId, password: creds.password };
+            client.propfirm = { name: conn.propfirmKey, systemName: creds.systemName, gateway: creds.gateway };
+          }
+        } catch (e) {
+          log.warn('Failed to cache credentials', { propfirm: conn.propfirmKey, error: e.message });
+        }
+        
         this.services.push({
           type: 'rithmic',
           service: client,
@@ -153,7 +164,7 @@ const connections = {
           propfirmKey: conn.propfirmKey,
           connectedAt: new Date(conn.connectedAt),
         });
-        log.debug('Restored from broker', { propfirm: conn.propfirmKey });
+        log.debug('Restored from broker', { propfirm: conn.propfirmKey, hasCreds: !!client.credentials });
       }
       
       return this.services.length > 0;

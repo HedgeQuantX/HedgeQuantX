@@ -328,7 +328,13 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   try {
     // Try sync (RithmicService) then async (BrokerClient)
     let rithmicCredentials = service.getRithmicCredentials?.();
-    if (!rithmicCredentials && service.getRithmicCredentialsAsync) rithmicCredentials = await service.getRithmicCredentialsAsync();
+    if (!rithmicCredentials && service.getRithmicCredentialsAsync) {
+      try {
+        rithmicCredentials = await service.getRithmicCredentialsAsync();
+      } catch (credErr) {
+        throw new Error(`Broker error: ${credErr.message} - try "hqx login"`);
+      }
+    }
     if (!rithmicCredentials) throw new Error('Rithmic credentials not available - try "hqx login"');
     if (service.disconnectTicker) await service.disconnectTicker(); // Avoid TICKER conflict
     await marketFeed.connect(rithmicCredentials);

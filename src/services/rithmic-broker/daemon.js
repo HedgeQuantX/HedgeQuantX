@@ -332,8 +332,20 @@ class RithmicBrokerDaemon {
 
   _handleGetCredentials(payload, requestId) {
     const conn = this.connections.get(payload.propfirmKey);
-    if (!conn?.service) return { error: 'Not connected', requestId };
-    return { type: 'credentials', payload: conn.service.getRithmicCredentials?.() || null, requestId };
+    if (!conn) {
+      log('WARN', 'getCredentials: propfirm not found', { propfirm: payload.propfirmKey });
+      return { error: `Propfirm "${payload.propfirmKey}" not connected - run "hqx login"`, requestId };
+    }
+    if (!conn.service) {
+      log('WARN', 'getCredentials: service is null', { propfirm: payload.propfirmKey, status: conn.status });
+      return { error: `Connection lost for "${payload.propfirmKey}" - run "hqx login"`, requestId };
+    }
+    const creds = conn.service.getRithmicCredentials?.();
+    if (!creds) {
+      log('WARN', 'getCredentials: credentials null', { propfirm: payload.propfirmKey });
+      return { error: `Credentials not available for "${payload.propfirmKey}"`, requestId };
+    }
+    return { type: 'credentials', payload: creds, requestId };
   }
 
   /**

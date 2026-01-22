@@ -249,9 +249,14 @@ class RithmicBrokerClient extends EventEmitter {
 
   /**
    * Get async Rithmic credentials from daemon
+   * @returns {Object|null} Credentials object or null
+   * @throws {Error} If daemon returns error
    */
   async getRithmicCredentialsAsync() {
     const result = await this._request('getRithmicCredentials', { propfirmKey: this.propfirmKey });
+    if (result.error) {
+      throw new Error(result.error);
+    }
     return result.payload || null;
   }
 
