@@ -211,7 +211,7 @@ class RithmicBrokerClient extends EventEmitter {
    */
   async getContracts() {
     const result = await this._request('getContracts', { propfirmKey: this.propfirmKey });
-    if (result.error) return { success: false, contracts: [] };
+    if (result.error) return { success: false, contracts: [], error: result.error };
     return result.payload || { success: true, contracts: [] };
   }
 

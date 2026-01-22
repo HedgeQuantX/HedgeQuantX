@@ -389,8 +389,8 @@ const selectMultipleSymbols = async (service, account) => {
 const selectSymbol = async (service, account) => {
   const spinner = ora({ text: 'Loading symbols...', color: 'yellow' }).start();
   
-  // Ensure we have a logged-in service
-  if (!service.loginInfo && service.credentials) {
+  // Ensure we have a logged-in service (for direct RithmicService, not BrokerClient)
+  if (!service.loginInfo && service.credentials && typeof service.login === 'function') {
     spinner.text = 'Reconnecting to broker...';
     const loginResult = await service.login(service.credentials.username, service.credentials.password);
     if (!loginResult.success) {
@@ -400,8 +400,11 @@ const selectSymbol = async (service, account) => {
   }
   
   const contractsResult = await service.getContracts();
+  
   if (!contractsResult.success || !contractsResult.contracts?.length) {
-    spinner.fail(`Failed to load contracts: ${contractsResult.error || 'No contracts'}`);
+    const errorMsg = contractsResult.error || 'No contracts available';
+    spinner.fail(`Failed to load contracts: ${errorMsg}`);
+    console.log(chalk.gray('  Tip: Try reconnecting with "hqx login"'));
     return null;
   }
   

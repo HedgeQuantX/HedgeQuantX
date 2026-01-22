@@ -299,8 +299,15 @@ class RithmicBrokerDaemon {
 
   async _handleGetContracts(payload, requestId) {
     const conn = this.connections.get(payload.propfirmKey);
-    if (!conn?.service) return { error: 'Not connected', requestId };
-    return { type: 'contracts', payload: await conn.service.getContracts(), requestId };
+    if (!conn?.service) return { error: 'Not connected to broker', requestId };
+    
+    try {
+      const result = await conn.service.getContracts();
+      return { type: 'contracts', payload: result, requestId };
+    } catch (err) {
+      log('ERROR', 'getContracts failed', { propfirm: payload.propfirmKey, error: err.message });
+      return { type: 'contracts', payload: { success: false, error: err.message, contracts: [] }, requestId };
+    }
   }
 
   async _handleSearchContracts(payload, requestId) {
