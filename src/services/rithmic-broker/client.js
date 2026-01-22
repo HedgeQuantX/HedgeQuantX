@@ -232,13 +232,13 @@ class RithmicBrokerClient extends EventEmitter {
    */
   getRithmicCredentials() {
     // Sync call - return cached credentials
-    // For async, use _request('getRithmicCredentials')
-    return this.credentials ? {
+    if (!this.credentials) return null;
+    return {
       userId: this.credentials.username,
       password: this.credentials.password,
       systemName: this.propfirm?.systemName || 'Apex',
-      gateway: 'wss://rituz.rithmic.com:443',
-    } : null;
+      gateway: 'wss://rprotocol.rithmic.com:443',
+    };
   }
 
   /**

@@ -286,16 +286,22 @@ const executeMultiSymbol = async ({ service, account, contracts, config, strateg
   let startingPnL = null;
   const pollPnL = async () => {
     try {
-      // Get P&L from cache (no API call)
       const accId = account.rithmicAccountId || account.accountId;
-      const pnlData = service.getAccountPnL ? service.getAccountPnL(accId) : null;
       
-      if (pnlData && pnlData.pnl !== null) {
-        if (startingPnL === null) startingPnL = pnlData.pnl;
-        globalStats.pnl = pnlData.pnl - startingPnL;
+      // Get P&L from cache (sync for RithmicService, async for BrokerClient)
+      let pnlData = null;
+      if (service.getAccountPnL) {
+        const result = service.getAccountPnL(accId);
+        pnlData = result && result.then ? await result : result; // Handle both sync/async
       }
       
-      // Check positions (less frequent - every 10s instead of 2s)
+      if (pnlData && pnlData.pnl !== null && pnlData.pnl !== undefined && !isNaN(pnlData.pnl)) {
+        if (startingPnL === null) startingPnL = pnlData.pnl;
+        const newPnl = pnlData.pnl - startingPnL;
+        if (!isNaN(newPnl)) globalStats.pnl = newPnl;
+      }
+      
+      // Check positions (less frequent - every 10s)
       if (Date.now() % 10000 < 2000) {
         const posResult = await service.getPositions(accId);
         if (posResult.success && posResult.positions) {
@@ -306,13 +312,15 @@ const executeMultiSymbol = async ({ service, account, contracts, config, strateg
         }
       }
       
-      // Risk checks
-      if (globalStats.pnl >= dailyTarget) {
-        stopReason = 'target'; running = false;
-        ui.addLog('fill_win', `TARGET REACHED! +$${globalStats.pnl.toFixed(2)}`);
-      } else if (globalStats.pnl <= -maxRisk) {
-        stopReason = 'risk'; running = false;
-        ui.addLog('fill_loss', `MAX RISK! -$${Math.abs(globalStats.pnl).toFixed(2)}`);
+      // Risk checks (only if pnl is valid)
+      if (!isNaN(globalStats.pnl)) {
+        if (globalStats.pnl >= dailyTarget) {
+          stopReason = 'target'; running = false;
+          ui.addLog('fill_win', `TARGET REACHED! +$${globalStats.pnl.toFixed(2)}`);
+        } else if (globalStats.pnl <= -maxRisk) {
+          stopReason = 'risk'; running = false;
+          ui.addLog('fill_loss', `MAX RISK! -$${Math.abs(globalStats.pnl).toFixed(2)}`);
+        }
       }
     } catch (e) { /* silent */ }
   };
@@ -321,23 +329,29 @@ const executeMultiSymbol = async ({ service, account, contracts, config, strateg
   const pnlInterval = setInterval(() => { if (running) pollPnL(); }, 2000);
   pollPnL();
   
-  // Live analysis logs every 1 second (rotates through symbols)
+  // Live analysis logs every 5 seconds (rotates through symbols with data)
   let liveLogSymbolIndex = 0;
-  let lastLiveLogSecond = 0;
+  let lastLiveLogTime = 0;
   const liveLogInterval = setInterval(() => {
     if (!running) return;
-    const now = Math.floor(Date.now() / 1000);
-    if (now === lastLiveLogSecond) return;
-    lastLiveLogSecond = now;
+    const now = Date.now();
+    if (now - lastLiveLogTime < 5000) return; // Every 5 seconds
+    lastLiveLogTime = now;
     
-    // Get a symbol to log (rotate through all)
+    // Get symbols with tick data (skip symbols without data)
     const symbolCodes = Array.from(symbolData.keys());
     if (symbolCodes.length === 0) return;
     
-    const symbolCode = symbolCodes[liveLogSymbolIndex % symbolCodes.length];
-    liveLogSymbolIndex++;
+    // Find next symbol with data
+    let attempts = 0;
+    let symbolCode, data;
+    do {
+      symbolCode = symbolCodes[liveLogSymbolIndex % symbolCodes.length];
+      liveLogSymbolIndex++;
+      data = symbolData.get(symbolCode);
+      attempts++;
+    } while ((!data || data.stats.tickCount === 0) && attempts < symbolCodes.length);
     
-    const data = symbolData.get(symbolCode);
     if (!data) return;
     
     const state = data.strategy.getAnalysisState?.(symbolCode, data.stats.lastPrice);
@@ -353,10 +367,13 @@ const executeMultiSymbol = async ({ service, account, contracts, config, strateg
       tickCount: data.stats.tickCount || 0,
     };
     
-    logsEngine.setSymbol(symbolCode);
-    const log = logsEngine.getLog(logState);
-    ui.addLog(log.type, log.message);
-    if (log.logToSession) sessionLogger.log('ANALYSIS', `[${symbolCode}] ${log.message}`);
+    // Only log if we have meaningful data
+    if (logState.price > 0 || logState.tickCount > 0) {
+      logsEngine.setSymbol(symbolCode);
+      const log = logsEngine.getLog(logState);
+      ui.addLog(log.type, log.message);
+      if (log.logToSession) sessionLogger.log('ANALYSIS', `[${symbolCode}] ${log.message}`);
+    }
   }, 1000);
   
   // Key handler

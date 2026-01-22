@@ -188,9 +188,9 @@ class AlgoUI {
     // Row 1: Account | Symbol(s)
     const accountName = String(stats.accountName || 'N/A').substring(0, 40);
     const isMultiSymbol = stats.symbolCount && stats.symbolCount > 1;
-    const symbolDisplay = isMultiSymbol 
-      ? `${stats.symbolCount} symbols` 
-      : String(stats.symbol || stats.symbols || 'N/A').substring(0, 35);
+    // Show actual symbols list, truncate if too long
+    const symbolsStr = String(stats.symbols || stats.symbol || 'N/A');
+    const symbolDisplay = symbolsStr.length > 35 ? symbolsStr.substring(0, 32) + '...' : symbolsStr;
     const r1c1 = buildCell('Account', accountName, chalk.cyan, colL);
     const r1c2 = buildCell(isMultiSymbol ? 'Symbols' : 'Symbol', symbolDisplay, chalk.yellow, colR);
     row(r1c1.padded, r1c2.padded);
