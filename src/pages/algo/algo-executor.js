@@ -47,7 +47,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   
   const stats = {
     accountName, symbol: symbolName, qty: contracts, target: dailyTarget, risk: maxRisk,
-    propfirm: account.propfirm || 'Unknown', platform: account.platform || 'Rithmic',
+    propfirm: account.propfirm || account.platform || 'Rithmic', platform: account.platform || 'Rithmic',
     pnl: 0, trades: 0, wins: 0, losses: 0, latency: 0, connected: false, startTime: Date.now()
   };
   

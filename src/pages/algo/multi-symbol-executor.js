@@ -92,6 +92,7 @@ const executeMultiSymbol = async ({ service, account, contracts, config, strateg
     qty: contractsPerSymbol,
     target: dailyTarget,
     risk: maxRisk,
+    propfirm: account.propfirm || account.platform || 'Rithmic',
     pnl: 0,
     trades: 0,
     wins: 0,
