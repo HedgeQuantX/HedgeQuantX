@@ -56,7 +56,11 @@ const executeMultiSymbol = async ({ service, account, contracts, config, strateg
         losses: 0,
         tickCount: 0,
         lastPrice: null,
-        position: 0
+        position: 0,
+        buyVolume: 0,
+        sellVolume: 0,
+        runningDelta: 0,
+        runningBuyPct: 50
       },
       pendingOrder: false,
       startingPnL: null
@@ -219,6 +223,27 @@ const executeMultiSymbol = async ({ service, account, contracts, config, strateg
     
     data.stats.lastPrice = price;
     
+    // Track buy/sell volume for delta calculation
+    if (tick.side === 'buy' || tick.aggressor === 1) {
+      data.stats.buyVolume += volume;
+    } else if (tick.side === 'sell' || tick.aggressor === 2) {
+      data.stats.sellVolume += volume;
+    } else if (price && data.stats.lastPrice) {
+      if (price > data.stats.lastPrice) data.stats.buyVolume += volume;
+      else if (price < data.stats.lastPrice) data.stats.sellVolume += volume;
+    }
+    
+    // Update running delta/buyPct every 1000 ticks
+    if (data.stats.tickCount % 1000 === 0) {
+      const totalVol = data.stats.buyVolume + data.stats.sellVolume;
+      if (totalVol > 0) {
+        data.stats.runningDelta = data.stats.buyVolume - data.stats.sellVolume;
+        data.stats.runningBuyPct = (data.stats.buyVolume / totalVol) * 100;
+      }
+      data.stats.buyVolume = 0;
+      data.stats.sellVolume = 0;
+    }
+    
     // Process tick through strategy
     if (price && price > 0) {
       data.strategy.processTick({
@@ -363,16 +388,23 @@ const executeMultiSymbol = async ({ service, account, contracts, config, strateg
     if (!data) return;
     
     const state = data.strategy.getAnalysisState?.(symbolCode, data.stats.lastPrice);
+    const buyPct = data.stats.runningBuyPct || 50;
     const logState = {
       bars: state?.barsProcessed || 0,
       swings: state?.swingsDetected || 0,
       zones: state?.activeZones || 0,
-      trend: 'neutral',
+      trend: buyPct > 55 ? 'bullish' : buyPct < 45 ? 'bearish' : 'neutral',
       nearZone: (state?.nearestSupport || state?.nearestResistance) ? true : false,
       setupForming: state?.ready && state?.activeZones > 0,
       position: data.stats.position || 0,
       price: data.stats.lastPrice || 0,
+      delta: data.stats.runningDelta || 0,
+      buyPct: buyPct,
       tickCount: data.stats.tickCount || 0,
+      // QUANT metrics - REAL values from strategy
+      zScore: state?.zScore || 0,
+      vpin: state?.vpin || 0,
+      ofi: state?.ofi || 0,
     };
     
     // Only log if we have meaningful data

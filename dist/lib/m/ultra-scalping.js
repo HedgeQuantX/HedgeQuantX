@@ -1,1 +1,705 @@
-const _0x1746f9=_0x67cf;(function(_0x3d2fd7,_0x154471){const _0x25dbb9=_0x67cf,_0x17daf6=_0x3d2fd7();while(!![]){try{const _0x3ecd46=parseInt(_0x25dbb9(0x1b9))/0x1*(-parseInt(_0x25dbb9(0x192))/0x2)+parseInt(_0x25dbb9(0x1e0))/0x3+parseInt(_0x25dbb9(0x1b0))/0x4*(parseInt(_0x25dbb9(0x18e))/0x5)+-parseInt(_0x25dbb9(0x19d))/0x6+parseInt(_0x25dbb9(0x1be))/0x7+-parseInt(_0x25dbb9(0x191))/0x8+-parseInt(_0x25dbb9(0x1ed))/0x9*(parseInt(_0x25dbb9(0x1a1))/0xa);if(_0x3ecd46===_0x154471)break;else _0x17daf6['push'](_0x17daf6['shift']());}catch(_0x28cf95){_0x17daf6['push'](_0x17daf6['shift']());}}}(_0x36db,0xe7252));function _0x36db(){const _0x5b2c86=['trades','6\x20(Z-Score,\x20VPIN,\x20Kyle,\x20Kalman,\x20Vol,\x20OFI)','zscoreExitThreshold','info','toFixed','_computeZScore','slice','5893218ncQZzu','zscoreThreshold','recordTradeResult','generateSignal','emit','vpinWindow','breakevenTicks','profitLockPct','size','_applyKalmanFilter','split','low','length','BID','short','25OZDKzR','_calculateATR','volumeBuffer','2443744qfUzyb','1018738PNRkSH','\x20|\x20Z:','normal','kalmanStates','/50\x20bars','winStreak','close','pow','_computeVPIN','baseTargetTicks',',\x20VPIN=','1653240cioaZy','\x20@\x20','_computeOrderFlowImbalance','set','10CcprOf',':\x20tick=','shift','uuid','processTick','log','kalmanMeasurementNoise','max','min','tickValue','barHistory','baseStopTicks','volume','_computeKyleLambda','volatility','1474392uPFCED','errorCovariance','side','buy','pnl','exports','processBar','ofi','now','2jBdAge','config','atrHistory','getBarHistory','%,\x20OFI=','8413090OfENgV','round','stats','tickSize','vpin','HQX_ULTRA_SCALPING_6MODELS','LOSS','ASK','high','\x20|\x20Conf:','minConfidence','stopMultiplier','lossStreak','onTick','signal','WIN','get','%\x20Kyle:','open','reset','push','kalman','weights','targetMultiplier','estimate','priceBuffer','ofiLookback','recentTrades','reduce','lastSignalTime','long','abs','toUpperCase','initialize','469374upPcCM','strategy','timestamp','symbol','getAnalysisState','contractId'];_0x36db=function(){return _0x5b2c86;};return _0x36db();}const EventEmitter=require('events'),{v4:uuidv4}=require(_0x1746f9(0x1a4)),OrderSide={'BID':0x0,'ASK':0x1},SignalStrength={'WEAK':0x1,'MODERATE':0x2,'STRONG':0x3,'VERY_STRONG':0x4};function _0x67cf(_0xb85477,_0x2bd4ab){_0xb85477=_0xb85477-0x18e;const _0x36db92=_0x36db();let _0x67cfa1=_0x36db92[_0xb85477];return _0x67cfa1;}class HQXUltraScalping extends EventEmitter{constructor(_0x5a43ad={}){const _0x258b23=_0x1746f9;super(),this[_0x258b23(0x1c1)]=_0x5a43ad['tickSize']||0.25,this['tickValue']=_0x5a43ad[_0x258b23(0x1aa)]||0x5,this['zscoreEntryThreshold']=1.5,this[_0x258b23(0x1e8)]=0.5,this['vpinWindow']=0x32,this['vpinToxicThreshold']=0.7,this['kalmanProcessNoise']=0.01,this[_0x258b23(0x1a7)]=0.1,this['volatilityLookback']=0x64,this[_0x258b23(0x1d8)]=0x14,this[_0x258b23(0x1ac)]=0x8,this[_0x258b23(0x19b)]=0x10,this['breakevenTicks']=0x4,this['profitLockPct']=0.5,this[_0x258b23(0x1c8)]=0.55,this[_0x258b23(0x1d4)]={'zscore':0.3,'ofi':0.2,'vpin':0.15,'kalman':0.15,'kyleLambda':0.1,'volatility':0.1},this['barHistory']=new Map(),this[_0x258b23(0x1d7)]=new Map(),this['volumeBuffer']=new Map(),this['kalmanStates']=new Map(),this[_0x258b23(0x1bb)]=new Map(),this['recentTrades']=[],this['winStreak']=0x0,this[_0x258b23(0x1ca)]=0x0,this['lastSignalTime']=0x0,this['cooldownMs']=0x7530,this['minHoldTimeMs']=0x2710,this[_0x258b23(0x1c0)]={'signals':0x0,'trades':0x0,'wins':0x0,'losses':0x0,'pnl':0x0};}[_0x1746f9(0x1df)](_0x2b546b,_0x5e5fd0=0.25,_0x65b5b3=0x5){const _0x2e3fff=_0x1746f9;this[_0x2e3fff(0x1c1)]=_0x5e5fd0,this[_0x2e3fff(0x1aa)]=_0x65b5b3,this['barHistory']['set'](_0x2b546b,[]),this['priceBuffer'][_0x2e3fff(0x1a0)](_0x2b546b,[]),this[_0x2e3fff(0x190)][_0x2e3fff(0x1a0)](_0x2b546b,[]),this[_0x2e3fff(0x1bb)]['set'](_0x2b546b,[]),this[_0x2e3fff(0x195)][_0x2e3fff(0x1a0)](_0x2b546b,{'estimate':0x0,'errorCovariance':0x1}),this['emit']('log',{'type':'info','message':'[HQX-UltraScalping]\x20Initialized\x20for\x20'+_0x2b546b+_0x2e3fff(0x1a2)+_0x5e5fd0+',\x20value='+_0x65b5b3}),this['emit'](_0x2e3fff(0x1a6),{'type':'info','message':'[HQX-UltraScalping]\x206\x20Models:\x20Z-Score(30%),\x20OFI(20%),\x20VPIN(15%),\x20Kalman(15%),\x20Kyle(10%),\x20Vol(10%)'});}['processTick'](_0x448e59){const _0x429bba=_0x1746f9,{contractId:_0x4215b2,price:_0x15b794,volume:_0x9b4f4a,side:_0x395d45,timestamp:_0x4f9c45}=_0x448e59,_0x3f02ad={'timestamp':_0x4f9c45||Date[_0x429bba(0x1b8)](),'open':_0x15b794,'high':_0x15b794,'low':_0x15b794,'close':_0x15b794,'volume':_0x9b4f4a||0x1};return this['processBar'](_0x4215b2,_0x3f02ad);}['onTick'](_0x32092f){const _0x3092f9=_0x1746f9;return this[_0x3092f9(0x1a5)](_0x32092f);}['onTrade'](_0x42cbc9){const _0x368754=_0x1746f9;return this['processTick']({'contractId':_0x42cbc9[_0x368754(0x1e5)]||_0x42cbc9[_0x368754(0x1e3)],'price':_0x42cbc9['price'],'volume':_0x42cbc9[_0x368754(0x1f5)]||_0x42cbc9['volume']||0x1,'side':_0x42cbc9[_0x368754(0x1b2)],'timestamp':_0x42cbc9[_0x368754(0x1e2)]||Date['now']()});}[_0x1746f9(0x1b6)](_0x100e21,_0x77e2f7){const _0x33a552=_0x1746f9;let _0xed9fba=this['barHistory']['get'](_0x100e21);!_0xed9fba&&(this['initialize'](_0x100e21),_0xed9fba=this['barHistory'][_0x33a552(0x1ce)](_0x100e21));_0xed9fba[_0x33a552(0x1d2)](_0x77e2f7);if(_0xed9fba['length']>0x1f4)_0xed9fba[_0x33a552(0x1a3)]();const _0x21bc76=this[_0x33a552(0x1d7)][_0x33a552(0x1ce)](_0x100e21);_0x21bc76[_0x33a552(0x1d2)](_0x77e2f7['close']);if(_0x21bc76['length']>0xc8)_0x21bc76[_0x33a552(0x1a3)]();const _0x537280=this[_0x33a552(0x190)][_0x33a552(0x1ce)](_0x100e21),_0x3fc573=_0x77e2f7['high']-_0x77e2f7['low'];let _0x322235=_0x77e2f7['volume']*0.5,_0x42a157=_0x77e2f7['volume']*0.5;if(_0x3fc573>0x0){const _0x53dc8f=(_0x77e2f7[_0x33a552(0x198)]-_0x77e2f7['low'])/_0x3fc573;_0x322235=_0x77e2f7['volume']*_0x53dc8f,_0x42a157=_0x77e2f7[_0x33a552(0x1ad)]*(0x1-_0x53dc8f);}_0x537280[_0x33a552(0x1d2)]({'buy':_0x322235,'sell':_0x42a157});if(_0x537280[_0x33a552(0x1f9)]>0x64)_0x537280['shift']();if(_0xed9fba['length']<0x32)return null;const _0x190dba=this[_0x33a552(0x1eb)](_0x21bc76),_0x26aa2f=this['_computeVPIN'](_0x537280),_0x45b15a=this[_0x33a552(0x1ae)](_0xed9fba),_0xbca683=this[_0x33a552(0x1f6)](_0x100e21,_0x77e2f7[_0x33a552(0x198)]),{regime:_0x309920,params:_0x56501b}=this['_detectVolatilityRegime'](_0x100e21,_0xed9fba),_0x1c97e4=this['_computeOrderFlowImbalance'](_0xed9fba);return this['_generateSignal'](_0x100e21,_0x77e2f7['close'],_0x190dba,_0x26aa2f,_0x45b15a,_0xbca683,_0x309920,_0x56501b,_0x1c97e4,_0xed9fba);}[_0x1746f9(0x1eb)](_0x3fa3ee,_0x48ee30=0x32){const _0x17d5ec=_0x1746f9;if(_0x3fa3ee['length']<_0x48ee30)return 0x0;const _0x1d457c=_0x3fa3ee['slice'](-_0x48ee30),_0x26aab8=_0x1d457c['reduce']((_0x138d6b,_0x2050a6)=>_0x138d6b+_0x2050a6,0x0)/_0x48ee30,_0x36e196=_0x1d457c[_0x17d5ec(0x1da)]((_0xe3681d,_0x3383c6)=>_0xe3681d+Math['pow'](_0x3383c6-_0x26aab8,0x2),0x0)/_0x48ee30,_0xd496a6=Math['sqrt'](_0x36e196);if(_0xd496a6<0.0001)return 0x0;const _0x2ac490=_0x3fa3ee[_0x3fa3ee[_0x17d5ec(0x1f9)]-0x1];return(_0x2ac490-_0x26aab8)/_0xd496a6;}['_computeVPIN'](_0x5c82d6){const _0x1070f4=_0x1746f9;if(_0x5c82d6['length']<this['vpinWindow'])return 0.5;const _0x2fb113=_0x5c82d6['slice'](-this[_0x1070f4(0x1f2)]);let _0x4bef7c=0x0,_0x1a10bd=0x0;for(const _0x3443d7 of _0x2fb113){_0x4bef7c+=_0x3443d7['buy'],_0x1a10bd+=_0x3443d7['sell'];}const _0x42b0e8=_0x4bef7c+_0x1a10bd;if(_0x42b0e8<0x1)return 0.5;return Math[_0x1070f4(0x1dd)](_0x4bef7c-_0x1a10bd)/_0x42b0e8;}[_0x1746f9(0x1ae)](_0x5806b8){const _0x2fa6fd=_0x1746f9;if(_0x5806b8[_0x2fa6fd(0x1f9)]<0x14)return 0x0;const _0x2fa503=_0x5806b8[_0x2fa6fd(0x1ec)](-0x14),_0x5c27c5=[],_0x464fcd=[];for(let _0x48ad11=0x1;_0x48ad11<_0x2fa503['length'];_0x48ad11++){_0x5c27c5['push'](_0x2fa503[_0x48ad11][_0x2fa6fd(0x198)]-_0x2fa503[_0x48ad11-0x1][_0x2fa6fd(0x198)]),_0x464fcd['push'](_0x2fa503[_0x48ad11][_0x2fa6fd(0x1ad)]);}const _0x52bb5c=_0x5c27c5[_0x2fa6fd(0x1da)]((_0x1760a4,_0xf2b971)=>_0x1760a4+_0xf2b971,0x0)/_0x5c27c5['length'],_0x3d4396=_0x464fcd['reduce']((_0x350f2b,_0x4a3fa2)=>_0x350f2b+_0x4a3fa2,0x0)/_0x464fcd[_0x2fa6fd(0x1f9)];let _0x29ede4=0x0,_0x173362=0x0;for(let _0x458871=0x0;_0x458871<_0x5c27c5[_0x2fa6fd(0x1f9)];_0x458871++){_0x29ede4+=(_0x5c27c5[_0x458871]-_0x52bb5c)*(_0x464fcd[_0x458871]-_0x3d4396),_0x173362+=Math[_0x2fa6fd(0x199)](_0x464fcd[_0x458871]-_0x3d4396,0x2);}_0x29ede4/=_0x5c27c5['length'],_0x173362/=_0x5c27c5['length'];if(_0x173362<0.0001)return 0x0;return Math['abs'](_0x29ede4/_0x173362);}[_0x1746f9(0x1f6)](_0x3520b3,_0x1f7107){const _0x4f81bc=_0x1746f9;let _0x441306=this[_0x4f81bc(0x195)]['get'](_0x3520b3);if(!_0x441306)return _0x441306={'estimate':_0x1f7107,'errorCovariance':0x1},this[_0x4f81bc(0x195)]['set'](_0x3520b3,_0x441306),_0x1f7107;const _0x2404ec=_0x441306['estimate'],_0x2bb5c9=_0x441306[_0x4f81bc(0x1b1)]+this['kalmanProcessNoise'],_0x1f7a65=_0x2bb5c9/(_0x2bb5c9+this['kalmanMeasurementNoise']),_0xc20102=_0x2404ec+_0x1f7a65*(_0x1f7107-_0x2404ec),_0x12c715=(0x1-_0x1f7a65)*_0x2bb5c9;return _0x441306[_0x4f81bc(0x1d6)]=_0xc20102,_0x441306['errorCovariance']=_0x12c715,_0xc20102;}['_detectVolatilityRegime'](_0x2f8a88,_0x4ac355){const _0xbc41f3=_0x1746f9,_0x339988=this[_0xbc41f3(0x18f)](_0x4ac355),_0x5f24be=_0x339988/this[_0xbc41f3(0x1c1)];let _0x279952=this[_0xbc41f3(0x1bb)][_0xbc41f3(0x1ce)](_0x2f8a88);!_0x279952&&(_0x279952=[],this[_0xbc41f3(0x1bb)]['set'](_0x2f8a88,_0x279952));_0x279952['push'](_0x339988);if(_0x279952['length']>0x1f4)_0x279952['shift']();let _0x524aa7=0.5;_0x279952['length']>=0x14&&(_0x524aa7=_0x279952['filter'](_0x474dda=>_0x474dda<=_0x339988)[_0xbc41f3(0x1f9)]/_0x279952[_0xbc41f3(0x1f9)]);let _0x1b333b,_0x5c07e8;if(_0x524aa7<0.25)_0x1b333b=_0xbc41f3(0x1f8),_0x5c07e8={'stopMultiplier':0.8,'targetMultiplier':0.9,'zscoreThreshold':1.2,'confidenceBonus':0.05};else _0x524aa7<0.75?(_0x1b333b='normal',_0x5c07e8={'stopMultiplier':0x1,'targetMultiplier':0x1,'zscoreThreshold':1.5,'confidenceBonus':0x0}):(_0x1b333b='high',_0x5c07e8={'stopMultiplier':1.3,'targetMultiplier':1.2,'zscoreThreshold':0x2,'confidenceBonus':-0.05});return{'regime':_0x1b333b,'params':_0x5c07e8};}[_0x1746f9(0x18f)](_0x4d91e8,_0x4c7029=0xe){const _0x8a4551=_0x1746f9;if(_0x4d91e8[_0x8a4551(0x1f9)]<_0x4c7029+0x1)return 2.5;const _0x19725f=[];for(let _0x10b591=_0x4d91e8['length']-_0x4c7029;_0x10b591<_0x4d91e8[_0x8a4551(0x1f9)];_0x10b591++){const _0x1ed810=_0x4d91e8[_0x10b591],_0x1b4fa9=_0x4d91e8[_0x10b591-0x1][_0x8a4551(0x198)],_0x4d5246=Math[_0x8a4551(0x1a8)](_0x1ed810['high']-_0x1ed810['low'],Math['abs'](_0x1ed810[_0x8a4551(0x1c6)]-_0x1b4fa9),Math['abs'](_0x1ed810['low']-_0x1b4fa9));_0x19725f['push'](_0x4d5246);}return _0x19725f['reduce']((_0x5a31af,_0x24e199)=>_0x5a31af+_0x24e199,0x0)/_0x19725f['length'];}[_0x1746f9(0x19f)](_0xecd442){const _0x4cc928=_0x1746f9;if(_0xecd442['length']<this['ofiLookback'])return 0x0;const _0x338ca2=_0xecd442['slice'](-this[_0x4cc928(0x1d8)]);let _0x31544c=0x0,_0x3a324d=0x0;for(const _0x25422f of _0x338ca2){const _0x20f7d6=_0x25422f['high']-_0x25422f[_0x4cc928(0x1f8)];if(_0x20f7d6>0x0){const _0x242e63=(_0x25422f[_0x4cc928(0x198)]-_0x25422f['low'])/_0x20f7d6;_0x31544c+=_0x242e63*_0x25422f['volume'],_0x3a324d+=(0x1-_0x242e63)*_0x25422f['volume'];}}const _0x53a73b=_0x31544c+_0x3a324d;if(_0x53a73b<0x1)return 0x0;return(_0x31544c-_0x3a324d)/_0x53a73b;}['_generateSignal'](_0x520adb,_0x335e18,_0x3f79c6,_0x469f2b,_0x590dc4,_0x22d515,_0x1ea5ce,_0x58b603,_0x48c458,_0x35cb52){const _0x234464=_0x1746f9,_0x42c7eb=Math['abs'](_0x3f79c6);if(_0x42c7eb<_0x58b603['zscoreThreshold'])return null;if(_0x469f2b>this['vpinToxicThreshold'])return null;let _0x2b818f;if(_0x3f79c6<-_0x58b603[_0x234464(0x1ee)])_0x2b818f=_0x234464(0x1dc);else{if(_0x3f79c6>_0x58b603['zscoreThreshold'])_0x2b818f=_0x234464(0x1fb);else return null;}const _0x46de4e=_0x2b818f===_0x234464(0x1dc)&&_0x48c458>0.1||_0x2b818f===_0x234464(0x1fb)&&_0x48c458<-0.1,_0xb7c0e=_0x335e18-_0x22d515,_0x32fefd=_0x2b818f===_0x234464(0x1dc)&&_0xb7c0e<0x0||_0x2b818f===_0x234464(0x1fb)&&_0xb7c0e>0x0,_0x47a9bb={'zscore':Math[_0x234464(0x1a9)](0x1,_0x42c7eb/0x4),'vpin':0x1-_0x469f2b,'kyleLambda':_0x590dc4>0.001?0.5:0.8,'kalman':_0x32fefd?0.8:0.4,'volatility':_0x1ea5ce===_0x234464(0x194)?0.8:_0x1ea5ce==='low'?0.7:0.6,'ofi':_0x46de4e?0.9:0.5,'composite':0x0};_0x47a9bb['composite']=_0x47a9bb['zscore']*this[_0x234464(0x1d4)]['zscore']+_0x47a9bb[_0x234464(0x1c2)]*this['weights']['vpin']+_0x47a9bb['kyleLambda']*this[_0x234464(0x1d4)]['kyleLambda']+_0x47a9bb['kalman']*this[_0x234464(0x1d4)][_0x234464(0x1d3)]+_0x47a9bb['volatility']*this['weights'][_0x234464(0x1af)]+_0x47a9bb['ofi']*this['weights'][_0x234464(0x1b7)];const _0x3fadc8=Math['min'](0x1,_0x47a9bb['composite']+_0x58b603['confidenceBonus']);if(_0x3fadc8<this['minConfidence'])return null;if(Date[_0x234464(0x1b8)]()-this['lastSignalTime']<this['cooldownMs'])return null;const _0x1274b=Math['round'](this['baseStopTicks']*_0x58b603[_0x234464(0x1c9)]),_0x19e244=Math[_0x234464(0x1bf)](this[_0x234464(0x19b)]*_0x58b603[_0x234464(0x1d5)]),_0x498c63=Math['max'](0x6,Math[_0x234464(0x1a9)](0xc,_0x1274b)),_0x248400=Math[_0x234464(0x1a8)](_0x498c63*1.5,Math['min'](0x18,_0x19e244));let _0x810d1b,_0xd2df88,_0x905f77,_0x3b7432;_0x2b818f===_0x234464(0x1dc)?(_0x810d1b=_0x335e18-_0x498c63*this['tickSize'],_0xd2df88=_0x335e18+_0x248400*this['tickSize'],_0x905f77=_0x335e18+this[_0x234464(0x1f3)]*this['tickSize'],_0x3b7432=_0x335e18+_0x248400*this['profitLockPct']*this[_0x234464(0x1c1)]):(_0x810d1b=_0x335e18+_0x498c63*this['tickSize'],_0xd2df88=_0x335e18-_0x248400*this['tickSize'],_0x905f77=_0x335e18-this[_0x234464(0x1f3)]*this['tickSize'],_0x3b7432=_0x335e18-_0x248400*this[_0x234464(0x1f4)]*this['tickSize']);const _0x3c2a2f=_0x248400/_0x498c63,_0x3678eb=Math['round'](_0x248400*0.5),_0x36cd4d=Math[_0x234464(0x1bf)](_0x498c63*0.4);let _0x458abf=SignalStrength['MODERATE'];if(_0x3fadc8>=0.85)_0x458abf=SignalStrength['VERY_STRONG'];else{if(_0x3fadc8>=0.75)_0x458abf=SignalStrength['STRONG'];else{if(_0x3fadc8<0.6)_0x458abf=SignalStrength['WEAK'];}}const _0x31fdb7=0.5+(_0x3fadc8-0.5)*0.4,_0x4dbc1d=_0x31fdb7*Math[_0x234464(0x1dd)](_0xd2df88-_0x335e18)-(0x1-_0x31fdb7)*Math[_0x234464(0x1dd)](_0x335e18-_0x810d1b);this[_0x234464(0x1db)]=Date['now'](),this['stats']['signals']++;const _0xd35aa3={'id':uuidv4(),'timestamp':Date[_0x234464(0x1b8)](),'symbol':_0x520adb[_0x234464(0x1f7)]('.')[0x0]||_0x520adb,'contractId':_0x520adb,'side':_0x2b818f===_0x234464(0x1dc)?OrderSide[_0x234464(0x1fa)]:OrderSide[_0x234464(0x1c5)],'direction':_0x2b818f,'strategy':_0x234464(0x1c3),'strength':_0x458abf,'edge':_0x4dbc1d,'confidence':_0x3fadc8,'entry':_0x335e18,'entryPrice':_0x335e18,'stopLoss':_0x810d1b,'takeProfit':_0xd2df88,'riskReward':_0x3c2a2f,'stopTicks':_0x498c63,'targetTicks':_0x248400,'trailTriggerTicks':_0x3678eb,'trailDistanceTicks':_0x36cd4d,'beBreakeven':_0x905f77,'profitLockLevel':_0x3b7432,'zScore':_0x3f79c6,'zScoreExit':this['zscoreExitThreshold'],'vpinValue':_0x469f2b,'kyleLambda':_0x590dc4,'kalmanEstimate':_0x22d515,'volatilityRegime':_0x1ea5ce,'ofiValue':_0x48c458,'models':_0x47a9bb,'orderFlowConfirmed':_0x46de4e,'kalmanConfirmed':_0x32fefd,'expires':Date['now']()+0xea60};return this['emit'](_0x234464(0x1cc),{'side':_0x2b818f==='long'?_0x234464(0x1b3):'sell','action':_0x234464(0x1d0),'reason':'Z='+_0x3f79c6['toFixed'](0x2)+_0x234464(0x19c)+(_0x469f2b*0x64)[_0x234464(0x1ea)](0x0)+_0x234464(0x1bd)+(_0x48c458*0x64)['toFixed'](0x0)+'%,\x20cf='+(_0x3fadc8*0x64)['toFixed'](0x0)+'%',..._0xd35aa3}),this['emit']('log',{'type':_0x234464(0x1e9),'message':'[HQX]\x20SIGNAL:\x20'+_0x2b818f[_0x234464(0x1de)]()+_0x234464(0x19e)+_0x335e18['toFixed'](0x2)+_0x234464(0x193)+_0x3f79c6['toFixed'](0x2)+'\x20VPIN:'+(_0x469f2b*0x64)[_0x234464(0x1ea)](0x0)+'%\x20OFI:'+(_0x48c458*0x64)[_0x234464(0x1ea)](0x0)+_0x234464(0x1cf)+_0x590dc4[_0x234464(0x1ea)](0x5)+'\x20Regime:'+_0x1ea5ce+_0x234464(0x1c7)+(_0x3fadc8*0x64)[_0x234464(0x1ea)](0x0)+'%'}),_0xd35aa3;}['shouldExitByZScore'](_0x29427c){const _0x2e24f5=_0x1746f9,_0x1954c8=this[_0x2e24f5(0x1d7)]['get'](_0x29427c);if(!_0x1954c8||_0x1954c8['length']<0x32)return![];const _0xfe7f7d=this[_0x2e24f5(0x1eb)](_0x1954c8);return Math['abs'](_0xfe7f7d)<this[_0x2e24f5(0x1e8)];}['getModelValues'](_0x32e4ba){const _0x804109=_0x1746f9,_0x4e24c7=this['priceBuffer']['get'](_0x32e4ba),_0x46623b=this[_0x804109(0x190)]['get'](_0x32e4ba),_0x492ce1=this[_0x804109(0x1ab)][_0x804109(0x1ce)](_0x32e4ba);if(!_0x4e24c7||!_0x46623b||!_0x492ce1||_0x492ce1['length']<0x32)return null;const _0x2fc56e=this['_computeZScore'](_0x4e24c7),_0xeda654=this[_0x804109(0x19a)](_0x46623b),_0x49b3e5=this['_computeKyleLambda'](_0x492ce1),_0x36f353=this[_0x804109(0x19f)](_0x492ce1);return{'zscore':Math[_0x804109(0x1a9)](0x1,Math[_0x804109(0x1dd)](_0x2fc56e)/0x4),'vpin':0x1-_0xeda654,'kyleLambda':_0x49b3e5>0.001?0.5:0.8,'kalman':0.7,'volatility':0.7,'ofi':Math[_0x804109(0x1dd)](_0x36f353)>0.1?0.8:0.5,'composite':0.7,'raw':{'zscore':_0x2fc56e,'vpin':_0xeda654,'kyleLambda':_0x49b3e5,'ofi':_0x36f353}};}[_0x1746f9(0x1e4)](_0x3ad9bf,_0x5ac53e){const _0x187fa3=_0x1746f9,_0x25bc3b=this[_0x187fa3(0x1ab)]['get'](_0x3ad9bf)||[];if(_0x25bc3b[_0x187fa3(0x1f9)]<0x32)return{'ready':![],'message':'Collecting\x20data...\x20'+_0x25bc3b[_0x187fa3(0x1f9)]+_0x187fa3(0x196)};const _0x6917d0=this['priceBuffer'][_0x187fa3(0x1ce)](_0x3ad9bf)||[],_0x5a9bd0=this[_0x187fa3(0x190)][_0x187fa3(0x1ce)](_0x3ad9bf)||[],_0x3a5335=this['_computeZScore'](_0x6917d0),_0x486926=this[_0x187fa3(0x19a)](_0x5a9bd0),_0x1ec2f1=this[_0x187fa3(0x19f)](_0x25bc3b),_0x1e61b5=this[_0x187fa3(0x1ae)](_0x25bc3b),{regime:_0x557940,params:_0x377daa}=this['_detectVolatilityRegime'](_0x3ad9bf,_0x25bc3b);return{'ready':!![],'zScore':_0x3a5335,'vpin':_0x486926,'ofi':_0x1ec2f1,'kyleLambda':_0x1e61b5,'regime':_0x557940,'stopTicks':Math[_0x187fa3(0x1bf)](this[_0x187fa3(0x1ac)]*_0x377daa['stopMultiplier']),'targetTicks':Math[_0x187fa3(0x1bf)](this['baseTargetTicks']*_0x377daa['targetMultiplier']),'threshold':_0x377daa['zscoreThreshold'],'barsProcessed':_0x25bc3b[_0x187fa3(0x1f9)],'models':_0x187fa3(0x1e7)};}['recordTradeResult'](_0x2744c7){const _0x573aef=_0x1746f9;this['recentTrades'][_0x573aef(0x1d2)]({'netPnl':_0x2744c7,'timestamp':Date['now']()});if(this[_0x573aef(0x1d9)][_0x573aef(0x1f9)]>0x64)this[_0x573aef(0x1d9)]['shift']();_0x2744c7>0x0?(this[_0x573aef(0x197)]++,this['lossStreak']=0x0,this['stats']['wins']++):(this['lossStreak']++,this[_0x573aef(0x197)]=0x0,this['stats']['losses']++),this[_0x573aef(0x1c0)][_0x573aef(0x1e6)]++,this[_0x573aef(0x1c0)][_0x573aef(0x1b4)]+=_0x2744c7,this[_0x573aef(0x1f1)](_0x573aef(0x1a6),{'type':'debug','message':'[HQX]\x20Trade\x20result:\x20'+(_0x2744c7>0x0?_0x573aef(0x1cd):_0x573aef(0x1c4))+'\x20$'+_0x2744c7[_0x573aef(0x1ea)](0x2)+',\x20streak:\x20'+(_0x2744c7>0x0?this['winStreak']:-this['lossStreak'])});}[_0x1746f9(0x1bc)](_0x4928ce){const _0xfdb719=_0x1746f9;return this[_0xfdb719(0x1ab)]['get'](_0x4928ce)||[];}['getStats'](){return this['stats'];}['reset'](_0x22ee62){const _0x5a6b14=_0x1746f9;this['barHistory'][_0x5a6b14(0x1a0)](_0x22ee62,[]),this['priceBuffer'][_0x5a6b14(0x1a0)](_0x22ee62,[]),this['volumeBuffer'][_0x5a6b14(0x1a0)](_0x22ee62,[]),this[_0x5a6b14(0x1bb)]['set'](_0x22ee62,[]),this[_0x5a6b14(0x195)][_0x5a6b14(0x1a0)](_0x22ee62,{'estimate':0x0,'errorCovariance':0x1}),this['emit']('log',{'type':'info','message':'[HQX-UltraScalping]\x20Reset\x20state\x20for\x20'+_0x22ee62});}}class UltraScalpingStrategy extends EventEmitter{constructor(_0x1a6888={}){const _0x17f7d5=_0x1746f9;super(),this[_0x17f7d5(0x1ba)]=_0x1a6888,this['strategy']=new HQXUltraScalping(_0x1a6888),this[_0x17f7d5(0x1e1)]['on']('signal',_0xde3f73=>this['emit']('signal',_0xde3f73)),this[_0x17f7d5(0x1e1)]['on']('log',_0x428e4f=>this[_0x17f7d5(0x1f1)](_0x17f7d5(0x1a6),_0x428e4f));}[_0x1746f9(0x1a5)](_0x56e7f0){const _0x344bc2=_0x1746f9;return this[_0x344bc2(0x1e1)][_0x344bc2(0x1a5)](_0x56e7f0);}[_0x1746f9(0x1cb)](_0x367642){return this['strategy']['onTick'](_0x367642);}['onTrade'](_0xaf0fd7){return this['strategy']['onTrade'](_0xaf0fd7);}[_0x1746f9(0x1b6)](_0x57daa5,_0x421f13){return this['strategy']['processBar'](_0x57daa5,_0x421f13);}['initialize'](_0x9f4b2d,_0x4b3240,_0x5e4246){const _0x1c46f3=_0x1746f9;return this[_0x1c46f3(0x1e1)]['initialize'](_0x9f4b2d,_0x4b3240,_0x5e4246);}[_0x1746f9(0x1e4)](_0x8c3608,_0x48c423){const _0x31b05a=_0x1746f9;return this[_0x31b05a(0x1e1)]['getAnalysisState'](_0x8c3608,_0x48c423);}[_0x1746f9(0x1ef)](_0x772829){const _0xca4138=_0x1746f9;return this['strategy'][_0xca4138(0x1ef)](_0x772829);}['reset'](_0x4b9f24){const _0x53f6b2=_0x1746f9;return this[_0x53f6b2(0x1e1)][_0x53f6b2(0x1d1)](_0x4b9f24);}['getStats'](){return this['strategy']['getStats']();}['getBarHistory'](_0x51fefb){const _0x2e3ee4=_0x1746f9;return this['strategy'][_0x2e3ee4(0x1bc)](_0x51fefb);}['getModelValues'](_0x3b8e36){return this['strategy']['getModelValues'](_0x3b8e36);}['shouldExitByZScore'](_0x5224c3){return this['strategy']['shouldExitByZScore'](_0x5224c3);}[_0x1746f9(0x1f0)](_0x5c5181){return null;}}module[_0x1746f9(0x1b5)]={'HQXUltraScalping':HQXUltraScalping,'UltraScalpingStrategy':UltraScalpingStrategy,'M1':UltraScalpingStrategy,'S1':HQXUltraScalping,'OrderSide':OrderSide,'SignalStrength':SignalStrength};
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __commonJS = (cb, mod) => function __require() {
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+};
+
+// ultra-scalping/config.js
+var require_config = __commonJS({
+  "ultra-scalping/config.js"(exports2, module2) {
+    var DEFAULT_CONFIG = {
+      // Model Parameters
+      zscoreEntryThreshold: 1.5,
+      // Live trading threshold (backtest: 2.5)
+      zscoreExitThreshold: 0.5,
+      vpinWindow: 50,
+      vpinToxicThreshold: 0.7,
+      // Skip if VPIN > 0.7
+      volatilityLookback: 100,
+      ofiLookback: 20,
+      // Trade Parameters
+      baseStopTicks: 8,
+      // $40
+      baseTargetTicks: 16,
+      // $80
+      breakevenTicks: 4,
+      // Move to BE at +4 ticks
+      profitLockPct: 0.5,
+      // Lock 50% of profit
+      minConfidence: 0.55,
+      // Minimum composite confidence
+      cooldownMs: 3e4,
+      // 30 seconds between signals
+      minHoldTimeMs: 1e4,
+      // Minimum 10 seconds hold
+      // Model Weights (from Python backtest)
+      weights: {
+        zscore: 0.3,
+        // 30%
+        ofi: 0.2,
+        // 20%
+        vpin: 0.15,
+        // 15%
+        kalman: 0.15,
+        // 15%
+        kyleLambda: 0.1,
+        // 10%
+        volatility: 0.1
+        // 10%
+      },
+      // Session (Futures Market Hours - Sunday 18:00 to Friday 17:00 EST)
+      session: {
+        enabled: false,
+        // Trade anytime markets are open
+        timezone: "America/New_York"
+      }
+    };
+    module2.exports = { DEFAULT_CONFIG };
+  }
+});
+
+// common/types.js
+var require_types = __commonJS({
+  "common/types.js"(exports2, module2) {
+    var OrderSide2 = { BID: 0, ASK: 1 };
+    var SignalStrength2 = { WEAK: 1, MODERATE: 2, STRONG: 3, VERY_STRONG: 4 };
+    module2.exports = { OrderSide: OrderSide2, SignalStrength: SignalStrength2 };
+  }
+});
+
+// ultra-scalping/signal.js
+var require_signal = __commonJS({
+  "ultra-scalping/signal.js"(exports2, module2) {
+    var { v4: uuidv4 } = require("uuid");
+    var { OrderSide: OrderSide2, SignalStrength: SignalStrength2 } = require_types();
+    function generateSignal(params) {
+      const {
+        contractId,
+        currentPrice,
+        zscore,
+        vpin,
+        kyleLambda,
+        kalmanEstimate,
+        regime,
+        volParams,
+        ofi,
+        config,
+        tickSize
+      } = params;
+      const absZscore = Math.abs(zscore);
+      if (absZscore < volParams.zscoreThreshold) {
+        return null;
+      }
+      if (vpin > config.vpinToxicThreshold) {
+        return null;
+      }
+      let direction;
+      if (zscore < -volParams.zscoreThreshold) {
+        direction = "long";
+      } else if (zscore > volParams.zscoreThreshold) {
+        direction = "short";
+      } else {
+        return null;
+      }
+      const ofiConfirms = direction === "long" && ofi > 0.1 || direction === "short" && ofi < -0.1;
+      const kalmanDiff = currentPrice - kalmanEstimate;
+      const kalmanConfirms = direction === "long" && kalmanDiff < 0 || direction === "short" && kalmanDiff > 0;
+      const scores = {
+        zscore: Math.min(1, absZscore / 4),
+        // Normalize to 0-1
+        vpin: 1 - vpin,
+        // Lower VPIN = better
+        kyleLambda: kyleLambda > 1e-3 ? 0.5 : 0.8,
+        // Moderate lambda is good
+        kalman: kalmanConfirms ? 0.8 : 0.4,
+        volatility: regime === "normal" ? 0.8 : regime === "low" ? 0.7 : 0.6,
+        ofi: ofiConfirms ? 0.9 : 0.5,
+        composite: 0
+        // Calculated below
+      };
+      scores.composite = scores.zscore * config.weights.zscore + // 30%
+      scores.vpin * config.weights.vpin + // 15%
+      scores.kyleLambda * config.weights.kyleLambda + // 10%
+      scores.kalman * config.weights.kalman + // 15%
+      scores.volatility * config.weights.volatility + // 10%
+      scores.ofi * config.weights.ofi;
+      const confidence = Math.min(1, scores.composite + volParams.confidenceBonus);
+      if (confidence < config.minConfidence) {
+        return null;
+      }
+      const stopTicks = Math.round(config.baseStopTicks * volParams.stopMultiplier);
+      const targetTicks = Math.round(config.baseTargetTicks * volParams.targetMultiplier);
+      const actualStopTicks = Math.max(6, Math.min(12, stopTicks));
+      const actualTargetTicks = Math.max(actualStopTicks * 1.5, Math.min(24, targetTicks));
+      let stopLoss, takeProfit, beBreakeven, profitLockLevel;
+      if (direction === "long") {
+        stopLoss = currentPrice - actualStopTicks * tickSize;
+        takeProfit = currentPrice + actualTargetTicks * tickSize;
+        beBreakeven = currentPrice + config.breakevenTicks * tickSize;
+        profitLockLevel = currentPrice + actualTargetTicks * config.profitLockPct * tickSize;
+      } else {
+        stopLoss = currentPrice + actualStopTicks * tickSize;
+        takeProfit = currentPrice - actualTargetTicks * tickSize;
+        beBreakeven = currentPrice - config.breakevenTicks * tickSize;
+        profitLockLevel = currentPrice - actualTargetTicks * config.profitLockPct * tickSize;
+      }
+      const riskReward = actualTargetTicks / actualStopTicks;
+      const trailTriggerTicks = Math.round(actualTargetTicks * 0.5);
+      const trailDistanceTicks = Math.round(actualStopTicks * 0.4);
+      let strength = SignalStrength2.MODERATE;
+      if (confidence >= 0.85) strength = SignalStrength2.VERY_STRONG;
+      else if (confidence >= 0.75) strength = SignalStrength2.STRONG;
+      else if (confidence < 0.6) strength = SignalStrength2.WEAK;
+      const winProb = 0.5 + (confidence - 0.5) * 0.4;
+      const edge = winProb * Math.abs(takeProfit - currentPrice) - (1 - winProb) * Math.abs(currentPrice - stopLoss);
+      return {
+        id: uuidv4(),
+        timestamp: Date.now(),
+        symbol: contractId.split(".")[0] || contractId,
+        contractId,
+        side: direction === "long" ? OrderSide2.BID : OrderSide2.ASK,
+        direction,
+        strategy: "HQX_ULTRA_SCALPING_6MODELS",
+        strength,
+        edge,
+        confidence,
+        entry: currentPrice,
+        entryPrice: currentPrice,
+        stopLoss,
+        takeProfit,
+        riskReward,
+        stopTicks: actualStopTicks,
+        targetTicks: actualTargetTicks,
+        trailTriggerTicks,
+        trailDistanceTicks,
+        beBreakeven,
+        profitLockLevel,
+        // Model values for debugging/monitoring
+        zScore: zscore,
+        zScoreExit: config.zscoreExitThreshold,
+        vpinValue: vpin,
+        kyleLambda,
+        kalmanEstimate,
+        volatilityRegime: regime,
+        ofiValue: ofi,
+        models: scores,
+        // Order flow confirmation flag
+        orderFlowConfirmed: ofiConfirms,
+        kalmanConfirmed: kalmanConfirms,
+        expires: Date.now() + 6e4
+      };
+    }
+    module2.exports = { generateSignal };
+  }
+});
+
+// ultra-scalping/models/zscore.js
+var require_zscore = __commonJS({
+  "ultra-scalping/models/zscore.js"(exports2, module2) {
+    function computeZScore(prices, window = 50) {
+      if (prices.length < window) return 0;
+      const recentPrices = prices.slice(-window);
+      const mean = recentPrices.reduce((a, b) => a + b, 0) / window;
+      const variance = recentPrices.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / window;
+      const std = Math.sqrt(variance);
+      if (std < 1e-4) return 0;
+      const currentPrice = prices[prices.length - 1];
+      return (currentPrice - mean) / std;
+    }
+    module2.exports = { computeZScore };
+  }
+});
+
+// ultra-scalping/models/vpin.js
+var require_vpin = __commonJS({
+  "ultra-scalping/models/vpin.js"(exports2, module2) {
+    function computeVPIN(volumes, vpinWindow = 50) {
+      if (volumes.length < vpinWindow) return 0.5;
+      const recentVolumes = volumes.slice(-vpinWindow);
+      let totalBuy = 0;
+      let totalSell = 0;
+      for (const v of recentVolumes) {
+        totalBuy += v.buy;
+        totalSell += v.sell;
+      }
+      const totalVolume = totalBuy + totalSell;
+      if (totalVolume < 1) return 0.5;
+      return Math.abs(totalBuy - totalSell) / totalVolume;
+    }
+    module2.exports = { computeVPIN };
+  }
+});
+
+// ultra-scalping/models/kyle.js
+var require_kyle = __commonJS({
+  "ultra-scalping/models/kyle.js"(exports2, module2) {
+    function computeKyleLambda(bars) {
+      if (bars.length < 20) return 0;
+      const recentBars = bars.slice(-20);
+      const priceChanges = [];
+      const volumes = [];
+      for (let i = 1; i < recentBars.length; i++) {
+        priceChanges.push(recentBars[i].close - recentBars[i - 1].close);
+        volumes.push(recentBars[i].volume);
+      }
+      const meanPrice = priceChanges.reduce((a, b) => a + b, 0) / priceChanges.length;
+      const meanVol = volumes.reduce((a, b) => a + b, 0) / volumes.length;
+      let covariance = 0;
+      let varianceVol = 0;
+      for (let i = 0; i < priceChanges.length; i++) {
+        covariance += (priceChanges[i] - meanPrice) * (volumes[i] - meanVol);
+        varianceVol += Math.pow(volumes[i] - meanVol, 2);
+      }
+      covariance /= priceChanges.length;
+      varianceVol /= priceChanges.length;
+      if (varianceVol < 1e-4) return 0;
+      return Math.abs(covariance / varianceVol);
+    }
+    module2.exports = { computeKyleLambda };
+  }
+});
+
+// ultra-scalping/models/kalman.js
+var require_kalman = __commonJS({
+  "ultra-scalping/models/kalman.js"(exports2, module2) {
+    var KALMAN_PROCESS_NOISE = 0.01;
+    var KALMAN_MEASUREMENT_NOISE = 0.1;
+    function applyKalmanFilter(state, measurement) {
+      if (!state || state.estimate === 0) {
+        return {
+          estimate: measurement,
+          errorCovariance: 1,
+          newEstimate: measurement
+        };
+      }
+      const predictedEstimate = state.estimate;
+      const predictedCovariance = state.errorCovariance + KALMAN_PROCESS_NOISE;
+      const kalmanGain = predictedCovariance / (predictedCovariance + KALMAN_MEASUREMENT_NOISE);
+      const newEstimate = predictedEstimate + kalmanGain * (measurement - predictedEstimate);
+      const newCovariance = (1 - kalmanGain) * predictedCovariance;
+      return {
+        estimate: newEstimate,
+        errorCovariance: newCovariance,
+        newEstimate
+      };
+    }
+    function createKalmanState() {
+      return {
+        estimate: 0,
+        errorCovariance: 1
+      };
+    }
+    module2.exports = {
+      applyKalmanFilter,
+      createKalmanState,
+      KALMAN_PROCESS_NOISE,
+      KALMAN_MEASUREMENT_NOISE
+    };
+  }
+});
+
+// ultra-scalping/models/volatility.js
+var require_volatility = __commonJS({
+  "ultra-scalping/models/volatility.js"(exports2, module2) {
+    function calculateATR(bars, period = 14) {
+      if (bars.length < period + 1) return 2.5;
+      const trValues = [];
+      for (let i = bars.length - period; i < bars.length; i++) {
+        const bar = bars[i];
+        const prevClose = bars[i - 1].close;
+        const tr = Math.max(
+          bar.high - bar.low,
+          Math.abs(bar.high - prevClose),
+          Math.abs(bar.low - prevClose)
+        );
+        trValues.push(tr);
+      }
+      return trValues.reduce((a, b) => a + b, 0) / trValues.length;
+    }
+    function detectVolatilityRegime(atr, atrHistory, tickSize) {
+      let atrPercentile = 0.5;
+      if (atrHistory.length >= 20) {
+        atrPercentile = atrHistory.filter((a) => a <= atr).length / atrHistory.length;
+      }
+      let regime, params;
+      if (atrPercentile < 0.25) {
+        regime = "low";
+        params = {
+          stopMultiplier: 0.8,
+          targetMultiplier: 0.9,
+          zscoreThreshold: 1.2,
+          confidenceBonus: 0.05
+        };
+      } else if (atrPercentile < 0.75) {
+        regime = "normal";
+        params = {
+          stopMultiplier: 1,
+          targetMultiplier: 1,
+          zscoreThreshold: 1.5,
+          confidenceBonus: 0
+        };
+      } else {
+        regime = "high";
+        params = {
+          stopMultiplier: 1.3,
+          targetMultiplier: 1.2,
+          zscoreThreshold: 2,
+          confidenceBonus: -0.05
+        };
+      }
+      return { regime, params, atrPercentile };
+    }
+    module2.exports = { calculateATR, detectVolatilityRegime };
+  }
+});
+
+// ultra-scalping/models/ofi.js
+var require_ofi = __commonJS({
+  "ultra-scalping/models/ofi.js"(exports2, module2) {
+    function computeOrderFlowImbalance(bars, lookback = 20) {
+      if (bars.length < lookback) return 0;
+      const recentBars = bars.slice(-lookback);
+      let totalBuyPressure = 0;
+      let totalSellPressure = 0;
+      for (const bar of recentBars) {
+        const barRange = bar.high - bar.low;
+        if (barRange > 0) {
+          const closePosition = (bar.close - bar.low) / barRange;
+          totalBuyPressure += closePosition * bar.volume;
+          totalSellPressure += (1 - closePosition) * bar.volume;
+        }
+      }
+      const totalPressure = totalBuyPressure + totalSellPressure;
+      if (totalPressure < 1) return 0;
+      return (totalBuyPressure - totalSellPressure) / totalPressure;
+    }
+    module2.exports = { computeOrderFlowImbalance };
+  }
+});
+
+// ultra-scalping/models/index.js
+var require_models = __commonJS({
+  "ultra-scalping/models/index.js"(exports2, module2) {
+    var { computeZScore } = require_zscore();
+    var { computeVPIN } = require_vpin();
+    var { computeKyleLambda } = require_kyle();
+    var { applyKalmanFilter, createKalmanState } = require_kalman();
+    var { calculateATR, detectVolatilityRegime } = require_volatility();
+    var { computeOrderFlowImbalance } = require_ofi();
+    module2.exports = {
+      computeZScore,
+      computeVPIN,
+      computeKyleLambda,
+      applyKalmanFilter,
+      createKalmanState,
+      calculateATR,
+      detectVolatilityRegime,
+      computeOrderFlowImbalance
+    };
+  }
+});
+
+// ultra-scalping/core.js
+var require_core = __commonJS({
+  "ultra-scalping/core.js"(exports2, module2) {
+    var EventEmitter2 = require("events");
+    var { DEFAULT_CONFIG } = require_config();
+    var { generateSignal } = require_signal();
+    var {
+      computeZScore,
+      computeVPIN,
+      computeKyleLambda,
+      applyKalmanFilter,
+      createKalmanState,
+      calculateATR,
+      detectVolatilityRegime,
+      computeOrderFlowImbalance
+    } = require_models();
+    var HQXUltraScalping2 = class extends EventEmitter2 {
+      constructor(config = {}) {
+        super();
+        this.tickSize = config.tickSize || 0.25;
+        this.tickValue = config.tickValue || 5;
+        this.config = { ...DEFAULT_CONFIG, ...config };
+        this.barHistory = /* @__PURE__ */ new Map();
+        this.priceBuffer = /* @__PURE__ */ new Map();
+        this.volumeBuffer = /* @__PURE__ */ new Map();
+        this.kalmanStates = /* @__PURE__ */ new Map();
+        this.atrHistory = /* @__PURE__ */ new Map();
+        this.recentTrades = [];
+        this.winStreak = 0;
+        this.lossStreak = 0;
+        this.lastSignalTime = 0;
+        this.stats = { signals: 0, trades: 0, wins: 0, losses: 0, pnl: 0 };
+      }
+      initialize(contractId, tickSize = 0.25, tickValue = 5) {
+        this.tickSize = tickSize;
+        this.tickValue = tickValue;
+        this.barHistory.set(contractId, []);
+        this.priceBuffer.set(contractId, []);
+        this.volumeBuffer.set(contractId, []);
+        this.atrHistory.set(contractId, []);
+        this.kalmanStates.set(contractId, createKalmanState());
+        this.emit("log", {
+          type: "info",
+          message: `[HQX-UltraScalping] Initialized for ${contractId}: tick=${tickSize}, value=${tickValue}`
+        });
+        this.emit("log", {
+          type: "info",
+          message: `[HQX-UltraScalping] 6 Models: Z-Score(30%), OFI(20%), VPIN(15%), Kalman(15%), Kyle(10%), Vol(10%)`
+        });
+      }
+      processTick(tick) {
+        const { contractId, price, volume, timestamp } = tick;
+        const bar = {
+          timestamp: timestamp || Date.now(),
+          open: price,
+          high: price,
+          low: price,
+          close: price,
+          volume: volume || 1
+        };
+        return this.processBar(contractId, bar);
+      }
+      onTick(tick) {
+        return this.processTick(tick);
+      }
+      onTrade(trade) {
+        return this.processTick({
+          contractId: trade.contractId || trade.symbol,
+          price: trade.price,
+          volume: trade.size || trade.volume || 1,
+          side: trade.side,
+          timestamp: trade.timestamp || Date.now()
+        });
+      }
+      processBar(contractId, bar) {
+        let bars = this.barHistory.get(contractId);
+        if (!bars) {
+          this.initialize(contractId);
+          bars = this.barHistory.get(contractId);
+        }
+        bars.push(bar);
+        if (bars.length > 500) bars.shift();
+        const prices = this.priceBuffer.get(contractId);
+        prices.push(bar.close);
+        if (prices.length > 200) prices.shift();
+        const volumes = this.volumeBuffer.get(contractId);
+        const barRange = bar.high - bar.low;
+        let buyVol = bar.volume * 0.5;
+        let sellVol = bar.volume * 0.5;
+        if (barRange > 0) {
+          const closePosition = (bar.close - bar.low) / barRange;
+          buyVol = bar.volume * closePosition;
+          sellVol = bar.volume * (1 - closePosition);
+        }
+        volumes.push({ buy: buyVol, sell: sellVol });
+        if (volumes.length > 100) volumes.shift();
+        if (bars.length < 50) return null;
+        const zscore = computeZScore(prices);
+        const vpin = computeVPIN(volumes, this.config.vpinWindow);
+        const kyleLambda = computeKyleLambda(bars);
+        const kalmanState = this.kalmanStates.get(contractId);
+        const kalmanResult = applyKalmanFilter(kalmanState, bar.close);
+        this.kalmanStates.set(contractId, {
+          estimate: kalmanResult.estimate,
+          errorCovariance: kalmanResult.errorCovariance
+        });
+        const kalmanEstimate = kalmanResult.newEstimate;
+        const atr = calculateATR(bars);
+        const atrHist = this.atrHistory.get(contractId);
+        atrHist.push(atr);
+        if (atrHist.length > 500) atrHist.shift();
+        const { regime, params: volParams } = detectVolatilityRegime(atr, atrHist, this.tickSize);
+        const ofi = computeOrderFlowImbalance(bars, this.config.ofiLookback);
+        if (Date.now() - this.lastSignalTime < this.config.cooldownMs) {
+          return null;
+        }
+        const signal = generateSignal({
+          contractId,
+          currentPrice: bar.close,
+          zscore,
+          vpin,
+          kyleLambda,
+          kalmanEstimate,
+          regime,
+          volParams,
+          ofi,
+          config: this.config,
+          tickSize: this.tickSize
+        });
+        if (signal) {
+          this.lastSignalTime = Date.now();
+          this.stats.signals++;
+          this.emit("signal", {
+            side: signal.direction === "long" ? "buy" : "sell",
+            action: "open",
+            reason: `Z=${zscore.toFixed(2)}, VPIN=${(vpin * 100).toFixed(0)}%, OFI=${(ofi * 100).toFixed(0)}%, cf=${(signal.confidence * 100).toFixed(0)}%`,
+            ...signal
+          });
+          this.emit("log", {
+            type: "info",
+            message: `[HQX] SIGNAL: ${signal.direction.toUpperCase()} @ ${bar.close.toFixed(2)} | Z:${zscore.toFixed(2)} VPIN:${(vpin * 100).toFixed(0)}% OFI:${(ofi * 100).toFixed(0)}% Kyle:${kyleLambda.toFixed(5)} Regime:${regime} | Conf:${(signal.confidence * 100).toFixed(0)}%`
+          });
+        }
+        return signal;
+      }
+      shouldExitByZScore(contractId) {
+        const prices = this.priceBuffer.get(contractId);
+        if (!prices || prices.length < 50) return false;
+        const zscore = computeZScore(prices);
+        return Math.abs(zscore) < this.config.zscoreExitThreshold;
+      }
+      getModelValues(contractId) {
+        const prices = this.priceBuffer.get(contractId);
+        const volumes = this.volumeBuffer.get(contractId);
+        const bars = this.barHistory.get(contractId);
+        if (!prices || !volumes || !bars || bars.length < 50) {
+          return null;
+        }
+        const zscore = computeZScore(prices);
+        const vpin = computeVPIN(volumes, this.config.vpinWindow);
+        const kyleLambda = computeKyleLambda(bars);
+        const ofi = computeOrderFlowImbalance(bars, this.config.ofiLookback);
+        return {
+          zscore: Math.min(1, Math.abs(zscore) / 4),
+          vpin: 1 - vpin,
+          kyleLambda: kyleLambda > 1e-3 ? 0.5 : 0.8,
+          kalman: 0.7,
+          volatility: 0.7,
+          ofi: Math.abs(ofi) > 0.1 ? 0.8 : 0.5,
+          composite: 0.7,
+          raw: { zscore, vpin, kyleLambda, ofi }
+        };
+      }
+      getAnalysisState(contractId, currentPrice) {
+        const bars = this.barHistory.get(contractId) || [];
+        if (bars.length < 50) {
+          return { ready: false, message: `Collecting data... ${bars.length}/50 bars` };
+        }
+        const prices = this.priceBuffer.get(contractId) || [];
+        const volumes = this.volumeBuffer.get(contractId) || [];
+        const atrHist = this.atrHistory.get(contractId) || [];
+        const zscore = computeZScore(prices);
+        const vpin = computeVPIN(volumes, this.config.vpinWindow);
+        const ofi = computeOrderFlowImbalance(bars, this.config.ofiLookback);
+        const kyleLambda = computeKyleLambda(bars);
+        const atr = calculateATR(bars);
+        const { regime, params } = detectVolatilityRegime(atr, atrHist, this.tickSize);
+        return {
+          ready: true,
+          zScore: zscore,
+          vpin,
+          ofi,
+          kyleLambda,
+          regime,
+          stopTicks: Math.round(this.config.baseStopTicks * params.stopMultiplier),
+          targetTicks: Math.round(this.config.baseTargetTicks * params.targetMultiplier),
+          threshold: params.zscoreThreshold,
+          barsProcessed: bars.length,
+          models: "6 (Z-Score, VPIN, Kyle, Kalman, Vol, OFI)"
+        };
+      }
+      recordTradeResult(pnl) {
+        this.recentTrades.push({ netPnl: pnl, timestamp: Date.now() });
+        if (this.recentTrades.length > 100) this.recentTrades.shift();
+        if (pnl > 0) {
+          this.winStreak++;
+          this.lossStreak = 0;
+          this.stats.wins++;
+        } else {
+          this.lossStreak++;
+          this.winStreak = 0;
+          this.stats.losses++;
+        }
+        this.stats.trades++;
+        this.stats.pnl += pnl;
+        this.emit("log", {
+          type: "debug",
+          message: `[HQX] Trade result: ${pnl > 0 ? "WIN" : "LOSS"} $${pnl.toFixed(2)}, streak: ${pnl > 0 ? this.winStreak : -this.lossStreak}`
+        });
+      }
+      getBarHistory(contractId) {
+        return this.barHistory.get(contractId) || [];
+      }
+      getStats() {
+        return this.stats;
+      }
+      reset(contractId) {
+        this.barHistory.set(contractId, []);
+        this.priceBuffer.set(contractId, []);
+        this.volumeBuffer.set(contractId, []);
+        this.atrHistory.set(contractId, []);
+        this.kalmanStates.set(contractId, createKalmanState());
+        this.emit("log", {
+          type: "info",
+          message: `[HQX-UltraScalping] Reset state for ${contractId}`
+        });
+      }
+    };
+    module2.exports = { HQXUltraScalping: HQXUltraScalping2 };
+  }
+});
+
+// ultra-scalping/index.js
+var EventEmitter = require("events");
+var { HQXUltraScalping } = require_core();
+var { OrderSide, SignalStrength } = require_types();
+var UltraScalpingStrategy = class extends EventEmitter {
+  constructor(config = {}) {
+    super();
+    this.config = config;
+    this.strategy = new HQXUltraScalping(config);
+    this.strategy.on("signal", (sig) => this.emit("signal", sig));
+    this.strategy.on("log", (log) => this.emit("log", log));
+  }
+  // Interface methods (compatible with M1)
+  processTick(tick) {
+    return this.strategy.processTick(tick);
+  }
+  onTick(tick) {
+    return this.strategy.onTick(tick);
+  }
+  onTrade(trade) {
+    return this.strategy.onTrade(trade);
+  }
+  processBar(contractId, bar) {
+    return this.strategy.processBar(contractId, bar);
+  }
+  initialize(contractId, tickSize, tickValue) {
+    return this.strategy.initialize(contractId, tickSize, tickValue);
+  }
+  getAnalysisState(contractId, price) {
+    return this.strategy.getAnalysisState(contractId, price);
+  }
+  recordTradeResult(pnl) {
+    return this.strategy.recordTradeResult(pnl);
+  }
+  reset(contractId) {
+    return this.strategy.reset(contractId);
+  }
+  getStats() {
+    return this.strategy.getStats();
+  }
+  getBarHistory(contractId) {
+    return this.strategy.getBarHistory(contractId);
+  }
+  getModelValues(contractId) {
+    return this.strategy.getModelValues(contractId);
+  }
+  shouldExitByZScore(contractId) {
+    return this.strategy.shouldExitByZScore(contractId);
+  }
+  generateSignal(params) {
+    return null;
+  }
+  // Signals come from processBar
+};
+module.exports = {
+  HQXUltraScalping,
+  UltraScalpingStrategy,
+  // Aliases for backward compatibility
+  M1: UltraScalpingStrategy,
+  S1: HQXUltraScalping,
+  OrderSide,
+  SignalStrength
+};

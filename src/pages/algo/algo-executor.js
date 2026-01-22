@@ -224,6 +224,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   let ticksPerSecond = 0, lastTickSecond = Math.floor(Date.now() / 1000);
   let lastBiasLogSecond = 0, lastStateLogSecond = 0;
   let buyVolume = 0, sellVolume = 0, lastTickTime = 0, tickLatencies = [];
+  let runningDelta = 0, runningBuyPct = 50; // For live logs
   
   marketFeed.on('tick', (tick) => {
     tickCount++;
@@ -271,6 +272,8 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       const totalVol = buyVolume + sellVolume;
       const buyPressure = totalVol > 0 ? (buyVolume / totalVol) * 100 : 50;
       lastBias = buyPressure > 55 ? 'LONG' : buyPressure < 45 ? 'SHORT' : 'FLAT';
+      runningDelta = buyVolume - sellVolume;
+      runningBuyPct = buyPressure;
       sessionLogger.log('TICK', `count=${tickCount} last=${price?.toFixed(2)} bias=${lastBias} vol=${totalVol}`);
       buyVolume = 0; sellVolume = 0;
     }
@@ -294,9 +297,10 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     lastAsk = ask;
     
     // Only process tick if we have a valid price
+    // IMPORTANT: Always use our contractId for consistency with getAnalysisState
     if (price && price > 0) {
       strategy.processTick({
-        contractId: tick.contractId || contractId,
+        contractId: contractId,
         price: price, bid: bid, ask: ask,
         volume: volume, 
         side: tick.side || tick.lastTradeSide || 'unknown',
@@ -437,7 +441,13 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       setupForming: state?.ready && state?.activeZones > 0,
       position: currentPosition,
       price: lastPrice || 0,
+      delta: runningDelta,
+      buyPct: runningBuyPct,
       tickCount,
+      // QUANT strategy metrics (real from strategy)
+      zScore: state?.zScore || 0,
+      vpin: state?.vpin || 0,
+      ofi: state?.ofi || 0,
     };
     
     const log = logsEngine.getLog(logState);
