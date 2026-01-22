@@ -60,8 +60,8 @@ const CONTRACT_DESCRIPTIONS = {
   YM: 'E-mini Dow $5', MYM: 'Micro E-mini Dow',
   EMD: 'E-mini S&P MidCap', NKD: 'Nikkei 225',
   // Metals
-  GC: 'Gold', MGC: 'Micro Gold', '1OZ': 'Micro Gold (1oz)',
-  SI: 'Silver', SIL: 'Micro Silver', HG: 'Copper', MHG: 'Micro Copper',
+  GC: 'Gold (100oz)', MGC: 'Micro Gold (10oz)', '1OZ': 'E-Micro Gold (1oz)',
+  SI: 'Silver (5000oz)', SIL: 'Micro Silver (1000oz)', HG: 'Copper', MHG: 'Micro Copper',
   PL: 'Platinum', PA: 'Palladium',
   // Energy
   CL: 'Crude Oil WTI', MCL: 'Micro Crude Oil', NG: 'Natural Gas',
