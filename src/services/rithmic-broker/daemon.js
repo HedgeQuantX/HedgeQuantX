@@ -5,6 +5,11 @@
  * Survives CLI restarts/updates. Only stops on explicit logout or reboot.
  * 
  * Communication: WebSocket server on port 18765
+ * 
+ * Key features:
+ * - Persistent connections (no disconnect on CLI restart)
+ * - Smart reconnection with rate limiting (max 10/day)
+ * - Cached accounts (no repeated API calls)
  */
 
 'use strict';
@@ -13,6 +18,7 @@ const WebSocket = require('ws');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { ReconnectManager } = require('./daemon-reconnect');
 
 // Paths
 const BROKER_DIR = path.join(os.homedir(), '.hqx', 'rithmic-broker');
@@ -45,9 +51,15 @@ class RithmicBrokerDaemon {
   constructor() {
     this.wss = null;
     this.clients = new Set();
-    this.connections = new Map(); // propfirmKey -> { service, credentials, connectedAt, accounts }
+    this.connections = new Map(); // propfirmKey -> { service, credentials, connectedAt, accounts, status }
     this.pnlCache = new Map();    // accountId -> { pnl, openPnl, closedPnl, balance, updatedAt }
     this.running = false;
+    
+    // Reconnection manager (handles health checks & reconnection with rate limiting)
+    this.reconnectManager = new ReconnectManager(this, log);
+    
+    // Expose loadRithmicService for ReconnectManager
+    this.loadRithmicService = loadRithmicService;
   }
 
   async start() {
@@ -56,7 +68,8 @@ class RithmicBrokerDaemon {
     if (!fs.existsSync(BROKER_DIR)) fs.mkdirSync(BROKER_DIR, { recursive: true });
     fs.writeFileSync(PID_FILE, String(process.pid));
     
-    await this._restoreState();
+    // Restore connections from state (with cached accounts - no API spam)
+    await this.reconnectManager.restoreConnections(STATE_FILE);
     
     this.wss = new WebSocket.Server({ port: BROKER_PORT, host: '127.0.0.1' });
     this.wss.on('connection', (ws) => this._handleClient(ws));
@@ -67,12 +80,20 @@ class RithmicBrokerDaemon {
     
     process.on('SIGTERM', () => this.stop());
     process.on('SIGINT', () => this.stop());
+    
+    // Auto-save state every 30s
     setInterval(() => this._saveState(), 30000);
+    
+    // Start health check (monitoring + rate-limited reconnection)
+    this.reconnectManager.startHealthCheck();
   }
 
   async stop() {
     log('INFO', 'Daemon stopping...');
     this.running = false;
+    
+    // Stop health check
+    this.reconnectManager.stopHealthCheck();
     
     for (const [key, conn] of this.connections) {
       try { if (conn.service?.disconnect) await conn.service.disconnect(); } 
@@ -138,18 +159,22 @@ class RithmicBrokerDaemon {
   _getStatus() {
     const conns = [];
     for (const [key, conn] of this.connections) {
+      const isAlive = conn.service?.orderConn?.isConnected && 
+                      conn.service?.orderConn?.connectionState === 'LOGGED_IN';
       conns.push({
         propfirmKey: key,
         propfirm: conn.service?.propfirm?.name || key,
         connectedAt: conn.connectedAt,
         accountCount: conn.accounts?.length || 0,
+        status: conn.status || (isAlive ? 'connected' : 'disconnected'),
+        isAlive,
       });
     }
     return { running: this.running, pid: process.pid, uptime: process.uptime(), connections: conns };
   }
 
   async _handleLogin(payload, requestId) {
-    const { propfirmKey, username, password } = payload;
+    const { propfirmKey, username, password, cachedAccounts } = payload;
     if (!propfirmKey || !username || !password) {
       return { error: 'Missing credentials', requestId };
     }
@@ -165,20 +190,30 @@ class RithmicBrokerDaemon {
     const Service = loadRithmicService();
     const service = new Service(propfirmKey);
     
-    log('INFO', 'Logging in...', { propfirm: propfirmKey });
-    const result = await service.login(username, password);
+    log('INFO', 'Logging in...', { propfirm: propfirmKey, hasCachedAccounts: !!cachedAccounts });
+    
+    // Login with optional cached accounts (skips fetchAccounts API call)
+    const loginOptions = cachedAccounts ? { skipFetchAccounts: true, cachedAccounts } : {};
+    const result = await service.login(username, password, loginOptions);
     
     if (result.success) {
+      // Use cached accounts if provided, otherwise use result from login
+      const accounts = cachedAccounts || result.accounts || [];
+      
       this.connections.set(propfirmKey, {
         service,
         credentials: { username, password },
         connectedAt: new Date().toISOString(),
-        accounts: result.accounts || [],
+        accounts,
+        status: 'connected',
       });
+      
       this._setupPnLUpdates(propfirmKey, service);
+      this.reconnectManager.setupConnectionMonitoring(propfirmKey, service);
       this._saveState();
-      log('INFO', 'Login successful', { propfirm: propfirmKey, accounts: result.accounts?.length });
-      return { type: 'loginResult', payload: { success: true, accounts: result.accounts }, requestId };
+      
+      log('INFO', 'Login successful', { propfirm: propfirmKey, accounts: accounts.length });
+      return { type: 'loginResult', payload: { success: true, accounts }, requestId };
     }
     
     log('WARN', 'Login failed', { propfirm: propfirmKey, error: result.error });
@@ -226,8 +261,14 @@ class RithmicBrokerDaemon {
   async _handleGetAccounts(requestId) {
     const allAccounts = [];
     for (const [propfirmKey, conn] of this.connections) {
+      // Include accounts even if service is temporarily disconnected (from cache)
       for (const acc of conn.accounts || []) {
-        allAccounts.push({ ...acc, propfirmKey, propfirm: conn.service.propfirm?.name || propfirmKey });
+        allAccounts.push({ 
+          ...acc, 
+          propfirmKey, 
+          propfirm: conn.service?.propfirm?.name || propfirmKey,
+          connectionStatus: conn.status
+        });
       }
     }
     return { type: 'accounts', payload: { accounts: allAccounts }, requestId };
@@ -274,25 +315,22 @@ class RithmicBrokerDaemon {
     return { type: 'credentials', payload: conn.service.getRithmicCredentials?.() || null, requestId };
   }
 
+  /**
+   * Save state including accounts (for reconnection without API calls)
+   */
   _saveState() {
-    const state = { connections: [] };
+    const state = { connections: [], savedAt: new Date().toISOString() };
     for (const [key, conn] of this.connections) {
-      if (conn.credentials) state.connections.push({ propfirmKey: key, credentials: conn.credentials });
+      if (conn.credentials) {
+        state.connections.push({ 
+          propfirmKey: key, 
+          credentials: conn.credentials,
+          accounts: conn.accounts || [],  // Save accounts to avoid fetchAccounts on restore
+          connectedAt: conn.connectedAt
+        });
+      }
     }
     try { fs.writeFileSync(STATE_FILE, JSON.stringify(state)); } catch (e) { /* ignore */ }
-  }
-
-  async _restoreState() {
-    if (!fs.existsSync(STATE_FILE)) return;
-    try {
-      const data = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-      for (const conn of data.connections || []) {
-        if (conn.credentials && conn.propfirmKey) {
-          log('INFO', 'Restoring connection...', { propfirm: conn.propfirmKey });
-          await this._handleLogin({ ...conn.credentials, propfirmKey: conn.propfirmKey }, null);
-        }
-      }
-    } catch (e) { log('WARN', 'Restore failed', { error: e.message }); }
   }
 }
 

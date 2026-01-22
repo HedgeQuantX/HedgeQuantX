@@ -19,6 +19,7 @@ const {
 const { placeOrder, cancelOrder, getOrders, getOrderHistory, getOrderHistoryDates, getTradeHistoryFull, closePosition } = require('./orders');
 const { fillsToRoundTrips, calculateTradeStats } = require('./trades');
 const { getContracts, searchContracts } = require('./contracts');
+const { handleAutoReconnect } = require('./reconnect');
 const { TIMEOUTS } = require('../../config/settings');
 const { logger } = require('../../utils/logger');
 
@@ -83,7 +84,15 @@ class RithmicService extends EventEmitter {
 
   // ==================== AUTH ====================
 
-  async login(username, password) {
+  /**
+   * Login to Rithmic
+   * @param {string} username - Rithmic username
+   * @param {string} password - Rithmic password
+   * @param {Object} options - Login options
+   * @param {boolean} options.skipFetchAccounts - Skip fetchAccounts API call (use cached)
+   * @param {Array} options.cachedAccounts - Cached accounts to use instead of fetching
+   */
+  async login(username, password, options = {}) {
     try {
       this.orderConn = new RithmicConnection();
       
@@ -121,11 +130,17 @@ class RithmicService extends EventEmitter {
           this.loginInfo = data;
           this.user = { userName: username, fcmId: data.fcmId, ibId: data.ibId };
           
-          try {
-            await fetchAccounts(this);
-            log.debug('Fetched accounts', { count: this.accounts.length });
-          } catch (err) {
-            log.warn('Failed to fetch accounts', { error: err.message });
+          // Skip fetchAccounts if using cached accounts (avoids API quota)
+          if (options.skipFetchAccounts && options.cachedAccounts) {
+            this.accounts = options.cachedAccounts;
+            log.debug('Using cached accounts', { count: this.accounts.length });
+          } else {
+            try {
+              await fetchAccounts(this);
+              log.debug('Fetched accounts', { count: this.accounts.length });
+            } catch (err) {
+              log.warn('Failed to fetch accounts', { error: err.message });
+            }
           }
           
           this.credentials = { username, password };
@@ -140,6 +155,7 @@ class RithmicService extends EventEmitter {
             log.warn('PnL connection failed', { error: err.message });
           }
           
+          // Get trading accounts (uses existing this.accounts, no new API call)
           const result = await getTradingAccounts(this);
           log.info('Login successful', { accounts: result.accounts.length });
           
@@ -423,33 +439,14 @@ class RithmicService extends EventEmitter {
 
   // ==================== AUTO-RECONNECT ====================
 
+  /**
+   * Auto-reconnect with rate limiting (delegated to reconnect module)
+   * - Minimum 1 hour between attempts
+   * - Maximum 10 attempts per 24 hours
+   * - Reuses cached accounts (no fetchAccounts API call)
+   */
   async _autoReconnect() {
-    if (!this.credentials) {
-      log.warn('Cannot auto-reconnect: no credentials');
-      return;
-    }
-    
-    const { username, password } = this.credentials;
-    log.info('Auto-reconnecting...');
-    this.emit('reconnecting');
-    
-    try {
-      const result = await this.login(username, password);
-      if (result.success) {
-        log.info('Auto-reconnect successful');
-        this.emit('reconnected', { accounts: result.accounts });
-      } else {
-        log.warn('Auto-reconnect failed', { error: result.error });
-        this.emit('reconnectFailed', { error: result.error });
-        // Retry in 10s
-        setTimeout(() => this._autoReconnect(), 10000);
-      }
-    } catch (err) {
-      log.error('Auto-reconnect error', { error: err.message });
-      this.emit('reconnectFailed', { error: err.message });
-      // Retry in 10s
-      setTimeout(() => this._autoReconnect(), 10000);
-    }
+    return handleAutoReconnect(this);
   }
 
   // ==================== CLEANUP ====================

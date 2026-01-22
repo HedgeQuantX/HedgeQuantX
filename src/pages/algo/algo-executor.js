@@ -361,17 +361,25 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   // P&L polling - uses CACHED data (NO API CALLS to avoid Rithmic rate limits)
   const pollPnL = async () => {
     try {
-      // Get P&L from cache (no API call)
       const accId = account.rithmicAccountId || account.accountId;
-      const pnlData = service.getAccountPnL ? service.getAccountPnL(accId) : null;
       
-      if (pnlData && pnlData.pnl !== null) {
-        if (startingPnL === null) startingPnL = pnlData.pnl;
-        stats.pnl = pnlData.pnl - startingPnL;
-        if (stats.pnl !== 0) strategy.recordTradeResult(stats.pnl);
+      // Get P&L from cache (handle sync/async)
+      let pnlData = null;
+      if (service.getAccountPnL) {
+        const result = service.getAccountPnL(accId);
+        pnlData = result && result.then ? await result : result;
       }
       
-      // Check positions (less frequent - every 10s to reduce API calls)
+      if (pnlData && pnlData.pnl !== null && pnlData.pnl !== undefined && !isNaN(pnlData.pnl)) {
+        if (startingPnL === null) startingPnL = pnlData.pnl;
+        const newPnl = pnlData.pnl - startingPnL;
+        if (!isNaN(newPnl)) {
+          stats.pnl = newPnl;
+          if (stats.pnl !== 0) strategy.recordTradeResult(stats.pnl);
+        }
+      }
+      
+      // Check positions (every 10s)
       if (Date.now() % 10000 < 2000) {
         const posResult = await service.getPositions(accId);
         if (posResult.success && posResult.positions) {
@@ -379,29 +387,27 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
             const sym = p.contractId || p.symbol || '';
             return sym.includes(contract.name) || sym.includes(contractId);
           });
-          
           if (pos && pos.quantity !== 0) {
             currentPosition = pos.quantity;
-            const pnl = pos.profitAndLoss || 0;
-            if (pnl > 0) stats.wins = Math.max(stats.wins, 1);
-            else if (pnl < 0) stats.losses = Math.max(stats.losses, 1);
           } else {
             currentPosition = 0;
           }
         }
       }
       
-      if (stats.pnl >= dailyTarget) {
-        stopReason = 'target'; running = false;
-        ui.addLog('fill_win', `TARGET REACHED! +$${stats.pnl.toFixed(2)}`);
-        sessionLogger.log('TARGET', `Daily target reached: +$${stats.pnl.toFixed(2)}`);
-      } else if (stats.pnl <= -maxRisk) {
-        stopReason = 'risk'; running = false;
-        ui.addLog('fill_loss', `MAX RISK! -$${Math.abs(stats.pnl).toFixed(2)}`);
-        sessionLogger.log('RISK', `Max risk hit: -$${Math.abs(stats.pnl).toFixed(2)}`);
+      // Risk checks (only if pnl is valid)
+      if (!isNaN(stats.pnl)) {
+        if (stats.pnl >= dailyTarget) {
+          stopReason = 'target'; running = false;
+          ui.addLog('fill_win', `TARGET REACHED! +$${stats.pnl.toFixed(2)}`);
+          sessionLogger.log('TARGET', `Daily target reached: +$${stats.pnl.toFixed(2)}`);
+        } else if (stats.pnl <= -maxRisk) {
+          stopReason = 'risk'; running = false;
+          ui.addLog('fill_loss', `MAX RISK! -$${Math.abs(stats.pnl).toFixed(2)}`);
+          sessionLogger.log('RISK', `Max risk hit: -$${Math.abs(stats.pnl).toFixed(2)}`);
+        }
+        sessionLogger.pnl(stats.pnl, 0, currentPosition);
       }
-      // Log P&L every poll
-      sessionLogger.pnl(stats.pnl, 0, currentPosition);
     } catch (e) { /* silent */ }
   };
   
