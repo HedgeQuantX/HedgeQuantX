@@ -129,12 +129,17 @@ class RithmicBrokerClient extends EventEmitter {
 
   /**
    * Login to Rithmic via daemon
+   * @param {string} username - Rithmic username
+   * @param {string} password - Rithmic password
+   * @param {Object} options - Optional settings
+   * @param {Array} options.cachedAccounts - Use cached accounts to avoid API call (CRITICAL for Rithmic limit)
    */
-  async login(username, password) {
+  async login(username, password, options = {}) {
     const result = await this._request('login', {
       propfirmKey: this.propfirmKey,
       username,
       password,
+      cachedAccounts: options.cachedAccounts || null,  // Pass to daemon to avoid fetchAccounts
     }, 60000);
     
     if (result.error) {

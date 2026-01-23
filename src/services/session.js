@@ -116,16 +116,18 @@ const connections = {
     const existingSessions = storage.load();
     const aiSessions = existingSessions.filter(s => s.type === 'ai');
     
-    // Build Rithmic sessions
+    // Build Rithmic sessions - INCLUDE accounts to avoid Rithmic API limit on restore
     const rithmicSessions = this.services.map(conn => ({
       type: conn.type,
       propfirm: conn.propfirm,
       propfirmKey: conn.service.propfirmKey || conn.propfirmKey,
       credentials: conn.service.credentials,
+      accounts: conn.service.accounts || [],  // CRITICAL: Cache accounts to avoid 2000 GetAccounts limit
     }));
     
     // Merge: AI sessions + Rithmic sessions
     storage.save([...aiSessions, ...rithmicSessions]);
+    log.debug('Session saved', { rithmicCount: rithmicSessions.length, hasAccounts: rithmicSessions.some(s => s.accounts?.length > 0) });
   },
 
   async restoreFromStorage() {
@@ -197,7 +199,10 @@ const connections = {
     // Use broker client (daemon handles persistence)
     if (type === 'rithmic' && session.credentials) {
       const client = new RithmicBrokerClient(propfirmKey || 'apex_rithmic');
-      const result = await client.login(session.credentials.username, session.credentials.password);
+      
+      // CRITICAL: Pass cached accounts to avoid Rithmic's 2000 GetAccounts limit
+      const loginOptions = session.accounts ? { cachedAccounts: session.accounts } : {};
+      const result = await client.login(session.credentials.username, session.credentials.password, loginOptions);
       
       if (result.success) {
         this.services.push({
@@ -207,7 +212,7 @@ const connections = {
           propfirmKey,
           connectedAt: new Date(),
         });
-        log.debug('Rithmic session restored via broker');
+        log.debug('Rithmic session restored via broker', { hasCachedAccounts: !!session.accounts });
       }
     }
   },

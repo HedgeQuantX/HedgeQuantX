@@ -78,11 +78,27 @@ class RithmicBrokerDaemon {
     this.running = true;
     log('INFO', 'Daemon started', { pid: process.pid, port: BROKER_PORT });
     
-    process.on('SIGTERM', () => this.stop());
-    process.on('SIGINT', () => this.stop());
+    // Save state on ANY termination signal
+    const gracefulShutdown = (signal) => {
+      log('WARN', `Received ${signal}, saving state...`);
+      this._saveState();
+      this.stop();
+    };
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    process.on('SIGHUP', () => gracefulShutdown('SIGHUP'));
+    process.on('uncaughtException', (err) => {
+      log('ERROR', 'Uncaught exception, saving state...', { error: err.message });
+      this._saveState();
+      process.exit(1);
+    });
+    process.on('unhandledRejection', (err) => {
+      log('ERROR', 'Unhandled rejection', { error: err?.message || String(err) });
+      this._saveState();
+    });
     
-    // Auto-save state every 30s
-    setInterval(() => this._saveState(), 30000);
+    // Auto-save state every 5s (critical for surviving updates)
+    setInterval(() => this._saveState(), 5000);
     
     // Start health check (monitoring + rate-limited reconnection)
     this.reconnectManager.startHealthCheck();
@@ -350,6 +366,7 @@ class RithmicBrokerDaemon {
 
   /**
    * Save state including accounts (for reconnection without API calls)
+   * CRITICAL: This state allows reconnection without hitting Rithmic's 2000 GetAccounts limit
    */
   _saveState() {
     const state = { connections: [], savedAt: new Date().toISOString() };
@@ -359,11 +376,17 @@ class RithmicBrokerDaemon {
           propfirmKey: key, 
           credentials: conn.credentials,
           accounts: conn.accounts || [],  // Save accounts to avoid fetchAccounts on restore
-          connectedAt: conn.connectedAt
+          connectedAt: conn.connectedAt,
+          propfirm: conn.service?.propfirm?.name || key
         });
       }
     }
-    try { fs.writeFileSync(STATE_FILE, JSON.stringify(state)); } catch (e) { /* ignore */ }
+    try { 
+      fs.writeFileSync(STATE_FILE, JSON.stringify(state)); 
+      log('DEBUG', 'State saved', { connections: state.connections.length });
+    } catch (e) { 
+      log('ERROR', 'Failed to save state', { error: e.message });
+    }
   }
 }
 
