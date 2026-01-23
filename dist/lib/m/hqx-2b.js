@@ -531,9 +531,6 @@ var require_core = __commonJS({
         const { contractId, price, volume, timestamp } = tick;
         const ts = timestamp || Date.now();
         const vol = volume || 1;
-        if (!this.isWithinSession(ts)) {
-          return null;
-        }
         let bar = this.currentBar.get(contractId);
         const barStartTime = Math.floor(ts / this.barIntervalMs) * this.barIntervalMs;
         if (!bar || bar.startTime !== barStartTime) {
