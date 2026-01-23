@@ -531,8 +531,17 @@ var require_core = __commonJS({
         const { contractId, price, volume, timestamp } = tick;
         const ts = timestamp || Date.now();
         const vol = volume || 1;
+        if (!this._tickCount) this._tickCount = /* @__PURE__ */ new Map();
+        const count = (this._tickCount.get(contractId) || 0) + 1;
+        this._tickCount.set(contractId, count);
         let bar = this.currentBar.get(contractId);
         const barStartTime = Math.floor(ts / this.barIntervalMs) * this.barIntervalMs;
+        if (count === 1) {
+          this.emit("log", {
+            type: "debug",
+            message: `[2B] First tick ${contractId}: price=${price}, ts=${ts}, barStart=${barStartTime}`
+          });
+        }
         if (!bar || bar.startTime !== barStartTime) {
           if (bar) {
             const closedBar = {
@@ -543,6 +552,11 @@ var require_core = __commonJS({
               close: bar.close,
               volume: bar.volume
             };
+            const bars = this.barHistory.get(contractId) || [];
+            this.emit("log", {
+              type: "debug",
+              message: `[2B] BAR CLOSE ${contractId} #${bars.length + 1}: O=${closedBar.open.toFixed(2)} H=${closedBar.high.toFixed(2)} L=${closedBar.low.toFixed(2)} C=${closedBar.close.toFixed(2)} V=${closedBar.volume}`
+            });
             const signal = this.processBar(contractId, closedBar);
             this.currentBar.set(contractId, {
               startTime: barStartTime,
@@ -554,6 +568,10 @@ var require_core = __commonJS({
             });
             return signal;
           } else {
+            this.emit("log", {
+              type: "debug",
+              message: `[2B] First bar start ${contractId} @ ${new Date(barStartTime).toISOString()}`
+            });
             this.currentBar.set(contractId, {
               startTime: barStartTime,
               open: price,
