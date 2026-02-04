@@ -384,6 +384,22 @@ class RithmicBrokerDaemon {
   }
 
   /**
+   * Sanitize account for safe serialization - ensure all fields are proper types
+   */
+  _sanitizeAccount(acc) {
+    if (!acc || typeof acc !== 'object') return null;
+    if (!acc.accountId) return null;
+    
+    return {
+      accountId: String(acc.accountId),
+      fcmId: acc.fcmId ? String(acc.fcmId) : undefined,
+      ibId: acc.ibId ? String(acc.ibId) : undefined,
+      accountName: acc.accountName ? String(acc.accountName) : undefined,
+      currency: acc.currency ? String(acc.currency) : undefined,
+    };
+  }
+
+  /**
    * Save state including accounts (for reconnection without API calls)
    * CRITICAL: This state allows reconnection without hitting Rithmic's 2000 GetAccounts limit
    */
@@ -391,10 +407,15 @@ class RithmicBrokerDaemon {
     const state = { connections: [], savedAt: new Date().toISOString() };
     for (const [key, conn] of this.connections) {
       if (conn.credentials) {
+        // Sanitize accounts to prevent corrupted data
+        const accounts = (conn.accounts || [])
+          .map(a => this._sanitizeAccount(a))
+          .filter(Boolean);
+        
         state.connections.push({ 
           propfirmKey: key, 
           credentials: conn.credentials,
-          accounts: conn.accounts || [],  // Save accounts to avoid fetchAccounts on restore
+          accounts,
           connectedAt: conn.connectedAt,
           propfirm: conn.service?.propfirm?.name || key
         });

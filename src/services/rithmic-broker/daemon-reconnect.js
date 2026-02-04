@@ -241,6 +241,22 @@ class ReconnectManager {
   }
 
   /**
+   * Validate cached accounts - ensure all fields are proper strings
+   */
+  _validateAccounts(accounts) {
+    if (!Array.isArray(accounts)) return [];
+    
+    return accounts.filter(acc => {
+      // Must have accountId as string
+      if (!acc || typeof acc.accountId !== 'string') return false;
+      // fcmId and ibId should be strings if present
+      if (acc.fcmId && typeof acc.fcmId !== 'string') return false;
+      if (acc.ibId && typeof acc.ibId !== 'string') return false;
+      return true;
+    });
+  }
+
+  /**
    * Restore connections from state with retry logic
    */
   async restoreConnections(stateFile) {
@@ -254,28 +270,51 @@ class ReconnectManager {
 
         this.log('INFO', 'Restoring connection', { propfirm: saved.propfirmKey });
         
+        // Validate cached accounts to prevent crashes from corrupted data
+        const validAccounts = this._validateAccounts(saved.accounts);
+        if (saved.accounts?.length && validAccounts.length !== saved.accounts.length) {
+          this.log('WARN', 'Some cached accounts invalid, will re-fetch', { 
+            propfirm: saved.propfirmKey,
+            original: saved.accounts?.length || 0,
+            valid: validAccounts.length
+          });
+        }
+        
         let success = false;
         let attempts = 0;
 
         while (!success && attempts < RECONNECT_CONFIG.RESTORE_MAX_ATTEMPTS) {
           attempts++;
           
-          const result = await this.daemon._handleLogin({
-            ...saved.credentials,
-            propfirmKey: saved.propfirmKey,
-            cachedAccounts: saved.accounts  // Use cached accounts!
-          }, null);
+          try {
+            const result = await this.daemon._handleLogin({
+              ...saved.credentials,
+              propfirmKey: saved.propfirmKey,
+              // Only use cached accounts if they are valid, otherwise re-fetch
+              cachedAccounts: validAccounts.length > 0 ? validAccounts : null
+            }, null);
 
-          if (result.payload?.success) {
-            success = true;
-            this.log('INFO', 'Connection restored', { propfirm: saved.propfirmKey });
-          } else {
-            this.log('WARN', 'Restore attempt failed', {
-              propfirm: saved.propfirmKey,
+            if (result.payload?.success) {
+              success = true;
+              this.log('INFO', 'Connection restored', { propfirm: saved.propfirmKey });
+            } else {
+              this.log('WARN', 'Restore attempt failed', {
+                propfirm: saved.propfirmKey,
+                attempt: attempts,
+                error: result.payload?.error || result.error
+              });
+
+              if (attempts < RECONNECT_CONFIG.RESTORE_MAX_ATTEMPTS) {
+                await new Promise(r => setTimeout(r, RECONNECT_CONFIG.RESTORE_RETRY_DELAY));
+              }
+            }
+          } catch (e) {
+            this.log('ERROR', 'Restore attempt error', { 
+              propfirm: saved.propfirmKey, 
               attempt: attempts,
-              error: result.payload?.error || result.error
+              error: e.message 
             });
-
+            
             if (attempts < RECONNECT_CONFIG.RESTORE_MAX_ATTEMPTS) {
               await new Promise(r => setTimeout(r, RECONNECT_CONFIG.RESTORE_RETRY_DELAY));
             }
@@ -288,13 +327,15 @@ class ReconnectManager {
             service: null,
             credentials: saved.credentials,
             connectedAt: null,
-            accounts: saved.accounts || [],
+            accounts: validAccounts,
             status: 'disconnected',
           });
         }
       }
     } catch (e) {
       this.log('ERROR', 'Restore failed', { error: e.message });
+      // Delete corrupted state file
+      try { fs.unlinkSync(stateFile); } catch (e2) { /* ignore */ }
     }
   }
 
