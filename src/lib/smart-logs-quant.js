@@ -1,8 +1,7 @@
 /**
- * QUANT (HQX Scalping) - Message Templates
- * 50 messages per phase - ALL using REAL data from strategy
- * Real Variables: d.sym, d.price, d.ticks, d.zScore, d.zScoreAbs, d.vpin, d.ofi, d.delta, d.rawZScore
- * WITH COLORS: cyan=building, yellow=zones, green=bull, red=bear, gray=neutral
+ * QUANT (HQX Scalping) - Event-Based + Legacy Messages
+ * Event functions for smart-logs-engine compatibility
+ * Legacy functions (building/zones/bull/bear/neutral/ready) kept for fallback
  */
 'use strict';
 
@@ -10,6 +9,20 @@ const chalk = require('chalk');
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 module.exports = {
+  // Event-based messages (for smart-logs-engine event detection)
+  init: (d) => chalk.cyan(`[${d.sym}]`) + ` QUANT model ready | ${d.ticks || d.bars} observations`,
+  newBar: (d) => chalk.gray(`[${d.sym}]`) + ` Tick batch #${d.bars} @ ${chalk.white(d.price)}`,
+  newSwing: (d) => chalk.yellow(`[${d.sym}]`) + ` Z-score shift | ${d.swings} signals`,
+  newZone: (d) => chalk.green(`[${d.sym}]`) + ` Statistical edge detected | ${d.zones} factors aligned`,
+  approachZone: (d) => chalk.bgYellow.black(' EDGE ') + ` ${chalk.yellow(`[${d.sym}]`)} ${chalk.white(d.price)} | Threshold proximity`,
+  biasFlip: (d) => {
+    const arrow = d.to === 'bullish' ? chalk.green('') : chalk.red('');
+    return `[${d.sym}] ${arrow} Regime: ${d.from}${d.to} | OFI: ${d.delta}`;
+  },
+  priceMove: (d) => chalk.gray(`[${d.sym}]`) + ` ${chalk.white(d.price)} (${d.dir === 'up' ? '+' : '-'}${d.ticks}t)`,
+  deltaShift: (d) => chalk.gray(`[${d.sym}]`) + ` OFI shift: ${d.from}${d.to}`,
+
+  // Legacy message pools (for fallback compatibility)
   building: (d) => pick([
     chalk.cyan(`[${d.sym}]`) + ` Factor model calibration | ${chalk.white(d.ticks)} observations | Z-score baseline init`,
     chalk.cyan(`[${d.sym}]`) + ` VPIN computation | ${chalk.white(d.ticks)} tick volume | Toxicity threshold loading`,

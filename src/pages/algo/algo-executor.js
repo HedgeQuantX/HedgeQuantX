@@ -422,7 +422,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   const pnlInterval = setInterval(() => { if (running) pollPnL(); }, 2000);
   pollPnL();
   
-  // Live analysis logs every 1 second
+  // Event-driven logs - only log when something significant happens
   let lastLiveLogSecond = 0;
   const liveLogInterval = setInterval(() => {
     if (!running) return;
@@ -438,6 +438,8 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       zones: state?.activeZones || 0,
       trend: lastBias === 'LONG' ? 'bullish' : lastBias === 'SHORT' ? 'bearish' : 'neutral',
       nearZone: (state?.nearestSupport || state?.nearestResistance) ? true : false,
+      nearestSupport: state?.nearestSupport || null,
+      nearestResistance: state?.nearestResistance || null,
       setupForming: state?.ready && state?.activeZones > 0,
       position: currentPosition,
       price: lastPrice || 0,
@@ -450,9 +452,12 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       ofi: state?.ofi || 0,
     };
     
+    // Only log if an event was detected (log !== null)
     const log = logsEngine.getLog(logState);
-    ui.addLog(log.type, log.message);
-    if (log.logToSession) sessionLogger.log('ANALYSIS', log.message);
+    if (log) {
+      ui.addLog(log.type, log.message);
+      if (log.logToSession) sessionLogger.log('ANALYSIS', log.message);
+    }
   }, 1000);
   
   const setupKeyHandler = () => {
