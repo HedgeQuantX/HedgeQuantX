@@ -86,21 +86,29 @@ const start = async () => {
     child.unref();
     fs.closeSync(logFd);
     
-    // Wait for daemon to start
-    await new Promise(r => setTimeout(r, 2000));
+    // Wait for daemon to start (poll every 500ms, max 5s)
+    let attempts = 0;
+    const maxAttempts = 10;
+    let runStatus = { running: false, pid: null };
     
-    const runStatus = await isRunning();
-    if (runStatus.running) {
-      return { success: true, error: null, pid: runStatus.pid || child.pid };
-    } else {
-      // Read log for error details
-      let errorDetail = 'Failed to start RithmicBroker daemon';
-      if (fs.existsSync(LOG_FILE)) {
-        const log = fs.readFileSync(LOG_FILE, 'utf8').slice(-500);
-        if (log) errorDetail += `: ${log.split('\n').filter(l => l).pop()}`;
+    while (attempts < maxAttempts) {
+      await new Promise(r => setTimeout(r, 500));
+      runStatus = await isRunning();
+      if (runStatus.running) {
+        return { success: true, error: null, pid: runStatus.pid || child.pid };
       }
-      return { success: false, error: errorDetail, pid: null };
+      attempts++;
     }
+    
+    // Read log for error details
+    let errorDetail = 'Daemon failed to start';
+    if (fs.existsSync(LOG_FILE)) {
+      const logContent = fs.readFileSync(LOG_FILE, 'utf8');
+      const lines = logContent.split('\n').filter(l => l.trim());
+      const lastLines = lines.slice(-5).join(' | ');
+      if (lastLines) errorDetail += ` - Log: ${lastLines}`;
+    }
+    return { success: false, error: errorDetail, pid: null };
   } catch (error) {
     return { success: false, error: error.message, pid: null };
   }

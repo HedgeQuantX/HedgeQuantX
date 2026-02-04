@@ -37,15 +37,20 @@ class RithmicBrokerClient extends EventEmitter {
     // Ensure daemon is running
     const daemonStatus = await manager.ensureRunning();
     if (!daemonStatus.success) {
-      return { success: false, error: daemonStatus.error || 'Failed to start daemon' };
+      const errorMsg = daemonStatus.error || 'Failed to start daemon';
+      return { success: false, error: `Daemon error: ${errorMsg}` };
     }
     
     return new Promise((resolve) => {
-      this.ws = new WebSocket(`ws://127.0.0.1:${BROKER_PORT}`);
+      try {
+        this.ws = new WebSocket(`ws://127.0.0.1:${BROKER_PORT}`);
+      } catch (err) {
+        return resolve({ success: false, error: `WebSocket create error: ${err.message}` });
+      }
       
       const timeout = setTimeout(() => {
         this.ws?.terminate();
-        resolve({ success: false, error: 'Connection timeout' });
+        resolve({ success: false, error: `Connection timeout (port ${BROKER_PORT})` });
       }, 5000);
       
       this.ws.on('open', () => {
@@ -64,7 +69,7 @@ class RithmicBrokerClient extends EventEmitter {
       this.ws.on('error', (err) => {
         clearTimeout(timeout);
         this.connected = false;
-        resolve({ success: false, error: err.message });
+        resolve({ success: false, error: `Daemon connection failed: ${err.message}` });
       });
     });
   }

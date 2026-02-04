@@ -67,16 +67,35 @@ class RithmicBrokerDaemon {
     
     if (!fs.existsSync(BROKER_DIR)) fs.mkdirSync(BROKER_DIR, { recursive: true });
     fs.writeFileSync(PID_FILE, String(process.pid));
+    log('INFO', 'Starting daemon...', { pid: process.pid });
     
     // Restore connections from state (with cached accounts - no API spam)
-    await this.reconnectManager.restoreConnections(STATE_FILE);
+    try {
+      await this.reconnectManager.restoreConnections(STATE_FILE);
+    } catch (e) {
+      log('WARN', 'Failed to restore connections', { error: e.message });
+    }
     
-    this.wss = new WebSocket.Server({ port: BROKER_PORT, host: '127.0.0.1' });
+    // Create WebSocket server with proper error handling
+    try {
+      this.wss = new WebSocket.Server({ port: BROKER_PORT, host: '127.0.0.1' });
+    } catch (e) {
+      log('ERROR', 'Failed to create WebSocket server', { error: e.message, port: BROKER_PORT });
+      throw e;
+    }
+    
+    // Wait for server to be listening
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('WSS listen timeout')), 5000);
+      this.wss.on('listening', () => { clearTimeout(timeout); resolve(); });
+      this.wss.on('error', (err) => { clearTimeout(timeout); reject(err); });
+    });
+    
     this.wss.on('connection', (ws) => this._handleClient(ws));
     this.wss.on('error', (err) => log('ERROR', 'WSS error', { error: err.message }));
     
     this.running = true;
-    log('INFO', 'Daemon started', { pid: process.pid, port: BROKER_PORT });
+    log('INFO', 'Daemon started successfully', { pid: process.pid, port: BROKER_PORT });
     
     // Save state on ANY termination signal
     const gracefulShutdown = (signal) => {
@@ -392,8 +411,31 @@ class RithmicBrokerDaemon {
 
 // Main entry point
 if (require.main === module) {
-  const daemon = new RithmicBrokerDaemon();
-  daemon.start().catch((e) => { console.error('Daemon failed:', e.message); process.exit(1); });
+  // Ensure log directory exists early
+  if (!fs.existsSync(BROKER_DIR)) {
+    fs.mkdirSync(BROKER_DIR, { recursive: true });
+  }
+  
+  // Log startup attempt
+  const startupLog = (msg) => {
+    const ts = new Date().toISOString();
+    fs.appendFileSync(LOG_FILE, `[${ts}] [STARTUP] ${msg}\n`);
+  };
+  
+  startupLog(`Daemon starting (pid=${process.pid}, node=${process.version})`);
+  
+  try {
+    const daemon = new RithmicBrokerDaemon();
+    daemon.start().catch((e) => { 
+      startupLog(`FATAL: start() failed - ${e.message}`);
+      console.error('Daemon failed:', e.message); 
+      process.exit(1); 
+    });
+  } catch (e) {
+    startupLog(`FATAL: constructor failed - ${e.message}`);
+    console.error('Daemon failed:', e.message);
+    process.exit(1);
+  }
 }
 
 module.exports = { RithmicBrokerDaemon, BROKER_PORT, BROKER_DIR, PID_FILE, LOG_FILE, STATE_FILE };
