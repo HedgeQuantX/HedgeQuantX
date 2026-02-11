@@ -123,11 +123,27 @@ const fetchAllFrontMonths = (service) => {
     };
 
     // Handler for FrontMonth responses
+    let frontMonthMsgCount = 0;
+    let template114Count = 0;
     const frontMonthHandler = (msg) => {
       msgCount++;
+      frontMonthMsgCount++;
       if (msg.templateId !== 114) return;
+      template114Count++;
       
       const decoded = decodeFrontMonthContract(msg.data);
+      
+      // Log first few responses to diagnose
+      if (template114Count <= 5) {
+        brokerLog('FrontMonth response', { 
+          template114Count,
+          rpCode: decoded.rpCode,
+          tradingSymbol: decoded.tradingSymbol,
+          userMsg: decoded.userMsg,
+          exchange: decoded.exchange 
+        });
+      }
+      
       if (decoded.rpCode[0] === '0' && decoded.tradingSymbol) {
         contracts.set(decoded.userMsg, {
           symbol: decoded.tradingSymbol,
@@ -165,6 +181,7 @@ const fetchAllFrontMonths = (service) => {
         brokerLog('WARNING: No products collected - TICKER may not be responding', {});
       }
 
+      let sentCount = 0;
       for (const product of productsToCheck.values()) {
         try {
           service.tickerConn.send('RequestFrontMonthContract', {
@@ -173,10 +190,12 @@ const fetchAllFrontMonths = (service) => {
             symbol: product.productCode,
             exchange: product.exchange,
           });
+          sentCount++;
         } catch (err) {
           brokerLog('Failed to send RequestFrontMonthContract', { product: product.productCode, error: err.message });
         }
       }
+      brokerLog('RequestFrontMonthContract sent', { sentCount, totalProducts: productsToCheck.size });
 
       // Collect results after timeout
       setTimeout(() => {
@@ -202,7 +221,12 @@ const fetchAllFrontMonths = (service) => {
         // Sort alphabetically by base symbol
         results.sort((a, b) => a.baseSymbol.localeCompare(b.baseSymbol));
 
-        brokerLog('FrontMonth phase complete', { contractsFound: results.length, totalMsgs: msgCount });
+        brokerLog('FrontMonth phase complete', { 
+          contractsFound: results.length, 
+          totalMsgs: msgCount,
+          frontMonthMsgs: frontMonthMsgCount,
+          template114Received: template114Count
+        });
         resolve(results);
       }, TIMEOUTS.RITHMIC_PRODUCTS);
     }, TIMEOUTS.RITHMIC_CONTRACTS);
