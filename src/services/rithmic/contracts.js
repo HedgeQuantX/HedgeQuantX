@@ -125,9 +125,15 @@ const fetchAllFrontMonths = (service) => {
     // Handler for FrontMonth responses
     let frontMonthMsgCount = 0;
     let template114Count = 0;
+    const templateIdsSeen = new Map();
     const frontMonthHandler = (msg) => {
       msgCount++;
       frontMonthMsgCount++;
+      
+      // Track all templateIds seen
+      const tid = msg.templateId;
+      templateIdsSeen.set(tid, (templateIdsSeen.get(tid) || 0) + 1);
+      
       if (msg.templateId !== 114) return;
       template114Count++;
       
@@ -221,11 +227,17 @@ const fetchAllFrontMonths = (service) => {
         // Sort alphabetically by base symbol
         results.sort((a, b) => a.baseSymbol.localeCompare(b.baseSymbol));
 
+        // Convert Map to object for logging
+        const templateStats = {};
+        for (const [tid, count] of templateIdsSeen) {
+          templateStats[`t${tid}`] = count;
+        }
         brokerLog('FrontMonth phase complete', { 
           contractsFound: results.length, 
           totalMsgs: msgCount,
           frontMonthMsgs: frontMonthMsgCount,
-          template114Received: template114Count
+          template114Received: template114Count,
+          templateIds: templateStats
         });
         resolve(results);
       }, TIMEOUTS.RITHMIC_PRODUCTS);
