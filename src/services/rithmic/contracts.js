@@ -188,20 +188,35 @@ const fetchAllFrontMonths = (service) => {
       }
 
       let sentCount = 0;
-      for (const product of productsToCheck.values()) {
+      let sendErrors = [];
+      // Only send for first 5 products to test
+      const productsArray = Array.from(productsToCheck.values());
+      const testProducts = productsArray.slice(0, 60); // Limit to 60 for testing
+      
+      for (const product of testProducts) {
         try {
-          service.tickerConn.send('RequestFrontMonthContract', {
+          const reqData = {
             templateId: 113,
             userMsg: [product.productCode],
             symbol: product.productCode,
             exchange: product.exchange,
-          });
+          };
+          // Log first request
+          if (sentCount === 0) {
+            brokerLog('First RequestFrontMonthContract', reqData);
+          }
+          service.tickerConn.send('RequestFrontMonthContract', reqData);
           sentCount++;
         } catch (err) {
-          brokerLog('Failed to send RequestFrontMonthContract', { product: product.productCode, error: err.message });
+          sendErrors.push({ product: product.productCode, error: err.message });
         }
       }
-      brokerLog('RequestFrontMonthContract sent', { sentCount, totalProducts: productsToCheck.size });
+      brokerLog('RequestFrontMonthContract sent', { 
+        sentCount, 
+        totalProducts: productsToCheck.size,
+        limitedTo: testProducts.length,
+        errors: sendErrors.length > 0 ? sendErrors.slice(0, 3) : 'none'
+      });
 
       // Collect results after timeout
       setTimeout(() => {
