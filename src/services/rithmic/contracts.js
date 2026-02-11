@@ -99,6 +99,8 @@ const fetchAllFrontMonths = (service) => {
 
     // Handler for ProductCodes responses
     const sampleProducts = [];
+    let decodeErrors = 0;
+    let firstError = null;
     const productHandler = (msg) => {
       msgCount++;
       if (msg.templateId !== 112) return;
@@ -109,9 +111,15 @@ const fetchAllFrontMonths = (service) => {
       try {
         decoded = proto.decode('ResponseProductCodes', msg.data);
       } catch (e) {
-        // Log first decode error
-        if (sampleProducts.length === 0) {
-          brokerLog('Decode error', { error: e.message });
+        decodeErrors++;
+        if (!firstError) {
+          firstError = e.message;
+          // Log raw buffer info for debugging
+          brokerLog('First decode error', { 
+            error: e.message, 
+            bufferLen: msg.data?.length,
+            first20bytes: msg.data?.slice(0, 20)?.toString('hex')
+          });
         }
         return;
       }
@@ -212,6 +220,8 @@ const fetchAllFrontMonths = (service) => {
         productsFound: productsToCheck.size, 
         totalMsgs: msgCount,
         productMsgs: productMsgCount,
+        decodeErrors: decodeErrors,
+        firstError: firstError,
         sampleProducts: sampleProducts
       });
 
