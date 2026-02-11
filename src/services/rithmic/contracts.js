@@ -98,12 +98,23 @@ const fetchAllFrontMonths = (service) => {
     let productMsgCount = 0;
 
     // Handler for ProductCodes responses
+    const sampleProducts = [];
     const productHandler = (msg) => {
       msgCount++;
       if (msg.templateId !== 112) return;
       productMsgCount++;
       
       const decoded = decodeProductCodes(msg.data);
+      
+      // Log first 5 decoded products
+      if (sampleProducts.length < 5 && decoded.productCode) {
+        sampleProducts.push({ 
+          code: decoded.productCode, 
+          exchange: decoded.exchange,
+          name: decoded.productName?.substring(0, 30)
+        });
+      }
+      
       if (!decoded.productCode || !decoded.exchange) return;
       
       const validExchanges = ['CME', 'CBOT', 'NYMEX', 'COMEX', 'NYBOT', 'CFE'];
@@ -186,7 +197,8 @@ const fetchAllFrontMonths = (service) => {
       brokerLog('ProductCodes phase complete', { 
         productsFound: productsToCheck.size, 
         totalMsgs: msgCount,
-        productMsgs: productMsgCount 
+        productMsgs: productMsgCount,
+        sampleProducts: sampleProducts
       });
 
       if (productsToCheck.size === 0) {
