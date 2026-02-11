@@ -85,17 +85,23 @@ const fetchAllFrontMonths = (service) => {
 
   const tickerState = service.tickerConn.connectionState;
   const tickerConnected = service.tickerConn.isConnected;
-  log.debug('fetchAllFrontMonths starting', { tickerState, tickerConnected });
+  
+  // Direct console.log for daemon broker.log (always visible)
+  const brokerLog = (msg, data) => console.log(`[CONTRACTS] ${msg}`, JSON.stringify(data));
+  
+  brokerLog('fetchAllFrontMonths starting', { tickerState, tickerConnected });
 
   return new Promise((resolve) => {
     const contracts = new Map();
     const productsToCheck = new Map();
     let msgCount = 0;
+    let productMsgCount = 0;
 
     // Handler for ProductCodes responses
     const productHandler = (msg) => {
       msgCount++;
       if (msg.templateId !== 112) return;
+      productMsgCount++;
       
       const decoded = decodeProductCodes(msg.data);
       if (!decoded.productCode || !decoded.exchange) return;
@@ -135,23 +141,28 @@ const fetchAllFrontMonths = (service) => {
     service.tickerConn.on('message', frontMonthHandler);
 
     // Request all product codes
-    log.debug('Sending RequestProductCodes');
+    brokerLog('Sending RequestProductCodes', { templateId: 111 });
     try {
       service.tickerConn.send('RequestProductCodes', {
         templateId: 111,
         userMsg: ['get-products'],
       });
+      brokerLog('RequestProductCodes sent OK', {});
     } catch (err) {
-      log.warn('Failed to send RequestProductCodes', { error: err.message });
+      brokerLog('FAILED to send RequestProductCodes', { error: err.message });
     }
 
     // After timeout, request front months
     setTimeout(() => {
       service.tickerConn.removeListener('message', productHandler);
-      log.debug('Collected products', { count: productsToCheck.size, totalMsgs: msgCount });
+      brokerLog('ProductCodes phase complete', { 
+        productsFound: productsToCheck.size, 
+        totalMsgs: msgCount,
+        productMsgs: productMsgCount 
+      });
 
       if (productsToCheck.size === 0) {
-        log.warn('No products collected - TICKER may not be working');
+        brokerLog('WARNING: No products collected - TICKER may not be responding', {});
       }
 
       for (const product of productsToCheck.values()) {
@@ -163,7 +174,7 @@ const fetchAllFrontMonths = (service) => {
             exchange: product.exchange,
           });
         } catch (err) {
-          log.warn('Failed to send RequestFrontMonthContract', { product: product.productCode, error: err.message });
+          brokerLog('Failed to send RequestFrontMonthContract', { product: product.productCode, error: err.message });
         }
       }
 
@@ -191,7 +202,7 @@ const fetchAllFrontMonths = (service) => {
         // Sort alphabetically by base symbol
         results.sort((a, b) => a.baseSymbol.localeCompare(b.baseSymbol));
 
-        log.debug('Got contracts from API', { count: results.length, totalMsgs: msgCount });
+        brokerLog('FrontMonth phase complete', { contractsFound: results.length, totalMsgs: msgCount });
         resolve(results);
       }, TIMEOUTS.RITHMIC_PRODUCTS);
     }, TIMEOUTS.RITHMIC_CONTRACTS);
