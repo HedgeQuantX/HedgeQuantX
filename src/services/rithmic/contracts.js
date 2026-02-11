@@ -5,7 +5,7 @@
  * NO FAKE DATA - Only real values from Rithmic API
  */
 
-const { decodeFrontMonthContract } = require('./protobuf');
+const { proto, decodeFrontMonthContract } = require('./protobuf');
 const { TIMEOUTS, CACHE } = require('../../config/settings');
 const { logger } = require('../../utils/logger');
 const { getContractDescription, getTickSize } = require('../../config/constants');
@@ -104,31 +104,45 @@ const fetchAllFrontMonths = (service) => {
       if (msg.templateId !== 112) return;
       productMsgCount++;
       
-      const decoded = decodeProductCodes(msg.data);
+      // Use official protobuf decoder instead of manual parsing
+      let decoded;
+      try {
+        decoded = proto.decode('ResponseProductCodes', msg.data);
+      } catch (e) {
+        // Log first decode error
+        if (sampleProducts.length === 0) {
+          brokerLog('Decode error', { error: e.message });
+        }
+        return;
+      }
+      
+      const productCode = decoded.productCode;
+      const exchange = decoded.exchange;
+      const productName = decoded.productName;
       
       // Log first 5 decoded products
-      if (sampleProducts.length < 5 && decoded.productCode) {
+      if (sampleProducts.length < 5 && productCode) {
         sampleProducts.push({ 
-          code: decoded.productCode, 
-          exchange: decoded.exchange,
-          name: decoded.productName?.substring(0, 30)
+          code: productCode, 
+          exchange: exchange,
+          name: productName?.substring(0, 30)
         });
       }
       
-      if (!decoded.productCode || !decoded.exchange) return;
+      if (!productCode || !exchange) return;
       
       const validExchanges = ['CME', 'CBOT', 'NYMEX', 'COMEX', 'NYBOT', 'CFE'];
-      if (!validExchanges.includes(decoded.exchange)) return;
+      if (!validExchanges.includes(exchange)) return;
       
-      const name = (decoded.productName || '').toLowerCase();
+      const name = (productName || '').toLowerCase();
       if (name.includes('option') || name.includes('swap') || name.includes('spread')) return;
       
-      const key = `${decoded.productCode}:${decoded.exchange}`;
+      const key = `${productCode}:${exchange}`;
       if (!productsToCheck.has(key)) {
         productsToCheck.set(key, {
-          productCode: decoded.productCode,
-          productName: decoded.productName || decoded.productCode,
-          exchange: decoded.exchange,
+          productCode: productCode,
+          productName: productName || productCode,
+          exchange: exchange,
         });
       }
     };
@@ -279,66 +293,8 @@ const fetchAllFrontMonths = (service) => {
   });
 };
 
-/**
- * Decode ProductCodes response
- * @param {Buffer} buffer - Protobuf buffer (with 4-byte length prefix)
- * @returns {Object} Decoded product data
- */
-const decodeProductCodes = (buffer) => {
-  // Skip 4-byte length prefix
-  const data = buffer.length > 4 ? buffer.slice(4) : buffer;
-  
-  const result = {};
-  let offset = 0;
-
-  const readVarint = (buf, off) => {
-    let value = 0;
-    let shift = 0;
-    while (off < buf.length) {
-      const byte = buf[off++];
-      value |= (byte & 0x7F) << shift;
-      if (!(byte & 0x80)) break;
-      shift += 7;
-    }
-    return [value, off];
-  };
-
-  const readString = (buf, off) => {
-    const [len, newOff] = readVarint(buf, off);
-    return [buf.slice(newOff, newOff + len).toString('utf8'), newOff + len];
-  };
-
-  while (offset < data.length) {
-    try {
-      const [tag, tagOff] = readVarint(data, offset);
-      const wireType = tag & 0x7;
-      const fieldNumber = tag >>> 3;
-      offset = tagOff;
-
-      if (wireType === 0) {
-        const [, newOff] = readVarint(data, offset);
-        offset = newOff;
-      } else if (wireType === 2) {
-        const [val, newOff] = readString(data, offset);
-        offset = newOff;
-        // Field IDs from Rithmic API (response_product_codes.proto)
-        if (fieldNumber === 110101) result.exchange = val;      // exchange
-        if (fieldNumber === 110102) result.productCode = val;   // product_code (ES, MES, MNQ, etc.)
-        if (fieldNumber === 110103) result.productName = val;   // product_name
-      } else {
-        break;
-      }
-    } catch {
-      break;
-    }
-  }
-
-  return result;
-};
-
 module.exports = {
   getContracts,
   searchContracts,
   fetchAllFrontMonths,
-  decodeProductCodes,
 };
