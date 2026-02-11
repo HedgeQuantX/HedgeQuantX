@@ -128,12 +128,14 @@ const fetchAllFrontMonths = (service) => {
       const exchange = decoded.exchange;
       const productName = decoded.productName;
       
-      // Log first 5 decoded products
-      if (sampleProducts.length < 5 && productCode) {
+      // Log first 5 raw decoded messages to see field names
+      if (sampleProducts.length < 5) {
+        const keys = Object.keys(decoded.toJSON ? decoded.toJSON() : decoded);
         sampleProducts.push({ 
-          code: productCode, 
-          exchange: exchange,
-          name: productName?.substring(0, 30)
+          code: productCode || 'NONE',
+          exchange: exchange || 'NONE',
+          name: productName?.substring(0, 30) || 'NONE',
+          fields: keys.slice(0, 10)
         });
       }
       
