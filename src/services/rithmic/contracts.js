@@ -126,6 +126,7 @@ const fetchAllFrontMonths = (service) => {
     let frontMonthMsgCount = 0;
     let template114Count = 0;
     const templateIdsSeen = new Map();
+    const rawResponses = [];
     const frontMonthHandler = (msg) => {
       msgCount++;
       frontMonthMsgCount++;
@@ -133,6 +134,11 @@ const fetchAllFrontMonths = (service) => {
       // Track all templateIds seen
       const tid = msg.templateId;
       templateIdsSeen.set(tid, (templateIdsSeen.get(tid) || 0) + 1);
+      
+      // Log first few non-112 messages to see what we're getting
+      if (tid !== 112 && rawResponses.length < 5) {
+        rawResponses.push({ templateId: tid, dataLen: msg.data?.length });
+      }
       
       if (msg.templateId !== 114) return;
       template114Count++;
@@ -252,7 +258,8 @@ const fetchAllFrontMonths = (service) => {
           totalMsgs: msgCount,
           frontMonthMsgs: frontMonthMsgCount,
           template114Received: template114Count,
-          templateIds: templateStats
+          templateIds: templateStats,
+          nonProductMsgs: rawResponses
         });
         resolve(results);
       }, TIMEOUTS.RITHMIC_PRODUCTS);
