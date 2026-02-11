@@ -83,12 +83,18 @@ const fetchAllFrontMonths = (service) => {
     throw new Error('TICKER_PLANT not connected');
   }
 
+  const tickerState = service.tickerConn.connectionState;
+  const tickerConnected = service.tickerConn.isConnected;
+  log.debug('fetchAllFrontMonths starting', { tickerState, tickerConnected });
+
   return new Promise((resolve) => {
     const contracts = new Map();
     const productsToCheck = new Map();
+    let msgCount = 0;
 
     // Handler for ProductCodes responses
     const productHandler = (msg) => {
+      msgCount++;
       if (msg.templateId !== 112) return;
       
       const decoded = decodeProductCodes(msg.data);
@@ -112,6 +118,7 @@ const fetchAllFrontMonths = (service) => {
 
     // Handler for FrontMonth responses
     const frontMonthHandler = (msg) => {
+      msgCount++;
       if (msg.templateId !== 114) return;
       
       const decoded = decodeFrontMonthContract(msg.data);
@@ -128,23 +135,36 @@ const fetchAllFrontMonths = (service) => {
     service.tickerConn.on('message', frontMonthHandler);
 
     // Request all product codes
-    service.tickerConn.send('RequestProductCodes', {
-      templateId: 111,
-      userMsg: ['get-products'],
-    });
+    log.debug('Sending RequestProductCodes');
+    try {
+      service.tickerConn.send('RequestProductCodes', {
+        templateId: 111,
+        userMsg: ['get-products'],
+      });
+    } catch (err) {
+      log.warn('Failed to send RequestProductCodes', { error: err.message });
+    }
 
     // After timeout, request front months
     setTimeout(() => {
       service.tickerConn.removeListener('message', productHandler);
-      log.debug('Collected products', { count: productsToCheck.size });
+      log.debug('Collected products', { count: productsToCheck.size, totalMsgs: msgCount });
+
+      if (productsToCheck.size === 0) {
+        log.warn('No products collected - TICKER may not be working');
+      }
 
       for (const product of productsToCheck.values()) {
-        service.tickerConn.send('RequestFrontMonthContract', {
-          templateId: 113,
-          userMsg: [product.productCode],
-          symbol: product.productCode,
-          exchange: product.exchange,
-        });
+        try {
+          service.tickerConn.send('RequestFrontMonthContract', {
+            templateId: 113,
+            userMsg: [product.productCode],
+            symbol: product.productCode,
+            exchange: product.exchange,
+          });
+        } catch (err) {
+          log.warn('Failed to send RequestFrontMonthContract', { product: product.productCode, error: err.message });
+        }
       }
 
       // Collect results after timeout
@@ -171,7 +191,7 @@ const fetchAllFrontMonths = (service) => {
         // Sort alphabetically by base symbol
         results.sort((a, b) => a.baseSymbol.localeCompare(b.baseSymbol));
 
-        log.debug('Got contracts from API', { count: results.length });
+        log.debug('Got contracts from API', { count: results.length, totalMsgs: msgCount });
         resolve(results);
       }, TIMEOUTS.RITHMIC_PRODUCTS);
     }, TIMEOUTS.RITHMIC_CONTRACTS);
