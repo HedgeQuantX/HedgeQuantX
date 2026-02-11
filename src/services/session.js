@@ -111,19 +111,38 @@ const connections = {
     log.info('Connection added', { type, propfirm: propfirm || type });
   },
 
+  /**
+   * Sanitize account data to prevent corrupted data from being saved
+   */
+  _sanitizeAccount(acc) {
+    if (!acc || typeof acc !== 'object' || !acc.accountId) return null;
+    return {
+      accountId: String(acc.accountId),
+      fcmId: acc.fcmId ? String(acc.fcmId) : undefined,
+      ibId: acc.ibId ? String(acc.ibId) : undefined,
+      accountName: acc.accountName ? String(acc.accountName) : undefined,
+    };
+  },
+
   saveToStorage() {
     // Load existing sessions to preserve AI agents
     const existingSessions = storage.load();
     const aiSessions = existingSessions.filter(s => s.type === 'ai');
     
     // Build Rithmic sessions - INCLUDE accounts to avoid Rithmic API limit on restore
-    const rithmicSessions = this.services.map(conn => ({
-      type: conn.type,
-      propfirm: conn.propfirm,
-      propfirmKey: conn.service.propfirmKey || conn.propfirmKey,
-      credentials: conn.service.credentials,
-      accounts: conn.service.accounts || [],  // CRITICAL: Cache accounts to avoid 2000 GetAccounts limit
-    }));
+    const rithmicSessions = this.services.map(conn => {
+      // Sanitize accounts to prevent corrupted data
+      const rawAccounts = conn.service.accounts || [];
+      const accounts = rawAccounts.map(a => this._sanitizeAccount(a)).filter(Boolean);
+      
+      return {
+        type: conn.type,
+        propfirm: conn.propfirm,
+        propfirmKey: conn.service.propfirmKey || conn.propfirmKey,
+        credentials: conn.service.credentials,
+        accounts,  // CRITICAL: Cache sanitized accounts to avoid 2000 GetAccounts limit
+      };
+    });
     
     // Merge: AI sessions + Rithmic sessions
     storage.save([...aiSessions, ...rithmicSessions]);
@@ -200,8 +219,17 @@ const connections = {
     if (type === 'rithmic' && session.credentials) {
       const client = new RithmicBrokerClient(propfirmKey || 'apex_rithmic');
       
-      // CRITICAL: Pass cached accounts to avoid Rithmic's 2000 GetAccounts limit
-      const loginOptions = session.accounts ? { cachedAccounts: session.accounts } : {};
+      // Validate cached accounts before using
+      let validAccounts = null;
+      if (session.accounts && Array.isArray(session.accounts)) {
+        validAccounts = session.accounts
+          .map(a => this._sanitizeAccount(a))
+          .filter(Boolean);
+        if (validAccounts.length === 0) validAccounts = null;
+      }
+      
+      // CRITICAL: Pass validated cached accounts to avoid Rithmic's 2000 GetAccounts limit
+      const loginOptions = validAccounts ? { cachedAccounts: validAccounts } : {};
       const result = await client.login(session.credentials.username, session.credentials.password, loginOptions);
       
       if (result.success) {
@@ -212,7 +240,7 @@ const connections = {
           propfirmKey,
           connectedAt: new Date(),
         });
-        log.debug('Rithmic session restored via broker', { hasCachedAccounts: !!session.accounts });
+        log.debug('Rithmic session restored via broker', { hasCachedAccounts: !!validAccounts, accountCount: validAccounts?.length || 0 });
       }
     }
   },

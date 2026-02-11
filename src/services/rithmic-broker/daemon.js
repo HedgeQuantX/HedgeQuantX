@@ -342,21 +342,69 @@ class RithmicBrokerDaemon {
     // Log service state for debugging
     const hasCredentials = !!conn.service.credentials;
     const hasTickerConn = !!conn.service.tickerConn;
-    log('DEBUG', 'getContracts request', { propfirm: payload.propfirmKey, hasCredentials, hasTickerConn });
+    const tickerState = conn.service.tickerConn?.connectionState;
+    log('DEBUG', 'getContracts request', { propfirm: payload.propfirmKey, hasCredentials, hasTickerConn, tickerState });
     
     try {
       const result = await conn.service.getContracts();
+      
+      // Log detailed result
+      const tickerStateAfter = conn.service.tickerConn?.connectionState;
       log('DEBUG', 'getContracts result', { 
         propfirm: payload.propfirmKey, 
         success: result.success, 
         count: result.contracts?.length || 0,
+        source: result.source,
+        tickerStateAfter,
         error: result.error 
       });
+      
+      // If no contracts found, return fallback list for common futures
+      if (!result.success || result.contracts?.length === 0) {
+        log('WARN', 'Using fallback contracts list');
+        const fallbackContracts = this._getFallbackContracts();
+        return { type: 'contracts', payload: { success: true, contracts: fallbackContracts, source: 'fallback' }, requestId };
+      }
+      
       return { type: 'contracts', payload: result, requestId };
     } catch (err) {
       log('ERROR', 'getContracts exception', { propfirm: payload.propfirmKey, error: err.message, stack: err.stack?.split('\n')[1] });
-      return { type: 'contracts', payload: { success: false, error: err.message, contracts: [] }, requestId };
+      // Return fallback on error
+      log('WARN', 'Using fallback contracts due to error');
+      const fallbackContracts = this._getFallbackContracts();
+      return { type: 'contracts', payload: { success: true, contracts: fallbackContracts, source: 'fallback' }, requestId };
     }
+  }
+  
+  /**
+   * Get fallback contracts list when TICKER_PLANT fails
+   * These are common futures that most prop firms support
+   */
+  _getFallbackContracts() {
+    const now = new Date();
+    const month = now.getMonth();
+    const year = now.getFullYear();
+    
+    // Determine front month code (H=Mar, M=Jun, U=Sep, Z=Dec for indices)
+    const monthCodes = ['H', 'H', 'H', 'M', 'M', 'M', 'U', 'U', 'U', 'Z', 'Z', 'Z'];
+    const frontMonth = monthCodes[month];
+    const yearCode = String(year).slice(-1);
+    const suffix = frontMonth + yearCode;
+    
+    return [
+      { symbol: `MNQ${suffix}`, baseSymbol: 'MNQ', name: 'Micro E-mini Nasdaq-100', exchange: 'CME', tickSize: 0.25 },
+      { symbol: `MES${suffix}`, baseSymbol: 'MES', name: 'Micro E-mini S&P 500', exchange: 'CME', tickSize: 0.25 },
+      { symbol: `NQ${suffix}`, baseSymbol: 'NQ', name: 'E-mini Nasdaq-100', exchange: 'CME', tickSize: 0.25 },
+      { symbol: `ES${suffix}`, baseSymbol: 'ES', name: 'E-mini S&P 500', exchange: 'CME', tickSize: 0.25 },
+      { symbol: `MCL${suffix}`, baseSymbol: 'MCL', name: 'Micro WTI Crude Oil', exchange: 'NYMEX', tickSize: 0.01 },
+      { symbol: `MGC${suffix}`, baseSymbol: 'MGC', name: 'Micro Gold', exchange: 'COMEX', tickSize: 0.10 },
+      { symbol: `M2K${suffix}`, baseSymbol: 'M2K', name: 'Micro E-mini Russell 2000', exchange: 'CME', tickSize: 0.10 },
+      { symbol: `MYM${suffix}`, baseSymbol: 'MYM', name: 'Micro E-mini Dow', exchange: 'CBOT', tickSize: 0.50 },
+      { symbol: `RTY${suffix}`, baseSymbol: 'RTY', name: 'E-mini Russell 2000', exchange: 'CME', tickSize: 0.10 },
+      { symbol: `YM${suffix}`, baseSymbol: 'YM', name: 'E-mini Dow', exchange: 'CBOT', tickSize: 1.00 },
+      { symbol: `CL${suffix}`, baseSymbol: 'CL', name: 'Crude Oil', exchange: 'NYMEX', tickSize: 0.01 },
+      { symbol: `GC${suffix}`, baseSymbol: 'GC', name: 'Gold', exchange: 'COMEX', tickSize: 0.10 },
+    ];
   }
 
   async _handleSearchContracts(payload, requestId) {
