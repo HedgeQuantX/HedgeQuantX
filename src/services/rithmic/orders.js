@@ -1,17 +1,74 @@
 /**
  * Rithmic Orders Module
  * Order placement, cancellation, and history
+ * 
+ * @module services/rithmic/orders
  */
 
 const { REQ } = require('./constants');
+const { sanitizeQuantity, MAX_SAFE_QUANTITY } = require('./protobuf-utils');
 
 // Debug mode - DISABLED to avoid polluting interactive UI
 const DEBUG = false;
+
+// Order status constants
+const ORDER_STATUS = {
+  PENDING: 1,
+  WORKING: 2,
+  FILLED: 3,
+  PARTIAL: 4,
+  REJECTED: 5,
+  CANCELLED: 6,
+};
+
+// Order timeouts (ms)
+const ORDER_TIMEOUTS = {
+  PLACE: 5000,
+  CANCEL: 5000,
+  CANCEL_ALL: 3000,
+  EXIT_POSITION: 5000,
+  GET_ORDERS: 5000,
+  GET_HISTORY: 10000,
+};
+
+/**
+ * Validate order data before sending
+ * @param {Object} orderData - Order parameters
+ * @returns {{ valid: boolean, error?: string }}
+ */
+function validateOrderData(orderData) {
+  // Required fields
+  if (!orderData.accountId) return { valid: false, error: 'Missing accountId' };
+  if (!orderData.symbol) return { valid: false, error: 'Missing symbol' };
+  
+  // Validate quantity
+  const qty = sanitizeQuantity(orderData.size);
+  if (qty <= 0) return { valid: false, error: 'Invalid quantity: must be > 0' };
+  if (qty > MAX_SAFE_QUANTITY) return { valid: false, error: `Invalid quantity: exceeds max ${MAX_SAFE_QUANTITY}` };
+  
+  // Validate side (0 = Buy, 1 = Sell)
+  if (orderData.side !== 0 && orderData.side !== 1) {
+    return { valid: false, error: 'Invalid side: must be 0 (Buy) or 1 (Sell)' };
+  }
+  
+  // Validate order type (1 = Limit, 2 = Market, 3 = Stop Limit, 4 = Stop Market)
+  if (![1, 2, 3, 4].includes(orderData.type)) {
+    return { valid: false, error: 'Invalid order type' };
+  }
+  
+  // Limit orders require price
+  if (orderData.type === 1 && (!orderData.price || orderData.price <= 0)) {
+    return { valid: false, error: 'Limit order requires price > 0' };
+  }
+  
+  return { valid: true };
+}
 
 /**
  * Place order via ORDER_PLANT and wait for confirmation
  * @param {RithmicService} service - The Rithmic service instance
  * @param {Object} orderData - Order parameters
+ * @returns {Promise<{success: boolean, orderId?: string, error?: string}>}
  */
 const placeOrder = async (service, orderData) => {
   // Check connection state
@@ -27,12 +84,23 @@ const placeOrder = async (service, orderData) => {
     });
   }
   
-  if (!service.orderConn || !service.loginInfo) {
-    return { success: false, error: 'Not connected' };
+  // Connection validation
+  if (!service.orderConn) {
+    return { success: false, error: 'ORDER_PLANT not connected' };
+  }
+  
+  if (!service.loginInfo) {
+    return { success: false, error: 'Not logged in - missing loginInfo' };
   }
   
   if (connState !== 'LOGGED_IN') {
     return { success: false, error: `ORDER_PLANT not logged in (state: ${connState})` };
+  }
+  
+  // Validate order data
+  const validation = validateOrderData(orderData);
+  if (!validation.valid) {
+    return { success: false, error: validation.error };
   }
 
   // Generate unique user message for tracking
@@ -41,12 +109,16 @@ const placeOrder = async (service, orderData) => {
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
       service.removeListener('orderNotification', onNotification);
-      resolve({ success: false, error: 'Order timeout - no confirmation received' });
-    }, 5000);
+      resolve({ success: false, error: 'Order timeout - no confirmation received', orderTag });
+    }, ORDER_TIMEOUTS.PLACE);
 
     const onNotification = (order) => {
-      // Match by symbol and approximate timing
-      if (order.symbol === orderData.symbol) {
+      // CRITICAL FIX: Match by orderTag (userMsg) first, then symbol as fallback
+      // This prevents race conditions when multiple orders for same symbol
+      const orderMatches = (order.userMsg && order.userMsg.includes(orderTag)) || 
+                          order.symbol === orderData.symbol;
+      
+      if (orderMatches) {
         clearTimeout(timeout);
         service.removeListener('orderNotification', onNotification);
         
@@ -59,6 +131,7 @@ const placeOrder = async (service, orderData) => {
             status: order.status,
             fillPrice: order.avgFillPrice || orderData.price,
             filledQty: order.totalFillSize || orderData.size,
+            orderTag: orderTag,
           });
         } else if (order.status === 5 || order.status === 6) {
           // Status 5 = Rejected, 6 = Cancelled
@@ -66,6 +139,7 @@ const placeOrder = async (service, orderData) => {
             success: false,
             error: `Order rejected: status ${order.status}`,
             orderId: order.basketId,
+            orderTag: orderTag,
           });
         }
         // Keep listening for other statuses
@@ -112,7 +186,7 @@ const placeOrder = async (service, orderData) => {
         accountId: orderData.accountId,
         symbol: orderData.symbol,
         exchange: exchange,
-        quantity: orderData.size,
+        quantity: sanitizeQuantity(orderData.size),
         transactionType: orderData.side === 0 ? 1 : 2, // 1=Buy, 2=Sell
         duration: 1, // DAY
         priceType: orderData.type === 2 ? 2 : 1, // 2=Market, 1=Limit

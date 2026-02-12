@@ -3,6 +3,11 @@
  * @module services/rithmic/protobuf-utils
  */
 
+// Constants for safe integer handling
+const MAX_SAFE_QUANTITY = 10000; // Max reasonable position/order quantity
+const MAX_UINT64 = BigInt('18446744073709551616'); // 2^64
+const MAX_INT64 = BigInt('9223372036854775807');   // 2^63 - 1
+
 /**
  * Read a varint from buffer
  * @param {Buffer} buffer - Input buffer
@@ -18,6 +23,13 @@ function readVarint(buffer, offset) {
     const byte = buffer[pos++];
     result |= BigInt(byte & 0x7f) << shift;
     if ((byte & 0x80) === 0) {
+      // Handle potential unsigned 64-bit to signed conversion
+      // Rithmic sends negative numbers as unsigned (e.g., -1 as 18446744073709551615)
+      if (result > MAX_INT64) {
+        // Convert unsigned to signed: subtract 2^64
+        const signedValue = result - MAX_UINT64;
+        return [Number(signedValue), pos];
+      }
       return [Number(result), pos];
     }
     shift += BigInt(7);
@@ -26,6 +38,41 @@ function readVarint(buffer, offset) {
     }
   }
   throw new Error('Incomplete varint');
+}
+
+/**
+ * Validate and sanitize a quantity value (positions, order sizes)
+ * Prevents overflow values and ensures reasonable bounds
+ * @param {number|string|BigInt} value - Raw quantity value
+ * @returns {number} Sanitized quantity (0 if invalid)
+ */
+function sanitizeQuantity(value) {
+  if (value === null || value === undefined) return 0;
+  
+  let num;
+  if (typeof value === 'bigint') {
+    // Handle BigInt overflow (negative values sent as unsigned)
+    if (value > MAX_INT64) {
+      num = Number(value - MAX_UINT64);
+    } else {
+      num = Number(value);
+    }
+  } else if (typeof value === 'string') {
+    num = parseInt(value, 10);
+  } else {
+    num = Number(value);
+  }
+  
+  // Validate the number
+  if (!Number.isFinite(num) || Number.isNaN(num)) return 0;
+  
+  // Check for overflow values (like 18446744073709552000)
+  if (Math.abs(num) > MAX_SAFE_QUANTITY) {
+    // This is likely an overflow - return 0 to be safe
+    return 0;
+  }
+  
+  return num;
 }
 
 /**
@@ -68,4 +115,6 @@ module.exports = {
   readVarint,
   readLengthDelimited,
   skipField,
+  sanitizeQuantity,
+  MAX_SAFE_QUANTITY,
 };

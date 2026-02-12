@@ -5,6 +5,7 @@
 
 const { proto, decodeAccountPnL, decodeInstrumentPnL } = require('./protobuf');
 const { RES, STREAM } = require('./constants');
+const { sanitizeQuantity } = require('./protobuf-utils');
 
 // Debug mode - DISABLED to avoid polluting interactive UI
 // Use session logs instead for debugging
@@ -252,7 +253,10 @@ const handleInstrumentPnLUpdate = (service, data) => {
     const pos = decodeInstrumentPnL(data);
     if (pos.symbol && pos.accountId) {
       const key = `${pos.accountId}:${pos.symbol}:${pos.exchange}`;
-      const netQty = pos.netQuantity || pos.openPositionQuantity || ((pos.buyQty || 0) - (pos.sellQty || 0));
+      
+      // CRITICAL: Sanitize quantity to prevent overflow (18446744073709552000 bug)
+      const rawQty = pos.netQuantity || pos.openPositionQuantity || ((pos.buyQty || 0) - (pos.sellQty || 0));
+      const netQty = sanitizeQuantity(rawQty);
       
       if (netQty !== 0) {
         service.positions.set(key, {
@@ -270,10 +274,17 @@ const handleInstrumentPnLUpdate = (service, data) => {
         service.positions.delete(key);
       }
       
-      service.emit('positionUpdate', service.positions.get(key));
+      // Only emit if position exists (not deleted)
+      const currentPos = service.positions.get(key);
+      if (currentPos) {
+        service.emit('positionUpdate', currentPos);
+      }
     }
   } catch (e) {
-    // Ignore decode errors
+    // Log decode errors for debugging (but don't pollute UI)
+    if (process.env.HQX_DEBUG === '1') {
+      console.error('[Handler] Position decode error:', e.message);
+    }
   }
 };
 
