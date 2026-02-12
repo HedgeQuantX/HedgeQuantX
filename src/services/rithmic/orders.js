@@ -5,8 +5,8 @@
 
 const { REQ } = require('./constants');
 
-// Debug mode
-const DEBUG = process.env.HQX_DEBUG === '1';
+// Debug mode - DISABLED to avoid polluting interactive UI
+const DEBUG = false;
 
 /**
  * Place order via ORDER_PLANT and wait for confirmation

@@ -11,9 +11,9 @@
 
 const { REQ } = require('./constants');
 
-// Debug mode
-const DEBUG = process.env.HQX_DEBUG === '1';
-const debug = (...args) => DEBUG && console.log('[Rithmic]', ...args);
+// Debug mode - DISABLED to avoid polluting interactive UI
+const DEBUG = false;
+const debug = (...args) => {};
 
 /**
  * Hash account ID to numeric (for compatibility)

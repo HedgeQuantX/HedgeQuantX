@@ -6,9 +6,10 @@
 const { proto, decodeAccountPnL, decodeInstrumentPnL } = require('./protobuf');
 const { RES, STREAM } = require('./constants');
 
-// Debug mode
-const DEBUG = process.env.HQX_DEBUG === '1';
-const debug = (...args) => DEBUG && console.log('[Rithmic:Handler]', ...args);
+// Debug mode - DISABLED to avoid polluting interactive UI
+// Use session logs instead for debugging
+const DEBUG = false;
+const debug = (...args) => {};
 
 /**
  * Create ORDER_PLANT message handler
