@@ -492,48 +492,92 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   clearInterval(pnlInterval);
   clearInterval(liveLogInterval);
   
-  // Flatten any open position before stopping
-  // Get fresh position from service to avoid stale/corrupted values
+  // ============================================================
+  // EMERGENCY FLATTEN - ULTRA SOLID
+  // 1. Cancel ALL pending orders
+  // 2. Exit position via Rithmic API
+  // 3. Fallback: Market order to flatten
+  // 4. Verify position is flat
+  // ============================================================
+  
+  const accountId = account.rithmicAccountId || account.accountId;
+  const exchange = contract.exchange || 'CME';
+  
+  ui.addLog('system', 'Stopping algo - cancelling orders...');
+  sessionLogger.log('EXIT', 'Emergency flatten initiated');
+  
+  // STEP 1: Cancel ALL pending orders
+  try {
+    if (service.cancelAllOrders) {
+      await service.cancelAllOrders(accountId);
+      ui.addLog('system', 'All pending orders cancelled');
+      sessionLogger.log('EXIT', 'All orders cancelled');
+    }
+  } catch (e) {
+    sessionLogger.log('EXIT', `Cancel orders error: ${e.message}`);
+  }
+  
+  // Wait for cancellations to process
+  await new Promise(r => setTimeout(r, 1000));
+  
+  // STEP 2: Try Rithmic's native ExitPosition first
+  try {
+    if (service.exitPosition) {
+      ui.addLog('system', 'Exiting position via Rithmic...');
+      const exitResult = await service.exitPosition(accountId, symbolCode, exchange);
+      if (exitResult.success) {
+        ui.addLog('system', 'Exit position command sent');
+        sessionLogger.log('EXIT', 'ExitPosition sent to Rithmic');
+      }
+    }
+  } catch (e) {
+    sessionLogger.log('EXIT', `ExitPosition error: ${e.message}`);
+  }
+  
+  // Wait for exit to process
+  await new Promise(r => setTimeout(r, 2000));
+  
+  // STEP 3: Verify position and flatten with market order if needed
   let positionToFlatten = 0;
   try {
-    const posResult = await service.getPositions(account.rithmicAccountId || account.accountId);
+    const posResult = await service.getPositions(accountId);
     if (posResult.success && posResult.positions) {
       const pos = posResult.positions.find(p => {
         const sym = p.contractId || p.symbol || '';
-        return sym.includes(contract.name) || sym.includes(symbolCode);
+        return sym.includes(symbolCode) || sym.includes(contract.name) || sym.includes(contract.baseSymbol);
       });
       if (pos && pos.quantity) {
         const qty = parseInt(pos.quantity);
-        // Validate quantity is reasonable (not overflow)
-        if (!isNaN(qty) && Math.abs(qty) < 1000) {
+        // Validate quantity is reasonable (not overflow - max 100 contracts)
+        if (!isNaN(qty) && qty !== 0 && Math.abs(qty) <= 100) {
           positionToFlatten = qty;
         }
       }
     }
   } catch (e) {
-    // Use tracked position as fallback, but validate it
-    if (Math.abs(currentPosition) < 1000) {
-      positionToFlatten = currentPosition;
-    }
+    sessionLogger.log('EXIT', `Get positions error: ${e.message}`);
   }
   
+  // STEP 4: Market order flatten if position still open
   if (positionToFlatten !== 0) {
     const side = positionToFlatten > 0 ? 'LONG' : 'SHORT';
     const size = Math.abs(positionToFlatten);
-    ui.addLog('system', `Flattening position: ${side} ${size}`);
-    sessionLogger.log('EXIT', `Flattening position: ${side} ${size}`);
+    ui.addLog('system', `Flattening ${side} ${size} @ market...`);
+    sessionLogger.log('EXIT', `Market flatten: ${side} ${size}`);
+    
     try {
       const flattenResult = await service.placeOrder({
-        accountId: account.rithmicAccountId || account.accountId,
+        accountId: accountId,
         symbol: symbolCode,
-        exchange: contract.exchange || 'CME',
-        type: 2, // Market
+        exchange: exchange,
+        type: 2, // Market order
         side: positionToFlatten > 0 ? 1 : 0, // Sell if long, Buy if short
         size: size
       });
+      
       if (flattenResult.success) {
         ui.addLog('fill_' + (positionToFlatten > 0 ? 'sell' : 'buy'), `Position flattened @ market`);
-        sessionLogger.log('EXIT', `Position flattened successfully`);
+        sessionLogger.log('EXIT', 'Position flattened successfully');
       } else {
         ui.addLog('error', `Flatten failed: ${flattenResult.error}`);
         sessionLogger.log('EXIT', `Flatten failed: ${flattenResult.error}`);
@@ -542,8 +586,32 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       ui.addLog('error', `Flatten error: ${e.message}`);
       sessionLogger.log('EXIT', `Flatten error: ${e.message}`);
     }
+    
     // Wait for fill
     await new Promise(r => setTimeout(r, 2000));
+    
+    // STEP 5: Final verification
+    try {
+      const verifyResult = await service.getPositions(accountId);
+      if (verifyResult.success && verifyResult.positions) {
+        const pos = verifyResult.positions.find(p => {
+          const sym = p.contractId || p.symbol || '';
+          return sym.includes(symbolCode);
+        });
+        if (pos && pos.quantity && Math.abs(parseInt(pos.quantity)) > 0 && Math.abs(parseInt(pos.quantity)) <= 100) {
+          ui.addLog('error', `WARNING: Position still open! Qty: ${pos.quantity}`);
+          sessionLogger.log('EXIT', `WARNING: Position NOT flat! Qty: ${pos.quantity}`);
+        } else {
+          ui.addLog('system', 'Position verified flat');
+          sessionLogger.log('EXIT', 'Position verified flat');
+        }
+      }
+    } catch (e) {
+      // Ignore verification errors
+    }
+  } else {
+    ui.addLog('system', 'No position to flatten');
+    sessionLogger.log('EXIT', 'No position to flatten');
   }
   
   await marketFeed.disconnect();

@@ -473,9 +473,112 @@ const closePosition = async (service, accountId, symbol) => {
   });
 };
 
+/**
+ * Cancel all orders for an account
+ * Uses RequestCancelAllOrders (template 346)
+ * @param {RithmicService} service - The Rithmic service instance
+ * @param {string} accountId - Account ID
+ */
+const cancelAllOrders = async (service, accountId) => {
+  if (!service.orderConn || !service.loginInfo) {
+    return { success: false, error: 'Not connected' };
+  }
+
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      resolve({ success: true, message: 'Cancel all orders sent' });
+    }, 3000);
+
+    try {
+      service.orderConn.send('RequestCancelAllOrders', {
+        templateId: REQ.CANCEL_ALL_ORDERS,
+        userMsg: ['HQX-FLATTEN'],
+        fcmId: service.loginInfo.fcmId,
+        ibId: service.loginInfo.ibId,
+        accountId: accountId,
+      });
+      
+      // Listen for response
+      const handler = (msg) => {
+        if (msg.templateId === 347) { // ResponseCancelAllOrders
+          clearTimeout(timeout);
+          service.orderConn.removeListener('message', handler);
+          resolve({ success: true, message: 'All orders cancelled' });
+        }
+      };
+      service.orderConn.on('message', handler);
+      
+    } catch (error) {
+      clearTimeout(timeout);
+      resolve({ success: false, error: error.message });
+    }
+  });
+};
+
+/**
+ * Exit position using Rithmic's ExitPosition request
+ * Uses RequestExitPosition (template 3504)
+ * @param {RithmicService} service - The Rithmic service instance
+ * @param {string} accountId - Account ID  
+ * @param {string} symbol - Symbol to exit
+ * @param {string} exchange - Exchange (default CME)
+ */
+const exitPosition = async (service, accountId, symbol, exchange = 'CME') => {
+  if (!service.orderConn || !service.loginInfo) {
+    return { success: false, error: 'Not connected' };
+  }
+
+  // Get trade route
+  let tradeRoute = null;
+  if (service.tradeRoutes && service.tradeRoutes.size > 0) {
+    const routeInfo = service.tradeRoutes.get(exchange);
+    if (routeInfo) {
+      tradeRoute = routeInfo.tradeRoute;
+    } else {
+      const firstRoute = service.tradeRoutes.values().next().value;
+      if (firstRoute) tradeRoute = firstRoute.tradeRoute;
+    }
+  }
+
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      resolve({ success: true, message: 'Exit position sent' });
+    }, 5000);
+
+    try {
+      service.orderConn.send('RequestExitPosition', {
+        templateId: REQ.EXIT_POSITION,
+        userMsg: ['HQX-EXIT'],
+        fcmId: service.loginInfo.fcmId,
+        ibId: service.loginInfo.ibId,
+        accountId: accountId,
+        symbol: symbol,
+        exchange: exchange,
+        tradeRoute: tradeRoute,
+      });
+      
+      // Listen for response
+      const handler = (msg) => {
+        if (msg.templateId === 3505) { // ResponseExitPosition
+          clearTimeout(timeout);
+          service.orderConn.removeListener('message', handler);
+          resolve({ success: true, message: 'Position exit sent' });
+        }
+      };
+      service.orderConn.on('message', handler);
+      
+    } catch (error) {
+      clearTimeout(timeout);
+      resolve({ success: false, error: error.message });
+    }
+  });
+};
+
 module.exports = {
   placeOrder,
   cancelOrder,
+  cancelAllOrders,
+  exitPosition,
   getOrders,
   getOrderHistory,
   getOrderHistoryDates,

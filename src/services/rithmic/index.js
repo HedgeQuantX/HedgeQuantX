@@ -17,7 +17,7 @@ const {
   getPositions,
   fetchTradeRoutes,
 } = require('./accounts');
-const { placeOrder, cancelOrder, getOrders, getOrderHistory, getOrderHistoryDates, getTradeHistoryFull, closePosition } = require('./orders');
+const { placeOrder, cancelOrder, cancelAllOrders, exitPosition, getOrders, getOrderHistory, getOrderHistoryDates, getTradeHistoryFull, closePosition } = require('./orders');
 const { fillsToRoundTrips, calculateTradeStats } = require('./trades');
 const { getContracts, searchContracts } = require('./contracts');
 const { handleAutoReconnect } = require('./reconnect');
@@ -320,6 +320,8 @@ class RithmicService extends EventEmitter {
   async getTradeHistoryFull(days) { return getTradeHistoryFull(this, days); }
   async placeOrder(orderData) { return placeOrder(this, orderData); }
   async cancelOrder(orderId) { return cancelOrder(this, orderId); }
+  async cancelAllOrders(accountId) { return cancelAllOrders(this, accountId); }
+  async exitPosition(accountId, symbol, exchange) { return exitPosition(this, accountId, symbol, exchange); }
   async closePosition(accountId, symbol) { return closePosition(this, accountId, symbol); }
   async getContracts() { return getContracts(this); }
   async searchContracts(searchText) { return searchContracts(this, searchText); }
