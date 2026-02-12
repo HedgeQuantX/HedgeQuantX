@@ -38,6 +38,11 @@ class SmartLogsEngine {
     this.counter = 0;
     this.lastState = null;
     this.lastLogTime = 0;
+    // QUANT-specific state tracking for event detection
+    this.lastZRegime = null;      // 'extreme' | 'high' | 'building' | 'neutral'
+    this.lastBias = null;         // 'bullish' | 'bearish' | 'neutral'
+    this.lastVpinToxic = false;   // true if VPIN > 0.6
+    this.warmupLogged = false;    // Track if we logged warmup milestones
   }
 
   setSymbol(s) { this.symbolCode = s; }
@@ -169,74 +174,88 @@ class SmartLogsEngine {
     const events = this._detectEvents(state, this.lastState);
     this.lastState = { ...state };
 
-    // For QUANT strategy: ALWAYS use rich QUANT-specific smart-logs with metrics
-    // HQX Scalping is TICK-BASED, not bar-based - use tickCount for display
+    // For QUANT strategy: EVENT-DRIVEN logs based on regime changes
+    // Only log when something SIGNIFICANT changes - no repetitive messages
     if (this.strategyId === 'ultra-scalping') {
-      const timeSinceLastLog = now - this.lastLogTime;
-      const ticks = state.tickCount || state.bars || 0;  // Prefer tickCount for scalping
+      const ticks = state.tickCount || state.bars || 0;
+      const absZ = Math.abs(zScore);
+      const vpinToxic = vpin > 0.6;
       
-      // Log every 5 seconds with quant metrics
-      if (timeSinceLastLog >= CONFIG.LOG_INTERVAL_SECONDS * 1000) {
-        this.lastLogTime = now;
-        
-        // Still warming up (need ~250 ticks for QUANT models to stabilize)
-        if (ticks < 250) {
-          const d = { sym, ticks, price };
-          return {
-            type: 'system',
-            message: QUANT.building(d),
-            logToSession: this.counter % CONFIG.SESSION_LOG_INTERVAL === 0
-          };
-        }
-        
-        // Ready - use rich QUANT context messages
-        // Determine market context from QUANT metrics
-        // zScore: mean reversion indicator (-3 to +3)
-        // vpin: toxicity 0-1 (higher = more informed trading)
-        // ofi: order flow imbalance -1 to +1 (positive = buying pressure)
-        const absZ = Math.abs(zScore);
-        const ofiAbs = Math.abs(ofi);
-        const zScoreAbs = absZ.toFixed(1);
-        const vpinPct = (vpin * 100).toFixed(0);
-        const ofiPct = (ofi > 0 ? '+' : '') + (ofi * 100).toFixed(0) + '%';
-        
-        // Build data object for QUANT message pools
-        const d = { 
-          sym, price, 
-          zScore: zScore.toFixed(1), 
-          zScoreAbs, 
-          rawZScore: zScore,
-          vpin: vpinPct, 
-          ofi: ofiPct, 
-          ticks
-        };
-        
-        let logType = 'analysis';
-        let message;
-        
-        if (absZ >= 2.0) {
-          // Strong signal zone - use bull/bear messages
+      // Determine current regimes
+      const zRegime = absZ >= 2.0 ? 'extreme' : absZ >= 1.5 ? 'high' : absZ >= 1.0 ? 'building' : 'neutral';
+      const bias = ofi > 0.15 ? 'bullish' : ofi < -0.15 ? 'bearish' : 'neutral';
+      
+      // Build data object for messages
+      const zScoreAbs = absZ.toFixed(1);
+      const vpinPct = (vpin * 100).toFixed(0);
+      const ofiPct = (ofi > 0 ? '+' : '') + (ofi * 100).toFixed(0) + '%';
+      const d = { 
+        sym, price, 
+        zScore: zScore.toFixed(1), 
+        zScoreAbs, 
+        rawZScore: zScore,
+        vpin: vpinPct, 
+        ofi: ofiPct, 
+        ticks
+      };
+      
+      let event = null;
+      let logType = 'analysis';
+      let message = null;
+      
+      // EVENT 1: Warmup milestone (only log once at 250 ticks)
+      if (ticks >= 250 && !this.warmupLogged) {
+        this.warmupLogged = true;
+        event = 'warmup_complete';
+        message = QUANT.init({ sym, ticks, bars: ticks, swings: 0, zones: 0 });
+        logType = 'system';
+      }
+      // EVENT 2: Z-Score regime change (neutral → building → high → extreme)
+      else if (this.lastZRegime !== null && zRegime !== this.lastZRegime) {
+        event = 'z_regime_change';
+        if (zRegime === 'extreme') {
           logType = 'signal';
           message = zScore < 0 ? QUANT.bull(d) : QUANT.bear(d);
-        } else if (absZ >= 1.5) {
-          // Approaching threshold - use ready messages
+        } else if (zRegime === 'high') {
           logType = 'signal';
           message = QUANT.ready(d);
-        } else if (absZ >= 1.0 || ofiAbs >= 0.2) {
-          // Building edge - use zones messages
+        } else if (zRegime === 'building') {
           message = QUANT.zones(d);
         } else {
-          // Normal market - use neutral messages
           message = QUANT.neutral(d);
         }
-        
+      }
+      // EVENT 3: Bias flip (bullish ↔ bearish)
+      else if (this.lastBias !== null && bias !== this.lastBias && bias !== 'neutral' && this.lastBias !== 'neutral') {
+        event = 'bias_flip';
+        message = QUANT.biasFlip({ sym, from: this.lastBias, to: bias, delta: delta });
+      }
+      // EVENT 4: VPIN toxicity change
+      else if (this.lastVpinToxic !== null && vpinToxic !== this.lastVpinToxic) {
+        event = 'vpin_change';
+        if (vpinToxic) {
+          message = `[${sym}] ${price} | VPIN toxic (${vpinPct}%) - informed flow detected, caution`;
+          logType = 'risk';
+        } else {
+          message = `[${sym}] ${price} | VPIN normalized (${vpinPct}%) - flow clean`;
+        }
+      }
+      
+      // Update state tracking
+      this.lastZRegime = zRegime;
+      this.lastBias = bias;
+      this.lastVpinToxic = vpinToxic;
+      
+      // Only return if we have an event
+      if (event && message) {
         return { 
           type: logType, 
           message,
-          logToSession: this.counter % CONFIG.SESSION_LOG_INTERVAL === 0 
+          logToSession: event === 'z_regime_change' || event === 'bias_flip'
         };
       }
-      return null;
+      
+      return null; // No event = silence
     }
 
     // HQX-2B strategy: event-based logging
@@ -257,6 +276,11 @@ class SmartLogsEngine {
     this.lastState = null; 
     this.counter = 0; 
     this.lastLogTime = 0;
+    // Reset QUANT tracking
+    this.lastZRegime = null;
+    this.lastBias = null;
+    this.lastVpinToxic = false;
+    this.warmupLogged = false;
   }
 }
 
