@@ -152,9 +152,10 @@ const connections = {
    */
   async restoreFromStorage() {
     const sessions = storage.load();
-    const rithmicSessions = sessions.filter(s => s.type === 'rithmic');
+    const rithmicSessions = sessions.filter(s => s.type === 'rithmic' && s.credentials);
     
     if (!rithmicSessions.length) {
+      log.debug('No saved sessions to restore');
       return false;
     }
     
@@ -162,9 +163,12 @@ const connections = {
     
     for (const session of rithmicSessions) {
       try {
-        await this._restoreSession(session);
+        const success = await this._restoreSession(session);
+        if (!success) {
+          log.warn('Session restore returned false', { propfirm: session.propfirm });
+        }
       } catch (err) {
-        log.warn('Failed to restore session', { error: err.message });
+        log.error('Failed to restore session', { propfirm: session.propfirm, error: err.message });
       }
     }
     
@@ -173,12 +177,13 @@ const connections = {
 
   /**
    * Restore a single session using direct RithmicService
+   * @returns {boolean} true if restore succeeded
    */
   async _restoreSession(session) {
     const { type, propfirm, propfirmKey } = session;
     
     if (type !== 'rithmic' || !session.credentials) {
-      return;
+      return false;
     }
     
     const Service = loadRithmicService();
@@ -192,6 +197,13 @@ const connections = {
         .filter(Boolean);
       if (validAccounts.length === 0) validAccounts = null;
     }
+    
+    log.debug('Restoring session', { 
+      propfirm, 
+      propfirmKey,
+      hasCredentials: !!session.credentials,
+      cachedAccounts: validAccounts?.length || 0 
+    });
     
     // Login with cached accounts to avoid Rithmic API limit
     const loginOptions = validAccounts 
@@ -212,9 +224,16 @@ const connections = {
         propfirmKey,
         connectedAt: new Date(),
       });
-      log.info('Session restored', { propfirm, accounts: service.accounts?.length || 0 });
+      log.info('Session restored', { 
+        propfirm, 
+        accounts: service.accounts?.length || 0,
+        hasPnL: !!service.pnlConn,
+        hasOrder: !!service.orderConn
+      });
+      return true;
     } else {
       log.warn('Session restore failed', { propfirm, error: result.error });
+      return false;
     }
   },
 
