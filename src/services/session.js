@@ -1,13 +1,15 @@
 /**
- * @fileoverview Secure session management - Rithmic Only
+ * @fileoverview Secure session management - Direct Rithmic Connection
  * @module services/session
+ * 
+ * NO DAEMON - Direct connection to Rithmic API
  */
 
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { encrypt, decrypt, maskSensitive } = require('../security/encryption');
+const { encrypt, decrypt } = require('../security/encryption');
 const { SECURITY } = require('../config/settings');
 const { logger } = require('../utils/logger');
 
@@ -23,7 +25,6 @@ const storage = {
   _ensureDir() {
     if (!fs.existsSync(SESSION_DIR)) {
       fs.mkdirSync(SESSION_DIR, { recursive: true, mode: SECURITY.DIR_PERMISSIONS });
-      log.debug('Created session directory');
     }
   },
 
@@ -33,7 +34,6 @@ const storage = {
       const data = JSON.stringify(sessions);
       const encrypted = encrypt(data);
       fs.writeFileSync(SESSION_FILE, encrypted, { mode: SECURITY.FILE_PERMISSIONS });
-      log.debug('Session saved', { count: sessions.length });
       return true;
     } catch (err) {
       log.error('Failed to save session', { error: err.message });
@@ -51,14 +51,11 @@ const storage = {
       const decrypted = decrypt(encrypted);
       
       if (!decrypted) {
-        log.warn('Session decryption failed - clearing');
         this.clear();
         return [];
       }
       
-      const sessions = JSON.parse(decrypted);
-      log.debug('Session loaded', { count: sessions.length });
-      return sessions;
+      return JSON.parse(decrypted);
     } catch (err) {
       log.error('Failed to load session', { error: err.message });
       this.clear();
@@ -74,7 +71,6 @@ const storage = {
           fs.writeFileSync(SESSION_FILE, crypto.randomBytes(size));
         }
         fs.unlinkSync(SESSION_FILE);
-        log.debug('Session cleared securely');
       }
       return true;
     } catch (err) {
@@ -84,27 +80,25 @@ const storage = {
   },
 };
 
-// Lazy load services to avoid circular dependencies
-let RithmicBrokerClient, brokerManager, RithmicService;
-const loadServices = () => {
-  if (!RithmicBrokerClient) {
-    ({ RithmicBrokerClient, manager: brokerManager } = require('./rithmic-broker'));
-  }
+// Lazy load RithmicService
+let RithmicService;
+const loadRithmicService = () => {
   if (!RithmicService) {
     ({ RithmicService } = require('./rithmic'));
   }
+  return RithmicService;
 };
 
-// Direct mode flag - bypass daemon completely
-const DIRECT_MODE = process.env.HQX_DIRECT === '1' || true; // Default to direct for now
-
 /**
- * Multi-connection manager (Rithmic only)
+ * Multi-connection manager - Direct Rithmic connections
  */
 const connections = {
   /** @type {Array<{type: string, service: Object, propfirm: string, propfirmKey: string, connectedAt: Date}>} */
   services: [],
 
+  /**
+   * Add a new connection
+   */
   add(type, service, propfirm = null) {
     this.services.push({
       type,
@@ -118,7 +112,7 @@ const connections = {
   },
 
   /**
-   * Sanitize account data to prevent corrupted data from being saved
+   * Sanitize account data
    */
   _sanitizeAccount(acc) {
     if (!acc || typeof acc !== 'object' || !acc.accountId) return null;
@@ -130,14 +124,14 @@ const connections = {
     };
   },
 
+  /**
+   * Save sessions to encrypted storage
+   */
   saveToStorage() {
-    // Load existing sessions to preserve AI agents
     const existingSessions = storage.load();
     const aiSessions = existingSessions.filter(s => s.type === 'ai');
     
-    // Build Rithmic sessions - INCLUDE accounts to avoid Rithmic API limit on restore
     const rithmicSessions = this.services.map(conn => {
-      // Sanitize accounts to prevent corrupted data
       const rawAccounts = conn.service.accounts || [];
       const accounts = rawAccounts.map(a => this._sanitizeAccount(a)).filter(Boolean);
       
@@ -146,80 +140,17 @@ const connections = {
         propfirm: conn.propfirm,
         propfirmKey: conn.service.propfirmKey || conn.propfirmKey,
         credentials: conn.service.credentials,
-        accounts,  // CRITICAL: Cache sanitized accounts to avoid 2000 GetAccounts limit
+        accounts,
       };
     });
     
-    // Merge: AI sessions + Rithmic sessions
     storage.save([...aiSessions, ...rithmicSessions]);
-    log.debug('Session saved', { rithmicCount: rithmicSessions.length, hasAccounts: rithmicSessions.some(s => s.accounts?.length > 0) });
   },
 
+  /**
+   * Restore sessions from storage - Direct connection to Rithmic
+   */
   async restoreFromStorage() {
-    loadServices();
-    
-    // DIRECT MODE: Bypass daemon, connect directly to Rithmic
-    if (DIRECT_MODE) {
-      log.info('Direct mode enabled - bypassing daemon');
-      
-      const sessions = storage.load();
-      const rithmicSessions = sessions.filter(s => s.type === 'rithmic');
-      
-      if (!rithmicSessions.length) {
-        return false;
-      }
-      
-      for (const session of rithmicSessions) {
-        try {
-          await this._restoreSessionDirect(session);
-        } catch (err) {
-          log.warn('Failed to restore session direct', { error: err.message });
-        }
-      }
-      
-      return this.services.length > 0;
-    }
-    
-    // Check if daemon is already running with active connections
-    const daemonStatus = await brokerManager.getStatus();
-    
-    if (daemonStatus.running && daemonStatus.connections?.length > 0) {
-      // Daemon has active connections - just create clients (NO API calls)
-      log.info('Daemon active, restoring from broker', { connections: daemonStatus.connections.length });
-      
-      for (const conn of daemonStatus.connections) {
-        const client = new RithmicBrokerClient(conn.propfirmKey);
-        await client.connect();
-        
-        // Get accounts from daemon cache
-        const accountsResult = await client.getTradingAccounts();
-        client.accounts = accountsResult.accounts || [];
-        
-        // Cache credentials locally for sync access (fetch from daemon)
-        try {
-          const creds = await client.getRithmicCredentialsAsync();
-          if (creds && creds.userId && creds.password) {
-            client.credentials = { username: creds.userId, password: creds.password };
-            client.propfirm = { name: conn.propfirmKey, systemName: creds.systemName, gateway: creds.gateway };
-          }
-        } catch (e) {
-          log.warn('Failed to cache credentials', { propfirm: conn.propfirmKey, error: e.message });
-        }
-        
-        this.services.push({
-          type: 'rithmic',
-          service: client,
-          propfirm: conn.propfirm,
-          propfirmKey: conn.propfirmKey,
-          connectedAt: new Date(conn.connectedAt),
-        });
-        log.debug('Restored from broker', { propfirm: conn.propfirmKey, hasCreds: !!client.credentials });
-      }
-      
-      return this.services.length > 0;
-    }
-    
-    // Daemon not running or no connections - check local storage
     const sessions = storage.load();
     const rithmicSessions = sessions.filter(s => s.type === 'rithmic');
     
@@ -227,87 +158,69 @@ const connections = {
       return false;
     }
     
-    log.info('Restoring sessions via broker', { count: rithmicSessions.length });
+    log.info('Restoring sessions', { count: rithmicSessions.length });
     
     for (const session of rithmicSessions) {
       try {
         await this._restoreSession(session);
       } catch (err) {
-        log.warn('Failed to restore session', { type: session.type, error: err.message });
+        log.warn('Failed to restore session', { error: err.message });
       }
     }
     
     return this.services.length > 0;
   },
-  
-  /**
-   * Restore session using direct RithmicService (no daemon)
-   */
-  async _restoreSessionDirect(session) {
-    const { type, propfirm, propfirmKey } = session;
-    
-    if (type === 'rithmic' && session.credentials) {
-      const service = new RithmicService(propfirmKey || 'apex_rithmic');
-      
-      // Validate cached accounts
-      let validAccounts = null;
-      if (session.accounts && Array.isArray(session.accounts)) {
-        validAccounts = session.accounts
-          .map(a => this._sanitizeAccount(a))
-          .filter(Boolean);
-        if (validAccounts.length === 0) validAccounts = null;
-      }
-      
-      // Login with cached accounts to avoid API limit
-      const loginOptions = validAccounts ? { skipFetchAccounts: true, cachedAccounts: validAccounts } : {};
-      const result = await service.login(session.credentials.username, session.credentials.password, loginOptions);
-      
-      if (result.success) {
-        this.services.push({
-          type,
-          service,
-          propfirm,
-          propfirmKey,
-          connectedAt: new Date(),
-        });
-        log.info('Direct session restored', { propfirm, accounts: service.accounts?.length || 0 });
-      }
-    }
-  },
 
+  /**
+   * Restore a single session using direct RithmicService
+   */
   async _restoreSession(session) {
     const { type, propfirm, propfirmKey } = session;
     
-    // Use broker client (daemon handles persistence)
-    if (type === 'rithmic' && session.credentials) {
-      const client = new RithmicBrokerClient(propfirmKey || 'apex_rithmic');
-      
-      // Validate cached accounts before using
-      let validAccounts = null;
-      if (session.accounts && Array.isArray(session.accounts)) {
-        validAccounts = session.accounts
-          .map(a => this._sanitizeAccount(a))
-          .filter(Boolean);
-        if (validAccounts.length === 0) validAccounts = null;
-      }
-      
-      // CRITICAL: Pass validated cached accounts to avoid Rithmic's 2000 GetAccounts limit
-      const loginOptions = validAccounts ? { cachedAccounts: validAccounts } : {};
-      const result = await client.login(session.credentials.username, session.credentials.password, loginOptions);
-      
-      if (result.success) {
-        this.services.push({
-          type,
-          service: client,
-          propfirm,
-          propfirmKey,
-          connectedAt: new Date(),
-        });
-        log.debug('Rithmic session restored via broker', { hasCachedAccounts: !!validAccounts, accountCount: validAccounts?.length || 0 });
-      }
+    if (type !== 'rithmic' || !session.credentials) {
+      return;
+    }
+    
+    const Service = loadRithmicService();
+    const service = new Service(propfirmKey || 'apex_rithmic');
+    
+    // Validate cached accounts
+    let validAccounts = null;
+    if (session.accounts && Array.isArray(session.accounts)) {
+      validAccounts = session.accounts
+        .map(a => this._sanitizeAccount(a))
+        .filter(Boolean);
+      if (validAccounts.length === 0) validAccounts = null;
+    }
+    
+    // Login with cached accounts to avoid Rithmic API limit
+    const loginOptions = validAccounts 
+      ? { skipFetchAccounts: true, cachedAccounts: validAccounts } 
+      : {};
+    
+    const result = await service.login(
+      session.credentials.username, 
+      session.credentials.password, 
+      loginOptions
+    );
+    
+    if (result.success) {
+      this.services.push({
+        type,
+        service,
+        propfirm,
+        propfirmKey,
+        connectedAt: new Date(),
+      });
+      log.info('Session restored', { propfirm, accounts: service.accounts?.length || 0 });
+    } else {
+      log.warn('Session restore failed', { propfirm, error: result.error });
     }
   },
 
+  /**
+   * Remove a connection by index
+   */
   remove(index) {
     if (index < 0 || index >= this.services.length) return;
     
@@ -342,6 +255,9 @@ const connections = {
     return this.services.length;
   },
 
+  /**
+   * Get all accounts from all connections
+   */
   async getAllAccounts() {
     const allAccounts = [];
     
@@ -367,6 +283,9 @@ const connections = {
     return allAccounts;
   },
 
+  /**
+   * Get service for a specific account
+   */
   getServiceForAccount(accountId) {
     for (const conn of this.services) {
       if (!conn.service?.accounts) continue;
@@ -386,22 +305,14 @@ const connections = {
     return this.services.length > 0;
   },
 
+  /**
+   * Disconnect all connections
+   */
   async disconnectAll() {
-    loadServices();
-    
-    // Stop the broker daemon (closes all Rithmic connections)
-    try {
-      await brokerManager.stop();
-      log.info('Broker daemon stopped');
-    } catch (err) {
-      log.warn('Broker stop failed', { error: err.message });
-    }
-    
-    // Disconnect local clients
     for (const conn of this.services) {
       try {
         if (conn.service?.disconnect) {
-          conn.service.disconnect();
+          await conn.service.disconnect();
         }
       } catch (err) {
         log.warn('Disconnect failed', { type: conn.type, error: err.message });

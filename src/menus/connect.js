@@ -1,14 +1,14 @@
 /**
- * Connection Menus - Rithmic Only
+ * Connection Menus - Direct Rithmic Connection
  */
 
 const chalk = require('chalk');
 const ora = require('ora');
 
 const { connections } = require('../services');
-const { RithmicBrokerClient, manager: brokerManager } = require('../services/rithmic-broker');
+const { RithmicService } = require('../services/rithmic');
 const { PROPFIRM_CHOICES } = require('../config');
-const { getLogoWidth, centerText, prepareStdin, displayBanner , clearScreen } = require('../ui');
+const { getLogoWidth, centerText, prepareStdin, displayBanner, clearScreen } = require('../ui');
 const { validateUsername, validatePassword } = require('../security');
 const { prompts } = require('../utils');
 
@@ -38,7 +38,6 @@ const loginPrompt = async (propfirmName) => {
  * Rithmic menu - Main connection menu
  */
 const rithmicMenu = async () => {
-  // Clear screen and show banner
   clearScreen();
   displayBanner();
   
@@ -87,29 +86,18 @@ const rithmicMenu = async () => {
   const credentials = await loginPrompt(selectedPropfirm.name);
   if (!credentials) return null;
 
-  const spinner = ora({ text: 'STARTING BROKER DAEMON...', color: 'yellow' }).start();
+  const spinner = ora({ text: 'CONNECTING TO RITHMIC...', color: 'yellow' }).start();
 
   try {
-    // Ensure broker daemon is running
-    const daemonResult = await brokerManager.ensureRunning();
-    if (!daemonResult.success) {
-      spinner.fail('FAILED TO START BROKER DAEMON');
-      console.log(chalk.yellow(`  → ${daemonResult.error}`));
-      await new Promise(r => setTimeout(r, 3000));
-      return null;
-    }
-    
-    spinner.text = 'CONNECTING TO RITHMIC...';
-    const client = new RithmicBrokerClient(selectedPropfirm.key);
-    const result = await client.login(credentials.username, credentials.password);
+    // Direct connection to Rithmic (no daemon)
+    const service = new RithmicService(selectedPropfirm.key);
+    const result = await service.login(credentials.username, credentials.password);
 
     if (result.success) {
-      spinner.text = 'FETCHING ACCOUNTS...';
-      const accResult = await client.getTradingAccounts();
-      connections.add('rithmic', client, client.propfirm.name || selectedPropfirm.name);
-      spinner.succeed(`CONNECTED TO ${selectedPropfirm.name.toUpperCase()} (${accResult.accounts?.length || 0} ACCOUNTS)`);
+      connections.add('rithmic', service, selectedPropfirm.name);
+      spinner.succeed(`CONNECTED TO ${selectedPropfirm.name.toUpperCase()} (${result.accounts?.length || 0} ACCOUNTS)`);
       await new Promise(r => setTimeout(r, 1500));
-      return client;
+      return service;
     } else {
       // Detailed error messages for common Rithmic issues
       const err = (result.error || '').toLowerCase();

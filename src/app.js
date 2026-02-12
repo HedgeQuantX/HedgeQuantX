@@ -271,31 +271,18 @@ const run = async () => {
             const credentials = await loginPrompt(selectedPropfirm.name);
             
             if (credentials) {
-              const spinner = ora({ text: 'STARTING BROKER DAEMON...', color: 'yellow' }).start();
+              const spinner = ora({ text: 'CONNECTING TO RITHMIC...', color: 'yellow' }).start();
               try {
-                // Use BrokerClient to go through daemon (persists connections)
-                const { RithmicBrokerClient, manager: brokerManager } = require('./services/rithmic-broker');
+                // Direct connection to Rithmic (no daemon)
+                const { RithmicService } = require('./services/rithmic');
                 
-                // Ensure daemon is running
-                const daemonResult = await brokerManager.ensureRunning();
-                if (!daemonResult.success) {
-                  spinner.fail('FAILED TO START BROKER DAEMON');
-                  console.log(chalk.yellow(`  → ${daemonResult.error}`));
-                  await new Promise(r => setTimeout(r, 3000));
-                  continue;
-                }
-                
-                spinner.text = 'CONNECTING TO RITHMIC...';
-                const client = new RithmicBrokerClient(selectedPropfirm.key);
-                const result = await client.login(credentials.username, credentials.password);
+                const service = new RithmicService(selectedPropfirm.key);
+                const result = await service.login(credentials.username, credentials.password);
                 
                 if (result.success) {
-                  spinner.text = 'FETCHING ACCOUNTS...';
-                  const accResult = await client.getTradingAccounts();
-                  client.accounts = accResult.accounts || [];
-                  connections.add('rithmic', client, selectedPropfirm.name);
-                  spinner.succeed(`CONNECTED TO ${selectedPropfirm.name.toUpperCase()} (${accResult.accounts?.length || 0} ACCOUNTS)`);
-                  currentService = client;
+                  connections.add('rithmic', service, selectedPropfirm.name);
+                  spinner.succeed(`CONNECTED TO ${selectedPropfirm.name.toUpperCase()} (${result.accounts?.length || 0} ACCOUNTS)`);
+                  currentService = service;
                   await refreshStats();
                   await new Promise(r => setTimeout(r, 1500));
                 } else {
