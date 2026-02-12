@@ -486,6 +486,35 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   clearInterval(refreshInterval);
   clearInterval(pnlInterval);
   clearInterval(liveLogInterval);
+  
+  // Flatten any open position before stopping
+  if (currentPosition !== 0) {
+    ui.addLog('system', `Flattening position: ${currentPosition > 0 ? 'LONG' : 'SHORT'} ${Math.abs(currentPosition)}`);
+    sessionLogger.log('EXIT', `Flattening position: ${currentPosition}`);
+    try {
+      const flattenResult = await service.placeOrder({
+        accountId: account.rithmicAccountId || account.accountId,
+        symbol: symbolCode,
+        exchange: contract.exchange || 'CME',
+        type: 2, // Market
+        side: currentPosition > 0 ? 1 : 0, // Sell if long, Buy if short
+        size: Math.abs(currentPosition)
+      });
+      if (flattenResult.success) {
+        ui.addLog('fill_' + (currentPosition > 0 ? 'sell' : 'buy'), `Position flattened @ market`);
+        sessionLogger.log('EXIT', `Position flattened successfully`);
+      } else {
+        ui.addLog('error', `Flatten failed: ${flattenResult.error}`);
+        sessionLogger.log('EXIT', `Flatten failed: ${flattenResult.error}`);
+      }
+    } catch (e) {
+      ui.addLog('error', `Flatten error: ${e.message}`);
+      sessionLogger.log('EXIT', `Flatten error: ${e.message}`);
+    }
+    // Wait for fill
+    await new Promise(r => setTimeout(r, 2000));
+  }
+  
   await marketFeed.disconnect();
   if (cleanupKeys) cleanupKeys();
   ui.cleanup();
