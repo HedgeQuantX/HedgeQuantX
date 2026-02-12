@@ -14,8 +14,25 @@ const DEBUG = process.env.HQX_DEBUG === '1';
  * @param {Object} orderData - Order parameters
  */
 const placeOrder = async (service, orderData) => {
+  // Check connection state
+  const connState = service.orderConn?.connectionState;
+  const wsState = service.orderConn?.ws?.readyState;
+  
+  if (DEBUG) {
+    console.log('[ORDER] Connection check:', { 
+      hasOrderConn: !!service.orderConn, 
+      connState, 
+      wsState,
+      hasLoginInfo: !!service.loginInfo 
+    });
+  }
+  
   if (!service.orderConn || !service.loginInfo) {
     return { success: false, error: 'Not connected' };
+  }
+  
+  if (connState !== 'LOGGED_IN') {
+    return { success: false, error: `ORDER_PLANT not logged in (state: ${connState})` };
   }
 
   // Generate unique user message for tracking
