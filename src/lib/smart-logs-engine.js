@@ -9,6 +9,7 @@
 const chalk = require('chalk');
 const HQX2B = require('./smart-logs-hqx2b');
 const QUANT = require('./smart-logs-quant');
+const smartLogs = require('./smart-logs');
 
 const CONFIG = { 
   SESSION_LOG_INTERVAL: 10,
@@ -168,7 +169,7 @@ class SmartLogsEngine {
     const events = this._detectEvents(state, this.lastState);
     this.lastState = { ...state };
 
-    // For QUANT strategy: use rich messages with Z-score, VPIN, OFI
+    // For QUANT strategy: use rich smart-logs messages
     if (this.strategyId === 'ultra-scalping' && state.bars >= 5) {
       const timeSinceLastLog = now - this.lastLogTime;
       
@@ -176,28 +177,28 @@ class SmartLogsEngine {
       if (timeSinceLastLog >= CONFIG.LOG_INTERVAL_SECONDS * 1000) {
         this.lastLogTime = now;
         
-        // Use rich QUANT messages with actual metrics
+        // Use getLiveAnalysisLog for rich contextual messages
+        const trend = zScore > 0.5 ? 'bullish' : zScore < -0.5 ? 'bearish' : 'neutral';
+        const liveMessage = smartLogs.getLiveAnalysisLog({
+          trend,
+          bars: state.bars || 0,
+          swings: state.swings || 0,
+          zones: state.zones || 0,
+          nearZone: state.nearZone || false,
+          setupForming: Math.abs(zScore) >= 1.5,
+        });
+        
+        // Add quant metrics suffix
         const zStr = zScore.toFixed(2);
-        const vpinStr = (vpin * 100).toFixed(0);
-        const ofiStr = (ofi * 100).toFixed(0);
+        const vpinPct = (vpin * 100).toFixed(0);
+        const ofiPct = (ofi * 100).toFixed(0);
+        const metrics = chalk.gray(` | Z:${zStr} VPIN:${vpinPct}% OFI:${ofiPct}%`);
         
-        // Choose message based on z-score level
-        let message;
-        if (Math.abs(zScore) >= 1.5) {
-          // Near signal threshold - use zones message
-          message = T.zones({ 
-            sym, price, zScore: zStr, vpin: vpinStr, ofi: ofiStr, 
-            ticks: state.tickCount || state.bars 
-          });
-        } else if (Math.abs(zScore) >= 0.8) {
-          // Building - use building message  
-          message = T.building({ sym, ticks: state.tickCount || state.bars });
-        } else {
-          // Neutral - use simpler analysis
-          message = T.priceMove({ sym, price, dir: zScore > 0 ? 'up' : 'down', ticks: Math.abs(zScore).toFixed(1) });
-        }
-        
-        return { type: 'analysis', message, logToSession: this.counter % CONFIG.SESSION_LOG_INTERVAL === 0 };
+        return { 
+          type: 'analysis', 
+          message: `[${sym}] ${liveMessage}${metrics}`,
+          logToSession: this.counter % CONFIG.SESSION_LOG_INTERVAL === 0 
+        };
       }
       return null;
     }
