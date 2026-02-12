@@ -112,12 +112,18 @@ const connections = {
   },
 
   /**
-   * Sanitize account data
+   * Sanitize account data for caching
+   * IMPORTANT: Keep rithmicAccountId for PnL lookups
    */
   _sanitizeAccount(acc) {
-    if (!acc || typeof acc !== 'object' || !acc.accountId) return null;
+    if (!acc || typeof acc !== 'object') return null;
+    
+    // Get the real Rithmic account ID (text like "APEX-130042-63")
+    const rithmicId = acc.rithmicAccountId || acc.accountId;
+    if (!rithmicId) return null;
+    
     return {
-      accountId: String(acc.accountId),
+      accountId: rithmicId,  // Use the real Rithmic ID, not the hash
       fcmId: acc.fcmId ? String(acc.fcmId) : undefined,
       ibId: acc.ibId ? String(acc.ibId) : undefined,
       accountName: acc.accountName ? String(acc.accountName) : undefined,
