@@ -85,12 +85,18 @@ const storage = {
 };
 
 // Lazy load services to avoid circular dependencies
-let RithmicBrokerClient, brokerManager;
+let RithmicBrokerClient, brokerManager, RithmicService;
 const loadServices = () => {
   if (!RithmicBrokerClient) {
     ({ RithmicBrokerClient, manager: brokerManager } = require('./rithmic-broker'));
   }
+  if (!RithmicService) {
+    ({ RithmicService } = require('./rithmic'));
+  }
 };
+
+// Direct mode flag - bypass daemon completely
+const DIRECT_MODE = process.env.HQX_DIRECT === '1' || true; // Default to direct for now
 
 /**
  * Multi-connection manager (Rithmic only)
@@ -152,6 +158,28 @@ const connections = {
   async restoreFromStorage() {
     loadServices();
     
+    // DIRECT MODE: Bypass daemon, connect directly to Rithmic
+    if (DIRECT_MODE) {
+      log.info('Direct mode enabled - bypassing daemon');
+      
+      const sessions = storage.load();
+      const rithmicSessions = sessions.filter(s => s.type === 'rithmic');
+      
+      if (!rithmicSessions.length) {
+        return false;
+      }
+      
+      for (const session of rithmicSessions) {
+        try {
+          await this._restoreSessionDirect(session);
+        } catch (err) {
+          log.warn('Failed to restore session direct', { error: err.message });
+        }
+      }
+      
+      return this.services.length > 0;
+    }
+    
     // Check if daemon is already running with active connections
     const daemonStatus = await brokerManager.getStatus();
     
@@ -210,6 +238,41 @@ const connections = {
     }
     
     return this.services.length > 0;
+  },
+  
+  /**
+   * Restore session using direct RithmicService (no daemon)
+   */
+  async _restoreSessionDirect(session) {
+    const { type, propfirm, propfirmKey } = session;
+    
+    if (type === 'rithmic' && session.credentials) {
+      const service = new RithmicService(propfirmKey || 'apex_rithmic');
+      
+      // Validate cached accounts
+      let validAccounts = null;
+      if (session.accounts && Array.isArray(session.accounts)) {
+        validAccounts = session.accounts
+          .map(a => this._sanitizeAccount(a))
+          .filter(Boolean);
+        if (validAccounts.length === 0) validAccounts = null;
+      }
+      
+      // Login with cached accounts to avoid API limit
+      const loginOptions = validAccounts ? { skipFetchAccounts: true, cachedAccounts: validAccounts } : {};
+      const result = await service.login(session.credentials.username, session.credentials.password, loginOptions);
+      
+      if (result.success) {
+        this.services.push({
+          type,
+          service,
+          propfirm,
+          propfirmKey,
+          connectedAt: new Date(),
+        });
+        log.info('Direct session restored', { propfirm, accounts: service.accounts?.length || 0 });
+      }
+    }
   },
 
   async _restoreSession(session) {
