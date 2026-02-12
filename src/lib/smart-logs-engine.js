@@ -169,72 +169,75 @@ class SmartLogsEngine {
     const events = this._detectEvents(state, this.lastState);
     this.lastState = { ...state };
 
-    // For QUANT strategy: use rich QUANT-specific smart-logs
-    if (this.strategyId === 'ultra-scalping' && state.bars >= 5) {
+    // For QUANT strategy: ALWAYS use rich QUANT-specific smart-logs with metrics
+    if (this.strategyId === 'ultra-scalping') {
       const timeSinceLastLog = now - this.lastLogTime;
       
       // Log every 5 seconds with quant metrics
       if (timeSinceLastLog >= CONFIG.LOG_INTERVAL_SECONDS * 1000) {
         this.lastLogTime = now;
         
+        // Still warming up - use building messages from QUANT pool
+        if (state.bars < 50) {
+          const d = { sym, ticks: state.bars || 0, price };
+          return {
+            type: 'system',
+            message: QUANT.building(d),
+            logToSession: this.counter % CONFIG.SESSION_LOG_INTERVAL === 0
+          };
+        }
+        
+        // Ready - use rich QUANT context messages
         // Determine market context from QUANT metrics
         // zScore: mean reversion indicator (-3 to +3)
         // vpin: toxicity 0-1 (higher = more informed trading)
         // ofi: order flow imbalance -1 to +1 (positive = buying pressure)
         const absZ = Math.abs(zScore);
         const ofiAbs = Math.abs(ofi);
+        const zScoreAbs = absZ.toFixed(1);
+        const vpinPct = (vpin * 100).toFixed(0);
+        const ofiPct = (ofi > 0 ? '+' : '') + (ofi * 100).toFixed(0) + '%';
         
-        let contextMessage;
+        // Build data object for QUANT message pools
+        const d = { 
+          sym, price, 
+          zScore: zScore.toFixed(1), 
+          zScoreAbs, 
+          rawZScore: zScore,
+          vpin: vpinPct, 
+          ofi: ofiPct, 
+          ticks: state.bars || 0 
+        };
+        
         let logType = 'analysis';
+        let message;
         
         if (absZ >= 2.0) {
-          // Strong mean reversion signal zone
-          const dir = zScore < 0 ? 'LONG' : 'SHORT';
-          const ofiConfirms = (zScore < 0 && ofi > 0.1) || (zScore > 0 && ofi < -0.1);
-          contextMessage = ofiConfirms 
-            ? `Z-Score extreme (${zScore.toFixed(1)}σ) + OFI confirms ${dir} setup forming`
-            : `Z-Score extreme (${zScore.toFixed(1)}σ) - awaiting OFI confirmation`;
+          // Strong signal zone - use bull/bear messages
           logType = 'signal';
+          message = zScore < 0 ? QUANT.bull(d) : QUANT.bear(d);
         } else if (absZ >= 1.5) {
-          // Approaching signal threshold
-          contextMessage = zScore > 0 
-            ? `Price extended above mean (+${zScore.toFixed(1)}σ) - watching for SHORT setup`
-            : `Price below mean (${zScore.toFixed(1)}σ) - watching for LONG setup`;
+          // Approaching threshold - use ready messages
           logType = 'signal';
-        } else if (absZ >= 1.0) {
-          // Building deviation
-          const vpinStatus = vpin > 0.6 ? 'high toxicity' : vpin > 0.4 ? 'moderate flow' : 'clean flow';
-          contextMessage = `Z-Score building (${zScore.toFixed(1)}σ) | VPIN: ${vpinStatus} | OFI: ${ofi > 0 ? '+' : ''}${(ofi * 100).toFixed(0)}%`;
-        } else if (ofiAbs >= 0.3) {
-          // Strong orderflow imbalance
-          contextMessage = ofi > 0 
-            ? `Strong buying pressure (OFI: +${(ofi * 100).toFixed(0)}%) - bulls in control`
-            : `Strong selling pressure (OFI: ${(ofi * 100).toFixed(0)}%) - bears in control`;
-        } else if (vpin > 0.6) {
-          // High toxicity warning
-          contextMessage = `VPIN elevated (${(vpin * 100).toFixed(0)}%) - informed trading detected, caution`;
+          message = QUANT.ready(d);
+        } else if (absZ >= 1.0 || ofiAbs >= 0.2) {
+          // Building edge - use zones messages
+          message = QUANT.zones(d);
         } else {
-          // Normal market - use trend from OFI
-          const trend = ofi > 0.1 ? 'bullish' : ofi < -0.1 ? 'bearish' : 'neutral';
-          contextMessage = smartLogs.getLiveAnalysisLog({
-            trend,
-            bars: state.bars || 0,
-            swings: 0,
-            zones: absZ >= 1.0 ? 1 : 0,
-            nearZone: absZ >= 1.5,
-            setupForming: absZ >= 2.0,
-          });
+          // Normal market - use neutral messages
+          message = QUANT.neutral(d);
         }
         
         return { 
           type: logType, 
-          message: `[${sym}] ${contextMessage}`,
+          message,
           logToSession: this.counter % CONFIG.SESSION_LOG_INTERVAL === 0 
         };
       }
       return null;
     }
 
+    // HQX-2B strategy: event-based logging
     // No events = no log (SILENCE)
     if (events.length === 0) {
       return null;
