@@ -579,7 +579,8 @@ class HQXUltraScalpingStrategy extends EventEmitter {
   }
 }
 
-// Singleton instance
-const M1 = new HQXUltraScalpingStrategy();
+// Export class (not instance) - consistent with HQX-2B pattern
+// M1 is the class, use new M1() to create instances
+const M1 = HQXUltraScalpingStrategy;
 
 module.exports = { M1, HQXUltraScalpingStrategy, OrderSide, SignalStrength };

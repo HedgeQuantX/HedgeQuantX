@@ -27,7 +27,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   const strategyId = strategyInfo?.id || 'ultra-scalping';
   const strategyName = strategyInfo?.name || 'HQX Scalping';
   const strategyModule = loadStrategy(strategyId);
-  const StrategyClass = strategyModule.M1; // loadStrategy normalizes to M1
+  const StrategyClass = strategyModule.M1;
   
   const supervisionEnabled = supervisionConfig?.supervisionEnabled && supervisionConfig?.agents?.length > 0;
   const supervisionEngine = supervisionEnabled ? new SupervisionEngine(supervisionConfig) : null;
