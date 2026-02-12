@@ -344,20 +344,25 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     await marketFeed.connect(rithmicCredentials);
     await marketFeed.subscribe(symbolCode, contract.exchange || 'CME');
     
-    // Load historical bars for instant warmup
+    // Load historical data for model warmup (optional - works with live data too)
     if (strategy.preloadBars) {
-      ui.addLog('system', 'Loading historical data...');
+      ui.addLog('system', 'Loading warmup data...');
       try {
         const histBars = await marketFeed.getHistoricalBars(symbolCode, contract.exchange || 'CME', 30);
         if (histBars && histBars.length > 0) {
           strategy.preloadBars(contractId, histBars);
-          ui.addLog('system', `Loaded ${histBars.length} historical bars - ready to trade!`);
-          sessionLogger.log('HISTORY', `Preloaded ${histBars.length} bars`);
+          // Different message for tick-based vs bar-based strategies
+          const isTickBased = strategyId === 'ultra-scalping';
+          const msg = isTickBased 
+            ? `Warmup data loaded - QUANT models initializing...`
+            : `Loaded ${histBars.length} historical bars - ready to trade!`;
+          ui.addLog('system', msg);
+          sessionLogger.log('HISTORY', `Preloaded ${histBars.length} bars for warmup`);
         } else {
-          ui.addLog('system', 'No history available - warming up with live data...');
+          ui.addLog('system', 'No history - warming up with live ticks...');
         }
       } catch (histErr) {
-        ui.addLog('system', `History load failed: ${histErr.message} - using live data`);
+        ui.addLog('system', `Warmup skipped - using live data`);
         sessionLogger.log('HISTORY', `Failed: ${histErr.message}`);
       }
     }

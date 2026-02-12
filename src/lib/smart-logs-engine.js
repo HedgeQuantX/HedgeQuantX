@@ -51,6 +51,7 @@ class SmartLogsEngine {
     this.symbolCode = symbol;
     this.counter = 0;
     this.lastState = null;
+    this.lastHeartbeat = 0;
     
     // State tracking for event detection (both strategies)
     this.lastBias = null;
@@ -220,8 +221,22 @@ class SmartLogsEngine {
     this.lastVpinToxic = vpinToxic;
 
     if (event && message) {
+      this.lastHeartbeat = Date.now();
       return { type: logType, message, logToSession: event === 'z_regime' || event === 'bias_flip' };
     }
+    
+    // HEARTBEAT: Show status every 30s when no events (proves strategy is active)
+    const now = Date.now();
+    if (this.warmupLogged && now - this.lastHeartbeat >= 30000) {
+      this.lastHeartbeat = now;
+      const liveMsg = smartLogs.getLiveAnalysisLog({ trend: bias, bars: ticks, swings: 0, zones: 0, nearZone: false, setupForming: false });
+      return {
+        type: 'analysis',
+        message: `[${sym}] ${price} | Z: ${zScore.toFixed(1)}σ | OFI: ${(ofi * 100).toFixed(0)}% | ${liveMsg}`,
+        logToSession: false
+      };
+    }
+    
     return null;
   }
 
@@ -230,6 +245,7 @@ class SmartLogsEngine {
     this.counter = 0;
     this.lastBias = null;
     this.warmupLogged = false;
+    this.lastHeartbeat = 0;
     // HQX-2B
     this.lastBars = 0;
     this.lastSwings = 0;
