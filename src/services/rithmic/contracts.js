@@ -213,61 +213,24 @@ const fetchAllFrontMonths = (service) => {
     throw new Error('TICKER_PLANT not connected');
   }
 
-  const tickerState = service.tickerConn.connectionState;
-  const tickerConnected = service.tickerConn.isConnected;
-  
-  // Direct console.log for daemon broker.log (always visible)
-  const brokerLog = (msg, data) => console.log(`[CONTRACTS] ${msg}`, JSON.stringify(data));
-  
-  brokerLog('fetchAllFrontMonths starting', { tickerState, tickerConnected });
-
   return new Promise((resolve) => {
     const contracts = new Map();
     const productsToCheck = new Map();
-    let msgCount = 0;
-    let productMsgCount = 0;
 
     // Handler for ProductCodes responses
-    const sampleProducts = [];
-    let decodeErrors = 0;
-    let firstError = null;
     const productHandler = (msg) => {
-      msgCount++;
       if (msg.templateId !== 112) return;
-      productMsgCount++;
       
-      // Use official protobuf decoder instead of manual parsing
       let decoded;
       try {
         decoded = proto.decode('ResponseProductCodes', msg.data);
       } catch (e) {
-        decodeErrors++;
-        if (!firstError) {
-          firstError = e.message;
-          // Log raw buffer info for debugging
-          brokerLog('First decode error', { 
-            error: e.message, 
-            bufferLen: msg.data?.length,
-            first20bytes: msg.data?.slice(0, 20)?.toString('hex')
-          });
-        }
         return;
       }
       
       const productCode = decoded.productCode;
       const exchange = decoded.exchange;
       const productName = decoded.productName;
-      
-      // Log first 5 raw decoded messages to see field names
-      if (sampleProducts.length < 5) {
-        const keys = Object.keys(decoded.toJSON ? decoded.toJSON() : decoded);
-        sampleProducts.push({ 
-          code: productCode || 'NONE',
-          exchange: exchange || 'NONE',
-          name: productName?.substring(0, 30) || 'NONE',
-          fields: keys.slice(0, 10)
-        });
-      }
       
       if (!productCode || !exchange) return;
       
@@ -288,44 +251,14 @@ const fetchAllFrontMonths = (service) => {
     };
 
     // Handler for FrontMonth responses
-    let frontMonthMsgCount = 0;
-    let template114Count = 0;
-    const templateIdsSeen = new Map();
-    const rawResponses = [];
     const frontMonthHandler = (msg) => {
-      msgCount++;
-      frontMonthMsgCount++;
-      
-      // Track all templateIds seen
-      const tid = msg.templateId;
-      templateIdsSeen.set(tid, (templateIdsSeen.get(tid) || 0) + 1);
-      
-      // Log first few non-112 messages to see what we're getting
-      if (tid !== 112 && rawResponses.length < 5) {
-        rawResponses.push({ templateId: tid, dataLen: msg.data?.length });
-      }
-      
       if (msg.templateId !== 114) return;
-      template114Count++;
       
-      // Use official protobuf decoder
       let decoded;
       try {
         decoded = proto.decode('ResponseFrontMonthContract', msg.data);
       } catch (e) {
-        brokerLog('FrontMonth decode error', { error: e.message });
         return;
-      }
-      
-      // Log first few responses to diagnose
-      if (template114Count <= 5) {
-        brokerLog('FrontMonth response', { 
-          template114Count,
-          rpCode: decoded.rpCode,
-          tradingSymbol: decoded.tradingSymbol,
-          userMsg: decoded.userMsg,
-          exchange: decoded.exchange 
-        });
       }
       
       if (decoded.rpCode && decoded.rpCode[0] === '0' && decoded.tradingSymbol) {
@@ -342,77 +275,46 @@ const fetchAllFrontMonths = (service) => {
     service.tickerConn.on('message', frontMonthHandler);
 
     // Request all product codes
-    brokerLog('Sending RequestProductCodes', { templateId: 111 });
     try {
       service.tickerConn.send('RequestProductCodes', {
         templateId: 111,
         userMsg: ['get-products'],
       });
-      brokerLog('RequestProductCodes sent OK', {});
     } catch (err) {
-      brokerLog('FAILED to send RequestProductCodes', { error: err.message });
+      log.warn('Failed to send RequestProductCodes', { error: err.message });
     }
 
     // After timeout, request front months
     setTimeout(() => {
       service.tickerConn.removeListener('message', productHandler);
-      brokerLog('ProductCodes phase complete', { 
-        productsFound: productsToCheck.size, 
-        totalMsgs: msgCount,
-        productMsgs: productMsgCount,
-        decodeErrors: decodeErrors,
-        firstError: firstError,
-        sampleProducts: sampleProducts
-      });
 
-      if (productsToCheck.size === 0) {
-        brokerLog('WARNING: No products collected - TICKER may not be responding', {});
-      }
-
-      let sentCount = 0;
-      let sendErrors = [];
-      
-      // Prioritize CME products (ES, NQ, MNQ, MES, etc.) - most used by traders
+      // Prioritize CME products (ES, NQ, MNQ, MES, etc.)
       const productsArray = Array.from(productsToCheck.values());
       const prioritySymbols = ['ES', 'NQ', 'MNQ', 'MES', 'RTY', 'M2K', 'YM', 'MYM', 'CL', 'MCL', 'GC', 'MGC', 'SI', 'HG', 'NG', 'ZB', 'ZN', 'ZF', 'ZT', '6E', '6J', '6B', '6A', '6C', '6S', 'ZC', 'ZS', 'ZW', 'ZM', 'ZL', 'HE', 'LE', 'GF'];
       
-      // Sort: priority symbols first (CME), then others
       productsArray.sort((a, b) => {
         const aPriority = prioritySymbols.includes(a.productCode) ? 0 : 1;
         const bPriority = prioritySymbols.includes(b.productCode) ? 0 : 1;
         if (aPriority !== bPriority) return aPriority - bPriority;
-        // Within same priority, prefer CME/CBOT
         const aExchange = (a.exchange === 'CME' || a.exchange === 'CBOT') ? 0 : 1;
         const bExchange = (b.exchange === 'CME' || b.exchange === 'CBOT') ? 0 : 1;
         return aExchange - bExchange;
       });
       
-      const testProducts = productsArray.slice(0, 60); // Limit to 60
+      const testProducts = productsArray.slice(0, 60);
       
       for (const product of testProducts) {
         try {
-          const reqData = {
+          service.tickerConn.send('RequestFrontMonthContract', {
             templateId: 113,
             userMsg: [product.productCode],
             symbol: product.productCode,
             exchange: product.exchange,
-          };
-          // Log first request
-          if (sentCount === 0) {
-            brokerLog('First RequestFrontMonthContract', reqData);
-          }
-          service.tickerConn.send('RequestFrontMonthContract', reqData);
-          sentCount++;
+          });
         } catch (err) {
-          sendErrors.push({ product: product.productCode, error: err.message });
+          // Ignore send errors
         }
       }
-      brokerLog('RequestFrontMonthContract sent', { 
-        sentCount, 
-        totalProducts: productsToCheck.size,
-        limitedTo: testProducts.length,
-        errors: sendErrors.length > 0 ? sendErrors.slice(0, 3) : 'none'
-      });
 
       // Collect results after timeout
       setTimeout(() => {
@@ -422,10 +324,8 @@ const fetchAllFrontMonths = (service) => {
         for (const [baseSymbol, contract] of contracts) {
           const productKey = `${baseSymbol}:${contract.exchange}`;
           const product = productsToCheck.get(productKey);
-
-          // Use our descriptions for better display names
-          const apiName = product?.productName || baseSymbol;
-          const displayName = getContractDescription(baseSymbol) || apiName;
+          const displayName = getContractDescription(baseSymbol) || product?.productName || baseSymbol;
+          
           results.push({
             symbol: contract.symbol,
             baseSymbol,
@@ -435,22 +335,7 @@ const fetchAllFrontMonths = (service) => {
           });
         }
 
-        // Sort alphabetically by base symbol
         results.sort((a, b) => a.baseSymbol.localeCompare(b.baseSymbol));
-
-        // Convert Map to object for logging
-        const templateStats = {};
-        for (const [tid, count] of templateIdsSeen) {
-          templateStats[`t${tid}`] = count;
-        }
-        brokerLog('FrontMonth phase complete', { 
-          contractsFound: results.length, 
-          totalMsgs: msgCount,
-          frontMonthMsgs: frontMonthMsgCount,
-          template114Received: template114Count,
-          templateIds: templateStats,
-          nonProductMsgs: rawResponses
-        });
         resolve(results);
       }, TIMEOUTS.RITHMIC_PRODUCTS);
     }, TIMEOUTS.RITHMIC_CONTRACTS);
