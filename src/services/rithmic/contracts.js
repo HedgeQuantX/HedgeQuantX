@@ -251,9 +251,23 @@ const fetchAllFrontMonths = (service) => {
 
       let sentCount = 0;
       let sendErrors = [];
-      // Only send for first 5 products to test
+      
+      // Prioritize CME products (ES, NQ, MNQ, MES, etc.) - most used by traders
       const productsArray = Array.from(productsToCheck.values());
-      const testProducts = productsArray.slice(0, 60); // Limit to 60 for testing
+      const prioritySymbols = ['ES', 'NQ', 'MNQ', 'MES', 'RTY', 'M2K', 'YM', 'MYM', 'CL', 'MCL', 'GC', 'MGC', 'SI', 'HG', 'NG', 'ZB', 'ZN', 'ZF', 'ZT', '6E', '6J', '6B', '6A', '6C', '6S', 'ZC', 'ZS', 'ZW', 'ZM', 'ZL', 'HE', 'LE', 'GF'];
+      
+      // Sort: priority symbols first (CME), then others
+      productsArray.sort((a, b) => {
+        const aPriority = prioritySymbols.includes(a.productCode) ? 0 : 1;
+        const bPriority = prioritySymbols.includes(b.productCode) ? 0 : 1;
+        if (aPriority !== bPriority) return aPriority - bPriority;
+        // Within same priority, prefer CME/CBOT
+        const aExchange = (a.exchange === 'CME' || a.exchange === 'CBOT') ? 0 : 1;
+        const bExchange = (b.exchange === 'CME' || b.exchange === 'CBOT') ? 0 : 1;
+        return aExchange - bExchange;
+      });
+      
+      const testProducts = productsArray.slice(0, 60); // Limit to 60
       
       for (const product of testProducts) {
         try {
