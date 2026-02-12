@@ -175,7 +175,7 @@ class SmartLogsEngine {
     this.lastState = { ...state };
 
     // For QUANT strategy: EVENT-DRIVEN logs based on regime changes
-    // Only log when something SIGNIFICANT changes - no repetitive messages
+    // Uses the same smart-logs system as HQX-2B for consistency
     if (this.strategyId === 'ultra-scalping') {
       const ticks = state.tickCount || state.bars || 0;
       const absZ = Math.abs(zScore);
@@ -185,59 +185,58 @@ class SmartLogsEngine {
       const zRegime = absZ >= 2.0 ? 'extreme' : absZ >= 1.5 ? 'high' : absZ >= 1.0 ? 'building' : 'neutral';
       const bias = ofi > 0.15 ? 'bullish' : ofi < -0.15 ? 'bearish' : 'neutral';
       
-      // Build data object for messages
-      const zScoreAbs = absZ.toFixed(1);
-      const vpinPct = (vpin * 100).toFixed(0);
-      const ofiPct = (ofi > 0 ? '+' : '') + (ofi * 100).toFixed(0) + '%';
-      const d = { 
-        sym, price, 
-        zScore: zScore.toFixed(1), 
-        zScoreAbs, 
-        rawZScore: zScore,
-        vpin: vpinPct, 
-        ofi: ofiPct, 
-        ticks
-      };
-      
       let event = null;
       let logType = 'analysis';
       let message = null;
       
-      // EVENT 1: Warmup milestone (only log once at 250 ticks)
+      // EVENT 1: Warmup complete (only log once at 250 ticks)
       if (ticks >= 250 && !this.warmupLogged) {
         this.warmupLogged = true;
         event = 'warmup_complete';
-        message = QUANT.init({ sym, ticks, bars: ticks, swings: 0, zones: 0 });
+        message = `[${sym}] QUANT models ready | ${ticks} ticks processed`;
         logType = 'system';
       }
-      // EVENT 2: Z-Score regime change (neutral → building → high → extreme)
+      // EVENT 2: Z-Score regime change (significant threshold crossing)
       else if (this.lastZRegime !== null && zRegime !== this.lastZRegime) {
         event = 'z_regime_change';
+        // Use smartLogs.getLiveAnalysisLog for varied contextual messages
+        const liveState = {
+          trend: bias,
+          bars: ticks,
+          swings: absZ >= 1.0 ? 1 : 0,
+          zones: absZ >= 1.5 ? 1 : 0,
+          nearZone: absZ >= 1.5,
+          setupForming: absZ >= 2.0,
+        };
+        const baseMsg = smartLogs.getLiveAnalysisLog(liveState);
+        
         if (zRegime === 'extreme') {
           logType = 'signal';
-          message = zScore < 0 ? QUANT.bull(d) : QUANT.bear(d);
+          const dir = zScore < 0 ? 'LONG' : 'SHORT';
+          message = `[${sym}] ${price} | Z: ${zScore.toFixed(1)}σ | ${dir} edge | ${baseMsg}`;
         } else if (zRegime === 'high') {
           logType = 'signal';
-          message = QUANT.ready(d);
+          message = `[${sym}] ${price} | Z: ${zScore.toFixed(1)}σ | ${baseMsg}`;
         } else if (zRegime === 'building') {
-          message = QUANT.zones(d);
+          message = `[${sym}] ${price} | Z building (${zScore.toFixed(1)}σ) | ${baseMsg}`;
         } else {
-          message = QUANT.neutral(d);
+          message = `[${sym}] ${price} | Z normalized | ${baseMsg}`;
         }
       }
-      // EVENT 3: Bias flip (bullish ↔ bearish)
+      // EVENT 3: Bias flip (bullish ↔ bearish) - significant directional change
       else if (this.lastBias !== null && bias !== this.lastBias && bias !== 'neutral' && this.lastBias !== 'neutral') {
         event = 'bias_flip';
-        message = QUANT.biasFlip({ sym, from: this.lastBias, to: bias, delta: delta });
+        const arrow = bias === 'bullish' ? chalk.green('▲') : chalk.red('▼');
+        message = `[${sym}] ${arrow} Flow flip: ${this.lastBias} → ${bias} | OFI: ${(ofi * 100).toFixed(0)}%`;
       }
-      // EVENT 4: VPIN toxicity change
+      // EVENT 4: VPIN toxicity threshold crossing
       else if (this.lastVpinToxic !== null && vpinToxic !== this.lastVpinToxic) {
         event = 'vpin_change';
         if (vpinToxic) {
-          message = `[${sym}] ${price} | VPIN toxic (${vpinPct}%) - informed flow detected, caution`;
+          message = `[${sym}] ${price} | VPIN elevated (${(vpin * 100).toFixed(0)}%) - informed flow`;
           logType = 'risk';
         } else {
-          message = `[${sym}] ${price} | VPIN normalized (${vpinPct}%) - flow clean`;
+          message = `[${sym}] ${price} | VPIN normalized (${(vpin * 100).toFixed(0)}%) - clean flow`;
         }
       }
       
