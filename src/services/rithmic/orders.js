@@ -9,7 +9,7 @@ const { REQ } = require('./constants');
 const DEBUG = process.env.HQX_DEBUG === '1';
 
 /**
- * Place order via ORDER_PLANT
+ * Place order via ORDER_PLANT and wait for confirmation
  * @param {RithmicService} service - The Rithmic service instance
  * @param {Object} orderData - Order parameters
  */
@@ -18,26 +18,66 @@ const placeOrder = async (service, orderData) => {
     return { success: false, error: 'Not connected' };
   }
 
-  try {
-    service.orderConn.send('RequestNewOrder', {
-      templateId: REQ.NEW_ORDER,
-      userMsg: ['HQX'],
-      fcmId: service.loginInfo.fcmId,
-      ibId: service.loginInfo.ibId,
-      accountId: orderData.accountId,
-      symbol: orderData.symbol,
-      exchange: orderData.exchange || 'CME',
-      quantity: orderData.size,
-      transactionType: orderData.side === 0 ? 1 : 2, // 1=Buy, 2=Sell
-      duration: 1, // DAY
-      orderType: orderData.type === 2 ? 1 : 2, // 1=Market, 2=Limit
-      price: orderData.price || 0,
-    });
+  // Generate unique user message for tracking
+  const orderTag = `HQX-${Date.now()}`;
 
-    return { success: true, message: 'Order submitted' };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      service.removeListener('orderNotification', onNotification);
+      resolve({ success: false, error: 'Order timeout - no confirmation received' });
+    }, 5000);
+
+    const onNotification = (order) => {
+      // Match by symbol and approximate timing
+      if (order.symbol === orderData.symbol) {
+        clearTimeout(timeout);
+        service.removeListener('orderNotification', onNotification);
+        
+        // Check if order was accepted/filled
+        if (order.status === 2 || order.status === 3 || order.notifyType === 15) {
+          // Status 2 = Working, 3 = Filled, notifyType 15 = Complete
+          resolve({
+            success: true,
+            orderId: order.basketId,
+            status: order.status,
+            fillPrice: order.avgFillPrice || orderData.price,
+            filledQty: order.totalFillSize || orderData.size,
+          });
+        } else if (order.status === 5 || order.status === 6) {
+          // Status 5 = Rejected, 6 = Cancelled
+          resolve({
+            success: false,
+            error: `Order rejected: status ${order.status}`,
+            orderId: order.basketId,
+          });
+        }
+        // Keep listening for other statuses
+      }
+    };
+
+    service.on('orderNotification', onNotification);
+
+    try {
+      service.orderConn.send('RequestNewOrder', {
+        templateId: REQ.NEW_ORDER,
+        userMsg: [orderTag],
+        fcmId: service.loginInfo.fcmId,
+        ibId: service.loginInfo.ibId,
+        accountId: orderData.accountId,
+        symbol: orderData.symbol,
+        exchange: orderData.exchange || 'CME',
+        quantity: orderData.size,
+        transactionType: orderData.side === 0 ? 1 : 2, // 1=Buy, 2=Sell
+        duration: 1, // DAY
+        orderType: orderData.type === 2 ? 1 : 2, // 1=Market, 2=Limit
+        price: orderData.price || 0,
+      });
+    } catch (error) {
+      clearTimeout(timeout);
+      service.removeListener('orderNotification', onNotification);
+      resolve({ success: false, error: error.message });
+    }
+  });
 };
 
 /**
