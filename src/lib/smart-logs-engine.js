@@ -170,16 +170,18 @@ class SmartLogsEngine {
     this.lastState = { ...state };
 
     // For QUANT strategy: ALWAYS use rich QUANT-specific smart-logs with metrics
+    // HQX Scalping is TICK-BASED, not bar-based - use tickCount for display
     if (this.strategyId === 'ultra-scalping') {
       const timeSinceLastLog = now - this.lastLogTime;
+      const ticks = state.tickCount || state.bars || 0;  // Prefer tickCount for scalping
       
       // Log every 5 seconds with quant metrics
       if (timeSinceLastLog >= CONFIG.LOG_INTERVAL_SECONDS * 1000) {
         this.lastLogTime = now;
         
-        // Still warming up - use building messages from QUANT pool
-        if (state.bars < 50) {
-          const d = { sym, ticks: state.bars || 0, price };
+        // Still warming up (need ~250 ticks for QUANT models to stabilize)
+        if (ticks < 250) {
+          const d = { sym, ticks, price };
           return {
             type: 'system',
             message: QUANT.building(d),
@@ -206,7 +208,7 @@ class SmartLogsEngine {
           rawZScore: zScore,
           vpin: vpinPct, 
           ofi: ofiPct, 
-          ticks: state.bars || 0 
+          ticks
         };
         
         let logType = 'analysis';
