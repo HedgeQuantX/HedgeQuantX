@@ -58,7 +58,7 @@ const placeOrder = async (service, orderData) => {
     service.on('orderNotification', onNotification);
 
     try {
-      service.orderConn.send('RequestNewOrder', {
+      const orderRequest = {
         templateId: REQ.NEW_ORDER,
         userMsg: [orderTag],
         fcmId: service.loginInfo.fcmId,
@@ -69,9 +69,16 @@ const placeOrder = async (service, orderData) => {
         quantity: orderData.size,
         transactionType: orderData.side === 0 ? 1 : 2, // 1=Buy, 2=Sell
         duration: 1, // DAY
-        orderType: orderData.type === 2 ? 1 : 2, // 1=Market, 2=Limit
+        priceType: orderData.type === 2 ? 2 : 1, // 2=Market, 1=Limit
         price: orderData.price || 0,
-      });
+        manualOrAuto: 2, // AUTO
+      };
+      
+      if (DEBUG) {
+        console.log('[ORDER] Sending RequestNewOrder:', JSON.stringify(orderRequest));
+      }
+      
+      service.orderConn.send('RequestNewOrder', orderRequest);
     } catch (error) {
       clearTimeout(timeout);
       service.removeListener('orderNotification', onNotification);

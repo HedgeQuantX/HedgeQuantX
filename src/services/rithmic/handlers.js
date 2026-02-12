@@ -39,6 +39,9 @@ const createOrderHandler = (service) => {
       case RES.SHOW_ORDERS:
         handleShowOrdersResponse(service, data);
         break;
+      case RES.NEW_ORDER:
+        handleNewOrderResponse(service, data);
+        break;
       case STREAM.EXCHANGE_NOTIFICATION:
         handleExchangeNotification(service, data);
         break;
@@ -151,6 +154,36 @@ const handleShowOrdersResponse = (service, data) => {
     }
   } catch (e) {
     // Ignore decode errors
+  }
+};
+
+/**
+ * Handle new order response (template 313)
+ */
+const handleNewOrderResponse = (service, data) => {
+  try {
+    const res = proto.decode('ResponseNewOrder', data);
+    debug('New order response:', JSON.stringify(res));
+    
+    // Emit as orderNotification for the placeOrder listener
+    if (res.basketId || res.orderId) {
+      const order = {
+        basketId: res.basketId || res.orderId,
+        accountId: res.accountId,
+        symbol: res.symbol,
+        exchange: res.exchange || 'CME',
+        status: res.rpCode?.[0] === '0' ? 2 : 5, // 2=Working, 5=Rejected
+        notifyType: res.rpCode?.[0] === '0' ? 1 : 0, // 1=Accepted
+        rpCode: res.rpCode,
+        userMsg: res.userMsg,
+      };
+      service.emit('orderNotification', order);
+    }
+    
+    // Also emit specific event
+    service.emit('newOrderResponse', res);
+  } catch (e) {
+    debug('Error decoding ResponseNewOrder:', e.message);
   }
 };
 
