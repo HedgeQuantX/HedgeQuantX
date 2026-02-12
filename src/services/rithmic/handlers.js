@@ -133,13 +133,41 @@ const handleAccountList = (service, data) => {
 
 /**
  * Handle trade routes response
+ * Stores trade routes in service.tradeRoutes Map keyed by exchange
  */
 const handleTradeRoutes = (service, data) => {
   try {
     const res = proto.decode('ResponseTradeRoutes', data);
+    debug('Trade routes response:', JSON.stringify(res));
+    
+    // Store trade route if we have exchange and trade_route
+    if (res.exchange && res.tradeRoute) {
+      const routeInfo = {
+        fcmId: res.fcmId,
+        ibId: res.ibId,
+        exchange: res.exchange,
+        tradeRoute: res.tradeRoute,
+        status: res.status,
+        isDefault: res.isDefault || false,
+      };
+      
+      // Use exchange as key, prefer default route
+      const existing = service.tradeRoutes.get(res.exchange);
+      if (!existing || res.isDefault) {
+        service.tradeRoutes.set(res.exchange, routeInfo);
+        debug('Stored trade route for', res.exchange, ':', res.tradeRoute, res.isDefault ? '(default)' : '');
+      }
+    }
+    
+    // Signal completion when rpCode is '0'
+    if (res.rpCode?.[0] === '0') {
+      debug('Trade routes complete, total:', service.tradeRoutes.size);
+      service.emit('tradeRoutesComplete');
+    }
+    
     service.emit('tradeRoutes', res);
   } catch (e) {
-    // Ignore decode errors
+    debug('Error decoding trade routes:', e.message);
   }
 };
 

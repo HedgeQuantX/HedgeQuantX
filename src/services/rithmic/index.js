@@ -15,6 +15,7 @@ const {
   requestPnLSnapshot,
   subscribePnLUpdates,
   getPositions,
+  fetchTradeRoutes,
 } = require('./accounts');
 const { placeOrder, cancelOrder, getOrders, getOrderHistory, getOrderHistoryDates, getTradeHistoryFull, closePosition } = require('./orders');
 const { fillsToRoundTrips, calculateTradeStats } = require('./trades');
@@ -77,6 +78,9 @@ class RithmicService extends EventEmitter {
     // Cache
     this._contractsCache = null;
     this._contractsCacheTime = 0;
+    
+    // Trade routes cache (keyed by exchange)
+    this.tradeRoutes = new Map();
     
     // Trades history (captured from ExchangeOrderNotification fills)
     this.trades = [];
@@ -153,6 +157,14 @@ class RithmicService extends EventEmitter {
             }
           } catch (err) {
             log.warn('PnL connection failed', { error: err.message });
+          }
+          
+          // Fetch trade routes (required for order placement)
+          try {
+            await fetchTradeRoutes(this);
+            log.debug('Trade routes fetched', { count: this.tradeRoutes.size });
+          } catch (err) {
+            log.warn('Trade routes fetch failed', { error: err.message });
           }
           
           // Get trading accounts (uses existing this.accounts, no new API call)
@@ -472,6 +484,7 @@ class RithmicService extends EventEmitter {
     this.accounts = [];
     this.accountPnL.clear();
     this.positions.clear();
+    this.tradeRoutes.clear();
     this.orders = [];
     this.loginInfo = null;
     this.user = null;

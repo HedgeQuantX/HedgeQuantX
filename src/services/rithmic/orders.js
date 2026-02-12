@@ -75,6 +75,35 @@ const placeOrder = async (service, orderData) => {
     service.on('orderNotification', onNotification);
 
     try {
+      const exchange = orderData.exchange || 'CME';
+      
+      // Get trade route from cache (fetched during login)
+      // Trade route is REQUIRED by Rithmic - orders rejected without it
+      let tradeRoute = null;
+      if (service.tradeRoutes && service.tradeRoutes.size > 0) {
+        const routeInfo = service.tradeRoutes.get(exchange);
+        if (routeInfo) {
+          tradeRoute = routeInfo.tradeRoute;
+        } else {
+          // Fallback: use first available route
+          const firstRoute = service.tradeRoutes.values().next().value;
+          if (firstRoute) {
+            tradeRoute = firstRoute.tradeRoute;
+          }
+        }
+      }
+      
+      if (DEBUG) {
+        console.log('[ORDER] Trade route for', exchange, ':', tradeRoute);
+      }
+      
+      if (!tradeRoute) {
+        // No trade route available - order will likely fail
+        if (DEBUG) {
+          console.log('[ORDER] WARNING: No trade route available, order may be rejected');
+        }
+      }
+      
       const orderRequest = {
         templateId: REQ.NEW_ORDER,
         userMsg: [orderTag],
@@ -82,12 +111,13 @@ const placeOrder = async (service, orderData) => {
         ibId: service.loginInfo.ibId,
         accountId: orderData.accountId,
         symbol: orderData.symbol,
-        exchange: orderData.exchange || 'CME',
+        exchange: exchange,
         quantity: orderData.size,
         transactionType: orderData.side === 0 ? 1 : 2, // 1=Buy, 2=Sell
         duration: 1, // DAY
         priceType: orderData.type === 2 ? 2 : 1, // 2=Market, 1=Limit
         price: orderData.price || 0,
+        tradeRoute: tradeRoute, // REQUIRED by Rithmic
         manualOrAuto: 2, // AUTO
       };
       

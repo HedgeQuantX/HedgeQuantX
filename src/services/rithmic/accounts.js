@@ -335,6 +335,47 @@ const getPositions = async (service) => {
   return { success: true, positions };
 };
 
+/**
+ * Fetch trade routes from ORDER_PLANT
+ * Routes are needed to place orders - Rithmic rejects orders without trade_route
+ * @param {RithmicService} service - The Rithmic service instance
+ */
+const fetchTradeRoutes = async (service) => {
+  if (!service.orderConn || !service.loginInfo) {
+    debug('fetchTradeRoutes: no connection or loginInfo');
+    return;
+  }
+
+  // Initialize map if needed
+  if (!service.tradeRoutes) service.tradeRoutes = new Map();
+
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      debug('fetchTradeRoutes: timeout, found', service.tradeRoutes.size, 'routes');
+      resolve();
+    }, 5000);
+
+    service.once('tradeRoutesComplete', () => {
+      debug('fetchTradeRoutes: complete, found', service.tradeRoutes.size, 'routes');
+      clearTimeout(timeout);
+      resolve();
+    });
+
+    try {
+      debug('fetchTradeRoutes: sending RequestTradeRoutes');
+      service.orderConn.send('RequestTradeRoutes', {
+        templateId: REQ.TRADE_ROUTES,
+        userMsg: ['HQX'],
+        subscribeForUpdates: false,
+      });
+    } catch (e) {
+      debug('fetchTradeRoutes: error', e.message);
+      clearTimeout(timeout);
+      resolve();
+    }
+  });
+};
+
 module.exports = {
   hashAccountId,
   fetchAccounts,
@@ -343,5 +384,6 @@ module.exports = {
   getTradingAccounts,
   requestPnLSnapshot,
   subscribePnLUpdates,
-  getPositions
+  getPositions,
+  fetchTradeRoutes
 };
