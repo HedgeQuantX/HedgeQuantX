@@ -178,7 +178,14 @@ const fetchAllFrontMonths = (service) => {
       if (msg.templateId !== 114) return;
       template114Count++;
       
-      const decoded = decodeFrontMonthContract(msg.data);
+      // Use official protobuf decoder
+      let decoded;
+      try {
+        decoded = proto.decode('ResponseFrontMonthContract', msg.data);
+      } catch (e) {
+        brokerLog('FrontMonth decode error', { error: e.message });
+        return;
+      }
       
       // Log first few responses to diagnose
       if (template114Count <= 5) {
@@ -191,10 +198,11 @@ const fetchAllFrontMonths = (service) => {
         });
       }
       
-      if (decoded.rpCode[0] === '0' && decoded.tradingSymbol) {
-        contracts.set(decoded.userMsg, {
+      if (decoded.rpCode && decoded.rpCode[0] === '0' && decoded.tradingSymbol) {
+        const baseSymbol = decoded.userMsg?.[0] || decoded.symbol;
+        contracts.set(baseSymbol, {
           symbol: decoded.tradingSymbol,
-          baseSymbol: decoded.userMsg,
+          baseSymbol: baseSymbol,
           exchange: decoded.exchange,
         });
       }
