@@ -28,8 +28,18 @@ const getContracts = async (service) => {
   }
 
   try {
-    // Connect to TICKER_PLANT if needed
-    if (!service.tickerConn) {
+    // Connect to TICKER_PLANT if needed - check both existence AND logged in state
+    const tickerReady = service.tickerConn?.isConnected && 
+                        service.tickerConn?.connectionState === 'LOGGED_IN';
+    
+    if (!tickerReady) {
+      // Force fresh connection if ticker exists but not ready
+      if (service.tickerConn) {
+        log.debug('TICKER_PLANT exists but not ready, reconnecting', { 
+          state: service.tickerConn.connectionState,
+          connected: service.tickerConn.isConnected 
+        });
+      }
       const connected = await service.connectTicker(service.credentials.username, service.credentials.password);
       if (!connected) {
         return { success: false, error: 'Failed to connect to TICKER_PLANT' };
