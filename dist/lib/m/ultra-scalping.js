@@ -1,705 +1,585 @@
-var __getOwnPropNames = Object.getOwnPropertyNames;
-var __commonJS = (cb, mod) => function __require() {
-  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
-};
+/**
+ * =============================================================================
+ * HQX ULTRA SCALPING STRATEGY
+ * =============================================================================
+ * 6 Mathematical Models with 4-Layer Trailing Stop System
+ *
+ * BACKTEST RESULTS (162 tests, V4):
+ * - Net P&L: $195,272.52
+ * - Win Rate: 86.3%
+ * - Profit Factor: 34.44
+ * - Sharpe: 1.29
+ * - Tests Passed: 150/162 (92.6%)
+ *
+ * MATHEMATICAL MODELS:
+ * 1. Z-Score Mean Reversion (Entry: |Z| > threshold, Exit: |Z| < 0.5)
+ * 2. VPIN (Volume-Synchronized Probability of Informed Trading)
+ * 3. Kyle's Lambda (Price Impact / Liquidity Measurement)
+ * 4. Kalman Filter (Signal Extraction from Noise)
+ * 5. Volatility Regime Detection (Low/Normal/High adaptive)
+ * 6. Order Flow Imbalance (OFI) - Directional Bias Confirmation
+ *
+ * KEY PARAMETERS:
+ * - Stop: 8 ticks = $40
+ * - Target: 16 ticks = $80
+ * - R:R = 1:2
+ * - Trailing: 50% profit lock
+ * 
+ * SOURCE: /root/HQX-Dev/hqx_tg/src/algo/strategy/hqx-ultra-scalping.strategy.ts
+ */
 
-// ultra-scalping/config.js
-var require_config = __commonJS({
-  "ultra-scalping/config.js"(exports2, module2) {
-    var DEFAULT_CONFIG = {
-      // Model Parameters
-      zscoreEntryThreshold: 1.5,
-      // Live trading threshold (backtest: 2.5)
-      zscoreExitThreshold: 0.5,
-      vpinWindow: 50,
-      vpinToxicThreshold: 0.7,
-      // Skip if VPIN > 0.7
-      volatilityLookback: 100,
-      ofiLookback: 20,
-      // Trade Parameters
-      baseStopTicks: 8,
-      // $40
-      baseTargetTicks: 16,
-      // $80
-      breakevenTicks: 4,
-      // Move to BE at +4 ticks
-      profitLockPct: 0.5,
-      // Lock 50% of profit
-      minConfidence: 0.55,
-      // Minimum composite confidence
-      cooldownMs: 3e4,
-      // 30 seconds between signals
-      minHoldTimeMs: 1e4,
-      // Minimum 10 seconds hold
-      // Model Weights (from Python backtest)
-      weights: {
-        zscore: 0.3,
-        // 30%
-        ofi: 0.2,
-        // 20%
-        vpin: 0.15,
-        // 15%
-        kalman: 0.15,
-        // 15%
-        kyleLambda: 0.1,
-        // 10%
-        volatility: 0.1
-        // 10%
-      },
-      // Session (Futures Market Hours - Sunday 18:00 to Friday 17:00 EST)
-      session: {
-        enabled: false,
-        // Trade anytime markets are open
-        timezone: "America/New_York"
-      }
-    };
-    module2.exports = { DEFAULT_CONFIG };
+'use strict';
+
+const EventEmitter = require('events');
+const { v4: uuidv4 } = require('uuid');
+const {
+  computeZScore,
+  computeVPIN,
+  computeKyleLambda,
+  applyKalmanFilter,
+  calculateATR,
+  detectVolatilityRegime,
+  computeOrderFlowImbalance,
+} = require('./s1-models');
+
+// =============================================================================
+// CONSTANTS
+// =============================================================================
+
+const OrderSide = { BID: 'BID', ASK: 'ASK' };
+const SignalStrength = { WEAK: 'WEAK', MODERATE: 'MODERATE', STRONG: 'STRONG', VERY_STRONG: 'VERY_STRONG' };
+
+// =============================================================================
+// HELPER: Extract base symbol from contractId
+// =============================================================================
+function extractBaseSymbol(contractId) {
+  // CON.F.US.ENQ.H25 -> NQ, CON.F.US.EP.H25 -> ES
+  const mapping = {
+    'ENQ': 'NQ', 'EP': 'ES', 'EMD': 'EMD', 'RTY': 'RTY',
+    'MNQ': 'MNQ', 'MES': 'MES', 'M2K': 'M2K', 'MYM': 'MYM',
+    'NKD': 'NKD', 'GC': 'GC', 'SI': 'SI', 'CL': 'CL', 'YM': 'YM'
+  };
+  
+  if (!contractId) return 'UNKNOWN';
+  const parts = contractId.split('.');
+  if (parts.length >= 4) {
+    const symbol = parts[3];
+    return mapping[symbol] || symbol;
   }
-});
+  return contractId;
+}
 
-// common/types.js
-var require_types = __commonJS({
-  "common/types.js"(exports2, module2) {
-    var OrderSide2 = { BID: 0, ASK: 1 };
-    var SignalStrength2 = { WEAK: 1, MODERATE: 2, STRONG: 3, VERY_STRONG: 4 };
-    module2.exports = { OrderSide: OrderSide2, SignalStrength: SignalStrength2 };
-  }
-});
+// =============================================================================
+// HQX ULTRA SCALPING STRATEGY CLASS
+// =============================================================================
 
-// ultra-scalping/signal.js
-var require_signal = __commonJS({
-  "ultra-scalping/signal.js"(exports2, module2) {
-    var { v4: uuidv4 } = require("uuid");
-    var { OrderSide: OrderSide2, SignalStrength: SignalStrength2 } = require_types();
-    function generateSignal(params) {
-      const {
-        contractId,
-        currentPrice,
-        zscore,
-        vpin,
-        kyleLambda,
-        kalmanEstimate,
-        regime,
-        volParams,
-        ofi,
-        config,
-        tickSize
-      } = params;
-      const absZscore = Math.abs(zscore);
-      if (absZscore < volParams.zscoreThreshold) {
-        return null;
-      }
-      if (vpin > config.vpinToxicThreshold) {
-        return null;
-      }
-      let direction;
-      if (zscore < -volParams.zscoreThreshold) {
-        direction = "long";
-      } else if (zscore > volParams.zscoreThreshold) {
-        direction = "short";
-      } else {
-        return null;
-      }
-      const ofiConfirms = direction === "long" && ofi > 0.1 || direction === "short" && ofi < -0.1;
-      const kalmanDiff = currentPrice - kalmanEstimate;
-      const kalmanConfirms = direction === "long" && kalmanDiff < 0 || direction === "short" && kalmanDiff > 0;
-      const scores = {
-        zscore: Math.min(1, absZscore / 4),
-        // Normalize to 0-1
-        vpin: 1 - vpin,
-        // Lower VPIN = better
-        kyleLambda: kyleLambda > 1e-3 ? 0.5 : 0.8,
-        // Moderate lambda is good
-        kalman: kalmanConfirms ? 0.8 : 0.4,
-        volatility: regime === "normal" ? 0.8 : regime === "low" ? 0.7 : 0.6,
-        ofi: ofiConfirms ? 0.9 : 0.5,
-        composite: 0
-        // Calculated below
-      };
-      scores.composite = scores.zscore * config.weights.zscore + // 30%
-      scores.vpin * config.weights.vpin + // 15%
-      scores.kyleLambda * config.weights.kyleLambda + // 10%
-      scores.kalman * config.weights.kalman + // 15%
-      scores.volatility * config.weights.volatility + // 10%
-      scores.ofi * config.weights.ofi;
-      const confidence = Math.min(1, scores.composite + volParams.confidenceBonus);
-      if (confidence < config.minConfidence) {
-        return null;
-      }
-      const stopTicks = Math.round(config.baseStopTicks * volParams.stopMultiplier);
-      const targetTicks = Math.round(config.baseTargetTicks * volParams.targetMultiplier);
-      const actualStopTicks = Math.max(6, Math.min(12, stopTicks));
-      const actualTargetTicks = Math.max(actualStopTicks * 1.5, Math.min(24, targetTicks));
-      let stopLoss, takeProfit, beBreakeven, profitLockLevel;
-      if (direction === "long") {
-        stopLoss = currentPrice - actualStopTicks * tickSize;
-        takeProfit = currentPrice + actualTargetTicks * tickSize;
-        beBreakeven = currentPrice + config.breakevenTicks * tickSize;
-        profitLockLevel = currentPrice + actualTargetTicks * config.profitLockPct * tickSize;
-      } else {
-        stopLoss = currentPrice + actualStopTicks * tickSize;
-        takeProfit = currentPrice - actualTargetTicks * tickSize;
-        beBreakeven = currentPrice - config.breakevenTicks * tickSize;
-        profitLockLevel = currentPrice - actualTargetTicks * config.profitLockPct * tickSize;
-      }
-      const riskReward = actualTargetTicks / actualStopTicks;
-      const trailTriggerTicks = Math.round(actualTargetTicks * 0.5);
-      const trailDistanceTicks = Math.round(actualStopTicks * 0.4);
-      let strength = SignalStrength2.MODERATE;
-      if (confidence >= 0.85) strength = SignalStrength2.VERY_STRONG;
-      else if (confidence >= 0.75) strength = SignalStrength2.STRONG;
-      else if (confidence < 0.6) strength = SignalStrength2.WEAK;
-      const winProb = 0.5 + (confidence - 0.5) * 0.4;
-      const edge = winProb * Math.abs(takeProfit - currentPrice) - (1 - winProb) * Math.abs(currentPrice - stopLoss);
-      return {
-        id: uuidv4(),
-        timestamp: Date.now(),
-        symbol: contractId.split(".")[0] || contractId,
-        contractId,
-        side: direction === "long" ? OrderSide2.BID : OrderSide2.ASK,
-        direction,
-        strategy: "HQX_ULTRA_SCALPING_6MODELS",
-        strength,
-        edge,
-        confidence,
-        entry: currentPrice,
-        entryPrice: currentPrice,
-        stopLoss,
-        takeProfit,
-        riskReward,
-        stopTicks: actualStopTicks,
-        targetTicks: actualTargetTicks,
-        trailTriggerTicks,
-        trailDistanceTicks,
-        beBreakeven,
-        profitLockLevel,
-        // Model values for debugging/monitoring
-        zScore: zscore,
-        zScoreExit: config.zscoreExitThreshold,
-        vpinValue: vpin,
-        kyleLambda,
-        kalmanEstimate,
-        volatilityRegime: regime,
-        ofiValue: ofi,
-        models: scores,
-        // Order flow confirmation flag
-        orderFlowConfirmed: ofiConfirms,
-        kalmanConfirmed: kalmanConfirms,
-        expires: Date.now() + 6e4
-      };
-    }
-    module2.exports = { generateSignal };
-  }
-});
-
-// ultra-scalping/models/zscore.js
-var require_zscore = __commonJS({
-  "ultra-scalping/models/zscore.js"(exports2, module2) {
-    function computeZScore(prices, window = 50) {
-      if (prices.length < window) return 0;
-      const recentPrices = prices.slice(-window);
-      const mean = recentPrices.reduce((a, b) => a + b, 0) / window;
-      const variance = recentPrices.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / window;
-      const std = Math.sqrt(variance);
-      if (std < 1e-4) return 0;
-      const currentPrice = prices[prices.length - 1];
-      return (currentPrice - mean) / std;
-    }
-    module2.exports = { computeZScore };
-  }
-});
-
-// ultra-scalping/models/vpin.js
-var require_vpin = __commonJS({
-  "ultra-scalping/models/vpin.js"(exports2, module2) {
-    function computeVPIN(volumes, vpinWindow = 50) {
-      if (volumes.length < vpinWindow) return 0.5;
-      const recentVolumes = volumes.slice(-vpinWindow);
-      let totalBuy = 0;
-      let totalSell = 0;
-      for (const v of recentVolumes) {
-        totalBuy += v.buy;
-        totalSell += v.sell;
-      }
-      const totalVolume = totalBuy + totalSell;
-      if (totalVolume < 1) return 0.5;
-      return Math.abs(totalBuy - totalSell) / totalVolume;
-    }
-    module2.exports = { computeVPIN };
-  }
-});
-
-// ultra-scalping/models/kyle.js
-var require_kyle = __commonJS({
-  "ultra-scalping/models/kyle.js"(exports2, module2) {
-    function computeKyleLambda(bars) {
-      if (bars.length < 20) return 0;
-      const recentBars = bars.slice(-20);
-      const priceChanges = [];
-      const volumes = [];
-      for (let i = 1; i < recentBars.length; i++) {
-        priceChanges.push(recentBars[i].close - recentBars[i - 1].close);
-        volumes.push(recentBars[i].volume);
-      }
-      const meanPrice = priceChanges.reduce((a, b) => a + b, 0) / priceChanges.length;
-      const meanVol = volumes.reduce((a, b) => a + b, 0) / volumes.length;
-      let covariance = 0;
-      let varianceVol = 0;
-      for (let i = 0; i < priceChanges.length; i++) {
-        covariance += (priceChanges[i] - meanPrice) * (volumes[i] - meanVol);
-        varianceVol += Math.pow(volumes[i] - meanVol, 2);
-      }
-      covariance /= priceChanges.length;
-      varianceVol /= priceChanges.length;
-      if (varianceVol < 1e-4) return 0;
-      return Math.abs(covariance / varianceVol);
-    }
-    module2.exports = { computeKyleLambda };
-  }
-});
-
-// ultra-scalping/models/kalman.js
-var require_kalman = __commonJS({
-  "ultra-scalping/models/kalman.js"(exports2, module2) {
-    var KALMAN_PROCESS_NOISE = 0.01;
-    var KALMAN_MEASUREMENT_NOISE = 0.1;
-    function applyKalmanFilter(state, measurement) {
-      if (!state || state.estimate === 0) {
-        return {
-          estimate: measurement,
-          errorCovariance: 1,
-          newEstimate: measurement
-        };
-      }
-      const predictedEstimate = state.estimate;
-      const predictedCovariance = state.errorCovariance + KALMAN_PROCESS_NOISE;
-      const kalmanGain = predictedCovariance / (predictedCovariance + KALMAN_MEASUREMENT_NOISE);
-      const newEstimate = predictedEstimate + kalmanGain * (measurement - predictedEstimate);
-      const newCovariance = (1 - kalmanGain) * predictedCovariance;
-      return {
-        estimate: newEstimate,
-        errorCovariance: newCovariance,
-        newEstimate
-      };
-    }
-    function createKalmanState() {
-      return {
-        estimate: 0,
-        errorCovariance: 1
-      };
-    }
-    module2.exports = {
-      applyKalmanFilter,
-      createKalmanState,
-      KALMAN_PROCESS_NOISE,
-      KALMAN_MEASUREMENT_NOISE
-    };
-  }
-});
-
-// ultra-scalping/models/volatility.js
-var require_volatility = __commonJS({
-  "ultra-scalping/models/volatility.js"(exports2, module2) {
-    function calculateATR(bars, period = 14) {
-      if (bars.length < period + 1) return 2.5;
-      const trValues = [];
-      for (let i = bars.length - period; i < bars.length; i++) {
-        const bar = bars[i];
-        const prevClose = bars[i - 1].close;
-        const tr = Math.max(
-          bar.high - bar.low,
-          Math.abs(bar.high - prevClose),
-          Math.abs(bar.low - prevClose)
-        );
-        trValues.push(tr);
-      }
-      return trValues.reduce((a, b) => a + b, 0) / trValues.length;
-    }
-    function detectVolatilityRegime(atr, atrHistory, tickSize) {
-      let atrPercentile = 0.5;
-      if (atrHistory.length >= 20) {
-        atrPercentile = atrHistory.filter((a) => a <= atr).length / atrHistory.length;
-      }
-      let regime, params;
-      if (atrPercentile < 0.25) {
-        regime = "low";
-        params = {
-          stopMultiplier: 0.8,
-          targetMultiplier: 0.9,
-          zscoreThreshold: 1.2,
-          confidenceBonus: 0.05
-        };
-      } else if (atrPercentile < 0.75) {
-        regime = "normal";
-        params = {
-          stopMultiplier: 1,
-          targetMultiplier: 1,
-          zscoreThreshold: 1.5,
-          confidenceBonus: 0
-        };
-      } else {
-        regime = "high";
-        params = {
-          stopMultiplier: 1.3,
-          targetMultiplier: 1.2,
-          zscoreThreshold: 2,
-          confidenceBonus: -0.05
-        };
-      }
-      return { regime, params, atrPercentile };
-    }
-    module2.exports = { calculateATR, detectVolatilityRegime };
-  }
-});
-
-// ultra-scalping/models/ofi.js
-var require_ofi = __commonJS({
-  "ultra-scalping/models/ofi.js"(exports2, module2) {
-    function computeOrderFlowImbalance(bars, lookback = 20) {
-      if (bars.length < lookback) return 0;
-      const recentBars = bars.slice(-lookback);
-      let totalBuyPressure = 0;
-      let totalSellPressure = 0;
-      for (const bar of recentBars) {
-        const barRange = bar.high - bar.low;
-        if (barRange > 0) {
-          const closePosition = (bar.close - bar.low) / barRange;
-          totalBuyPressure += closePosition * bar.volume;
-          totalSellPressure += (1 - closePosition) * bar.volume;
-        }
-      }
-      const totalPressure = totalBuyPressure + totalSellPressure;
-      if (totalPressure < 1) return 0;
-      return (totalBuyPressure - totalSellPressure) / totalPressure;
-    }
-    module2.exports = { computeOrderFlowImbalance };
-  }
-});
-
-// ultra-scalping/models/index.js
-var require_models = __commonJS({
-  "ultra-scalping/models/index.js"(exports2, module2) {
-    var { computeZScore } = require_zscore();
-    var { computeVPIN } = require_vpin();
-    var { computeKyleLambda } = require_kyle();
-    var { applyKalmanFilter, createKalmanState } = require_kalman();
-    var { calculateATR, detectVolatilityRegime } = require_volatility();
-    var { computeOrderFlowImbalance } = require_ofi();
-    module2.exports = {
-      computeZScore,
-      computeVPIN,
-      computeKyleLambda,
-      applyKalmanFilter,
-      createKalmanState,
-      calculateATR,
-      detectVolatilityRegime,
-      computeOrderFlowImbalance
-    };
-  }
-});
-
-// ultra-scalping/core.js
-var require_core = __commonJS({
-  "ultra-scalping/core.js"(exports2, module2) {
-    var EventEmitter2 = require("events");
-    var { DEFAULT_CONFIG } = require_config();
-    var { generateSignal } = require_signal();
-    var {
-      computeZScore,
-      computeVPIN,
-      computeKyleLambda,
-      applyKalmanFilter,
-      createKalmanState,
-      calculateATR,
-      detectVolatilityRegime,
-      computeOrderFlowImbalance
-    } = require_models();
-    var HQXUltraScalping2 = class extends EventEmitter2 {
-      constructor(config = {}) {
-        super();
-        this.tickSize = config.tickSize || 0.25;
-        this.tickValue = config.tickValue || 5;
-        this.config = { ...DEFAULT_CONFIG, ...config };
-        this.barHistory = /* @__PURE__ */ new Map();
-        this.priceBuffer = /* @__PURE__ */ new Map();
-        this.volumeBuffer = /* @__PURE__ */ new Map();
-        this.kalmanStates = /* @__PURE__ */ new Map();
-        this.atrHistory = /* @__PURE__ */ new Map();
-        this.recentTrades = [];
-        this.winStreak = 0;
-        this.lossStreak = 0;
-        this.lastSignalTime = 0;
-        this.stats = { signals: 0, trades: 0, wins: 0, losses: 0, pnl: 0 };
-      }
-      initialize(contractId, tickSize = 0.25, tickValue = 5) {
-        this.tickSize = tickSize;
-        this.tickValue = tickValue;
-        this.barHistory.set(contractId, []);
-        this.priceBuffer.set(contractId, []);
-        this.volumeBuffer.set(contractId, []);
-        this.atrHistory.set(contractId, []);
-        this.kalmanStates.set(contractId, createKalmanState());
-        this.emit("log", {
-          type: "info",
-          message: `[HQX-UltraScalping] Initialized for ${contractId}: tick=${tickSize}, value=${tickValue}`
-        });
-        this.emit("log", {
-          type: "info",
-          message: `[HQX-UltraScalping] 6 Models: Z-Score(30%), OFI(20%), VPIN(15%), Kalman(15%), Kyle(10%), Vol(10%)`
-        });
-      }
-      processTick(tick) {
-        const { contractId, price, volume, timestamp } = tick;
-        const bar = {
-          timestamp: timestamp || Date.now(),
-          open: price,
-          high: price,
-          low: price,
-          close: price,
-          volume: volume || 1
-        };
-        return this.processBar(contractId, bar);
-      }
-      onTick(tick) {
-        return this.processTick(tick);
-      }
-      onTrade(trade) {
-        return this.processTick({
-          contractId: trade.contractId || trade.symbol,
-          price: trade.price,
-          volume: trade.size || trade.volume || 1,
-          side: trade.side,
-          timestamp: trade.timestamp || Date.now()
-        });
-      }
-      processBar(contractId, bar) {
-        let bars = this.barHistory.get(contractId);
-        if (!bars) {
-          this.initialize(contractId);
-          bars = this.barHistory.get(contractId);
-        }
-        bars.push(bar);
-        if (bars.length > 500) bars.shift();
-        const prices = this.priceBuffer.get(contractId);
-        prices.push(bar.close);
-        if (prices.length > 200) prices.shift();
-        const volumes = this.volumeBuffer.get(contractId);
-        const barRange = bar.high - bar.low;
-        let buyVol = bar.volume * 0.5;
-        let sellVol = bar.volume * 0.5;
-        if (barRange > 0) {
-          const closePosition = (bar.close - bar.low) / barRange;
-          buyVol = bar.volume * closePosition;
-          sellVol = bar.volume * (1 - closePosition);
-        }
-        volumes.push({ buy: buyVol, sell: sellVol });
-        if (volumes.length > 100) volumes.shift();
-        if (bars.length < 50) return null;
-        const zscore = computeZScore(prices);
-        const vpin = computeVPIN(volumes, this.config.vpinWindow);
-        const kyleLambda = computeKyleLambda(bars);
-        const kalmanState = this.kalmanStates.get(contractId);
-        const kalmanResult = applyKalmanFilter(kalmanState, bar.close);
-        this.kalmanStates.set(contractId, {
-          estimate: kalmanResult.estimate,
-          errorCovariance: kalmanResult.errorCovariance
-        });
-        const kalmanEstimate = kalmanResult.newEstimate;
-        const atr = calculateATR(bars);
-        const atrHist = this.atrHistory.get(contractId);
-        atrHist.push(atr);
-        if (atrHist.length > 500) atrHist.shift();
-        const { regime, params: volParams } = detectVolatilityRegime(atr, atrHist, this.tickSize);
-        const ofi = computeOrderFlowImbalance(bars, this.config.ofiLookback);
-        if (Date.now() - this.lastSignalTime < this.config.cooldownMs) {
-          return null;
-        }
-        const signal = generateSignal({
-          contractId,
-          currentPrice: bar.close,
-          zscore,
-          vpin,
-          kyleLambda,
-          kalmanEstimate,
-          regime,
-          volParams,
-          ofi,
-          config: this.config,
-          tickSize: this.tickSize
-        });
-        if (signal) {
-          this.lastSignalTime = Date.now();
-          this.stats.signals++;
-          this.emit("signal", {
-            side: signal.direction === "long" ? "buy" : "sell",
-            action: "open",
-            reason: `Z=${zscore.toFixed(2)}, VPIN=${(vpin * 100).toFixed(0)}%, OFI=${(ofi * 100).toFixed(0)}%, cf=${(signal.confidence * 100).toFixed(0)}%`,
-            ...signal
-          });
-          this.emit("log", {
-            type: "info",
-            message: `[HQX] SIGNAL: ${signal.direction.toUpperCase()} @ ${bar.close.toFixed(2)} | Z:${zscore.toFixed(2)} VPIN:${(vpin * 100).toFixed(0)}% OFI:${(ofi * 100).toFixed(0)}% Kyle:${kyleLambda.toFixed(5)} Regime:${regime} | Conf:${(signal.confidence * 100).toFixed(0)}%`
-          });
-        }
-        return signal;
-      }
-      shouldExitByZScore(contractId) {
-        const prices = this.priceBuffer.get(contractId);
-        if (!prices || prices.length < 50) return false;
-        const zscore = computeZScore(prices);
-        return Math.abs(zscore) < this.config.zscoreExitThreshold;
-      }
-      getModelValues(contractId) {
-        const prices = this.priceBuffer.get(contractId);
-        const volumes = this.volumeBuffer.get(contractId);
-        const bars = this.barHistory.get(contractId);
-        if (!prices || !volumes || !bars || bars.length < 50) {
-          return null;
-        }
-        const zscore = computeZScore(prices);
-        const vpin = computeVPIN(volumes, this.config.vpinWindow);
-        const kyleLambda = computeKyleLambda(bars);
-        const ofi = computeOrderFlowImbalance(bars, this.config.ofiLookback);
-        return {
-          zscore: Math.min(1, Math.abs(zscore) / 4),
-          vpin: 1 - vpin,
-          kyleLambda: kyleLambda > 1e-3 ? 0.5 : 0.8,
-          kalman: 0.7,
-          volatility: 0.7,
-          ofi: Math.abs(ofi) > 0.1 ? 0.8 : 0.5,
-          composite: 0.7,
-          raw: { zscore, vpin, kyleLambda, ofi }
-        };
-      }
-      getAnalysisState(contractId, currentPrice) {
-        const bars = this.barHistory.get(contractId) || [];
-        if (bars.length < 50) {
-          return { ready: false, message: `Collecting data... ${bars.length}/50 bars` };
-        }
-        const prices = this.priceBuffer.get(contractId) || [];
-        const volumes = this.volumeBuffer.get(contractId) || [];
-        const atrHist = this.atrHistory.get(contractId) || [];
-        const zscore = computeZScore(prices);
-        const vpin = computeVPIN(volumes, this.config.vpinWindow);
-        const ofi = computeOrderFlowImbalance(bars, this.config.ofiLookback);
-        const kyleLambda = computeKyleLambda(bars);
-        const atr = calculateATR(bars);
-        const { regime, params } = detectVolatilityRegime(atr, atrHist, this.tickSize);
-        return {
-          ready: true,
-          zScore: zscore,
-          vpin,
-          ofi,
-          kyleLambda,
-          regime,
-          stopTicks: Math.round(this.config.baseStopTicks * params.stopMultiplier),
-          targetTicks: Math.round(this.config.baseTargetTicks * params.targetMultiplier),
-          threshold: params.zscoreThreshold,
-          barsProcessed: bars.length,
-          models: "6 (Z-Score, VPIN, Kyle, Kalman, Vol, OFI)"
-        };
-      }
-      recordTradeResult(pnl) {
-        this.recentTrades.push({ netPnl: pnl, timestamp: Date.now() });
-        if (this.recentTrades.length > 100) this.recentTrades.shift();
-        if (pnl > 0) {
-          this.winStreak++;
-          this.lossStreak = 0;
-          this.stats.wins++;
-        } else {
-          this.lossStreak++;
-          this.winStreak = 0;
-          this.stats.losses++;
-        }
-        this.stats.trades++;
-        this.stats.pnl += pnl;
-        this.emit("log", {
-          type: "debug",
-          message: `[HQX] Trade result: ${pnl > 0 ? "WIN" : "LOSS"} $${pnl.toFixed(2)}, streak: ${pnl > 0 ? this.winStreak : -this.lossStreak}`
-        });
-      }
-      getBarHistory(contractId) {
-        return this.barHistory.get(contractId) || [];
-      }
-      getStats() {
-        return this.stats;
-      }
-      reset(contractId) {
-        this.barHistory.set(contractId, []);
-        this.priceBuffer.set(contractId, []);
-        this.volumeBuffer.set(contractId, []);
-        this.atrHistory.set(contractId, []);
-        this.kalmanStates.set(contractId, createKalmanState());
-        this.emit("log", {
-          type: "info",
-          message: `[HQX-UltraScalping] Reset state for ${contractId}`
-        });
-      }
-    };
-    module2.exports = { HQXUltraScalping: HQXUltraScalping2 };
-  }
-});
-
-// ultra-scalping/index.js
-var EventEmitter = require("events");
-var { HQXUltraScalping } = require_core();
-var { OrderSide, SignalStrength } = require_types();
-var UltraScalpingStrategy = class extends EventEmitter {
-  constructor(config = {}) {
+class HQXUltraScalpingStrategy extends EventEmitter {
+  constructor() {
     super();
-    this.config = config;
-    this.strategy = new HQXUltraScalping(config);
-    this.strategy.on("signal", (sig) => this.emit("signal", sig));
-    this.strategy.on("log", (log) => this.emit("log", log));
+    
+    this.tickSize = 0.25;
+    this.tickValue = 5.0;
+
+    // === Model Parameters (from V4 backtest) ===
+    this.zscoreEntryThreshold = 1.5;  // Adaptive per regime
+    this.zscoreExitThreshold = 0.5;
+    this.vpinWindow = 50;
+    this.vpinToxicThreshold = 0.7;
+    this.kalmanProcessNoise = 0.01;
+    this.kalmanMeasurementNoise = 0.1;
+    this.volatilityLookback = 100;
+    this.ofiLookback = 20;
+
+    // === Trade Parameters (from V4 backtest) ===
+    this.baseStopTicks = 8;     // $40
+    this.baseTargetTicks = 16;  // $80
+    this.breakevenTicks = 4;    // Move to BE at +4 ticks
+    this.profitLockPct = 0.5;   // Lock 50% of profit
+
+    // === State Storage ===
+    this.barHistory = new Map();
+    this.kalmanStates = new Map();
+    this.priceBuffer = new Map();
+    this.volumeBuffer = new Map();
+    this.tradesBuffer = new Map();
+    this.atrHistory = new Map();
+
+    // === Tick aggregation ===
+    this.tickBuffer = new Map();
+    this.lastBarTime = new Map();
+    this.barIntervalMs = 5000; // 5-second bars
+
+    // === Performance Tracking ===
+    this.recentTrades = [];
+    this.winStreak = 0;
+    this.lossStreak = 0;
+    
+    // === CRITICAL: Cooldown & Risk Management ===
+    this.lastSignalTime = 0;
+    this.signalCooldownMs = 30000;  // 30 seconds minimum between signals
+    this.maxConsecutiveLosses = 3;  // Stop trading after 3 consecutive losses
+    this.minConfidenceThreshold = 0.65;  // Minimum 65% confidence (was 55%)
+    this.tradingEnabled = true;
   }
-  // Interface methods (compatible with M1)
+
+  /**
+   * Initialize strategy for a contract
+   */
+  initialize(contractId, tickSize = 0.25, tickValue = 5.0) {
+    this.tickSize = tickSize;
+    this.tickValue = tickValue;
+    this.barHistory.set(contractId, []);
+    this.priceBuffer.set(contractId, []);
+    this.volumeBuffer.set(contractId, []);
+    this.tradesBuffer.set(contractId, []);
+    this.atrHistory.set(contractId, []);
+    this.tickBuffer.set(contractId, []);
+    this.lastBarTime.set(contractId, 0);
+    this.kalmanStates.set(contractId, { estimate: 0, errorCovariance: 1.0 });
+  }
+
+  /**
+   * Process a tick - aggregates into bars then runs strategy
+   */
   processTick(tick) {
-    return this.strategy.processTick(tick);
-  }
-  onTick(tick) {
-    return this.strategy.onTick(tick);
-  }
-  onTrade(trade) {
-    return this.strategy.onTrade(trade);
-  }
-  processBar(contractId, bar) {
-    return this.strategy.processBar(contractId, bar);
-  }
-  initialize(contractId, tickSize, tickValue) {
-    return this.strategy.initialize(contractId, tickSize, tickValue);
-  }
-  getAnalysisState(contractId, price) {
-    return this.strategy.getAnalysisState(contractId, price);
-  }
-  recordTradeResult(pnl) {
-    return this.strategy.recordTradeResult(pnl);
-  }
-  reset(contractId) {
-    return this.strategy.reset(contractId);
-  }
-  getStats() {
-    return this.strategy.getStats();
-  }
-  getBarHistory(contractId) {
-    return this.strategy.getBarHistory(contractId);
-  }
-  getModelValues(contractId) {
-    return this.strategy.getModelValues(contractId);
-  }
-  shouldExitByZScore(contractId) {
-    return this.strategy.shouldExitByZScore(contractId);
-  }
-  generateSignal(params) {
+    const contractId = tick.contractId;
+    
+    if (!this.barHistory.has(contractId)) {
+      this.initialize(contractId);
+    }
+
+    // Add tick to buffer
+    let ticks = this.tickBuffer.get(contractId);
+    ticks.push(tick);
+
+    // Check if we should form a new bar
+    const now = Date.now();
+    const lastBar = this.lastBarTime.get(contractId);
+    
+    if (now - lastBar >= this.barIntervalMs && ticks.length > 0) {
+      const bar = this._aggregateTicksToBar(ticks, now);
+      this.tickBuffer.set(contractId, []);
+      this.lastBarTime.set(contractId, now);
+      
+      if (bar) {
+        const signal = this.processBar(contractId, bar);
+        if (signal) {
+          this.emit('signal', signal);
+          return signal;
+        }
+      }
+    }
     return null;
   }
-  // Signals come from processBar
-};
-module.exports = {
-  HQXUltraScalping,
-  UltraScalpingStrategy,
-  // Aliases for backward compatibility
-  M1: UltraScalpingStrategy,
-  S1: HQXUltraScalping,
-  OrderSide,
-  SignalStrength
-};
+
+  /**
+   * Aggregate ticks into a bar
+   */
+  _aggregateTicksToBar(ticks, timestamp) {
+    if (ticks.length === 0) return null;
+
+    const prices = ticks.map(t => t.price).filter(p => p != null);
+    if (prices.length === 0) return null;
+
+    let buyVol = 0, sellVol = 0;
+    for (let i = 1; i < ticks.length; i++) {
+      const vol = ticks[i].volume || 1;
+      if (ticks[i].price > ticks[i-1].price) buyVol += vol;
+      else if (ticks[i].price < ticks[i-1].price) sellVol += vol;
+      else { buyVol += vol / 2; sellVol += vol / 2; }
+    }
+
+    return {
+      timestamp,
+      open: prices[0],
+      high: Math.max(...prices),
+      low: Math.min(...prices),
+      close: prices[prices.length - 1],
+      volume: ticks.reduce((sum, t) => sum + (t.volume || 1), 0),
+      delta: buyVol - sellVol,
+      tickCount: ticks.length
+    };
+  }
+
+  /**
+   * Process a new bar and potentially generate signal
+   */
+  processBar(contractId, bar) {
+    let bars = this.barHistory.get(contractId);
+    if (!bars) {
+      this.initialize(contractId);
+      bars = this.barHistory.get(contractId);
+    }
+
+    bars.push(bar);
+    if (bars.length > 500) bars.shift();
+
+    // Update price buffer
+    const prices = this.priceBuffer.get(contractId);
+    prices.push(bar.close);
+    if (prices.length > 200) prices.shift();
+
+    // Update volume buffer
+    const volumes = this.volumeBuffer.get(contractId);
+    const barRange = bar.high - bar.low;
+    let buyVol = bar.volume * 0.5;
+    let sellVol = bar.volume * 0.5;
+    if (barRange > 0) {
+      const closePosition = (bar.close - bar.low) / barRange;
+      buyVol = bar.volume * closePosition;
+      sellVol = bar.volume * (1 - closePosition);
+    }
+    volumes.push({ buy: buyVol, sell: sellVol });
+    if (volumes.length > 100) volumes.shift();
+
+    // Need minimum data
+    if (bars.length < 50) return null;
+
+    // === 6 MODELS ===
+    const zscore = computeZScore(prices);
+    const vpin = computeVPIN(volumes, this.vpinWindow);
+    const kyleLambda = computeKyleLambda(bars);
+    const kalmanEstimate = this._applyKalmanFilter(contractId, bar.close);
+    const { regime, params } = this._detectVolatilityRegime(contractId, bars);
+    const ofi = computeOrderFlowImbalance(bars, this.ofiLookback);
+
+    // === SIGNAL GENERATION ===
+    return this._generateSignal(contractId, bar.close, zscore, vpin, kyleLambda, kalmanEstimate, regime, params, ofi, bars);
+  }
+
+  // ===========================================================================
+  // MODEL 4: KALMAN FILTER (uses shared state)
+  // ===========================================================================
+  _applyKalmanFilter(contractId, measurement) {
+    let state = this.kalmanStates.get(contractId);
+    const result = applyKalmanFilter(state, measurement, this.kalmanProcessNoise, this.kalmanMeasurementNoise);
+    this.kalmanStates.set(contractId, result.state);
+    return result.estimate;
+  }
+
+  // ===========================================================================
+  // MODEL 5: VOLATILITY REGIME (uses shared state)
+  // ===========================================================================
+  _detectVolatilityRegime(contractId, bars) {
+    const atr = calculateATR(bars);
+    let atrHist = this.atrHistory.get(contractId);
+    if (!atrHist) { atrHist = []; this.atrHistory.set(contractId, atrHist); }
+    atrHist.push(atr);
+    if (atrHist.length > 500) atrHist.shift();
+    return detectVolatilityRegime(atrHist, atr);
+  }
+
+  // ===========================================================================
+  // SIGNAL GENERATION
+  // ===========================================================================
+  _generateSignal(contractId, currentPrice, zscore, vpin, kyleLambda, kalmanEstimate, regime, volParams, ofi, bars) {
+    // CRITICAL: Check if trading is enabled
+    if (!this.tradingEnabled) {
+      this.emit('log', { type: 'debug', message: `Trading disabled (${this.lossStreak} consecutive losses)` });
+      return null;
+    }
+    
+    // CRITICAL: Check cooldown
+    const now = Date.now();
+    const timeSinceLastSignal = now - this.lastSignalTime;
+    if (timeSinceLastSignal < this.signalCooldownMs) {
+      // Silent - don't spam logs
+      return null;
+    }
+    
+    // CRITICAL: Check consecutive losses
+    if (this.lossStreak >= this.maxConsecutiveLosses) {
+      this.tradingEnabled = false;
+      this.emit('log', { type: 'info', message: `Trading paused: ${this.lossStreak} consecutive losses. Waiting for cooldown...` });
+      // Auto re-enable after 2 minutes
+      setTimeout(() => {
+        this.tradingEnabled = true;
+        this.lossStreak = 0;
+        this.emit('log', { type: 'info', message: 'Trading re-enabled after cooldown' });
+      }, 120000);
+      return null;
+    }
+    
+    const absZscore = Math.abs(zscore);
+    if (absZscore < volParams.zscoreThreshold) return null;
+    if (vpin > this.vpinToxicThreshold) return null;
+
+    let direction;
+    if (zscore < -volParams.zscoreThreshold) direction = 'long';
+    else if (zscore > volParams.zscoreThreshold) direction = 'short';
+    else return null;
+
+    // CRITICAL: OFI must confirm direction (stronger filter)
+    const ofiConfirms = (direction === 'long' && ofi > 0.15) || (direction === 'short' && ofi < -0.15);
+    if (!ofiConfirms) {
+      this.emit('log', { type: 'debug', message: `Signal rejected: OFI (${(ofi * 100).toFixed(1)}%) doesn't confirm ${direction}` });
+      return null;
+    }
+    
+    const kalmanDiff = currentPrice - kalmanEstimate;
+    const kalmanConfirms = (direction === 'long' && kalmanDiff < 0) || (direction === 'short' && kalmanDiff > 0);
+
+    const scores = {
+      zscore: Math.min(1.0, absZscore / 4.0),
+      vpin: 1.0 - vpin,
+      kyleLambda: kyleLambda > 0.001 ? 0.5 : 0.8,
+      kalman: kalmanConfirms ? 0.8 : 0.4,
+      volatility: regime === 'normal' ? 0.8 : regime === 'low' ? 0.7 : 0.6,
+      ofi: ofiConfirms ? 0.9 : 0.5,
+      composite: 0
+    };
+
+    scores.composite = scores.zscore * 0.30 + scores.vpin * 0.15 + scores.kyleLambda * 0.10 +
+                       scores.kalman * 0.15 + scores.volatility * 0.10 + scores.ofi * 0.20;
+
+    const confidence = Math.min(1.0, scores.composite + volParams.confidenceBonus);
+    
+    // CRITICAL: Higher confidence threshold (65% minimum)
+    if (confidence < this.minConfidenceThreshold) {
+      this.emit('log', { type: 'debug', message: `Signal rejected: confidence ${(confidence * 100).toFixed(1)}% < ${this.minConfidenceThreshold * 100}%` });
+      return null;
+    }
+    
+    // Update last signal time
+    this.lastSignalTime = now;
+
+    const stopTicks = Math.round(this.baseStopTicks * volParams.stopMultiplier);
+    const targetTicks = Math.round(this.baseTargetTicks * volParams.targetMultiplier);
+    const actualStopTicks = Math.max(6, Math.min(12, stopTicks));
+    const actualTargetTicks = Math.max(actualStopTicks * 1.5, Math.min(24, targetTicks));
+
+    let stopLoss, takeProfit, beBreakeven, profitLockLevel;
+    if (direction === 'long') {
+      stopLoss = currentPrice - actualStopTicks * this.tickSize;
+      takeProfit = currentPrice + actualTargetTicks * this.tickSize;
+      beBreakeven = currentPrice + this.breakevenTicks * this.tickSize;
+      profitLockLevel = currentPrice + (actualTargetTicks * this.profitLockPct) * this.tickSize;
+    } else {
+      stopLoss = currentPrice + actualStopTicks * this.tickSize;
+      takeProfit = currentPrice - actualTargetTicks * this.tickSize;
+      beBreakeven = currentPrice - this.breakevenTicks * this.tickSize;
+      profitLockLevel = currentPrice - (actualTargetTicks * this.profitLockPct) * this.tickSize;
+    }
+
+    const riskReward = actualTargetTicks / actualStopTicks;
+    const trailTriggerTicks = Math.round(actualTargetTicks * 0.5);
+    const trailDistanceTicks = Math.round(actualStopTicks * 0.4);
+
+    let strength = SignalStrength.MODERATE;
+    if (confidence >= 0.85) strength = SignalStrength.VERY_STRONG;
+    else if (confidence >= 0.75) strength = SignalStrength.STRONG;
+    else if (confidence < 0.60) strength = SignalStrength.WEAK;
+
+    const winProb = 0.5 + (confidence - 0.5) * 0.4;
+    const edge = winProb * Math.abs(takeProfit - currentPrice) - (1 - winProb) * Math.abs(currentPrice - stopLoss);
+
+    return {
+      id: uuidv4(),
+      timestamp: Date.now(),
+      symbol: extractBaseSymbol(contractId),
+      contractId,
+      side: direction === 'long' ? OrderSide.BID : OrderSide.ASK,
+      direction,
+      strategy: 'HQX_ULTRA_SCALPING',
+      strength,
+      edge,
+      confidence,
+      entry: currentPrice,
+      entryPrice: currentPrice,
+      stopLoss,
+      takeProfit,
+      riskReward,
+      stopTicks: actualStopTicks,
+      targetTicks: actualTargetTicks,
+      trailTriggerTicks,
+      trailDistanceTicks,
+      beBreakeven,
+      profitLockLevel,
+      zScore: zscore,
+      zScoreExit: this.zscoreExitThreshold,
+      vpinValue: vpin,
+      kyleLambda,
+      kalmanEstimate,
+      volatilityRegime: regime,
+      ofiValue: ofi,
+      models: scores
+    };
+  }
+
+  /**
+   * Check if should exit by Z-Score
+   */
+  shouldExitByZScore(contractId) {
+    const prices = this.priceBuffer.get(contractId);
+    if (!prices || prices.length < 50) return false;
+    const zscore = computeZScore(prices);
+    return Math.abs(zscore) < this.zscoreExitThreshold;
+  }
+
+  /**
+   * Get current model values
+   */
+  getModelValues(contractId) {
+    const prices = this.priceBuffer.get(contractId);
+    const volumes = this.volumeBuffer.get(contractId);
+    const bars = this.barHistory.get(contractId);
+    if (!prices || !volumes || !bars || bars.length < 50) return null;
+
+    return {
+      zscore: computeZScore(prices).toFixed(2),
+      vpin: (computeVPIN(volumes, this.vpinWindow) * 100).toFixed(1) + '%',
+      ofi: (computeOrderFlowImbalance(bars, this.ofiLookback) * 100).toFixed(1) + '%',
+      bars: bars.length
+    };
+  }
+
+  /**
+   * Record trade result - CRITICAL for risk management
+   * @param {number} pnl - Trade P&L (positive or negative)
+   */
+  recordTradeResult(pnl) {
+    // Only record actual trades (not P&L updates)
+    // A trade is considered closed when P&L changes significantly
+    const lastTrade = this.recentTrades[this.recentTrades.length - 1];
+    if (lastTrade && Math.abs(pnl - lastTrade.pnl) < 0.5) {
+      // Same P&L, ignore duplicate
+      return;
+    }
+    
+    this.recentTrades.push({ pnl, timestamp: Date.now() });
+    if (this.recentTrades.length > 100) this.recentTrades.shift();
+    
+    if (pnl > 0) {
+      this.winStreak++;
+      this.lossStreak = 0;
+      this.tradingEnabled = true;  // Re-enable on win
+      this.emit('log', { type: 'info', message: `WIN +$${pnl.toFixed(2)} | Streak: ${this.winStreak}` });
+    } else if (pnl < 0) {
+      this.lossStreak++;
+      this.winStreak = 0;
+      this.emit('log', { type: 'info', message: `LOSS $${pnl.toFixed(2)} | Streak: -${this.lossStreak}` });
+      
+      // Check if we need to pause trading
+      if (this.lossStreak >= this.maxConsecutiveLosses) {
+        this.emit('log', { type: 'info', message: `Max losses reached (${this.lossStreak}). Pausing...` });
+      }
+    }
+  }
+
+  /**
+   * Get bar history
+   */
+  getBarHistory(contractId) {
+    return this.barHistory.get(contractId) || [];
+  }
+  
+  /**
+   * Get analysis state for logging/debugging
+   * @param {string} contractId - Contract ID
+   * @param {number} currentPrice - Current price
+   * @returns {Object} Current strategy state
+   */
+  getAnalysisState(contractId, currentPrice) {
+    const prices = this.priceBuffer.get(contractId);
+    const volumes = this.volumeBuffer.get(contractId);
+    const bars = this.barHistory.get(contractId);
+    
+    if (!prices || !volumes || !bars || bars.length < 20) {
+      return {
+        ready: false,
+        barsProcessed: bars?.length || 0,
+        swingsDetected: 0,
+        activeZones: 0,
+      };
+    }
+    
+    const zscore = computeZScore(prices);
+    const vpin = computeVPIN(volumes, this.vpinWindow);
+    const ofi = computeOrderFlowImbalance(bars, this.ofiLookback);
+    
+    return {
+      ready: bars.length >= 50,
+      barsProcessed: bars.length,
+      swingsDetected: 0,
+      activeZones: 0,
+      zScore: zscore,
+      vpin: vpin,
+      ofi: ofi,
+      tradingEnabled: this.tradingEnabled,
+      lossStreak: this.lossStreak,
+      winStreak: this.winStreak,
+      cooldownRemaining: Math.max(0, this.signalCooldownMs - (Date.now() - this.lastSignalTime)),
+    };
+  }
+  
+  /**
+   * Preload historical bars for faster warmup
+   * @param {string} contractId - Contract ID
+   * @param {Array} histBars - Historical bar data [{timestamp, open, high, low, close, volume}, ...]
+   */
+  preloadBars(contractId, histBars) {
+    if (!histBars || histBars.length === 0) return;
+    
+    if (!this.barHistory.has(contractId)) {
+      this.initialize(contractId);
+    }
+    
+    const bars = this.barHistory.get(contractId);
+    const prices = this.priceBuffer.get(contractId);
+    const volumes = this.volumeBuffer.get(contractId);
+    
+    for (const bar of histBars) {
+      bars.push({
+        timestamp: bar.timestamp,
+        open: bar.open,
+        high: bar.high,
+        low: bar.low,
+        close: bar.close,
+        volume: bar.volume || 1,
+        delta: 0,
+        tickCount: 1
+      });
+      
+      prices.push(bar.close);
+      
+      const barRange = bar.high - bar.low;
+      let buyVol = (bar.volume || 1) * 0.5;
+      let sellVol = (bar.volume || 1) * 0.5;
+      if (barRange > 0) {
+        const closePosition = (bar.close - bar.low) / barRange;
+        buyVol = (bar.volume || 1) * closePosition;
+        sellVol = (bar.volume || 1) * (1 - closePosition);
+      }
+      volumes.push({ buy: buyVol, sell: sellVol });
+    }
+    
+    // Trim to max sizes
+    while (bars.length > 500) bars.shift();
+    while (prices.length > 200) prices.shift();
+    while (volumes.length > 100) volumes.shift();
+    
+    // Set last bar time to now
+    this.lastBarTime.set(contractId, Date.now());
+    
+    this.emit('log', { type: 'info', message: `Preloaded ${histBars.length} bars for ${contractId}` });
+  }
+
+  /**
+   * Reset strategy
+   */
+  reset(contractId) {
+    this.barHistory.set(contractId, []);
+    this.priceBuffer.set(contractId, []);
+    this.volumeBuffer.set(contractId, []);
+    this.tradesBuffer.set(contractId, []);
+    this.atrHistory.set(contractId, []);
+    this.tickBuffer.set(contractId, []);
+    this.lastBarTime.set(contractId, 0);
+    this.kalmanStates.set(contractId, { estimate: 0, errorCovariance: 1.0 });
+  }
+}
+
+// Singleton instance
+const M1 = new HQXUltraScalpingStrategy();
+
+module.exports = { M1, HQXUltraScalpingStrategy, OrderSide, SignalStrength };
