@@ -14,6 +14,7 @@
 
 const chalk = require('chalk');
 const smartLogs = require('./smart-logs');
+const { getContextualMessage } = require('./smart-logs-context');
 
 const CONFIG = { 
   SESSION_LOG_INTERVAL: 10,
@@ -113,34 +114,36 @@ class SmartLogsEngine {
     if (bars >= 10 && !this.warmupLogged) {
       this.warmupLogged = true;
       event = 'warmup';
-      message = `[${sym}] Strategy ready | ${bars} bars | Scanning for setups`;
+      const warmupMsg = getContextualMessage(this.symbolCode, this.strategyId, 'warmup');
+      message = `[${sym}] 2B ready | ${bars} bars | ${warmupMsg}`;
       logType = 'system';
     }
     // EVENT 2: New zone created
     else if (zones > this.lastZones && zones > 0) {
       event = 'new_zone';
-      const liveMsg = smartLogs.getLiveAnalysisLog({ trend, bars, swings, zones, nearZone, setupForming: false });
-      message = `[${sym}] ${price} | Zone #${zones} created | ${liveMsg}`;
+      const signalMsg = getContextualMessage(this.symbolCode, this.strategyId, 'signal');
+      message = `[${sym}] ${price} | Zone #${zones} | ${signalMsg}`;
       logType = 'signal';
     }
     // EVENT 3: New swing detected
     else if (swings > this.lastSwings && swings > 0) {
       event = 'new_swing';
-      const liveMsg = smartLogs.getLiveAnalysisLog({ trend, bars, swings, zones, nearZone, setupForming: false });
-      message = `[${sym}] ${price} | Swing #${swings} | ${liveMsg}`;
+      const scanMsg = getContextualMessage(this.symbolCode, this.strategyId, 'scanning');
+      message = `[${sym}] ${price} | Swing #${swings} | ${scanMsg}`;
     }
     // EVENT 4: Zone approach (price near zone)
     else if (nearZone && !this.lastNearZone && zones > 0) {
       event = 'zone_approach';
-      const liveMsg = smartLogs.getLiveAnalysisLog({ trend, bars, swings, zones, nearZone: true, setupForming: true });
-      message = `[${sym}] ${price} | Approaching zone | ${liveMsg}`;
+      const signalMsg = getContextualMessage(this.symbolCode, this.strategyId, 'signal');
+      message = `[${sym}] ${price} | Zone approach | ${signalMsg}`;
       logType = 'signal';
     }
     // EVENT 5: Bias flip
     else if (this.lastBias && trend !== this.lastBias && trend !== 'neutral' && this.lastBias !== 'neutral') {
       event = 'bias_flip';
       const arrow = trend === 'bullish' ? chalk.green('▲') : chalk.red('▼');
-      message = `[${sym}] ${arrow} Bias: ${this.lastBias} → ${trend} | Delta: ${delta}`;
+      const flipMsg = getContextualMessage(this.symbolCode, this.strategyId, trend);
+      message = `[${sym}] ${arrow} ${this.lastBias} → ${trend} | ${flipMsg}`;
     }
 
     // Update state tracking
@@ -176,33 +179,38 @@ class SmartLogsEngine {
     if (ticks >= CONFIG.QUANT_WARMUP_TICKS && !this.warmupLogged) {
       this.warmupLogged = true;
       event = 'warmup';
-      message = `[${sym}] QUANT models ready | ${ticks} ticks | Z-Score/VPIN/OFI active`;
+      const warmupMsg = getContextualMessage(this.symbolCode, this.strategyId, 'warmup');
+      message = `[${sym}] QUANT ready | ${ticks} ticks | ${warmupMsg}`;
       logType = 'system';
     }
     // EVENT 2: Z-Score regime change
     else if (this.lastZRegime !== null && zRegime !== this.lastZRegime) {
       event = 'z_regime';
-      const liveState = { trend: bias, bars: ticks, swings: absZ >= 1.0 ? 1 : 0, zones: absZ >= 1.5 ? 1 : 0, nearZone: absZ >= 1.5, setupForming: absZ >= 2.0 };
-      const liveMsg = smartLogs.getLiveAnalysisLog(liveState);
+      // Get instrument-specific market context message
+      const marketCtx = bias === 'bullish' ? 'bullish' : bias === 'bearish' ? 'bearish' : 'neutral';
+      const instrumentMsg = getContextualMessage(this.symbolCode, this.strategyId, marketCtx);
       
       if (zRegime === 'extreme') {
         logType = 'signal';
         const dir = zScore < 0 ? 'LONG' : 'SHORT';
-        message = `[${sym}] ${price} | Z: ${zScore.toFixed(1)}σ | ${dir} edge | ${liveMsg}`;
+        const signalMsg = getContextualMessage(this.symbolCode, this.strategyId, 'signal');
+        message = `[${sym}] ${price} | Z: ${zScore.toFixed(1)}σ | ${dir} | ${signalMsg}`;
       } else if (zRegime === 'high') {
         logType = 'signal';
-        message = `[${sym}] ${price} | Z: ${zScore.toFixed(1)}σ approaching | ${liveMsg}`;
+        message = `[${sym}] ${price} | Z: ${zScore.toFixed(1)}σ | ${instrumentMsg}`;
       } else if (zRegime === 'building') {
-        message = `[${sym}] ${price} | Z building (${zScore.toFixed(1)}σ) | ${liveMsg}`;
+        message = `[${sym}] ${price} | Z building (${zScore.toFixed(1)}σ) | ${instrumentMsg}`;
       } else {
-        message = `[${sym}] ${price} | Z normalized | ${liveMsg}`;
+        const scanMsg = getContextualMessage(this.symbolCode, this.strategyId, 'scanning');
+        message = `[${sym}] ${price} | Z normalized | ${scanMsg}`;
       }
     }
     // EVENT 3: Bias flip (OFI direction change)
     else if (this.lastBias !== null && bias !== this.lastBias && bias !== 'neutral' && this.lastBias !== 'neutral') {
       event = 'bias_flip';
       const arrow = bias === 'bullish' ? chalk.green('▲') : chalk.red('▼');
-      message = `[${sym}] ${arrow} OFI flip: ${this.lastBias} → ${bias} | ${(ofi * 100).toFixed(0)}%`;
+      const flipMsg = getContextualMessage(this.symbolCode, this.strategyId, bias);
+      message = `[${sym}] ${arrow} OFI: ${this.lastBias} → ${bias} | ${flipMsg}`;
     }
     // EVENT 4: VPIN toxicity change
     else if (this.lastVpinToxic !== null && vpinToxic !== this.lastVpinToxic) {
@@ -229,10 +237,12 @@ class SmartLogsEngine {
     const now = Date.now();
     if (this.warmupLogged && now - this.lastHeartbeat >= 30000) {
       this.lastHeartbeat = now;
-      const liveMsg = smartLogs.getLiveAnalysisLog({ trend: bias, bars: ticks, swings: 0, zones: 0, nearZone: false, setupForming: false });
+      // Use instrument + strategy contextual message
+      const marketCtx = bias === 'bullish' ? 'bullish' : bias === 'bearish' ? 'bearish' : 'neutral';
+      const ctxMsg = getContextualMessage(this.symbolCode, this.strategyId, marketCtx);
       return {
         type: 'analysis',
-        message: `[${sym}] ${price} | Z: ${zScore.toFixed(1)}σ | OFI: ${(ofi * 100).toFixed(0)}% | ${liveMsg}`,
+        message: `[${sym}] ${price} | Z: ${zScore.toFixed(1)}σ | OFI: ${(ofi * 100).toFixed(0)}% | ${ctxMsg}`,
         logToSession: false
       };
     }
