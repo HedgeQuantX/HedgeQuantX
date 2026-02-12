@@ -1,6 +1,6 @@
 {
   "name": "hedgequantx",
-  "version": "2.9.199",
+  "version": "2.9.200",
   "description": "HedgeQuantX - Prop Futures Trading CLI",
   "main": "src/app.js",
   "bin": {
@@ -45,7 +45,12 @@
     "src/app.js",
     "src/api/",
     "src/config/",
-    "src/lib/",
+    "src/lib/data.js",
+    "src/lib/smart-logs*.js",
+    "src/lib/smart-logs-messages/",
+    "src/lib/m/index.js",
+    "src/lib/m/ultra-scalping.js",
+    "src/lib/m/hqx-2b.js",
     "src/menus/",
     "src/pages/",
     "src/security/",
