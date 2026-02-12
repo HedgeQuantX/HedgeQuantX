@@ -466,9 +466,10 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     process.stdin.setRawMode(true);
     process.stdin.resume();
     const onKey = (str, key) => {
-      // Handle 'x', 'X', or Ctrl+C to stop
+      // Handle 'x', 'X', '$', '£', or Ctrl+C to stop
       const keyName = key?.name?.toLowerCase();
-      if (keyName === 'x' || (key?.ctrl && keyName === 'c')) {
+      const char = str || '';
+      if (keyName === 'x' || char === '$' || char === '£' || (key?.ctrl && keyName === 'c')) {
         running = false;
         stopReason = 'manual';
       }

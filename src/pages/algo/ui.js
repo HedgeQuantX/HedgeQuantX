@@ -301,7 +301,7 @@ class AlgoUI {
     const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     
     const leftText = ` EXECUTION LOG ${spinner}`;
-    const rightText = `[X] STOP `;
+    const rightText = `[X/$] STOP `;
     
     const totalFixed = leftText.length + rightText.length;
     const centerSpace = W - totalFixed;
@@ -310,7 +310,7 @@ class AlgoUI {
     
     const left = ` EXECUTION LOG ${chalk.yellow(spinner)}`;
     const center = ' '.repeat(Math.max(0, centerPadLeft)) + chalk.white(dateStr) + ' '.repeat(Math.max(0, centerPadRight));
-    const right = chalk.yellow('[X] STOP') + ' ';
+    const right = chalk.yellow('[X/$] STOP') + ' ';
     
     this._line(chalk.cyan(BOX.V) + chalk.white.bold(left) + center + right + chalk.cyan(BOX.V));
     this._line(chalk.cyan(BOX.ML + BOX.H.repeat(W) + BOX.MR));
