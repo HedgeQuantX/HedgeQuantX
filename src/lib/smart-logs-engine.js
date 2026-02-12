@@ -15,6 +15,7 @@ const CONFIG = {
   PRICE_CHANGE_TICKS: 4,      // Log when price moves 4+ ticks
   DELTA_CHANGE_THRESHOLD: 200, // Log when delta changes 200+
   ZONE_APPROACH_TICKS: 5,     // Log when within 5 ticks of zone
+  LOG_INTERVAL_SECONDS: 5,    // Log every N seconds with quant data
 };
 
 const SYMBOLS = {
@@ -146,9 +147,11 @@ class SmartLogsEngine {
 
   getLog(state = {}) {
     this.counter++;
-    const { position = 0, delta = 0 } = state;
+    const { position = 0, delta = 0, zScore = 0, vpin = 0, ofi = 0 } = state;
     const sym = getSym(this.symbolCode);
     const price = state.price > 0 ? state.price.toFixed(2) : '-.--';
+    const T = this.strategyId === 'hqx-2b' ? HQX2B : QUANT;
+    const now = Date.now();
 
     // Active position - always log
     if (position !== 0) {
@@ -164,6 +167,40 @@ class SmartLogsEngine {
     // Detect events
     const events = this._detectEvents(state, this.lastState);
     this.lastState = { ...state };
+
+    // For QUANT strategy: use rich messages with Z-score, VPIN, OFI
+    if (this.strategyId === 'ultra-scalping' && state.bars >= 5) {
+      const timeSinceLastLog = now - this.lastLogTime;
+      
+      // Log every 5 seconds with quant metrics
+      if (timeSinceLastLog >= CONFIG.LOG_INTERVAL_SECONDS * 1000) {
+        this.lastLogTime = now;
+        
+        // Use rich QUANT messages with actual metrics
+        const zStr = zScore.toFixed(2);
+        const vpinStr = (vpin * 100).toFixed(0);
+        const ofiStr = (ofi * 100).toFixed(0);
+        
+        // Choose message based on z-score level
+        let message;
+        if (Math.abs(zScore) >= 1.5) {
+          // Near signal threshold - use zones message
+          message = T.zones({ 
+            sym, price, zScore: zStr, vpin: vpinStr, ofi: ofiStr, 
+            ticks: state.tickCount || state.bars 
+          });
+        } else if (Math.abs(zScore) >= 0.8) {
+          // Building - use building message  
+          message = T.building({ sym, ticks: state.tickCount || state.bars });
+        } else {
+          // Neutral - use simpler analysis
+          message = T.priceMove({ sym, price, dir: zScore > 0 ? 'up' : 'down', ticks: Math.abs(zScore).toFixed(1) });
+        }
+        
+        return { type: 'analysis', message, logToSession: this.counter % CONFIG.SESSION_LOG_INTERVAL === 0 };
+      }
+      return null;
+    }
 
     // No events = no log (SILENCE)
     if (events.length === 0) {
