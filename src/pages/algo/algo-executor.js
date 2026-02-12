@@ -395,7 +395,11 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
             return sym.includes(contract.name) || sym.includes(contractId);
           });
           if (pos && pos.quantity !== 0) {
-            currentPosition = pos.quantity;
+            // Validate quantity is reasonable (prevent overflow values)
+            const qty = parseInt(pos.quantity);
+            if (!isNaN(qty) && Math.abs(qty) < 1000) {
+              currentPosition = qty;
+            }
           } else {
             currentPosition = 0;
           }
@@ -489,20 +493,46 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   clearInterval(liveLogInterval);
   
   // Flatten any open position before stopping
-  if (currentPosition !== 0) {
-    ui.addLog('system', `Flattening position: ${currentPosition > 0 ? 'LONG' : 'SHORT'} ${Math.abs(currentPosition)}`);
-    sessionLogger.log('EXIT', `Flattening position: ${currentPosition}`);
+  // Get fresh position from service to avoid stale/corrupted values
+  let positionToFlatten = 0;
+  try {
+    const posResult = await service.getPositions(account.rithmicAccountId || account.accountId);
+    if (posResult.success && posResult.positions) {
+      const pos = posResult.positions.find(p => {
+        const sym = p.contractId || p.symbol || '';
+        return sym.includes(contract.name) || sym.includes(symbolCode);
+      });
+      if (pos && pos.quantity) {
+        const qty = parseInt(pos.quantity);
+        // Validate quantity is reasonable (not overflow)
+        if (!isNaN(qty) && Math.abs(qty) < 1000) {
+          positionToFlatten = qty;
+        }
+      }
+    }
+  } catch (e) {
+    // Use tracked position as fallback, but validate it
+    if (Math.abs(currentPosition) < 1000) {
+      positionToFlatten = currentPosition;
+    }
+  }
+  
+  if (positionToFlatten !== 0) {
+    const side = positionToFlatten > 0 ? 'LONG' : 'SHORT';
+    const size = Math.abs(positionToFlatten);
+    ui.addLog('system', `Flattening position: ${side} ${size}`);
+    sessionLogger.log('EXIT', `Flattening position: ${side} ${size}`);
     try {
       const flattenResult = await service.placeOrder({
         accountId: account.rithmicAccountId || account.accountId,
         symbol: symbolCode,
         exchange: contract.exchange || 'CME',
         type: 2, // Market
-        side: currentPosition > 0 ? 1 : 0, // Sell if long, Buy if short
-        size: Math.abs(currentPosition)
+        side: positionToFlatten > 0 ? 1 : 0, // Sell if long, Buy if short
+        size: size
       });
       if (flattenResult.success) {
-        ui.addLog('fill_' + (currentPosition > 0 ? 'sell' : 'buy'), `Position flattened @ market`);
+        ui.addLog('fill_' + (positionToFlatten > 0 ? 'sell' : 'buy'), `Position flattened @ market`);
         sessionLogger.log('EXIT', `Position flattened successfully`);
       } else {
         ui.addLog('error', `Flatten failed: ${flattenResult.error}`);
