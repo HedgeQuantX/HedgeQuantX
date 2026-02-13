@@ -126,18 +126,15 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     sessionLogger.signal(dir, signal.entry, signal.confidence, signalLog.details);
     
     if (!running) {
-      const riskLog = smartLogs.getRiskCheckLog(false, 'Algo stopped');
-      ui.addLog('risk', riskLog.message);
+      ui.addLog('risk', 'Algo stopped - ignoring signal');
       return;
     }
     if (pendingOrder) {
-      const riskLog = smartLogs.getRiskCheckLog(false, 'Order pending');
-      ui.addLog('risk', riskLog.message);
+      ui.addLog('risk', 'Order pending - wait for fill');
       return;
     }
     if (currentPosition !== 0) {
-      const riskLog = smartLogs.getRiskCheckLog(false, `Position open (${currentPosition})`);
-      ui.addLog('risk', riskLog.message);
+      ui.addLog('risk', `Position open (${currentPosition}) - close first`);
       return;
     }
     
