@@ -74,13 +74,15 @@ const executeMultiSymbol = async ({ service, account, contracts, config, strateg
     // Filter logs - only show important events (swings, zones, signals)
     strategy.on('log', (log) => {
       const msg = log.message || '';
+      // Skip debug logs in UI (too verbose)
+      if (log.type === 'debug') return;
       // Skip bar close logs (too noisy with 5 symbols)
       if (msg.includes('[BAR]')) return;
       // Skip routine pivot checks
       if (msg.includes('Checking pivot')) return;
       // Show swing and zone events
       const prefix = `[${symbolCode}] `;
-      ui.addLog(log.type === 'debug' ? 'debug' : 'analysis', prefix + msg);
+      ui.addLog('analysis', prefix + msg);
     });
   }
   

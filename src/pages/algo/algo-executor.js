@@ -78,7 +78,12 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   sessionLogger.log('CONFIG', `account=${account.accountId} rithmicId=${account.rithmicAccountId || 'N/A'}`);
   
   strategy.on('log', (log) => {
-    const type = log.type === 'debug' ? 'debug' : log.type === 'info' ? 'analysis' : 'system';
+    // Debug logs only go to session file, not UI (too verbose)
+    if (log.type === 'debug') {
+      sessionLogger.log('DEBUG', log.message);
+      return;
+    }
+    const type = log.type === 'info' ? 'analysis' : 'system';
     ui.addLog(type, log.message);
     sessionLogger.log(type.toUpperCase(), log.message);
   });
@@ -352,12 +357,12 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
         if (histBars && histBars.length > 0) {
           strategy.preloadBars(contractId, histBars);
           // Different message for tick-based vs bar-based strategies
-          const isTickBased = strategyId === 'ultra-scalping';
+          const isTickBased = strategyId === 'ultra-scalping' || strategyId === 'hqx-scalping';
           const msg = isTickBased 
-            ? `Warmup data loaded - QUANT models initializing...`
+            ? `Reference data loaded - QUANT tick engine initializing...`
             : `Loaded ${histBars.length} historical bars - ready to trade!`;
           ui.addLog('system', msg);
-          sessionLogger.log('HISTORY', `Preloaded ${histBars.length} bars for warmup`);
+          sessionLogger.log('WARMUP', isTickBased ? `Tick engine warmup with ${histBars.length} ref periods` : `Preloaded ${histBars.length} bars`);
         } else {
           ui.addLog('system', 'No history - warming up with live ticks...');
         }

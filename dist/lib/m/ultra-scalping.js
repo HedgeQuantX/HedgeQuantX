@@ -561,7 +561,8 @@ class HQXUltraScalpingStrategy extends EventEmitter {
     // Set last bar time to now
     this.lastBarTime.set(contractId, Date.now());
     
-    this.emit('log', { type: 'info', message: `Preloaded ${histBars.length} bars for ${contractId}` });
+    // Tick-based strategy uses bars only for warmup reference data (volatility, ranges)
+    this.emit('log', { type: 'info', message: `Reference data loaded (${histBars.length} periods) - tick engine ready` });
   }
 
   /**
