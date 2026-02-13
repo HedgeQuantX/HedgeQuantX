@@ -45,6 +45,9 @@ class DaemonProxyService extends EventEmitter {
     
     /** @type {Object|null} Credentials for direct mode */
     this.credentials = null;
+    
+    /** @type {Map<string, Object>} Cached P&L data for daemon mode */
+    this._pnlCache = new Map();
   }
   
   /**
@@ -192,7 +195,20 @@ class DaemonProxyService extends EventEmitter {
     
     client.on('orderUpdate', (data) => this.emit('orderUpdate', data));
     client.on('positionUpdate', (data) => this.emit('positionUpdate', data));
-    client.on('pnlUpdate', (data) => this.emit('pnlUpdate', data));
+    
+    // Cache P&L data for sync getAccountPnL calls
+    client.on('pnlUpdate', (data) => {
+      if (data && data.accountId) {
+        this._pnlCache.set(data.accountId, {
+          pnl: data.dayPnl ?? data.pnl ?? null,
+          openPnl: data.openPositionPnl ?? data.openPnl ?? null,
+          closedPnl: data.closedPositionPnl ?? data.closedPnl ?? null,
+          balance: data.accountBalance ?? data.balance ?? null,
+        });
+      }
+      this.emit('pnlUpdate', data);
+    });
+    
     client.on('fill', (data) => this.emit('fill', data));
     client.on('marketData', (data) => this.emit('marketData', data));
     client.on('rithmicDisconnected', (data) => this.emit('disconnected', data));
@@ -248,8 +264,15 @@ class DaemonProxyService extends EventEmitter {
     if (!this._backend) return { pnl: null, openPnl: null, closedPnl: null, balance: null };
     
     if (this._mode === 'daemon') {
-      // For daemon, we need to make async call but this is sync interface
-      // Return cached value or null
+      // Return cached P&L from pnlUpdate events
+      const cached = this._pnlCache.get(accountId);
+      if (cached) return cached;
+      
+      // Try without account ID (some events don't include it)
+      if (this._pnlCache.size === 1) {
+        return this._pnlCache.values().next().value;
+      }
+      
       return { pnl: null, openPnl: null, closedPnl: null, balance: null };
     }
     return this._backend.getAccountPnL(accountId);

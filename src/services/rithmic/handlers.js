@@ -222,11 +222,33 @@ const handleNewOrderResponse = (service, data) => {
     const res = proto.decode('ResponseNewOrder', data);
     
     const isAccepted = res.rpCode?.[0] === '0';
-    const rejectReason = res.rpCode?.[1] || res.rqHandlerRpCode?.[1] || 'Unknown';
     
-    // Log rejection details for debugging
+    // Build rejection reason from rpCode array
+    // rpCode is typically ['code', 'message'] or just ['code']
+    let rejectReason = null;
     if (!isAccepted) {
-      console.log('[Rithmic] Order rejected:', rejectReason, '| rpCode:', res.rpCode, '| rqHandlerRpCode:', res.rqHandlerRpCode);
+      // Try to get the error message from rpCode[1] or rqHandlerRpCode[1]
+      const rpMsg = res.rpCode?.slice(1).join(' ') || '';
+      const rqMsg = res.rqHandlerRpCode?.slice(1).join(' ') || '';
+      rejectReason = rpMsg || rqMsg || null;
+      
+      // If no message, interpret the code
+      if (!rejectReason && res.rpCode?.[0]) {
+        const codeMap = {
+          '1': 'Invalid request',
+          '2': 'Invalid account',
+          '3': 'Invalid symbol',
+          '4': 'Invalid quantity',
+          '5': 'Insufficient buying power',
+          '6': 'Market closed',
+          '7': 'Order rejected by risk system',
+          '8': 'Position limit exceeded',
+          '9': 'Rate limit exceeded',
+        };
+        rejectReason = codeMap[res.rpCode[0]] || `Gateway rejected (code: ${res.rpCode[0]})`;
+      }
+      
+      console.log('[Rithmic] Gateway rejection:', rejectReason, '| rpCode:', res.rpCode, '| rqHandlerRpCode:', res.rqHandlerRpCode);
     }
     
     const order = {
@@ -235,7 +257,7 @@ const handleNewOrderResponse = (service, data) => {
       exchange: res.exchange || 'CME',
       notifyType: isAccepted ? 1 : 6, // 1=STATUS (accepted), 6=REJECT
       status: isAccepted ? 2 : 6,
-      text: isAccepted ? null : rejectReason,
+      text: rejectReason,
       rpCode: res.rpCode,
       userMsg: res.userMsg,
     };
@@ -378,6 +400,25 @@ const handleExchangeNotification = (service, data) => {
     const res = proto.decode('ExchangeOrderNotification', data);
     debug('Exchange notification:', res.notifyType, res.symbol, res.status);
     
+    // Build rejection text from available fields
+    // Priority: text > reportText > remarks > status code interpretation
+    let rejectText = res.text || res.reportText || res.remarks || null;
+    if (!rejectText && res.notifyType === 6) {
+      // Map common Rithmic status codes to human-readable messages
+      const statusMap = {
+        '1': 'Order pending',
+        '2': 'Order working',
+        '3': 'Order filled',
+        '4': 'Order partially filled',
+        '5': 'Order rejected by exchange',
+        '6': 'Order cancelled',
+        '7': 'Order expired',
+        '8': 'Order suspended',
+      };
+      rejectText = statusMap[res.status] || `Exchange rejected (code: ${res.status || 'unknown'})`;
+      console.log('[Rithmic] Exchange rejection:', rejectText, '| status:', res.status, '| symbol:', res.symbol);
+    }
+    
     // Emit orderNotification for placeOrder listener
     // This is critical for order tracking
     const orderNotif = {
@@ -392,7 +433,7 @@ const handleExchangeNotification = (service, data) => {
       avgFillPrice: res.avgFillPrice ? parseFloat(res.avgFillPrice) : null,
       totalFillSize: res.totalFillSize ? parseInt(res.totalFillSize) : null,
       confirmedSize: res.confirmedSize ? parseInt(res.confirmedSize) : null,
-      text: res.text || res.reportText,
+      text: rejectText,
       userMsg: res.userTag ? [res.userTag] : null,
     };
     service.emit('orderNotification', orderNotif);
