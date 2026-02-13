@@ -145,11 +145,18 @@ const placeOrder = async (service, orderData) => {
             orderTag,
           });
         } else if (status === 5 || status === 6) {
+          // Extract rejection reason from rpCode[1] if available
+          const rpCode = order.rpCode;
+          let errorMsg = `Order rejected: status ${status}`;
+          if (rpCode && Array.isArray(rpCode) && rpCode.length > 1 && rpCode[1]) {
+            errorMsg = `Order rejected: ${rpCode[1]}`;
+          }
           resolve({
             success: false,
-            error: `Order rejected: status ${status}`,
+            error: errorMsg,
             orderId: order.basketId,
             orderTag,
+            rpCode,
           });
         }
       }
@@ -167,6 +174,11 @@ const placeOrder = async (service, orderData) => {
       const routeInfo = routes.get(exchange);
       tradeRoute = routeInfo ? routeInfo.tradeRoute : 
                    routes.values().next().value?.tradeRoute || null;
+    }
+    
+    // Warn if no trade route - Rithmic will reject the order
+    if (!tradeRoute) {
+      DEBUG && console.log('[Orders] WARNING: No trade route for', exchange, '- order may be rejected');
     }
     
     // HFT: Reuse template and mutate (faster than object spread)

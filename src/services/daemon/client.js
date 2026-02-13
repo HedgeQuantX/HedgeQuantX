@@ -43,6 +43,21 @@ class DaemonClient extends EventEmitter {
     
     /** @type {Object|null} Cached daemon info */
     this.daemonInfo = null;
+    
+    /** @type {boolean} Auto-reconnect enabled */
+    this.autoReconnect = true;
+    
+    /** @type {number} Reconnect attempts */
+    this.reconnectAttempts = 0;
+    
+    /** @type {number} Max reconnect attempts */
+    this.maxReconnectAttempts = 10;
+    
+    /** @type {NodeJS.Timeout|null} Reconnect timer */
+    this.reconnectTimer = null;
+    
+    /** @type {boolean} Intentionally disconnecting */
+    this._disconnecting = false;
   }
   
   /**
@@ -64,6 +79,9 @@ class DaemonClient extends EventEmitter {
           this.daemonInfo = await this._request(MSG_TYPE.HANDSHAKE, null, TIMEOUTS.HANDSHAKE);
           log.debug('Handshake complete', this.daemonInfo);
           
+          // Reset reconnect attempts on successful connection
+          this.reconnectAttempts = 0;
+          
           // Start ping interval
           this._startPing();
           
@@ -84,8 +102,14 @@ class DaemonClient extends EventEmitter {
       
       this.socket.on('close', () => {
         log.debug('Disconnected from daemon');
+        const wasConnected = this.connected;
         this._cleanup();
         this.emit('disconnected');
+        
+        // Auto-reconnect if enabled and not intentionally disconnecting
+        if (wasConnected && this.autoReconnect && !this._disconnecting) {
+          this._scheduleReconnect();
+        }
       });
       
       this.socket.on('error', (err) => {
@@ -113,16 +137,28 @@ class DaemonClient extends EventEmitter {
   
   /**
    * Disconnect from daemon
+   * @param {boolean} [permanent=false] - If true, disable auto-reconnect
    */
-  disconnect() {
+  disconnect(permanent = false) {
+    this._disconnecting = true;
+    if (permanent) {
+      this.autoReconnect = false;
+    }
+    
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    
     if (this.socket) {
       this.socket.destroy();
     }
     this._cleanup();
+    this._disconnecting = false;
   }
   
   /**
-   * Cleanup state
+   * Cleanup state (does NOT clear reconnect state)
    */
   _cleanup() {
     this.connected = false;
@@ -138,6 +174,18 @@ class DaemonClient extends EventEmitter {
   }
   
   /**
+   * Enable/disable auto-reconnect
+   * @param {boolean} enable
+   */
+  setAutoReconnect(enable) {
+    this.autoReconnect = enable;
+    if (!enable && this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+  
+  /**
    * Start ping interval
    */
   _startPing() {
@@ -145,10 +193,47 @@ class DaemonClient extends EventEmitter {
       try {
         await this._request(MSG_TYPE.PING, null, TIMEOUTS.PING_TIMEOUT);
       } catch (err) {
-        log.warn('Ping failed, disconnecting');
-        this.disconnect();
+        log.warn('Ping failed, will auto-reconnect');
+        // Don't call disconnect() - let socket close trigger reconnect
+        if (this.socket) {
+          this.socket.destroy();
+        }
       }
     }, TIMEOUTS.PING_INTERVAL);
+  }
+  
+  /**
+   * Schedule auto-reconnect with exponential backoff
+   */
+  _scheduleReconnect() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+    }
+    
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      log.error('Max reconnect attempts reached, giving up');
+      this.emit('reconnectFailed');
+      return;
+    }
+    
+    // Exponential backoff: 1s, 2s, 4s, 8s... max 30s
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+    this.reconnectAttempts++;
+    
+    log.debug(`Scheduling reconnect in ${delay}ms (attempt ${this.reconnectAttempts})`);
+    
+    this.reconnectTimer = setTimeout(async () => {
+      this.reconnectTimer = null;
+      log.debug('Attempting reconnect...');
+      
+      const success = await this.connect();
+      if (success) {
+        log.debug('Reconnected successfully');
+        this.reconnectAttempts = 0;
+        this.emit('reconnected');
+      }
+      // If failed, the connect() will trigger another close -> scheduleReconnect
+    }, delay);
   }
   
   /**
