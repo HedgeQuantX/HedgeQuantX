@@ -309,14 +309,13 @@ async function startDaemonBackground() {
   // Install daemon to isolated directory first
   const installed = installDaemon();
   if (!installed) {
-    log.error('Failed to install daemon');
-    return false;
+    log.warn('Failed to install daemon to isolated dir, using direct mode');
+    return startDaemonDirect();
   }
   
   // Check if isolated daemon entry exists
   if (!fs.existsSync(DAEMON_ENTRY)) {
-    log.error('Daemon entry not found', { path: DAEMON_ENTRY });
-    // Fallback to direct execution
+    log.warn('Daemon entry not found, using direct mode', { path: DAEMON_ENTRY });
     return startDaemonDirect();
   }
   
@@ -338,7 +337,7 @@ async function startDaemonBackground() {
     let attempts = 0;
     const maxAttempts = 30;
     
-    const check = setInterval(() => {
+    const check = setInterval(async () => {
       attempts++;
       
       if (isDaemonRunning()) {
@@ -347,8 +346,10 @@ async function startDaemonBackground() {
         resolve(true);
       } else if (attempts >= maxAttempts) {
         clearInterval(check);
-        log.error('Daemon failed to start');
-        resolve(false);
+        log.warn('Isolated daemon failed to start, trying direct mode');
+        // Fallback to direct mode
+        const directResult = await startDaemonDirect();
+        resolve(directResult);
       }
     }, 100);
   });
