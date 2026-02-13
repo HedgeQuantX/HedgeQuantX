@@ -221,19 +221,31 @@ const handleNewOrderResponse = (service, data) => {
   try {
     const res = proto.decode('ResponseNewOrder', data);
     
+    // Log full response for debugging
+    console.log('[Rithmic] ResponseNewOrder:', JSON.stringify(res));
+    
     const isAccepted = res.rpCode?.[0] === '0';
     
     // Build rejection reason from rpCode array
-    // rpCode is typically ['code', 'message'] or just ['code']
     let rejectReason = null;
-    if (!isAccepted) {
-      // Try to get the error message from rpCode[1] or rqHandlerRpCode[1]
-      const rpMsg = res.rpCode?.slice(1).join(' ') || '';
-      const rqMsg = res.rqHandlerRpCode?.slice(1).join(' ') || '';
-      rejectReason = rpMsg || rqMsg || null;
+    if (!isAccepted && res.rpCode) {
+      // rpCode can be ['0'] for success or ['code', 'message', ...] for errors
+      // Join all parts after the code for the full message
+      const allCodes = Array.isArray(res.rpCode) ? res.rpCode : [res.rpCode];
+      const rqCodes = Array.isArray(res.rqHandlerRpCode) ? res.rqHandlerRpCode : [];
       
-      // If no message, interpret the code
-      if (!rejectReason && res.rpCode?.[0]) {
+      // Get message from rpCode (skip first element which is the code)
+      const rpMsg = allCodes.slice(1).join(' ').trim();
+      const rqMsg = rqCodes.slice(1).join(' ').trim();
+      
+      // Use the message if available
+      if (rpMsg) {
+        rejectReason = rpMsg;
+      } else if (rqMsg) {
+        rejectReason = rqMsg;
+      } else {
+        // Map numeric codes to messages
+        const code = allCodes[0];
         const codeMap = {
           '1': 'Invalid request',
           '2': 'Invalid account',
@@ -245,17 +257,17 @@ const handleNewOrderResponse = (service, data) => {
           '8': 'Position limit exceeded',
           '9': 'Rate limit exceeded',
         };
-        rejectReason = codeMap[res.rpCode[0]] || `Gateway rejected (code: ${res.rpCode[0]})`;
+        rejectReason = codeMap[code] || `Gateway rejected (code: ${code})`;
       }
       
-      console.log('[Rithmic] Gateway rejection:', rejectReason, '| rpCode:', res.rpCode, '| rqHandlerRpCode:', res.rqHandlerRpCode);
+      console.log('[Rithmic] Order REJECTED:', rejectReason);
     }
     
     const order = {
       basketId: res.basketId || null,
       symbol: res.symbol,
       exchange: res.exchange || 'CME',
-      notifyType: isAccepted ? 1 : 6, // 1=STATUS (accepted), 6=REJECT
+      notifyType: isAccepted ? 1 : 6,
       status: isAccepted ? 2 : 6,
       text: rejectReason,
       rpCode: res.rpCode,
