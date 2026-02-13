@@ -8,6 +8,16 @@
  * - Uses smartLogs.getLiveAnalysisLog() for varied, non-repetitive messages
  * 
  * Only logs when something SIGNIFICANT happens - no spam, no repetitive messages
+ * 
+ * COLOR SCHEME:
+ * - Symbols: cyan (NQ, ES, CL, GC)
+ * - Prices: white bold
+ * - Bullish/Long: green
+ * - Bearish/Short: red
+ * - Neutral/System: gray/dim
+ * - Signals: yellow/magenta
+ * - Risk/Warnings: red bold
+ * - Values: blue (Z-Score, VPIN, OFI numbers)
  */
 
 'use strict';
@@ -15,6 +25,39 @@
 const chalk = require('chalk');
 const smartLogs = require('./smart-logs');
 const { getContextualMessage } = require('./smart-logs-context');
+
+// Color helpers for consistent styling
+const C = {
+  // Symbols & identifiers
+  sym: (s) => chalk.cyan.bold(s),
+  
+  // Prices
+  price: (p) => chalk.white.bold(p),
+  
+  // Direction
+  long: (s) => chalk.green.bold(s),
+  short: (s) => chalk.red.bold(s),
+  bull: (s) => chalk.green(s),
+  bear: (s) => chalk.red(s),
+  
+  // Values & metrics
+  val: (v) => chalk.blue(v),
+  valHigh: (v) => chalk.magenta.bold(v),
+  
+  // Status
+  ok: (s) => chalk.green(s),
+  warn: (s) => chalk.yellow(s),
+  danger: (s) => chalk.red.bold(s),
+  
+  // System/neutral
+  dim: (s) => chalk.dim(s),
+  info: (s) => chalk.gray(s),
+  
+  // Special
+  signal: (s) => chalk.yellow.bold(s),
+  zone: (s) => chalk.magenta(s),
+  regime: (s) => chalk.cyan(s),
+};
 
 const CONFIG = { 
   SESSION_LOG_INTERVAL: 10,
@@ -84,11 +127,14 @@ class SmartLogsEngine {
 
     // Active position - same for all strategies
     if (position !== 0) {
-      const side = position > 0 ? 'LONG' : 'SHORT';
-      const flow = (position > 0 && delta > 0) || (position < 0 && delta < 0) ? 'FAVOR' : 'ADVERSE';
+      const isLong = position > 0;
+      const side = isLong ? C.long('LONG') : C.short('SHORT');
+      const flowFavor = (isLong && delta > 0) || (!isLong && delta < 0);
+      const flowLabel = flowFavor ? C.ok('FAVOR') : C.danger('ADVERSE');
+      const deltaStr = delta > 0 ? C.bull(`+${delta}`) : C.bear(`${delta}`);
       return {
         type: 'trade',
-        message: `[${sym}] ${side} ACTIVE @ ${price} | Delta: ${delta > 0 ? '+' : ''}${delta} | Flow: ${flow}`,
+        message: `[${C.sym(sym)}] ${side} ACTIVE @ ${C.price(price)} | Delta: ${deltaStr} | Flow: ${flowLabel}`,
         logToSession: true
       };
     }
@@ -116,35 +162,37 @@ class SmartLogsEngine {
       this.warmupLogged = true;
       event = 'warmup';
       const warmupMsg = getContextualMessage(this.symbolCode, this.strategyId, 'warmup');
-      message = `[${sym}] 2B ready | ${bars} bars | ${warmupMsg}`;
+      message = `[${C.sym(sym)}] ${C.ok('2B ready')} | ${C.val(bars)} bars | ${C.dim(warmupMsg)}`;
       logType = 'system';
     }
     // EVENT 2: New zone created
     else if (zones > this.lastZones && zones > 0) {
       event = 'new_zone';
       const signalMsg = getContextualMessage(this.symbolCode, this.strategyId, 'signal');
-      message = `[${sym}] ${price} | Zone #${zones} | ${signalMsg}`;
+      message = `[${C.sym(sym)}] ${C.price(price)} | ${C.zone('Zone #' + zones)} | ${C.signal(signalMsg)}`;
       logType = 'signal';
     }
     // EVENT 3: New swing detected
     else if (swings > this.lastSwings && swings > 0) {
       event = 'new_swing';
       const scanMsg = getContextualMessage(this.symbolCode, this.strategyId, 'scanning');
-      message = `[${sym}] ${price} | Swing #${swings} | ${scanMsg}`;
+      message = `[${C.sym(sym)}] ${C.price(price)} | ${C.info('Swing #' + swings)} | ${C.dim(scanMsg)}`;
     }
     // EVENT 4: Zone approach (price near zone)
     else if (nearZone && !this.lastNearZone && zones > 0) {
       event = 'zone_approach';
       const signalMsg = getContextualMessage(this.symbolCode, this.strategyId, 'signal');
-      message = `[${sym}] ${price} | Zone approach | ${signalMsg}`;
+      message = `[${C.sym(sym)}] ${C.price(price)} | ${C.warn('Zone approach')} | ${C.signal(signalMsg)}`;
       logType = 'signal';
     }
     // EVENT 5: Bias flip
     else if (this.lastBias && trend !== this.lastBias && trend !== 'neutral' && this.lastBias !== 'neutral') {
       event = 'bias_flip';
-      const arrow = trend === 'bullish' ? chalk.green('▲') : chalk.red('▼');
+      const arrow = trend === 'bullish' ? C.bull('▲') : C.bear('▼');
+      const oldBias = this.lastBias === 'bullish' ? C.bull(this.lastBias) : C.bear(this.lastBias);
+      const newBias = trend === 'bullish' ? C.bull(trend) : C.bear(trend);
       const flipMsg = getContextualMessage(this.symbolCode, this.strategyId, trend);
-      message = `[${sym}] ${arrow} ${this.lastBias} → ${trend} | ${flipMsg}`;
+      message = `[${C.sym(sym)}] ${arrow} ${oldBias} → ${newBias} | ${C.dim(flipMsg)}`;
     }
 
     // Update state tracking
@@ -176,12 +224,22 @@ class SmartLogsEngine {
     let logType = 'analysis';
     let message = null;
 
+    // Helper for Z-Score color
+    const zColor = (z) => {
+      const absVal = Math.abs(z);
+      const formatted = `${z.toFixed(1)}σ`;
+      if (absVal >= CONFIG.Z_EXTREME) return C.valHigh(formatted);
+      if (absVal >= CONFIG.Z_HIGH) return C.warn(formatted);
+      if (absVal >= CONFIG.Z_BUILDING) return C.val(formatted);
+      return C.dim(formatted);
+    };
+
     // EVENT 1: Warmup complete (250 ticks for QUANT models)
     if (ticks >= CONFIG.QUANT_WARMUP_TICKS && !this.warmupLogged) {
       this.warmupLogged = true;
       event = 'warmup';
       const warmupMsg = getContextualMessage(this.symbolCode, this.strategyId, 'warmup');
-      message = `[${sym}] QUANT ready | ${ticks} ticks | ${warmupMsg}`;
+      message = `[${C.sym(sym)}] ${C.ok('QUANT ready')} | ${C.val(ticks)} ticks | ${C.dim(warmupMsg)}`;
       logType = 'system';
     }
     // EVENT 2: Z-Score regime change
@@ -193,34 +251,37 @@ class SmartLogsEngine {
       
       if (zRegime === 'extreme') {
         logType = 'signal';
-        const dir = zScore < 0 ? 'LONG' : 'SHORT';
+        const dir = zScore < 0 ? C.long('LONG') : C.short('SHORT');
         const signalMsg = getContextualMessage(this.symbolCode, this.strategyId, 'signal');
-        message = `[${sym}] ${price} | Z: ${zScore.toFixed(1)}σ | ${dir} | ${signalMsg}`;
+        message = `[${C.sym(sym)}] ${C.price(price)} | Z: ${zColor(zScore)} ${C.signal('EXTREME')} | ${dir} | ${C.signal(signalMsg)}`;
       } else if (zRegime === 'high') {
         logType = 'signal';
-        message = `[${sym}] ${price} | Z: ${zScore.toFixed(1)}σ | ${instrumentMsg}`;
+        message = `[${C.sym(sym)}] ${C.price(price)} | Z: ${zColor(zScore)} ${C.warn('HIGH')} | ${C.dim(instrumentMsg)}`;
       } else if (zRegime === 'building') {
-        message = `[${sym}] ${price} | Z building (${zScore.toFixed(1)}σ) | ${instrumentMsg}`;
+        message = `[${C.sym(sym)}] ${C.price(price)} | Z: ${zColor(zScore)} ${C.info('building')} | ${C.dim(instrumentMsg)}`;
       } else {
         const scanMsg = getContextualMessage(this.symbolCode, this.strategyId, 'scanning');
-        message = `[${sym}] ${price} | Z normalized | ${scanMsg}`;
+        message = `[${C.sym(sym)}] ${C.price(price)} | Z: ${C.ok('normalized')} | ${C.dim(scanMsg)}`;
       }
     }
     // EVENT 3: Bias flip (OFI direction change)
     else if (this.lastBias !== null && bias !== this.lastBias && bias !== 'neutral' && this.lastBias !== 'neutral') {
       event = 'bias_flip';
-      const arrow = bias === 'bullish' ? chalk.green('▲') : chalk.red('▼');
+      const arrow = bias === 'bullish' ? C.bull('▲') : C.bear('▼');
+      const oldBias = this.lastBias === 'bullish' ? C.bull(this.lastBias) : C.bear(this.lastBias);
+      const newBias = bias === 'bullish' ? C.bull(bias) : C.bear(bias);
       const flipMsg = getContextualMessage(this.symbolCode, this.strategyId, bias);
-      message = `[${sym}] ${arrow} OFI: ${this.lastBias} → ${bias} | ${flipMsg}`;
+      message = `[${C.sym(sym)}] ${arrow} OFI: ${oldBias} → ${newBias} | ${C.dim(flipMsg)}`;
     }
     // EVENT 4: VPIN toxicity change
     else if (this.lastVpinToxic !== null && vpinToxic !== this.lastVpinToxic) {
       event = 'vpin';
+      const vpinPct = (vpin * 100).toFixed(0);
       if (vpinToxic) {
-        message = `[${sym}] ${price} | VPIN toxic (${(vpin * 100).toFixed(0)}%) - informed flow detected`;
+        message = `[${C.sym(sym)}] ${C.price(price)} | VPIN: ${C.danger(vpinPct + '%')} ${C.danger('TOXIC')} - informed flow`;
         logType = 'risk';
       } else {
-        message = `[${sym}] ${price} | VPIN clean (${(vpin * 100).toFixed(0)}%) - normal flow`;
+        message = `[${C.sym(sym)}] ${C.price(price)} | VPIN: ${C.ok(vpinPct + '%')} ${C.ok('clean')} - normal flow`;
       }
     }
 
