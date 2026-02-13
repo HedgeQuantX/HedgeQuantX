@@ -147,4 +147,68 @@ const rithmicMenu = async () => {
   }
 };
 
-module.exports = { loginPrompt, rithmicMenu };
+/**
+ * Show propfirm selection menu and return selected propfirm
+ * @returns {Promise<{key: string, name: string}|null>}
+ */
+const showPropfirmSelection = async () => {
+  const boxWidth = getLogoWidth();
+  const innerWidth = boxWidth - 2;
+  const numCols = 3;
+  
+  const propfirms = PROPFIRM_CHOICES;
+  const numbered = propfirms.map((pf, i) => ({ num: i + 1, key: pf.value, name: pf.name }));
+  const maxNameLen = Math.max(...numbered.map(n => n.name.length));
+  const itemWidth = 4 + 1 + maxNameLen;
+  const gap = 3;
+  
+  console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
+  console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PROPFIRM', innerWidth)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
+  
+  const rows = Math.ceil(numbered.length / numCols);
+  for (let row = 0; row < rows; row++) {
+    let lineParts = [];
+    for (let col = 0; col < numCols; col++) {
+      const idx = row + col * rows;
+      if (idx < numbered.length) {
+        const item = numbered[idx];
+        const numStr = item.num.toString().padStart(2, ' ');
+        const namePadded = item.name.padEnd(maxNameLen);
+        lineParts.push({ num: `[${numStr}]`, name: namePadded });
+      } else {
+        lineParts.push(null);
+      }
+    }
+    
+    let content = '';
+    for (let i = 0; i < lineParts.length; i++) {
+      if (lineParts[i]) {
+        content += chalk.cyan(lineParts[i].num) + ' ' + chalk.white(lineParts[i].name);
+      } else {
+        content += ' '.repeat(itemWidth);
+      }
+      if (i < lineParts.length - 1) content += ' '.repeat(gap);
+    }
+    
+    const contentLen = content.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const leftPad = Math.floor((innerWidth - contentLen) / 2);
+    const rightPad = innerWidth - contentLen - leftPad;
+    console.log(chalk.cyan('║') + ' '.repeat(leftPad) + content + ' '.repeat(rightPad) + chalk.cyan('║'));
+  }
+  
+  console.log(chalk.cyan('╠' + '─'.repeat(innerWidth) + '╣'));
+  console.log(chalk.cyan('║') + chalk.red(centerText('[X] EXIT', innerWidth)) + chalk.cyan('║'));
+  console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
+  
+  const input = await prompts.textInput(chalk.cyan('SELECT (1-' + numbered.length + '/X): '));
+  
+  if (!input || input.toLowerCase() === 'x') return null;
+  
+  const action = parseInt(input);
+  if (isNaN(action) || action < 1 || action > numbered.length) return null;
+  
+  return numbered[action - 1];
+};
+
+module.exports = { loginPrompt, rithmicMenu, showPropfirmSelection };

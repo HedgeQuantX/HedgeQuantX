@@ -1,6 +1,10 @@
 /**
- * @fileoverview Main application router - Rithmic Only
+ * @fileoverview Main application router - Rithmic Only (Daemon Mode)
  * @module app
+ * 
+ * The TUI always uses the daemon for Rithmic connections.
+ * Daemon is auto-started in background if not running.
+ * This allows TUI updates without losing connection.
  */
 
 const chalk = require('chalk');
@@ -10,6 +14,7 @@ const { connections } = require('./services');
 const { getLogoWidth, centerText, prepareStdin, clearScreen } = require('./ui');
 const { logger, prompts } = require('./utils');
 const { setCachedStats, clearCachedStats } = require('./services/stats-cache');
+const { startDaemonBackground, isDaemonRunning, getDaemonClient } = require('./services/daemon');
 
 const log = logger.scope('App');
 
@@ -22,9 +27,54 @@ const { aiAgentsMenu, getActiveAgentCount } = require('./pages/ai-agents');
 // Menus
 const { rithmicMenu, dashboardMenu, handleUpdate } = require('./menus');
 const { PROPFIRM_CHOICES } = require('./config');
+const { showPropfirmSelection } = require('./menus/connect');
 
 /** @type {Object|null} */
 let currentService = null;
+
+/** @type {Object|null} Daemon client for IPC */
+let daemonClient = null;
+
+/**
+ * Create a proxy service that uses daemon for all operations
+ * @param {Object} client - DaemonClient instance
+ * @param {Object} propfirm - Propfirm info
+ * @returns {Object} Service-like object
+ */
+function createDaemonProxyService(client, propfirm) {
+  const checkMarketHours = () => {
+    const now = new Date(), utcDay = now.getUTCDay(), utcHour = now.getUTCHours();
+    const isDST = now.getTimezoneOffset() < Math.max(
+      new Date(now.getFullYear(), 0, 1).getTimezoneOffset(),
+      new Date(now.getFullYear(), 6, 1).getTimezoneOffset());
+    const ctOffset = isDST ? 5 : 6, ctHour = (utcHour - ctOffset + 24) % 24;
+    const ctDay = utcHour < ctOffset ? (utcDay + 6) % 7 : utcDay;
+    if (ctDay === 6) return { isOpen: false, message: 'Market closed (Saturday)' };
+    if (ctDay === 0 && ctHour < 17) return { isOpen: false, message: 'Market opens Sunday 5PM CT' };
+    if (ctDay === 5 && ctHour >= 16) return { isOpen: false, message: 'Market closed (Friday 4PM CT)' };
+    if (ctHour === 16 && ctDay >= 1 && ctDay <= 4) return { isOpen: false, message: 'Daily maintenance' };
+    return { isOpen: true, message: 'Market is open' };
+  };
+  
+  return {
+    propfirm, propfirmKey: propfirm?.key, accounts: [], credentials: null,
+    async getTradingAccounts() { return client.getTradingAccounts(); },
+    async getPositions() { return client.getPositions(); },
+    async getOrders() { return client.getOrders(); },
+    async placeOrder(data) { return client.placeOrder(data); },
+    async cancelOrder(orderId) { return client.cancelOrder(orderId); },
+    async cancelAllOrders(accountId) { return client.cancelAllOrders(accountId); },
+    async closePosition(accountId, symbol) { return client.closePosition(accountId, symbol); },
+    async getContracts() { return client.getContracts(); },
+    async searchContracts(search) { return client.searchContracts(search); },
+    getAccountPnL() { return { pnl: null, openPnl: null, closedPnl: null, balance: null }; },
+    getToken() { return 'daemon-connected'; },
+    getPropfirm() { return propfirm?.key || 'apex'; },
+    getRithmicCredentials() { return null; },
+    checkMarketHours,
+    async disconnect() { return { success: true }; },
+  };
+}
 
 // ==================== TERMINAL ====================
 
@@ -176,20 +226,92 @@ const run = async () => {
   try {
     log.info('Starting HQX CLI');
     
-    // First launch - show banner then try restore session
+    // First launch - show banner
     await banner();
     
-    const spinner = ora({ text: 'Restoring session...', color: 'cyan' }).start();
+    // ==================== DAEMON AUTO-START ====================
+    // Always ensure daemon is running for persistent connections
+    let spinner = ora({ text: 'Starting daemon...', color: 'cyan' }).start();
     
-    const restored = await connections.restoreFromStorage();
+    if (!isDaemonRunning()) {
+      const daemonStarted = await startDaemonBackground();
+      if (!daemonStarted) {
+        spinner.warn('Daemon failed to start - using direct mode');
+        await new Promise(r => setTimeout(r, 500));
+      } else {
+        spinner.succeed('Daemon started');
+      }
+    } else {
+      spinner.succeed('Daemon running');
+    }
+    
+    // Connect to daemon
+    daemonClient = getDaemonClient();
+    const daemonConnected = await daemonClient.connect();
+    
+    if (!daemonConnected) {
+      log.warn('Could not connect to daemon, falling back to direct mode');
+    }
+    
+    // ==================== SESSION RESTORE ====================
+    spinner = ora({ text: 'Restoring session...', color: 'cyan' }).start();
+    
+    // Try to restore via daemon first
+    let restored = false;
+    if (daemonConnected) {
+      try {
+        const status = await daemonClient.getStatus();
+        
+        if (status.connected) {
+          // Daemon already has a connection, use it
+          const accountsResult = await daemonClient.getTradingAccounts();
+          if (accountsResult.success && accountsResult.accounts?.length > 0) {
+            // Create a proxy service that uses daemon
+            currentService = createDaemonProxyService(daemonClient, status.propfirm);
+            connections.services.push({
+              type: 'rithmic',
+              service: currentService,
+              propfirm: status.propfirm?.name,
+              propfirmKey: status.propfirm?.key,
+              connectedAt: new Date(),
+            });
+            restored = true;
+            spinner.succeed(`Session active: ${status.propfirm?.name} (${accountsResult.accounts.length} accounts)`);
+          }
+        } else {
+          // Daemon not connected, try to restore session via daemon
+          const restoreResult = await daemonClient.restoreSession();
+          if (restoreResult.success) {
+            currentService = createDaemonProxyService(daemonClient, restoreResult.propfirm);
+            connections.services.push({
+              type: 'rithmic',
+              service: currentService,
+              propfirm: restoreResult.propfirm?.name,
+              propfirmKey: restoreResult.propfirm?.key,
+              connectedAt: new Date(),
+            });
+            restored = true;
+            spinner.succeed(`Session restored: ${restoreResult.propfirm?.name} (${restoreResult.accounts?.length || 0} accounts)`);
+          }
+        }
+      } catch (err) {
+        log.warn('Daemon restore failed', { error: err.message });
+      }
+    }
+    
+    // Fallback to direct restore if daemon failed
+    if (!restored) {
+      restored = await connections.restoreFromStorage();
+      if (restored) {
+        const conn = connections.getAll()[0];
+        currentService = conn.service;
+        const accountCount = currentService.accounts?.length || 0;
+        spinner.succeed(`Session restored: ${conn.propfirm} (${accountCount} accounts)`);
+      }
+    }
 
     if (restored) {
-      const conn = connections.getAll()[0];
-      currentService = conn.service;
-      const accountCount = currentService.accounts?.length || 0;
-      spinner.succeed(`Session restored: ${conn.propfirm} (${accountCount} accounts)`);
       await new Promise(r => setTimeout(r, 500));
-      
       const spinner2 = ora({ text: 'Loading dashboard...', color: 'yellow' }).start();
       await refreshStats();
       global.__hqxSpinner = spinner2;
@@ -207,84 +329,42 @@ const run = async () => {
         if (!connections.isConnected()) {
           // Not connected - show banner + propfirm selection
           await banner();
-          // Not connected - show propfirm selection directly
-          const boxWidth = getLogoWidth();
-          const innerWidth = boxWidth - 2;
-          const numCols = 3;
           
-          const propfirms = PROPFIRM_CHOICES;
-          const numbered = propfirms.map((pf, i) => ({ num: i + 1, key: pf.value, name: pf.name }));
-          
-          // Find max name length for alignment
-          const maxNameLen = Math.max(...numbered.map(n => n.name.length));
-          const itemWidth = 4 + 1 + maxNameLen; // [##] + space + name
-          const gap = 3; // gap between columns
-          const totalContentWidth = (itemWidth * numCols) + (gap * (numCols - 1));
-          
-          // New rectangle (banner is always closed)
-          console.log(chalk.cyan('╔' + '═'.repeat(innerWidth) + '╗'));
-          console.log(chalk.cyan('║') + chalk.white.bold(centerText('SELECT PROPFIRM', innerWidth)) + chalk.cyan('║'));
-          console.log(chalk.cyan('╠' + '═'.repeat(innerWidth) + '╣'));
-          
-          const rows = Math.ceil(numbered.length / numCols);
-          for (let row = 0; row < rows; row++) {
-            let lineParts = [];
-            for (let col = 0; col < numCols; col++) {
-              const idx = row + col * rows;
-              if (idx < numbered.length) {
-                const item = numbered[idx];
-                const numStr = item.num.toString().padStart(2, ' ');
-                const namePadded = item.name.padEnd(maxNameLen);
-                lineParts.push({ num: `[${numStr}]`, name: namePadded });
-              } else {
-                lineParts.push(null);
-              }
-            }
-            
-            // Build line content
-            let content = '';
-            for (let i = 0; i < lineParts.length; i++) {
-              if (lineParts[i]) {
-                content += chalk.cyan(lineParts[i].num) + ' ' + chalk.white(lineParts[i].name);
-              } else {
-                content += ' '.repeat(itemWidth);
-              }
-              if (i < lineParts.length - 1) content += ' '.repeat(gap);
-            }
-            
-            // Center the content
-            const contentLen = content.replace(/\x1b\[[0-9;]*m/g, '').length;
-            const leftPad = Math.floor((innerWidth - contentLen) / 2);
-            const rightPad = innerWidth - contentLen - leftPad;
-            console.log(chalk.cyan('║') + ' '.repeat(leftPad) + content + ' '.repeat(rightPad) + chalk.cyan('║'));
-          }
-          
-          console.log(chalk.cyan('╠' + '─'.repeat(innerWidth) + '╣'));
-          console.log(chalk.cyan('║') + chalk.red(centerText('[X] EXIT', innerWidth)) + chalk.cyan('║'));
-          console.log(chalk.cyan('╚' + '═'.repeat(innerWidth) + '╝'));
-          
-          const input = await prompts.textInput(chalk.cyan('SELECT (1-' + numbered.length + '/X): '));
-          
-          if (!input || input.toLowerCase() === 'x') {
+          const selectedPropfirm = await showPropfirmSelection();
+          if (!selectedPropfirm) {
             console.log(chalk.gray('GOODBYE!'));
             process.exit(0);
           }
           
-          const action = parseInt(input);
-          if (!isNaN(action) && action >= 1 && action <= numbered.length) {
-            const selectedPropfirm = numbered[action - 1];
-            const { loginPrompt } = require('./menus/connect');
-            const credentials = await loginPrompt(selectedPropfirm.name);
-            
-            if (credentials) {
-              const spinner = ora({ text: 'CONNECTING TO RITHMIC...', color: 'yellow' }).start();
-              try {
-                // Direct connection to Rithmic (no daemon)
+          const { loginPrompt } = require('./menus/connect');
+          const credentials = await loginPrompt(selectedPropfirm.name);
+          
+          if (credentials) {
+            const spinner = ora({ text: 'CONNECTING TO RITHMIC...', color: 'yellow' }).start();
+            try {
+              let result;
+              
+              // Try daemon connection first (persistent)
+              if (daemonClient?.connected) {
+                result = await daemonClient.login(selectedPropfirm.key, credentials.username, credentials.password);
+                if (result.success) {
+                  currentService = createDaemonProxyService(daemonClient, result.propfirm);
+                  connections.services.push({
+                    type: 'rithmic', service: currentService,
+                    propfirm: selectedPropfirm.name, propfirmKey: selectedPropfirm.key, connectedAt: new Date(),
+                  });
+                  spinner.succeed(`CONNECTED TO ${selectedPropfirm.name.toUpperCase()} (${result.accounts?.length || 0} ACCOUNTS) [DAEMON]`);
+                  await refreshStats();
+                  await new Promise(r => setTimeout(r, 1500));
+                } else {
+                  spinner.fail((result.error || 'AUTHENTICATION FAILED').toUpperCase());
+                  await new Promise(r => setTimeout(r, 2000));
+                }
+              } else {
+                // Fallback to direct connection
                 const { RithmicService } = require('./services/rithmic');
-                
                 const service = new RithmicService(selectedPropfirm.key);
-                const result = await service.login(credentials.username, credentials.password);
-                
+                result = await service.login(credentials.username, credentials.password);
                 if (result.success) {
                   connections.add('rithmic', service, selectedPropfirm.name);
                   spinner.succeed(`CONNECTED TO ${selectedPropfirm.name.toUpperCase()} (${result.accounts?.length || 0} ACCOUNTS)`);
@@ -295,10 +375,10 @@ const run = async () => {
                   spinner.fail((result.error || 'AUTHENTICATION FAILED').toUpperCase());
                   await new Promise(r => setTimeout(r, 2000));
                 }
-              } catch (error) {
-                spinner.fail(`CONNECTION ERROR: ${error.message.toUpperCase()}`);
-                await new Promise(r => setTimeout(r, 2000));
               }
+            } catch (error) {
+              spinner.fail(`CONNECTION ERROR: ${error.message.toUpperCase()}`);
+              await new Promise(r => setTimeout(r, 2000));
             }
           }
         } else {
