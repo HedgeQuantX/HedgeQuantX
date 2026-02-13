@@ -78,10 +78,17 @@ function createDaemonProxyService(client, propfirm, credentials = null) {
       // Return credentials for algo trading market data connection
       if (!storedCredentials) return null;
       const { RITHMIC_ENDPOINTS } = require('./services/rithmic');
+      const { getPropFirm } = require('./config/propfirms');
+      
+      // Get the proper rithmicSystem from propfirm config
+      const propfirmKey = propfirm?.key || 'apex_rithmic';
+      const propfirmConfig = getPropFirm(propfirmKey);
+      const systemName = propfirmConfig?.rithmicSystem || propfirm?.rithmicSystem || propfirm?.name || 'Apex';
+      
       return {
         userId: storedCredentials.username,
         password: storedCredentials.password,
-        systemName: propfirm?.systemName || propfirm?.name || 'Apex',
+        systemName,
         gateway: RITHMIC_ENDPOINTS?.CHICAGO || 'wss://rprotocol.rithmic.com:443',
       };
     },

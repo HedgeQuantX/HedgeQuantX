@@ -54,9 +54,14 @@ function createHandlers(daemon) {
     const result = await daemon.rithmic.login(username, password);
     
     if (result.success) {
+      // Get rithmicSystem from config
+      const { getPropFirm } = require('../../config/propfirms');
+      const propfirmConfig = getPropFirm(propfirmKey);
+      
       daemon.propfirm = {
         key: propfirmKey,
         name: daemon.rithmic.propfirm.name,
+        rithmicSystem: propfirmConfig?.rithmicSystem || daemon.rithmic.propfirm.systemName || 'Apex',
       };
       
       // Save credentials for auto-reconnect
@@ -72,6 +77,7 @@ function createHandlers(daemon) {
         type: 'rithmic',
         propfirm: daemon.propfirm.name,
         propfirmKey,
+        rithmicSystem: daemon.propfirm.rithmicSystem,
         credentials: { username, password },
         accounts: daemon.rithmic.accounts,
       }]);
@@ -116,9 +122,14 @@ function createHandlers(daemon) {
     );
     
     if (result.success) {
+      // Get rithmicSystem from config or session
+      const { getPropFirm } = require('../../config/propfirms');
+      const propfirmConfig = getPropFirm(propfirmKey);
+      
       daemon.propfirm = {
         key: propfirmKey,
         name: daemon.rithmic.propfirm.name,
+        rithmicSystem: propfirmConfig?.rithmicSystem || rithmicSession.rithmicSystem || daemon.rithmic.propfirm.systemName || 'Apex',
       };
       
       // Save credentials for auto-reconnect
@@ -299,6 +310,13 @@ function createHandlers(daemon) {
     
     // Return credentials for algo trading market data
     const { RITHMIC_ENDPOINTS } = require('../rithmic');
+    const { getPropFirm } = require('../../config/propfirms');
+    
+    // Get proper rithmicSystem from config
+    const propfirmKey = rithmicSession.propfirmKey || daemon.propfirm?.key || 'apex_rithmic';
+    const propfirmConfig = getPropFirm(propfirmKey);
+    const systemName = propfirmConfig?.rithmicSystem || daemon.propfirm?.name || rithmicSession.propfirm || 'Apex';
+    
     daemon._send(socket, createMessage(MSG_TYPE.CREDENTIALS, {
       success: true,
       credentials: {
@@ -308,9 +326,10 @@ function createHandlers(daemon) {
       rithmicCredentials: {
         userId: rithmicSession.credentials.username,
         password: rithmicSession.credentials.password,
-        systemName: daemon.propfirm?.name || rithmicSession.propfirm || 'Apex',
+        systemName,
         gateway: RITHMIC_ENDPOINTS?.CHICAGO || 'wss://rprotocol.rithmic.com:443',
       },
+      propfirmKey,
     }, id));
   }
   

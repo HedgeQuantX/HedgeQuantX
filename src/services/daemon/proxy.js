@@ -335,10 +335,16 @@ class DaemonProxyService extends EventEmitter {
     // For daemon mode, return stored credentials
     if (this.credentials && this.propfirmKey) {
       const { RITHMIC_ENDPOINTS } = require('../rithmic');
+      const { getPropFirm } = require('../../config/propfirms');
+      
+      // Get proper rithmicSystem from config
+      const propfirmConfig = getPropFirm(this.propfirmKey);
+      const systemName = propfirmConfig?.rithmicSystem || this.propfirm?.rithmicSystem || 'Apex';
+      
       return {
         userId: this.credentials.username,
         password: this.credentials.password,
-        systemName: this.propfirm?.systemName || 'Apex',
+        systemName,
         gateway: RITHMIC_ENDPOINTS?.CHICAGO || 'wss://rprotocol.rithmic.com:443',
       };
     }
