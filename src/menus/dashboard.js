@@ -71,30 +71,31 @@ const dashboardMenu = async (service) => {
     // Daemon status
     const daemonOn = isDaemonRunning();
     const daemonDisplay = daemonOn ? 'ON' : 'OFF';
-    const daemonColor = daemonOn ? chalk.green : chalk.gray;
+    const daemonColor = daemonOn ? chalk.green : chalk.red;
     
-    // Fixed width columns for alignment (4 columns)
-    const icon = chalk.yellow('✔ ');
-    const colWidth = Math.floor(W / 4);
+    // Build stats items
+    const icon = chalk.yellow('✔');
+    const items = [
+      { label: 'Accounts', value: String(statsInfo.accounts), color: chalk.white },
+      { label: 'Balance', value: balStr, color: balColor },
+      { label: 'Daemon', value: daemonDisplay, color: daemonColor },
+      { label: 'AI', value: agentDisplay, color: agentColor },
+    ];
     
-    const formatCol = (label, value, valueColor = chalk.white) => {
-      const text = `✔ ${label}: ${value}`;
-      const textLen = text.length;
-      const padLeft = Math.floor((colWidth - textLen) / 2);
-      const padRight = colWidth - textLen - padLeft;
-      return ' '.repeat(Math.max(0, padLeft)) + icon + chalk.white(label + ': ') + valueColor(value) + ' '.repeat(Math.max(0, padRight));
-    };
+    // Format: "✔ Label: Value" with consistent spacing
+    const formatted = items.map(item => 
+      `${icon} ${chalk.white(item.label + ':')} ${item.color(item.value)}`
+    );
     
-    const col1 = formatCol('Accounts', String(statsInfo.accounts));
-    const col2 = formatCol('Balance', balStr, balColor);
-    const col3 = formatCol('Daemon', daemonDisplay, daemonColor);
-    const col4 = formatCol('AI', agentDisplay, agentColor);
+    // Join with consistent gaps and center the whole line
+    const gap = '    '; // 4 spaces between items
+    const statsContent = formatted.join(gap);
+    const statsPlainLen = statsContent.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const totalPad = W - statsPlainLen;
+    const padLeft = Math.floor(totalPad / 2);
+    const padRight = totalPad - padLeft;
     
-    const statsLine = col1 + col2 + col3 + col4;
-    const statsPlainLen = statsLine.replace(/\x1b\[[0-9;]*m/g, '').length;
-    const extraPad = W - statsPlainLen;
-    
-    console.log(chalk.cyan('║') + statsLine + ' '.repeat(Math.max(0, extraPad)) + chalk.cyan('║'));
+    console.log(chalk.cyan('║') + ' '.repeat(padLeft) + statsContent + ' '.repeat(padRight) + chalk.cyan('║'));
   }
   
   console.log(chalk.cyan('╠' + '═'.repeat(W) + '╣'));
