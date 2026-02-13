@@ -35,13 +35,19 @@
 'use strict';
 
 const fs = require('fs');
-const { spawn } = require('child_process');
+const path = require('path');
+const { spawn, execSync } = require('child_process');
 const { SOCKET_PATH, PID_FILE, SOCKET_DIR } = require('./constants');
 const { DaemonServer } = require('./server');
 const { DaemonClient, getDaemonClient } = require('./client');
 const { logger } = require('../../utils/logger');
 
 const log = logger.scope('Daemon');
+
+/** Isolated daemon directory - survives npm updates */
+const DAEMON_INSTALL_DIR = path.join(SOCKET_DIR, 'daemon');
+const DAEMON_ENTRY = path.join(DAEMON_INSTALL_DIR, 'cli-daemon.js');
+const DAEMON_VERSION_FILE = path.join(DAEMON_INSTALL_DIR, 'version.txt');
 
 /**
  * Check if daemon is running
@@ -83,6 +89,150 @@ function getDaemonPid() {
     return parseInt(fs.readFileSync(PID_FILE, 'utf8'));
   } catch (_) {
     return null;
+  }
+}
+
+/**
+ * Get current package version
+ * @returns {string}
+ */
+function getCurrentVersion() {
+  try {
+    const pkg = require('../../../package.json');
+    return pkg.version;
+  } catch (_) {
+    return '0.0.0';
+  }
+}
+
+/**
+ * Get installed daemon version
+ * @returns {string|null}
+ */
+function getInstalledDaemonVersion() {
+  try {
+    if (fs.existsSync(DAEMON_VERSION_FILE)) {
+      return fs.readFileSync(DAEMON_VERSION_FILE, 'utf8').trim();
+    }
+  } catch (_) {}
+  return null;
+}
+
+/**
+ * Install daemon to isolated directory
+ * This copies all necessary files so daemon survives npm updates
+ * @returns {boolean}
+ */
+function installDaemon() {
+  const currentVersion = getCurrentVersion();
+  const installedVersion = getInstalledDaemonVersion();
+  
+  // Skip if already installed with same version
+  if (installedVersion === currentVersion && fs.existsSync(DAEMON_ENTRY)) {
+    log.debug('Daemon already installed', { version: currentVersion });
+    return true;
+  }
+  
+  log.info('Installing daemon to isolated directory', { version: currentVersion });
+  
+  try {
+    // Create daemon directory
+    if (!fs.existsSync(DAEMON_INSTALL_DIR)) {
+      fs.mkdirSync(DAEMON_INSTALL_DIR, { recursive: true, mode: 0o700 });
+    }
+    
+    // Get source directory (where this package is installed)
+    const srcDir = path.resolve(__dirname, '../../..');
+    
+    // Files/directories to copy for daemon to work
+    const filesToCopy = [
+      'src/cli-daemon.js',
+      'src/services/daemon',
+      'src/services/rithmic',
+      'src/services/session.js',
+      'src/services/index.js',
+      'src/config',
+      'src/security',
+      'src/utils',
+      'package.json',
+    ];
+    
+    // Copy each file/directory
+    for (const file of filesToCopy) {
+      const srcPath = path.join(srcDir, file);
+      const destPath = path.join(DAEMON_INSTALL_DIR, file);
+      
+      if (!fs.existsSync(srcPath)) {
+        log.warn('Source not found', { file });
+        continue;
+      }
+      
+      // Create parent directory
+      const destDir = path.dirname(destPath);
+      if (!fs.existsSync(destDir)) {
+        fs.mkdirSync(destDir, { recursive: true });
+      }
+      
+      // Copy file or directory
+      if (fs.statSync(srcPath).isDirectory()) {
+        copyDirSync(srcPath, destPath);
+      } else {
+        fs.copyFileSync(srcPath, destPath);
+      }
+    }
+    
+    // Copy node_modules that daemon needs
+    const nodeModulesDir = path.join(srcDir, 'node_modules');
+    const destNodeModules = path.join(DAEMON_INSTALL_DIR, 'node_modules');
+    
+    // Essential dependencies for daemon
+    const deps = ['protobufjs', 'ws', 'long', 'signale', 'chalk', 'figures'];
+    
+    if (!fs.existsSync(destNodeModules)) {
+      fs.mkdirSync(destNodeModules, { recursive: true });
+    }
+    
+    for (const dep of deps) {
+      const srcDep = path.join(nodeModulesDir, dep);
+      const destDep = path.join(destNodeModules, dep);
+      
+      if (fs.existsSync(srcDep) && !fs.existsSync(destDep)) {
+        copyDirSync(srcDep, destDep);
+      }
+    }
+    
+    // Write version file
+    fs.writeFileSync(DAEMON_VERSION_FILE, currentVersion);
+    
+    log.info('Daemon installed successfully');
+    return true;
+  } catch (err) {
+    log.error('Failed to install daemon', { error: err.message });
+    return false;
+  }
+}
+
+/**
+ * Recursively copy directory
+ * @param {string} src
+ * @param {string} dest
+ */
+function copyDirSync(src, dest) {
+  if (!fs.existsSync(dest)) {
+    fs.mkdirSync(dest, { recursive: true });
+  }
+  
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+  
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    
+    if (entry.isDirectory()) {
+      copyDirSync(srcPath, destPath);
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+    }
   }
 }
 
@@ -147,7 +297,7 @@ async function startDaemonForeground() {
 }
 
 /**
- * Start daemon in background
+ * Start daemon in background (from isolated directory)
  * @returns {Promise<boolean>}
  */
 async function startDaemonBackground() {
@@ -156,8 +306,60 @@ async function startDaemonBackground() {
     return true;
   }
   
+  // Install daemon to isolated directory first
+  const installed = installDaemon();
+  if (!installed) {
+    log.error('Failed to install daemon');
+    return false;
+  }
+  
+  // Check if isolated daemon entry exists
+  if (!fs.existsSync(DAEMON_ENTRY)) {
+    log.error('Daemon entry not found', { path: DAEMON_ENTRY });
+    // Fallback to direct execution
+    return startDaemonDirect();
+  }
+  
   return new Promise((resolve) => {
-    // Spawn daemon process
+    // Spawn daemon from isolated directory (survives npm updates)
+    const daemon = spawn(process.execPath, [DAEMON_ENTRY], {
+      detached: true,
+      stdio: 'ignore',
+      cwd: DAEMON_INSTALL_DIR,
+      env: {
+        ...process.env,
+        NODE_PATH: path.join(DAEMON_INSTALL_DIR, 'node_modules'),
+      },
+    });
+    
+    daemon.unref();
+    
+    // Wait for daemon to start
+    let attempts = 0;
+    const maxAttempts = 30;
+    
+    const check = setInterval(() => {
+      attempts++;
+      
+      if (isDaemonRunning()) {
+        clearInterval(check);
+        log.debug('Daemon started from isolated directory');
+        resolve(true);
+      } else if (attempts >= maxAttempts) {
+        clearInterval(check);
+        log.error('Daemon failed to start');
+        resolve(false);
+      }
+    }, 100);
+  });
+}
+
+/**
+ * Start daemon directly (fallback if isolation fails)
+ * @returns {Promise<boolean>}
+ */
+function startDaemonDirect() {
+  return new Promise((resolve) => {
     const daemon = spawn(process.execPath, [
       require.resolve('../../cli-daemon'),
     ], {
@@ -167,7 +369,6 @@ async function startDaemonBackground() {
     
     daemon.unref();
     
-    // Wait for daemon to start
     let attempts = 0;
     const maxAttempts = 20;
     
@@ -176,7 +377,7 @@ async function startDaemonBackground() {
       
       if (isDaemonRunning()) {
         clearInterval(check);
-        log.debug('Daemon started');
+        log.debug('Daemon started (direct mode)');
         resolve(true);
       } else if (attempts >= maxAttempts) {
         clearInterval(check);
@@ -248,6 +449,11 @@ module.exports = {
   getDaemonClient,
   ensureDaemon,
   
+  // Installation
+  installDaemon,
+  getCurrentVersion,
+  getInstalledDaemonVersion,
+  
   // Utilities
   isDaemonRunning,
   getDaemonPid,
@@ -255,4 +461,5 @@ module.exports = {
   // Constants
   SOCKET_PATH,
   PID_FILE,
+  DAEMON_INSTALL_DIR,
 };
