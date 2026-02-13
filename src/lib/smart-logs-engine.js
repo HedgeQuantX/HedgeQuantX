@@ -28,6 +28,8 @@ const CONFIG = {
   OFI_THRESHOLD: 0.15,
   VPIN_TOXIC: 0.6,
   QUANT_WARMUP_TICKS: 250,
+  // Heartbeat interval - frequent updates in scanning mode
+  HEARTBEAT_MS: 5000,  // 5 seconds
 };
 
 const SYMBOLS = {
@@ -52,7 +54,7 @@ class SmartLogsEngine {
     this.symbolCode = symbol;
     this.counter = 0;
     this.lastState = null;
-    this.lastHeartbeat = 0;
+    this.lastLogTime = 0;
     
     // State tracking for event detection (both strategies)
     this.lastBias = null;
@@ -67,6 +69,10 @@ class SmartLogsEngine {
     // QUANT specific
     this.lastZRegime = null;
     this.lastVpinToxic = false;
+    this.lastPrice = 0;
+    this.lastLoggedZ = null;
+    this.lastLoggedOfi = null;
+    this.recentMessages = [];
   }
 
   setSymbol(s) { this.symbolCode = s; }
@@ -229,20 +235,62 @@ class SmartLogsEngine {
     this.lastVpinToxic = vpinToxic;
 
     if (event && message) {
-      this.lastHeartbeat = Date.now();
+      this.lastLogTime = Date.now();
+      this.lastPrice = state.price;
+      this.lastLoggedZ = zScore;
+      this.lastLoggedOfi = ofi;
       return { type: logType, message, logToSession: event === 'z_regime' || event === 'bias_flip' };
     }
     
-    // HEARTBEAT: Show status every 30s when no events (proves strategy is active)
+    // REAL-TIME LOGS: Every second, show meaningful market activity
     const now = Date.now();
-    if (this.warmupLogged && now - this.lastHeartbeat >= 30000) {
-      this.lastHeartbeat = now;
-      // Use instrument + strategy contextual message
-      const marketCtx = bias === 'bullish' ? 'bullish' : bias === 'bearish' ? 'bearish' : 'neutral';
-      const ctxMsg = getContextualMessage(this.symbolCode, this.strategyId, marketCtx);
+    if (this.warmupLogged && now - this.lastLogTime >= 1000) {
+      const price = state.price || 0;
+      const priceChange = this.lastPrice ? price - this.lastPrice : 0;
+      const zChange = this.lastLoggedZ !== null ? zScore - this.lastLoggedZ : 0;
+      const ofiChange = this.lastLoggedOfi !== null ? ofi - this.lastLoggedOfi : 0;
+      
+      this.lastLogTime = now;
+      this.lastPrice = price;
+      this.lastLoggedZ = zScore;
+      this.lastLoggedOfi = ofi;
+      
+      // Build contextual message based on what's actually happening
+      const zStr = zScore >= 0 ? `+${zScore.toFixed(1)}` : zScore.toFixed(1);
+      const ofiPct = (ofi * 100).toFixed(0);
+      const vpinPct = (vpin * 100).toFixed(0);
+      
+      // Determine what's notable RIGHT NOW
+      let context;
+      if (Math.abs(priceChange) >= 0.5) {
+        // Price moved significantly
+        const dir = priceChange > 0 ? 'uptick' : 'downtick';
+        const ticks = Math.abs(priceChange / 0.25).toFixed(0);
+        context = `${dir} ${ticks}t`;
+      } else if (Math.abs(zChange) >= 0.3) {
+        // Z-Score shifting
+        context = zChange > 0 ? 'Z expanding' : 'Z contracting';
+      } else if (Math.abs(ofiChange) >= 0.05) {
+        // OFI shifting
+        context = ofiChange > 0 ? 'buying pressure' : 'selling pressure';
+      } else if (absZ >= 1.5) {
+        // In signal zone
+        const dir = zScore < 0 ? 'LONG zone' : 'SHORT zone';
+        context = dir;
+      } else if (Math.abs(ofi) >= 0.15) {
+        // Strong flow
+        context = ofi > 0 ? 'bid strength' : 'offer strength';
+      } else if (vpin > 0.4) {
+        // Elevated VPIN
+        context = 'elevated toxicity';
+      } else {
+        // Get instrument-specific neutral message
+        context = getContextualMessage(this.symbolCode, this.strategyId, 'neutral');
+      }
+      
       return {
         type: 'analysis',
-        message: `[${sym}] ${price} | Z: ${zScore.toFixed(1)}σ | OFI: ${(ofi * 100).toFixed(0)}% | ${ctxMsg}`,
+        message: `[${sym}] ${price.toFixed(2)} | Z: ${zStr}σ | OFI: ${ofiPct}% | ${context}`,
         logToSession: false
       };
     }
@@ -255,7 +303,7 @@ class SmartLogsEngine {
     this.counter = 0;
     this.lastBias = null;
     this.warmupLogged = false;
-    this.lastHeartbeat = 0;
+    this.lastLogTime = 0;
     // HQX-2B
     this.lastBars = 0;
     this.lastSwings = 0;
@@ -264,6 +312,10 @@ class SmartLogsEngine {
     // QUANT
     this.lastZRegime = null;
     this.lastVpinToxic = false;
+    this.lastPrice = 0;
+    this.lastLoggedZ = null;
+    this.lastLoggedOfi = null;
+    this.recentMessages = [];
   }
 }
 
