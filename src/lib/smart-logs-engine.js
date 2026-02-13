@@ -1,320 +1,242 @@
 /**
- * Smart Logs Engine - Unified Event-Driven Intelligent Logs
- * ==========================================================
+ * Smart Logs Engine - Professional HF-Grade Adaptive Logs
+ * ========================================================
  * 
- * UNIFIED SYSTEM for all CLI strategies:
- * - Same engine, same event detection logic
- * - Strategy-specific vocabulary (HQX-2B: bars/swings/zones, QUANT: ticks/Z-Score/VPIN/OFI)
- * - Uses smartLogs.getLiveAnalysisLog() for varied, non-repetitive messages
+ * PRINCIPLES:
+ * 1. NO repetitive messages - each log must be unique and meaningful
+ * 2. Adaptive to real market context - uses actual QUANT metrics
+ * 3. Professional HF language - precise, technical, actionable
+ * 4. Event-driven only - silence means scanning, no spam
  * 
- * Only logs when something SIGNIFICANT happens - no spam, no repetitive messages
- * 
- * COLOR SCHEME:
- * - Symbols: cyan (NQ, ES, CL, GC)
- * - Prices: white bold
- * - Bullish/Long: green
- * - Bearish/Short: red
- * - Neutral/System: gray/dim
- * - Signals: yellow/magenta
- * - Risk/Warnings: red bold
- * - Values: blue (Z-Score, VPIN, OFI numbers)
+ * This replaces the old rotating generic messages with
+ * intelligent, context-aware logs that reflect the actual
+ * algorithmic decision process.
  */
 
 'use strict';
 
 const chalk = require('chalk');
-const smartLogs = require('./smart-logs');
-const { getContextualMessage } = require('./smart-logs-context');
 
 // Color helpers for consistent styling
 const C = {
-  // Symbols & identifiers
   sym: (s) => chalk.cyan.bold(s),
-  
-  // Prices
   price: (p) => chalk.white.bold(p),
-  
-  // Direction
   long: (s) => chalk.green.bold(s),
   short: (s) => chalk.red.bold(s),
   bull: (s) => chalk.green(s),
   bear: (s) => chalk.red(s),
-  
-  // Values & metrics
   val: (v) => chalk.blue(v),
   valHigh: (v) => chalk.magenta.bold(v),
-  
-  // Status
   ok: (s) => chalk.green(s),
   warn: (s) => chalk.yellow(s),
   danger: (s) => chalk.red.bold(s),
-  
-  // System/neutral
   dim: (s) => chalk.dim(s),
   info: (s) => chalk.gray(s),
-  
-  // Special
   signal: (s) => chalk.yellow.bold(s),
-  zone: (s) => chalk.magenta(s),
-  regime: (s) => chalk.cyan(s),
 };
 
 const CONFIG = { 
-  SESSION_LOG_INTERVAL: 10,
-  // HQX-2B thresholds
-  PRICE_CHANGE_TICKS: 4,
-  DELTA_CHANGE_THRESHOLD: 200,
-  // QUANT thresholds
   Z_EXTREME: 2.0,
   Z_HIGH: 1.5,
   Z_BUILDING: 1.0,
+  OFI_STRONG: 0.20,
   OFI_THRESHOLD: 0.15,
-  VPIN_TOXIC: 0.6,
-  QUANT_WARMUP_TICKS: 250,
-  // Heartbeat interval - frequent updates in scanning mode
-  HEARTBEAT_MS: 5000,  // 5 seconds
-};
-
-const SYMBOLS = {
-  NQ: 'NQ', MNQ: 'MNQ', ES: 'ES', MES: 'MES', YM: 'YM', MYM: 'MYM',
-  CL: 'CL', MCL: 'MCL', GC: 'GC', MGC: 'MGC', SI: 'SI', SIL: 'SIL',
-  RTY: 'RTY', M2K: 'M2K', ZB: 'ZB', ZN: 'ZN',
+  VPIN_TOXIC: 0.65,
+  VPIN_ELEVATED: 0.50,
 };
 
 function getSym(s) {
   if (!s) return 'FUT';
   const b = s.split(':')[0].replace(/[FGHJKMNQUVXZ]\d{1,2}$/, '').toUpperCase();
-  return SYMBOLS[b] || b;
+  const map = { ENQ: 'NQ', EP: 'ES', RTY: 'RTY', EMD: 'EMD', MGC: 'GC', MCL: 'CL' };
+  return map[b] || b;
 }
 
 /**
- * Unified Smart Logs Engine
- * Works with any strategy - adapts vocabulary based on strategyId
+ * Professional HF Smart Logs Engine
  */
 class SmartLogsEngine {
   constructor(strategyId, symbol) {
-    this.strategyId = strategyId || 'hqx-2b';
+    this.strategyId = strategyId || 'ultra-scalping';
     this.symbolCode = symbol;
-    this.counter = 0;
-    this.lastState = null;
+    this.lastLogHash = null;
+    this.lastLogTime = 0;
+    this.eventCounter = 0;
     
-    // State tracking for event detection (both strategies)
-    this.lastBias = null;
-    this.warmupLogged = false;
-    
-    // HQX-2B specific
-    this.lastBars = 0;
-    this.lastSwings = 0;
-    this.lastZones = 0;
-    this.lastNearZone = false;
-    
-    // QUANT specific
-    this.lastZRegime = null;
-    this.lastVpinToxic = false;
+    // State tracking for change detection
+    this.prev = {
+      zRegime: null,
+      ofiDir: null,
+      vpinLevel: null,
+      position: 0,
+      ready: false,
+    };
   }
 
   setSymbol(s) { this.symbolCode = s; }
 
   /**
-   * Get log message - unified entry point
-   * Detects strategy and routes to appropriate handler
+   * Main entry - returns log only when meaningful event occurs
+   * Returns null for silence (professional: no news = scanning)
    */
   getLog(state = {}) {
-    this.counter++;
     const sym = getSym(this.symbolCode);
-    const price = state.price > 0 ? state.price.toFixed(2) : '-.--';
-    const { position = 0, delta = 0 } = state;
-
-    // Active position - same for all strategies
-    if (position !== 0) {
-      const isLong = position > 0;
-      const side = isLong ? C.long('LONG') : C.short('SHORT');
-      const flowFavor = (isLong && delta > 0) || (!isLong && delta < 0);
-      const flowLabel = flowFavor ? C.ok('FAVOR') : C.danger('ADVERSE');
-      const deltaStr = delta > 0 ? C.bull(`+${delta}`) : C.bear(`${delta}`);
+    const price = state.price > 0 ? state.price.toFixed(2) : null;
+    const { position = 0, zScore = 0, vpin = 0, ofi = 0, tickCount = 0, bars = 0 } = state;
+    
+    // Not enough data - still warming up
+    const dataPoints = tickCount || bars || 0;
+    if (dataPoints < 50 || !price) {
+      // Only log warmup progress at milestones
+      if (!this.prev.ready && dataPoints > 0) {
+        const pct = Math.min(100, Math.round((dataPoints / 50) * 100));
+        const milestone = Math.floor(pct / 25) * 25;
+        const lastMilestone = this._lastWarmupMilestone || 0;
+        if (milestone > lastMilestone) {
+          this._lastWarmupMilestone = milestone;
+          return {
+            type: 'system',
+            message: `[${C.sym(sym)}] Calibrating QUANT models... ${C.val(pct + '%')} (${dataPoints} samples)`,
+            logToSession: false
+          };
+        }
+      }
+      return null;
+    }
+    
+    // Mark as ready
+    if (!this.prev.ready) {
+      this.prev.ready = true;
       return {
-        type: 'trade',
-        message: `[${C.sym(sym)}] ${side} ACTIVE @ ${C.price(price)} | Delta: ${deltaStr} | Flow: ${flowLabel}`,
+        type: 'system',
+        message: `[${C.sym(sym)}] ${C.price(price)} | ${C.ok('QUANT models calibrated')} | Scanning for alpha`,
         logToSession: true
       };
     }
-
-    // Route to strategy-specific handler
-    if (this.strategyId === 'ultra-scalping') {
-      return this._getQuantLog(state, sym, price);
-    } else {
-      return this._getHqx2bLog(state, sym, price);
-    }
-  }
-
-  /**
-   * HQX-2B Liquidity Sweep - Bar/Swing/Zone based events
-   */
-  _getHqx2bLog(state, sym, price) {
-    const { bars = 0, swings = 0, zones = 0, nearZone = false, trend = 'neutral', delta = 0 } = state;
     
-    let event = null;
-    let logType = 'analysis';
-    let message = null;
-
-    // EVENT 1: Warmup complete (10+ bars)
-    if (bars >= 10 && !this.warmupLogged) {
-      this.warmupLogged = true;
-      event = 'warmup';
-      const warmupMsg = getContextualMessage(this.symbolCode, this.strategyId, 'warmup');
-      message = `[${C.sym(sym)}] ${C.ok('2B ready')} | ${C.val(bars)} bars | ${C.dim(warmupMsg)}`;
-      logType = 'system';
+    // Active position - always show
+    if (position !== 0) {
+      const isLong = position > 0;
+      const side = isLong ? C.long('LONG') : C.short('SHORT');
+      const deltaFavor = (isLong && ofi > 0) || (!isLong && ofi < 0);
+      const flowLabel = deltaFavor ? C.ok('ALIGNED') : C.warn('ADVERSE');
+      const ofiStr = (ofi * 100).toFixed(0);
+      const zStr = zScore.toFixed(2);
+      
+      // Only log position updates when something changes
+      const posHash = `pos-${position}-${Math.round(ofi * 10)}`;
+      if (posHash !== this.lastLogHash) {
+        this.lastLogHash = posHash;
+        return {
+          type: 'trade',
+          message: `[${C.sym(sym)}] ${side} @ ${C.price(price)} | OFI:${ofiStr}% ${flowLabel} | Z:${zStr}σ`,
+          logToSession: true
+        };
+      }
+      return null;
     }
-    // EVENT 2: New zone created
-    else if (zones > this.lastZones && zones > 0) {
-      event = 'new_zone';
-      const signalMsg = getContextualMessage(this.symbolCode, this.strategyId, 'signal');
-      message = `[${C.sym(sym)}] ${C.price(price)} | ${C.zone('Zone #' + zones)} | ${C.signal(signalMsg)}`;
-      logType = 'signal';
-    }
-    // EVENT 3: New swing detected
-    else if (swings > this.lastSwings && swings > 0) {
-      event = 'new_swing';
-      const scanMsg = getContextualMessage(this.symbolCode, this.strategyId, 'scanning');
-      message = `[${C.sym(sym)}] ${C.price(price)} | ${C.info('Swing #' + swings)} | ${C.dim(scanMsg)}`;
-    }
-    // EVENT 4: Zone approach (price near zone)
-    else if (nearZone && !this.lastNearZone && zones > 0) {
-      event = 'zone_approach';
-      const signalMsg = getContextualMessage(this.symbolCode, this.strategyId, 'signal');
-      message = `[${C.sym(sym)}] ${C.price(price)} | ${C.warn('Zone approach')} | ${C.signal(signalMsg)}`;
-      logType = 'signal';
-    }
-    // EVENT 5: Bias flip
-    else if (this.lastBias && trend !== this.lastBias && trend !== 'neutral' && this.lastBias !== 'neutral') {
-      event = 'bias_flip';
-      const arrow = trend === 'bullish' ? C.bull('▲') : C.bear('▼');
-      const oldBias = this.lastBias === 'bullish' ? C.bull(this.lastBias) : C.bear(this.lastBias);
-      const newBias = trend === 'bullish' ? C.bull(trend) : C.bear(trend);
-      const flipMsg = getContextualMessage(this.symbolCode, this.strategyId, trend);
-      message = `[${C.sym(sym)}] ${arrow} ${oldBias} → ${newBias} | ${C.dim(flipMsg)}`;
-    }
-
-    // Update state tracking
-    this.lastBars = bars;
-    this.lastSwings = swings;
-    this.lastZones = zones;
-    this.lastNearZone = nearZone;
-    this.lastBias = trend;
-
-    if (event && message) {
-      return { type: logType, message, logToSession: event === 'new_zone' || event === 'bias_flip' };
-    }
-    return null;
-  }
-
-  /**
-   * QUANT (HQX Ultra Scalping) - Tick/Z-Score/VPIN/OFI based events
-   */
-  _getQuantLog(state, sym, price) {
-    const { tickCount = 0, zScore = 0, vpin = 0, ofi = 0 } = state;
-    const ticks = tickCount || state.bars || 0;
     
+    // Compute current regimes
     const absZ = Math.abs(zScore);
-    const vpinToxic = vpin > CONFIG.VPIN_TOXIC;
-    const zRegime = absZ >= CONFIG.Z_EXTREME ? 'extreme' : absZ >= CONFIG.Z_HIGH ? 'high' : absZ >= CONFIG.Z_BUILDING ? 'building' : 'neutral';
-    const bias = ofi > CONFIG.OFI_THRESHOLD ? 'bullish' : ofi < -CONFIG.OFI_THRESHOLD ? 'bearish' : 'neutral';
-
+    const zRegime = absZ >= CONFIG.Z_EXTREME ? 'extreme' : 
+                    absZ >= CONFIG.Z_HIGH ? 'high' : 
+                    absZ >= CONFIG.Z_BUILDING ? 'building' : 'neutral';
+    const ofiDir = ofi > CONFIG.OFI_STRONG ? 'strong-bull' :
+                   ofi > CONFIG.OFI_THRESHOLD ? 'bull' :
+                   ofi < -CONFIG.OFI_STRONG ? 'strong-bear' :
+                   ofi < -CONFIG.OFI_THRESHOLD ? 'bear' : 'neutral';
+    const vpinLevel = vpin > CONFIG.VPIN_TOXIC ? 'toxic' :
+                      vpin > CONFIG.VPIN_ELEVATED ? 'elevated' : 'normal';
+    
+    // Detect events (changes in regime)
     let event = null;
-    let logType = 'analysis';
     let message = null;
-
-    // Helper for Z-Score color
-    const zColor = (z) => {
-      const absVal = Math.abs(z);
-      const formatted = `${z.toFixed(1)}σ`;
-      if (absVal >= CONFIG.Z_EXTREME) return C.valHigh(formatted);
-      if (absVal >= CONFIG.Z_HIGH) return C.warn(formatted);
-      if (absVal >= CONFIG.Z_BUILDING) return C.val(formatted);
-      return C.dim(formatted);
-    };
-
-    // EVENT 1: Warmup complete (250 ticks for QUANT models)
-    if (ticks >= CONFIG.QUANT_WARMUP_TICKS && !this.warmupLogged) {
-      this.warmupLogged = true;
-      event = 'warmup';
-      const warmupMsg = getContextualMessage(this.symbolCode, this.strategyId, 'warmup');
-      message = `[${C.sym(sym)}] ${C.ok('QUANT ready')} | ${C.val(ticks)} ticks | ${C.dim(warmupMsg)}`;
-      logType = 'system';
-    }
-    // EVENT 2: Z-Score regime change
-    else if (this.lastZRegime !== null && zRegime !== this.lastZRegime) {
+    let logType = 'analysis';
+    
+    const zColor = absZ >= CONFIG.Z_EXTREME ? C.valHigh : 
+                   absZ >= CONFIG.Z_HIGH ? C.warn : 
+                   absZ >= CONFIG.Z_BUILDING ? C.val : C.dim;
+    const zStr = zColor(`${zScore.toFixed(2)}σ`);
+    const ofiPct = (ofi * 100).toFixed(0);
+    const vpinPct = (vpin * 100).toFixed(0);
+    
+    // EVENT 1: Z-Score regime change (most important)
+    if (zRegime !== this.prev.zRegime && this.prev.zRegime !== null) {
       event = 'z_regime';
-      // Get instrument-specific market context message
-      const marketCtx = bias === 'bullish' ? 'bullish' : bias === 'bearish' ? 'bearish' : 'neutral';
-      const instrumentMsg = getContextualMessage(this.symbolCode, this.strategyId, marketCtx);
+      const dir = zScore < 0 ? 'LONG' : 'SHORT';
       
       if (zRegime === 'extreme') {
         logType = 'signal';
-        const dir = zScore < 0 ? C.long('LONG') : C.short('SHORT');
-        const signalMsg = getContextualMessage(this.symbolCode, this.strategyId, 'signal');
-        message = `[${C.sym(sym)}] ${C.price(price)} | Z: ${zColor(zScore)} ${C.signal('EXTREME')} | ${dir} | ${C.signal(signalMsg)}`;
+        const ofiConfirm = (zScore < 0 && ofi > CONFIG.OFI_THRESHOLD) || 
+                          (zScore > 0 && ofi < -CONFIG.OFI_THRESHOLD);
+        if (ofiConfirm) {
+          message = `[${C.sym(sym)}] ${C.price(price)} | Z:${zStr} ${C.signal('EXTREME')} | ${C.long(dir)} | OFI:${ofiPct}% ${C.ok('CONFIRMS')}`;
+        } else {
+          message = `[${C.sym(sym)}] ${C.price(price)} | Z:${zStr} ${C.signal('EXTREME')} | ${C.warn(dir + ' pending')} | OFI:${ofiPct}% awaiting`;
+        }
       } else if (zRegime === 'high') {
         logType = 'signal';
-        message = `[${C.sym(sym)}] ${C.price(price)} | Z: ${zColor(zScore)} ${C.warn('HIGH')} | ${C.dim(instrumentMsg)}`;
-      } else if (zRegime === 'building') {
-        message = `[${C.sym(sym)}] ${C.price(price)} | Z: ${zColor(zScore)} ${C.info('building')} | ${C.dim(instrumentMsg)}`;
-      } else {
-        const scanMsg = getContextualMessage(this.symbolCode, this.strategyId, 'scanning');
-        message = `[${C.sym(sym)}] ${C.price(price)} | Z: ${C.ok('normalized')} | ${C.dim(scanMsg)}`;
+        message = `[${C.sym(sym)}] ${C.price(price)} | Z:${zStr} ${C.warn('building')} | ${dir} setup forming | OFI:${ofiPct}%`;
+      } else if (zRegime === 'building' && this.prev.zRegime === 'neutral') {
+        message = `[${C.sym(sym)}] ${C.price(price)} | Z:${zStr} | Deviation detected | Monitoring`;
+      } else if (zRegime === 'neutral' && (this.prev.zRegime === 'high' || this.prev.zRegime === 'extreme')) {
+        message = `[${C.sym(sym)}] ${C.price(price)} | Z:${C.ok('normalized')} | Mean reversion complete`;
       }
     }
-    // EVENT 3: Bias flip (OFI direction change)
-    else if (this.lastBias !== null && bias !== this.lastBias && bias !== 'neutral' && this.lastBias !== 'neutral') {
-      event = 'bias_flip';
-      const arrow = bias === 'bullish' ? C.bull('▲') : C.bear('▼');
-      const oldBias = this.lastBias === 'bullish' ? C.bull(this.lastBias) : C.bear(this.lastBias);
-      const newBias = bias === 'bullish' ? C.bull(bias) : C.bear(bias);
-      const flipMsg = getContextualMessage(this.symbolCode, this.strategyId, bias);
-      message = `[${C.sym(sym)}] ${arrow} OFI: ${oldBias} → ${newBias} | ${C.dim(flipMsg)}`;
+    // EVENT 2: OFI direction flip (significant)
+    else if (ofiDir !== this.prev.ofiDir && this.prev.ofiDir !== null && 
+             ofiDir !== 'neutral' && this.prev.ofiDir !== 'neutral') {
+      event = 'ofi_flip';
+      const wasLong = this.prev.ofiDir.includes('bull');
+      const nowLong = ofiDir.includes('bull');
+      if (wasLong !== nowLong) {
+        const arrow = nowLong ? C.bull('▲') : C.bear('▼');
+        const newDir = nowLong ? C.bull('BUY') : C.bear('SELL');
+        message = `[${C.sym(sym)}] ${C.price(price)} | ${arrow} OFI flip → ${newDir} pressure | ${ofiPct}% | Z:${zStr}`;
+      }
     }
-    // EVENT 4: VPIN toxicity change
-    else if (this.lastVpinToxic !== null && vpinToxic !== this.lastVpinToxic) {
-      event = 'vpin';
-      const vpinPct = (vpin * 100).toFixed(0);
-      if (vpinToxic) {
-        message = `[${C.sym(sym)}] ${C.price(price)} | VPIN: ${C.danger(vpinPct + '%')} ${C.danger('TOXIC')} - informed flow`;
+    // EVENT 3: VPIN level change (toxicity warning)
+    else if (vpinLevel !== this.prev.vpinLevel && this.prev.vpinLevel !== null) {
+      event = 'vpin_change';
+      if (vpinLevel === 'toxic') {
         logType = 'risk';
-      } else {
-        message = `[${C.sym(sym)}] ${C.price(price)} | VPIN: ${C.ok(vpinPct + '%')} ${C.ok('clean')} - normal flow`;
+        message = `[${C.sym(sym)}] ${C.price(price)} | VPIN:${C.danger(vpinPct + '% TOXIC')} | Informed flow detected | Hold`;
+      } else if (vpinLevel === 'elevated' && this.prev.vpinLevel === 'normal') {
+        message = `[${C.sym(sym)}] ${C.price(price)} | VPIN:${C.warn(vpinPct + '%')} elevated | Monitoring toxicity`;
+      } else if (vpinLevel === 'normal' && this.prev.vpinLevel === 'toxic') {
+        message = `[${C.sym(sym)}] ${C.price(price)} | VPIN:${C.ok(vpinPct + '%')} normalized | Flow clean`;
       }
-    }
-
-    // Update state tracking
-    this.lastZRegime = zRegime;
-    this.lastBias = bias;
-    this.lastVpinToxic = vpinToxic;
-
-    if (event && message) {
-      return { type: logType, message, logToSession: event === 'z_regime' || event === 'bias_flip' };
     }
     
-    // EVENT-DRIVEN ONLY: No spam, no repetitive logs
-    // Silence = system is scanning, nothing notable happening
-    // This is professional HF behavior
+    // Update state tracking
+    this.prev.zRegime = zRegime;
+    this.prev.ofiDir = ofiDir;
+    this.prev.vpinLevel = vpinLevel;
+    this.prev.position = position;
+    
+    // Return event or null (silence = professional scanning)
+    if (event && message) {
+      this.lastLogHash = `${event}-${zRegime}-${ofiDir}-${vpinLevel}`;
+      return { type: logType, message, logToSession: logType === 'signal' || logType === 'risk' };
+    }
+    
     return null;
   }
 
   reset() { 
-    this.lastState = null;
-    this.counter = 0;
-    this.lastBias = null;
-    this.warmupLogged = false;
-    // HQX-2B
-    this.lastBars = 0;
-    this.lastSwings = 0;
-    this.lastZones = 0;
-    this.lastNearZone = false;
-    // QUANT
-    this.lastZRegime = null;
-    this.lastVpinToxic = false;
+    this.lastLogHash = null;
+    this.lastLogTime = 0;
+    this.eventCounter = 0;
+    this._lastWarmupMilestone = 0;
+    this.prev = {
+      zRegime: null,
+      ofiDir: null,
+      vpinLevel: null,
+      position: 0,
+      ready: false,
+    };
   }
 }
 
 function createEngine(strategyId, symbol) { return new SmartLogsEngine(strategyId, symbol); }
-module.exports = { SmartLogsEngine, createEngine, CONFIG };
+module.exports = { SmartLogsEngine, createEngine, CONFIG, C };
