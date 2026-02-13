@@ -11,6 +11,7 @@ const { getLogoWidth, centerText, prepareStdin, displayBanner, clearScreen } = r
 const { getCachedStats } = require('../services/stats-cache');
 const { prompts } = require('../utils');
 const { getActiveAgentCount } = require('../pages/ai-agents');
+const { isDaemonRunning } = require('../services/daemon');
 
 /**
  * Dashboard menu after login
@@ -67,9 +68,14 @@ const dashboardMenu = async (service) => {
     const agentDisplay = agentCount > 0 ? 'ON' : 'OFF';
     const agentColor = agentCount > 0 ? chalk.green : chalk.red;
     
-    // Fixed width columns for alignment (3 columns)
+    // Daemon status
+    const daemonOn = isDaemonRunning();
+    const daemonDisplay = daemonOn ? 'ON' : 'OFF';
+    const daemonColor = daemonOn ? chalk.green : chalk.gray;
+    
+    // Fixed width columns for alignment (4 columns)
     const icon = chalk.yellow('✔ ');
-    const colWidth = Math.floor(W / 3);
+    const colWidth = Math.floor(W / 4);
     
     const formatCol = (label, value, valueColor = chalk.white) => {
       const text = `✔ ${label}: ${value}`;
@@ -81,9 +87,10 @@ const dashboardMenu = async (service) => {
     
     const col1 = formatCol('Accounts', String(statsInfo.accounts));
     const col2 = formatCol('Balance', balStr, balColor);
-    const col3 = formatCol('AI Agents', agentDisplay, agentColor);
+    const col3 = formatCol('Daemon', daemonDisplay, daemonColor);
+    const col4 = formatCol('AI', agentDisplay, agentColor);
     
-    const statsLine = col1 + col2 + col3;
+    const statsLine = col1 + col2 + col3 + col4;
     const statsPlainLen = statsLine.replace(/\x1b\[[0-9;]*m/g, '').length;
     const extraPad = W - statsPlainLen;
     
