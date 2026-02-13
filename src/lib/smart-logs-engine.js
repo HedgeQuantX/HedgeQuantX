@@ -118,21 +118,16 @@ class SmartLogsEngine {
     const tickVelocity = (tickCount || bars || 0) - lastTicks;
     this._lastTicks = tickCount || bars || 0;
     
-    // Not enough data - still warming up
-    // HQX Scalping is a TICK strategy - needs minimum ticks for QUANT models
-    const tickTotal = tickCount || 0;
-    const minTicks = 500; // Minimum ticks needed for Z-score, VPIN, OFI calculations
-    
-    if (tickTotal < minTicks || !price) {
-      const pct = Math.min(100, Math.round((tickTotal / minTicks) * 100));
-      const remaining = minTicks - tickTotal;
-      const pctColor = pct < 30 ? C.warn : pct < 70 ? C.val : C.ok;
+    // No price yet - waiting for first tick
+    if (!price) {
       return {
         type: 'system',
-        message: `[${C.sym(sym)}] ${price ? C.price(price) : C.dim('-.--')} ${C.separator()} ${C.label('Calibrating')} ${pctColor(pct + '%')} ${C.separator()} ${C.val(tickTotal + '/' + minTicks)} ${C.label('ticks')} ${C.separator()} ${C.val('+' + tickVelocity + '/s')}`,
+        message: `[${C.sym(sym)}] ${C.dim('Waiting for market data...')}`,
         logToSession: false
       };
     }
+    
+    const tickTotal = tickCount || 0;
     
     // Compute current states with precision for uniqueness
     const absZ = Math.abs(zScore);
