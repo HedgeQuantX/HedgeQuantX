@@ -136,6 +136,26 @@ class HQXUltraScalpingStrategy extends EventEmitter {
     this.tickBuffer.set(contractId, []);
     this.lastBarTime.set(contractId, 0);
     this.kalmanStates.set(contractId, { estimate: 0, errorCovariance: 1.0 });
+    
+    // Start status log interval - emits every second regardless of tick flow
+    this._currentContractId = contractId;
+    this._lastPrice = 0;
+    if (this._statusInterval) clearInterval(this._statusInterval);
+    this._statusInterval = setInterval(() => {
+      if (this._lastPrice > 0) {
+        this._emitStatusLog(this._currentContractId, this._lastPrice);
+      }
+    }, 1000);
+  }
+  
+  /**
+   * Stop the strategy and clean up interval
+   */
+  stop() {
+    if (this._statusInterval) {
+      clearInterval(this._statusInterval);
+      this._statusInterval = null;
+    }
   }
 
   /**
@@ -152,15 +172,10 @@ class HQXUltraScalpingStrategy extends EventEmitter {
     let ticks = this.tickBuffer.get(contractId);
     ticks.push(tick);
     
-    // Track total ticks for status log
+    // Track total ticks and last price for status log interval
     this._totalTicks = (this._totalTicks || 0) + 1;
-    
-    // Emit status log every second
-    const now = Date.now();
-    if (!this._lastStatusLog || now - this._lastStatusLog >= 1000) {
-      this._lastStatusLog = now;
-      this._emitStatusLog(contractId, tick.price);
-    }
+    this._lastPrice = tick.price;
+    this._currentContractId = contractId;
 
     // Check if we should form a new bar
     const lastBar = this.lastBarTime.get(contractId);
