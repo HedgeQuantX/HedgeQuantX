@@ -158,40 +158,41 @@ class HQXUltraScalpingStrategy extends EventEmitter {
   }
 
   /**
-   * Process a tick - aggregates into bars then runs strategy
+   * Process a tick - TICK-BY-TICK processing (matches Python backtest)
+   * Each tick is treated as a single-tick "bar" for model calculations
    */
   processTick(tick) {
     const contractId = tick.contractId;
+    const price = tick.price;
+    const volume = tick.volume || 1;
+    const timestamp = tick.timestamp || Date.now();
     
     if (!this.barHistory.has(contractId)) {
       this.initialize(contractId);
     }
-
-    // Add tick to buffer
-    let ticks = this.tickBuffer.get(contractId);
-    ticks.push(tick);
     
-    // Track total ticks and last price for status log interval
+    // Track total ticks and last price
     this._totalTicks = (this._totalTicks || 0) + 1;
-    this._lastPrice = tick.price;
+    this._lastPrice = price;
     this._currentContractId = contractId;
 
-    // Check if we should form a new bar
-    const lastBar = this.lastBarTime.get(contractId);
+    // Create single-tick bar (matches Python backtest behavior)
+    const bar = {
+      timestamp,
+      open: price,
+      high: price,
+      low: price,
+      close: price,
+      volume
+    };
     
-    if (now - lastBar >= this.barIntervalMs && ticks.length > 0) {
-      const bar = this._aggregateTicksToBar(ticks, now);
-      this.tickBuffer.set(contractId, []);
-      this.lastBarTime.set(contractId, now);
-      
-      if (bar) {
-        const signal = this.processBar(contractId, bar);
-        if (signal) {
-          this.emit('signal', signal);
-          return signal;
-        }
-      }
+    // Process bar and emit signal if generated
+    const signal = this.processBar(contractId, bar);
+    if (signal) {
+      this.emit('signal', signal);
+      return signal;
     }
+    
     return null;
   }
   
