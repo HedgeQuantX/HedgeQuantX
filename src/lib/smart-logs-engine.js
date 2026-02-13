@@ -119,14 +119,17 @@ class SmartLogsEngine {
     this._lastTicks = tickCount || bars || 0;
     
     // Not enough data - still warming up
-    const dataPoints = bars || tickCount || 0;
-    if (dataPoints < 50 || !price) {
-      const pct = Math.min(100, Math.round((dataPoints / 50) * 100));
-      const remaining = 50 - dataPoints;
-      const pctColor = pct < 50 ? C.warn : C.ok;
+    // HQX Scalping is a TICK strategy - needs minimum ticks for QUANT models
+    const tickTotal = tickCount || 0;
+    const minTicks = 500; // Minimum ticks needed for Z-score, VPIN, OFI calculations
+    
+    if (tickTotal < minTicks || !price) {
+      const pct = Math.min(100, Math.round((tickTotal / minTicks) * 100));
+      const remaining = minTicks - tickTotal;
+      const pctColor = pct < 30 ? C.warn : pct < 70 ? C.val : C.ok;
       return {
         type: 'system',
-        message: `[${C.sym(sym)}] ${price ? C.price(price) : C.dim('-.--')} ${C.separator()} ${C.label('Calibrating')} ${pctColor(pct + '%')} ${C.separator()} ${C.val(remaining)} ${C.label('samples to ready')} ${C.separator()} ${C.dim('+' + tickVelocity + '/s')}`,
+        message: `[${C.sym(sym)}] ${price ? C.price(price) : C.dim('-.--')} ${C.separator()} ${C.label('Calibrating')} ${pctColor(pct + '%')} ${C.separator()} ${C.val(tickTotal + '/' + minTicks)} ${C.label('ticks')} ${C.separator()} ${C.val('+' + tickVelocity + '/s')}`,
         logToSession: false
       };
     }
