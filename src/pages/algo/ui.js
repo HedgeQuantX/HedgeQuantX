@@ -77,47 +77,37 @@ const center = (text, width) => {
 
 /**
  * Fit text to exact width (truncate or pad)
- * Ensures output is EXACTLY width characters (visible)
+ * Ensures output is EXACTLY width visible characters
  */
 const fitToWidth = (text, width) => {
   const plain = stripAnsi(text);
   
-  if (plain.length > width) {
-    // Need to truncate - find cut point accounting for ANSI codes
-    let visibleCount = 0;
-    let cutIndex = 0;
-    let inAnsi = false;
-    
-    for (let i = 0; i < text.length; i++) {
-      if (text[i] === '\x1B') {
-        inAnsi = true;
-      } else if (inAnsi && text[i] === 'm') {
-        inAnsi = false;
-      } else if (!inAnsi) {
-        visibleCount++;
-        if (visibleCount >= width - 2) {
-          cutIndex = i + 1;
-          break;
-        }
-      }
-      cutIndex = i + 1;
-    }
-    
-    // Truncate and add ".." (2 chars to stay within width)
-    const truncated = text.substring(0, cutIndex);
-    const truncatedPlain = stripAnsi(truncated);
-    const remaining = width - truncatedPlain.length;
-    
-    if (remaining >= 2) {
-      return truncated + '..' + ' '.repeat(remaining - 2);
-    } else if (remaining > 0) {
-      return truncated + ' '.repeat(remaining);
-    }
-    return truncated;
+  if (plain.length <= width) {
+    // Pad to exact width
+    return text + ' '.repeat(width - plain.length);
   }
   
-  // Pad to exact width
-  return text + ' '.repeat(width - plain.length);
+  // Need to truncate to (width - 2) visible chars, then add ".."
+  const targetLen = width - 2;
+  let visibleCount = 0;
+  let cutIndex = 0;
+  let i = 0;
+  
+  while (i < text.length && visibleCount < targetLen) {
+    if (text[i] === '\x1B') {
+      // Skip entire ANSI sequence
+      while (i < text.length && text[i] !== 'm') {
+        i++;
+      }
+      i++; // skip 'm'
+    } else {
+      visibleCount++;
+      i++;
+    }
+    cutIndex = i;
+  }
+  
+  return text.substring(0, cutIndex) + '..';
 };
 
 /**
