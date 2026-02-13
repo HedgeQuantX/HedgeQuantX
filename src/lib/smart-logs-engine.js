@@ -215,25 +215,37 @@ class SmartLogsEngine {
       const bias = zScore < 0 ? C.bull('bid ↑') : C.bear('ask ↓');
       message = `[${C.sym(sym)}] ${priceDirColor(priceDir)} ${priceDisplay} ${C.separator()} ${C.label('Z:')}${zStr} ${bias} ${C.separator()} ${C.val('+' + needed + 'σ')} ${C.label('to setup')} ${C.separator()} ${C.label('Δ:')}${deltaStr}`;
     }
-    // Z-Score neutral - scanning
+    // Z-Score neutral - scanning (but don't spam when market is quiet)
     else {
-      // Cycle through different useful info each second to avoid repetition
-      const infoType = Math.floor(Date.now() / 1000) % 4;
-      let context;
-      switch (infoType) {
-        case 0:
-          context = `${C.label('Δ:')}${deltaStr} ${C.separator()} ${C.label('Buy:')}${buyStr}`;
-          break;
-        case 1:
-          context = `${C.label('VPIN:')}${vpinStr} ${C.separator()} ${C.label('OFI:')}${ofiStr}`;
-          break;
-        case 2:
-          context = `${C.val(tickVelocity)} ${C.label('ticks/s')} ${C.separator()} ${C.label('Δ:')}${deltaStr}`;
-          break;
-        default:
-          context = `${C.label('OFI:')}${ofiStr} ${C.separator()} ${C.label('Buy:')}${buyStr}`;
+      // If market is very quiet (no price change, low Z, low velocity), skip logging
+      const isQuiet = absZ < 0.3 && tickVelocity < 5 && Math.abs(priceDiff) < 0.01;
+      if (isQuiet) {
+        // Only log every 30 seconds when quiet
+        const now = Date.now();
+        if (this._lastQuietLog && (now - this._lastQuietLog) < 30000) {
+          return null; // Skip this log
+        }
+        this._lastQuietLog = now;
+        message = `[${C.sym(sym)}] ${C.muted('─')} ${C.price(price)} ${C.separator()} ${C.muted('Market quiet - waiting for activity')}`;
+      } else {
+        // Market active - cycle through different useful info
+        const infoType = Math.floor(Date.now() / 1000) % 4;
+        let context;
+        switch (infoType) {
+          case 0:
+            context = `${C.label('Δ:')}${deltaStr} ${C.separator()} ${C.label('Buy:')}${buyStr}`;
+            break;
+          case 1:
+            context = `${C.label('VPIN:')}${vpinStr} ${C.separator()} ${C.label('OFI:')}${ofiStr}`;
+            break;
+          case 2:
+            context = `${C.val(tickVelocity)} ${C.label('ticks/s')} ${C.separator()} ${C.label('Δ:')}${deltaStr}`;
+            break;
+          default:
+            context = `${C.label('OFI:')}${ofiStr} ${C.separator()} ${C.label('Buy:')}${buyStr}`;
+        }
+        message = `[${C.sym(sym)}] ${priceDirColor(priceDir)} ${priceDisplay} ${C.separator()} ${C.label('Z:')}${zStr} ${C.muted('scanning')} ${C.separator()} ${context}`;
       }
-      message = `[${C.sym(sym)}] ${priceDirColor(priceDir)} ${priceDisplay} ${C.separator()} ${C.label('Z:')}${zStr} ${C.muted('scanning')} ${C.separator()} ${context}`;
     }
     
     return { type: logType, message, logToSession: logType === 'signal' };
