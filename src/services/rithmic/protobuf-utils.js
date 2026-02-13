@@ -99,15 +99,24 @@ function skipField(buffer, offset, wireType) {
     case 0: // Varint
       const [, newOffset] = readVarint(buffer, offset);
       return newOffset;
-    case 1: // 64-bit
+    case 1: // 64-bit (fixed64, sfixed64, double)
       return offset + 8;
-    case 2: // Length-delimited
+    case 2: // Length-delimited (string, bytes, embedded messages, packed repeated)
       const [length, lenOffset] = readVarint(buffer, offset);
       return lenOffset + length;
-    case 5: // 32-bit
+    case 3: // Start group (deprecated)
+    case 4: // End group (deprecated)
+      // Groups are deprecated, skip to end of buffer
+      return buffer.length;
+    case 5: // 32-bit (fixed32, sfixed32, float)
       return offset + 4;
+    case 6: // Reserved (unused)
+    case 7: // Reserved (unused) - indicates corrupted data
+      // Skip to end to prevent infinite loops on corrupted data
+      return buffer.length;
     default:
-      throw new Error(`Unknown wire type: ${wireType}`);
+      // Unknown wire type - skip to end
+      return buffer.length;
   }
 }
 

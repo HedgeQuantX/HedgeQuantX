@@ -93,8 +93,15 @@ class ProtobufHandler {
     // Skip 4-byte length prefix
     const data = buffer.length > 4 ? buffer.slice(4) : buffer;
     
+    // Sanity check: buffer must be at least a few bytes
+    if (data.length < 2) return -1;
+    
     let offset = 0;
-    while (offset < data.length) {
+    let iterations = 0;
+    const maxIterations = 100; // Prevent infinite loops on corrupted data
+    
+    while (offset < data.length && iterations < maxIterations) {
+      iterations++;
       try {
         const [tag, newOffset] = readVarint(data, offset);
         const fieldNumber = tag >>> 3;
@@ -106,7 +113,11 @@ class ProtobufHandler {
           return templateId;
         }
 
+        const prevOffset = offset;
         offset = skipField(data, offset, wireType);
+        
+        // Ensure we're making progress (prevent infinite loop)
+        if (offset <= prevOffset) break;
       } catch (e) {
         break;
       }
