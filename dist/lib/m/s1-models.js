@@ -24,28 +24,30 @@
 'use strict';
 
 // =============================================================================
-// PRE-ALLOCATED REGIME PARAMETERS (avoid object creation)
+// REGIME PARAMETERS - EXACT MATCH TO PYTHON BACKTEST
+// Backtest Result: $2,012,373.75 | 146,685 trades | 71.1% WR
+// Z-Score Entry: >2.5 | Exit: <0.5 | Stop: 8 ticks | Target: 16 ticks
 // =============================================================================
 
 const REGIME_LOW = Object.freeze({
-  stopMultiplier: 0.8,
-  targetMultiplier: 0.9,
-  zscoreThreshold: 1.2,
-  confidenceBonus: 0.05
+  stopMultiplier: 1.0,
+  targetMultiplier: 1.0,
+  zscoreThreshold: 2.5,  // BACKTEST EXACT: 2.5
+  confidenceBonus: 0.0
 });
 
 const REGIME_NORMAL = Object.freeze({
   stopMultiplier: 1.0,
   targetMultiplier: 1.0,
-  zscoreThreshold: 1.5,
+  zscoreThreshold: 2.5,  // BACKTEST EXACT: 2.5
   confidenceBonus: 0.0
 });
 
 const REGIME_HIGH = Object.freeze({
-  stopMultiplier: 1.3,
-  targetMultiplier: 1.2,
-  zscoreThreshold: 2.0,
-  confidenceBonus: -0.05
+  stopMultiplier: 1.0,
+  targetMultiplier: 1.0,
+  zscoreThreshold: 2.5,  // BACKTEST EXACT: 2.5
+  confidenceBonus: 0.0
 });
 
 // Pre-allocated result object for Kalman filter (reused)
@@ -65,61 +67,49 @@ const _regimeResult = {
 // =============================================================================
 
 /**
- * Compute Z-Score with zero intermediate array allocations
- * Uses in-place calculation with index arithmetic
+ * Compute Z-Score - EXACT MATCH TO PYTHON BACKTEST
  * 
- * @param {number[]} prices - Price buffer (circular or linear)
- * @param {number} length - Actual number of valid prices
- * @param {number} window - Lookback window (default 50)
+ * PYTHON CODE (from ultra_scalper_v2_protected.py):
+ * ```python
+ * for i in range(lookback, n):
+ *     window = prices[i-lookback:i]  # EXCLUDES current price!
+ *     mean = np.mean(window)
+ *     std = np.std(window)
+ *     if std > 0:
+ *         zscore[i] = (prices[i] - mean) / std
+ * ```
+ * 
+ * CRITICAL: Mean/std are calculated from PREVIOUS 100 prices, NOT including current!
+ * 
+ * @param {number[]} prices - Price buffer
+ * @param {number} lookback - Lookback window (default 100 to match Python)
  * @returns {number} Z-Score value
  */
-function computeZScore(prices, window = 50) {
+function computeZScore(prices, lookback = 100) {
   const length = prices.length;
-  if (length === 0) return 0;
+  
+  // Need at least lookback+1 prices (lookback for window + 1 for current)
+  if (length <= lookback) return 0;
 
   const currentPrice = prices[length - 1];
   
-  // Determine effective window
-  const n = length < window ? length : window;
-  const startIdx = length - n;
+  // CRITICAL: Window is [i-lookback : i], which EXCLUDES current price
+  // This matches Python: window = prices[i-lookback:i]
+  const windowEnd = length - 1;  // Exclude current price
+  const windowStart = windowEnd - lookback;
   
-  // Single-pass mean calculation (no slice, no reduce)
+  // Single-pass mean and std calculation over lookback window
   let sum = 0;
   let sumSq = 0;
-  for (let i = startIdx; i < length; i++) {
+  for (let i = windowStart; i < windowEnd; i++) {
     const p = prices[i];
     sum += p;
-    sumSq += p * p;  // Faster than Math.pow(p, 2)
+    sumSq += p * p;
   }
   
-  const mean = sum / n;
-  const variance = (sumSq / n) - (mean * mean);
-  
-  // Blend cumulative and rolling std if enough data (like Python backtest)
-  let std;
-  if (length >= 100) {
-    const cumulativeStd = Math.sqrt(Math.max(0, variance));
-    
-    // Calculate rolling std over last 100 prices (in-place)
-    const rollingStart = length - 100;
-    let rollingSum = 0;
-    for (let i = rollingStart; i < length; i++) {
-      rollingSum += prices[i];
-    }
-    const rollingMean = rollingSum / 100;
-    
-    let rollingVarSum = 0;
-    for (let i = rollingStart; i < length; i++) {
-      const diff = prices[i] - rollingMean;
-      rollingVarSum += diff * diff;
-    }
-    const rollingStd = Math.sqrt(rollingVarSum / 100);
-    
-    // Blend: 30% cumulative, 70% rolling (matches Python)
-    std = cumulativeStd * 0.3 + rollingStd * 0.7;
-  } else {
-    std = Math.sqrt(Math.max(0, variance));
-  }
+  const mean = sum / lookback;
+  const variance = (sumSq / lookback) - (mean * mean);
+  const std = Math.sqrt(Math.max(0, variance));
 
   if (std < 0.0001) return 0;
   return (currentPrice - mean) / std;

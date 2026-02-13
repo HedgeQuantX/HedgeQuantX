@@ -79,21 +79,33 @@ class HQXUltraScalpingStrategy extends EventEmitter {
     this.tickSize = 0.25;
     this.tickValue = 5.0;
 
-    // === Model Parameters (BACKTEST VALIDATED - $2,012,373.75) ===
-    this.zscoreEntryThreshold = 2.5;  // BACKTEST: Z-Score Entry >2.5
-    this.zscoreExitThreshold = 0.5;
+    // ==========================================================================
+    // EXACT MATCH TO PYTHON BACKTEST CONFIG
+    // Result: $2,012,373.75 | 146,685 trades | 71.1% WR
+    // ==========================================================================
+    
+    // Z-Score Parameters (EXACT FROM PYTHON)
+    this.zscoreLookback = 100;        // PYTHON: zscore_lookback: 100
+    this.zscoreEntryThreshold = 2.5;  // PYTHON: zscore_entry: 2.5
+    this.zscoreExitThreshold = 0.5;   // PYTHON: zscore_exit: 0.5
+    
+    // Trade Parameters (EXACT FROM PYTHON)
+    this.baseStopTicks = 8;           // PYTHON: stop_ticks: 8
+    this.baseTargetTicks = 16;        // PYTHON: target_ticks: 16
+    this.breakevenTicks = 4;          // PYTHON: be_ticks: 4
+    this.trailActivationTicks = 6;    // PYTHON: trail_activation: 6
+    this.profitLockPct = 0.5;         // PYTHON: trail_pct: 0.5
+    
+    // Risk Management (EXACT FROM PYTHON)
+    this.cooldownTicks = 100;         // PYTHON: cooldown: 100
+    this.maxConsecutiveLosses = 10;   // PYTHON: max_consecutive_losses: 10
+    
+    // NOT USED AS FILTERS (Python doesn't use these)
     this.vpinWindow = 50;
     this.vpinToxicThreshold = 0.7;
+    this.ofiLookback = 20;
     this.kalmanProcessNoise = 0.01;
     this.kalmanMeasurementNoise = 0.1;
-    this.volatilityLookback = 100;
-    this.ofiLookback = 20;
-
-    // === Trade Parameters (BACKTEST VALIDATED) ===
-    this.baseStopTicks = 8;     // $40
-    this.baseTargetTicks = 16;  // $80
-    this.breakevenTicks = 4;    // Move to BE at +4 ticks
-    this.profitLockPct = 0.5;   // Lock 50% of profit
 
     // === State Storage ===
     this.barHistory = new Map();
@@ -102,22 +114,15 @@ class HQXUltraScalpingStrategy extends EventEmitter {
     this.volumeBuffer = new Map();
     this.tradesBuffer = new Map();
     this.atrHistory = new Map();
-
-    // === Tick aggregation ===
-    this.tickBuffer = new Map();
-    this.lastBarTime = new Map();
-    this.barIntervalMs = 5000; // 5-second bars
+    this.tickBuffer = new Map();      // For tick aggregation
+    this.lastBarTime = new Map();     // Last bar timestamp per contract
 
     // === Performance Tracking ===
+    this.tickCount = 0;               // Total ticks processed
+    this.lastSignalTick = 0;          // Tick count at last signal (for cooldown)
     this.recentTrades = [];
     this.winStreak = 0;
     this.lossStreak = 0;
-    
-    // === CRITICAL: Cooldown & Risk Management ===
-    this.lastSignalTime = 0;
-    this.signalCooldownMs = 30000;  // 30 seconds minimum between signals
-    this.maxConsecutiveLosses = 3;  // Stop trading after 3 consecutive losses
-    this.minConfidenceThreshold = 0.65;  // Minimum 65% confidence (was 55%)
     this.tradingEnabled = true;
   }
 
@@ -171,8 +176,8 @@ class HQXUltraScalpingStrategy extends EventEmitter {
       this.initialize(contractId);
     }
     
-    // Track total ticks and last price
-    this._totalTicks = (this._totalTicks || 0) + 1;
+    // Track total ticks (CRITICAL for tick-based cooldown like Python)
+    this.tickCount++;
     this._lastPrice = price;
     this._currentContractId = contractId;
 
@@ -231,23 +236,21 @@ class HQXUltraScalpingStrategy extends EventEmitter {
       const vpinPct = (vpin * 100).toFixed(0);
       const zRounded = Math.round(zscore * 10) / 10; // Round to 0.1
       
-      // Check cooldown
-      const now = Date.now();
-      const timeSinceLastSignal = now - this.lastSignalTime;
-      const cooldownRemaining = Math.max(0, this.signalCooldownMs - timeSinceLastSignal);
+      // Check tick-based cooldown (matches Python)
+      const ticksSinceLastSignal = this.tickCount - this.lastSignalTick;
+      const cooldownRemaining = Math.max(0, this.cooldownTicks - ticksSinceLastSignal);
       
       // Trading disabled?
       if (!this.tradingEnabled) {
         state = 'paused';
         message = `[${sym}] ${priceStr} | PAUSED - ${this.lossStreak} losses | Cooldown active`;
       }
-      // In cooldown?
-      else if (cooldownRemaining > 0 && this.lastSignalTime > 0) {
-        const secs = Math.ceil(cooldownRemaining / 1000);
-        state = `cooldown-${secs}`;
-        message = `[${sym}] ${priceStr} | Cooldown ${secs}s | Z:${zRounded}σ OFI:${ofiPct}%`;
+      // In tick-based cooldown?
+      else if (cooldownRemaining > 0 && this.lastSignalTick > 0) {
+        state = `cooldown-${cooldownRemaining}`;
+        message = `[${sym}] ${priceStr} | Cooldown ${cooldownRemaining} ticks | Z:${zRounded}σ OFI:${ofiPct}%`;
       }
-      // VPIN toxic?
+      // VPIN toxic? (info only, not a hard filter)
       else if (vpin > this.vpinToxicThreshold) {
         state = 'vpin-toxic';
         message = `[${sym}] ${priceStr} | VPIN toxic ${vpinPct}% > 70% | No entry - informed traders active`;
@@ -394,51 +397,65 @@ class HQXUltraScalpingStrategy extends EventEmitter {
       return null;
     }
     
-    // CRITICAL: Check cooldown
-    const now = Date.now();
-    const timeSinceLastSignal = now - this.lastSignalTime;
-    if (timeSinceLastSignal < this.signalCooldownMs) {
+    // CRITICAL: Tick-based cooldown (MATCHES PYTHON: cooldown = 100 ticks)
+    // Python: if i - last_trade_idx < cooldown_ticks: continue
+    const ticksSinceLastSignal = this.tickCount - this.lastSignalTick;
+    if (ticksSinceLastSignal < this.cooldownTicks) {
       // Silent - don't spam logs
       return null;
     }
     
-    // CRITICAL: Check consecutive losses
+    // Extra cooldown after losses (MATCHES PYTHON)
+    // Python: extra_cooldown = consecutive_losses * 50
+    if (this.lossStreak > 0) {
+      const extraCooldown = this.lossStreak * 50;
+      if (ticksSinceLastSignal < this.cooldownTicks + extraCooldown) {
+        return null;
+      }
+    }
+    
+    // CRITICAL: Check consecutive losses (kill switch)
     if (this.lossStreak >= this.maxConsecutiveLosses) {
       this.tradingEnabled = false;
       this.emit('log', { type: 'info', message: `Trading paused: ${this.lossStreak} consecutive losses. Waiting for cooldown...` });
-      // Auto re-enable after 2 minutes
+      // Auto re-enable after 1 hour (matches Python: 3600_000_000 us = 1 hour)
       setTimeout(() => {
         this.tradingEnabled = true;
         this.lossStreak = 0;
         this.emit('log', { type: 'info', message: 'Trading re-enabled after cooldown' });
-      }, 120000);
+      }, 3600000);
       return null;
     }
+    
+    // =========================================================================
+    // ENTRY LOGIC - MATCHES PYTHON BACKTEST EXACTLY
+    // Python backtest: Z-Score >2.5 = entry, no OFI/VPIN/Kalman filters
+    // Result: 146,685 trades, 71.1% WR, $2,012,373.75
+    // =========================================================================
     
     const absZscore = Math.abs(zscore);
-    if (absZscore < volParams.zscoreThreshold) return null;
-    if (vpin > this.vpinToxicThreshold) return null;
-
-    let direction;
-    if (zscore < -volParams.zscoreThreshold) direction = 'long';
-    else if (zscore > volParams.zscoreThreshold) direction = 'short';
-    else return null;
-
-    // CRITICAL: OFI must confirm direction (stronger filter)
-    const ofiConfirms = (direction === 'long' && ofi > 0.15) || (direction === 'short' && ofi < -0.15);
-    if (!ofiConfirms) {
-      this.emit('log', { type: 'debug', message: `Signal rejected: OFI (${(ofi * 100).toFixed(1)}%) doesn't confirm ${direction}` });
-      return null;
-    }
     
+    // Z-Score threshold check (ONLY filter from Python backtest)
+    if (absZscore < volParams.zscoreThreshold) return null;
+
+    // Determine direction based on Z-Score
+    let direction;
+    if (zscore < -volParams.zscoreThreshold) direction = 'long';   // Price below mean = buy
+    else if (zscore > volParams.zscoreThreshold) direction = 'short'; // Price above mean = sell
+    else return null;
+    
+    // OFI/VPIN/Kalman used for confidence scoring only (NOT as hard filters)
+    const ofiConfirms = (direction === 'long' && ofi > 0.1) || (direction === 'short' && ofi < -0.1);
     const kalmanDiff = currentPrice - kalmanEstimate;
     const kalmanConfirms = (direction === 'long' && kalmanDiff < 0) || (direction === 'short' && kalmanDiff > 0);
+    const vpinOk = vpin < this.vpinToxicThreshold;
 
+    // Composite confidence score (informational, not blocking)
     const scores = {
       zscore: Math.min(1.0, absZscore / 4.0),
-      vpin: 1.0 - vpin,
+      vpin: vpinOk ? (1.0 - vpin) : 0.3,
       kyleLambda: kyleLambda > 0.001 ? 0.5 : 0.8,
-      kalman: kalmanConfirms ? 0.8 : 0.4,
+      kalman: kalmanConfirms ? 0.8 : 0.5,
       volatility: regime === 'normal' ? 0.8 : regime === 'low' ? 0.7 : 0.6,
       ofi: ofiConfirms ? 0.9 : 0.5,
       composite: 0
@@ -449,14 +466,8 @@ class HQXUltraScalpingStrategy extends EventEmitter {
 
     const confidence = Math.min(1.0, scores.composite + volParams.confidenceBonus);
     
-    // CRITICAL: Higher confidence threshold (65% minimum)
-    if (confidence < this.minConfidenceThreshold) {
-      this.emit('log', { type: 'debug', message: `Signal rejected: confidence ${(confidence * 100).toFixed(1)}% < ${this.minConfidenceThreshold * 100}%` });
-      return null;
-    }
-    
-    // Update last signal time
-    this.lastSignalTime = now;
+    // Update last signal tick (tick-based cooldown like Python)
+    this.lastSignalTick = this.tickCount;
 
     const stopTicks = Math.round(this.baseStopTicks * volParams.stopMultiplier);
     const targetTicks = Math.round(this.baseTargetTicks * volParams.targetMultiplier);
@@ -623,7 +634,8 @@ class HQXUltraScalpingStrategy extends EventEmitter {
       tradingEnabled: this.tradingEnabled,
       lossStreak: this.lossStreak,
       winStreak: this.winStreak,
-      cooldownRemaining: Math.max(0, this.signalCooldownMs - (Date.now() - this.lastSignalTime)),
+      cooldownRemaining: Math.max(0, this.cooldownTicks - (this.tickCount - this.lastSignalTick)),
+      tickCount: this.tickCount,
     };
   }
   
