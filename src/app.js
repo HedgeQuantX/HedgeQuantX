@@ -39,9 +39,10 @@ let daemonClient = null;
  * Create a proxy service that uses daemon for all operations
  * @param {Object} client - DaemonClient instance
  * @param {Object} propfirm - Propfirm info
+ * @param {Object} credentials - Optional credentials {username, password}
  * @returns {Object} Service-like object
  */
-function createDaemonProxyService(client, propfirm) {
+function createDaemonProxyService(client, propfirm, credentials = null) {
   const checkMarketHours = () => {
     const now = new Date(), utcDay = now.getUTCDay(), utcHour = now.getUTCHours();
     const isDST = now.getTimezoneOffset() < Math.max(
@@ -56,8 +57,11 @@ function createDaemonProxyService(client, propfirm) {
     return { isOpen: true, message: 'Market is open' };
   };
   
+  // Store credentials for algo trading (market data feed)
+  let storedCredentials = credentials;
+  
   return {
-    propfirm, propfirmKey: propfirm?.key, accounts: [], credentials: null,
+    propfirm, propfirmKey: propfirm?.key, accounts: [], credentials: storedCredentials,
     async getTradingAccounts() { return client.getTradingAccounts(); },
     async getPositions() { return client.getPositions(); },
     async getOrders() { return client.getOrders(); },
@@ -70,9 +74,22 @@ function createDaemonProxyService(client, propfirm) {
     getAccountPnL() { return { pnl: null, openPnl: null, closedPnl: null, balance: null }; },
     getToken() { return 'daemon-connected'; },
     getPropfirm() { return propfirm?.key || 'apex'; },
-    getRithmicCredentials() { return null; },
+    getRithmicCredentials() {
+      // Return credentials for algo trading market data connection
+      if (!storedCredentials) return null;
+      const { RITHMIC_ENDPOINTS } = require('./services/rithmic');
+      return {
+        userId: storedCredentials.username,
+        password: storedCredentials.password,
+        systemName: propfirm?.systemName || propfirm?.name || 'Apex',
+        gateway: RITHMIC_ENDPOINTS?.CHICAGO || 'wss://rprotocol.rithmic.com:443',
+      };
+    },
+    setCredentials(creds) { storedCredentials = creds; },
     checkMarketHours,
     async disconnect() { return { success: true }; },
+    // For algo - disconnect ticker before starting new market data connection
+    async disconnectTicker() { return { success: true }; },
   };
 }
 
@@ -266,8 +283,19 @@ const run = async () => {
           // Daemon already has a connection, use it
           const accountsResult = await daemonClient.getTradingAccounts();
           if (accountsResult.success && accountsResult.accounts?.length > 0) {
+            // Get credentials for algo trading
+            let credentials = null;
+            try {
+              const credResult = await daemonClient.getCredentials();
+              if (credResult.success) {
+                credentials = credResult.credentials;
+              }
+            } catch (credErr) {
+              log.warn('Failed to get credentials', { error: credErr.message });
+            }
+            
             // Create a proxy service that uses daemon
-            currentService = createDaemonProxyService(daemonClient, status.propfirm);
+            currentService = createDaemonProxyService(daemonClient, status.propfirm, credentials);
             connections.services.push({
               type: 'rithmic',
               service: currentService,
@@ -282,7 +310,18 @@ const run = async () => {
           // Daemon not connected, try to restore session via daemon
           const restoreResult = await daemonClient.restoreSession();
           if (restoreResult.success) {
-            currentService = createDaemonProxyService(daemonClient, restoreResult.propfirm);
+            // Get credentials for algo trading
+            let credentials = null;
+            try {
+              const credResult = await daemonClient.getCredentials();
+              if (credResult.success) {
+                credentials = credResult.credentials;
+              }
+            } catch (credErr) {
+              log.warn('Failed to get credentials', { error: credErr.message });
+            }
+            
+            currentService = createDaemonProxyService(daemonClient, restoreResult.propfirm, credentials);
             connections.services.push({
               type: 'rithmic',
               service: currentService,
@@ -348,7 +387,8 @@ const run = async () => {
               if (daemonClient?.connected) {
                 result = await daemonClient.login(selectedPropfirm.key, credentials.username, credentials.password);
                 if (result.success) {
-                  currentService = createDaemonProxyService(daemonClient, result.propfirm);
+                  // Pass credentials for algo trading market data
+                  currentService = createDaemonProxyService(daemonClient, result.propfirm, credentials);
                   connections.services.push({
                     type: 'rithmic', service: currentService,
                     propfirm: selectedPropfirm.name, propfirmKey: selectedPropfirm.key, connectedAt: new Date(),

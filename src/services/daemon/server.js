@@ -196,6 +196,10 @@ class DaemonServer extends EventEmitter {
           await h.handleGetPnL(socket, id, data);
           break;
           
+        case MSG_TYPE.GET_CREDENTIALS:
+          await h.handleGetCredentials(socket, id);
+          break;
+          
         case MSG_TYPE.PLACE_ORDER:
           await h.handlePlaceOrder(socket, id, data);
           break;

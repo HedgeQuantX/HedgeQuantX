@@ -352,6 +352,14 @@ class DaemonClient extends EventEmitter {
   }
   
   /**
+   * Get credentials for algo trading
+   * @returns {Promise<Object>}
+   */
+  async getCredentials() {
+    return this._request(MSG_TYPE.GET_CREDENTIALS);
+  }
+  
+  /**
    * Subscribe to market data
    * @param {string} symbol
    * @returns {Promise<Object>}

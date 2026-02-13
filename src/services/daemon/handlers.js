@@ -262,6 +262,39 @@ function createHandlers(daemon) {
     daemon._send(socket, createMessage(MSG_TYPE.ORDER_RESULT, result, id));
   }
   
+  // ==================== CREDENTIALS HANDLER ====================
+  
+  async function handleGetCredentials(socket, id) {
+    // Load credentials from saved session
+    const { storage } = require('../session');
+    const sessions = storage.load();
+    const rithmicSession = sessions.find(s => s.type === 'rithmic' && s.credentials);
+    
+    if (!rithmicSession || !rithmicSession.credentials) {
+      daemon._send(socket, createMessage(MSG_TYPE.CREDENTIALS, {
+        success: false,
+        error: 'No credentials available',
+      }, id));
+      return;
+    }
+    
+    // Return credentials for algo trading market data
+    const { RITHMIC_ENDPOINTS } = require('../rithmic');
+    daemon._send(socket, createMessage(MSG_TYPE.CREDENTIALS, {
+      success: true,
+      credentials: {
+        username: rithmicSession.credentials.username,
+        password: rithmicSession.credentials.password,
+      },
+      rithmicCredentials: {
+        userId: rithmicSession.credentials.username,
+        password: rithmicSession.credentials.password,
+        systemName: daemon.propfirm?.name || rithmicSession.propfirm || 'Apex',
+        gateway: RITHMIC_ENDPOINTS?.CHICAGO || 'wss://rprotocol.rithmic.com:443',
+      },
+    }, id));
+  }
+  
   // ==================== CONTRACT HANDLERS ====================
   
   async function handleGetContracts(socket, id) {
@@ -332,6 +365,7 @@ function createHandlers(daemon) {
     handleGetPositions,
     handleGetOrders,
     handleGetPnL,
+    handleGetCredentials,
     handlePlaceOrder,
     handleCancelOrder,
     handleCancelAll,

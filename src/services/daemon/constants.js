@@ -42,6 +42,7 @@ const MSG_TYPE = {
   GET_STATUS: 'get_status',
   GET_CONTRACTS: 'get_contracts',
   SEARCH_CONTRACTS: 'search_contracts',
+  GET_CREDENTIALS: 'get_credentials',
   
   // Data responses
   ACCOUNTS: 'accounts',
@@ -50,6 +51,7 @@ const MSG_TYPE = {
   PNL: 'pnl',
   STATUS: 'status',
   CONTRACTS: 'contracts',
+  CREDENTIALS: 'credentials',
   
   // Trading
   PLACE_ORDER: 'place_order',
