@@ -56,6 +56,18 @@ class DaemonServer extends EventEmitter {
     
     /** @type {Object} Message handlers */
     this.handlers = createHandlers(this);
+    
+    /** @type {NodeJS.Timer|null} Health check interval */
+    this._healthCheckInterval = null;
+    
+    /** @type {number} Last successful Rithmic response timestamp */
+    this._lastRithmicResponse = 0;
+    
+    /** @type {boolean} Is currently reconnecting */
+    this._isReconnecting = false;
+    
+    /** @type {Object} Saved credentials for reconnection */
+    this._savedCredentials = null;
   }
   
   /**
@@ -264,6 +276,138 @@ class DaemonServer extends EventEmitter {
    */
   _setupRithmicEvents() {
     setupRithmicEvents(this);
+    
+    // Monitor disconnection
+    if (this.rithmic) {
+      this.rithmic.on('disconnected', (info) => {
+        log.warn('Rithmic disconnected', info);
+        this._handleRithmicDisconnect();
+      });
+      
+      this.rithmic.on('reconnected', () => {
+        log.info('Rithmic reconnected');
+        this._lastRithmicResponse = Date.now();
+        this._isReconnecting = false;
+      });
+    }
+  }
+  
+  /**
+   * Start health monitoring
+   */
+  _startHealthCheck() {
+    if (this._healthCheckInterval) return;
+    
+    // Check every 30 seconds
+    this._healthCheckInterval = setInterval(() => {
+      this._performHealthCheck();
+    }, 30000);
+    
+    log.debug('Health check started');
+  }
+  
+  /**
+   * Stop health monitoring
+   */
+  _stopHealthCheck() {
+    if (this._healthCheckInterval) {
+      clearInterval(this._healthCheckInterval);
+      this._healthCheckInterval = null;
+    }
+  }
+  
+  /**
+   * Perform health check on Rithmic connection
+   */
+  async _performHealthCheck() {
+    if (!this.rithmic || this._isReconnecting) return;
+    
+    try {
+      // Try to get accounts as a health check (uses cache, no API call)
+      const result = await this.rithmic.getTradingAccounts();
+      
+      if (result.success) {
+        this._lastRithmicResponse = Date.now();
+      } else {
+        log.warn('Health check failed', { error: result.error });
+        
+        // If no response for 2 minutes, try reconnect
+        const timeSinceLastResponse = Date.now() - this._lastRithmicResponse;
+        if (timeSinceLastResponse > 120000) {
+          log.warn('Rithmic unresponsive for 2 minutes, attempting reconnect');
+          this._handleRithmicDisconnect();
+        }
+      }
+    } catch (err) {
+      log.error('Health check error', { error: err.message });
+    }
+  }
+  
+  /**
+   * Handle Rithmic disconnection - attempt reconnect
+   */
+  async _handleRithmicDisconnect() {
+    if (this._isReconnecting) {
+      log.debug('Already reconnecting, skipping');
+      return;
+    }
+    
+    if (!this._savedCredentials) {
+      log.warn('Cannot reconnect: no saved credentials');
+      return;
+    }
+    
+    this._isReconnecting = true;
+    
+    // Notify clients
+    this._broadcast(createMessage(MSG_TYPE.EVENT_DISCONNECTED, {
+      reason: 'Connection lost, reconnecting...',
+      reconnecting: true,
+    }));
+    
+    // Use reconnect module
+    const { handleAutoReconnect } = require('../rithmic/reconnect');
+    
+    // Prepare service with credentials
+    if (this.rithmic) {
+      this.rithmic.credentials = this._savedCredentials;
+    }
+    
+    try {
+      await handleAutoReconnect(this.rithmic);
+      
+      if (this.rithmic && this.rithmic.accounts?.length > 0) {
+        this._lastRithmicResponse = Date.now();
+        this._isReconnecting = false;
+        
+        // Notify clients of reconnection
+        this._broadcast(createMessage(MSG_TYPE.EVENT_RECONNECTED, {
+          propfirm: this.propfirm,
+          accounts: this.rithmic.accounts.length,
+        }));
+        
+        log.info('Reconnection successful');
+      }
+    } catch (err) {
+      log.error('Reconnection failed', { error: err.message });
+      this._isReconnecting = false;
+      
+      // Schedule retry in 5 minutes
+      setTimeout(() => {
+        if (this.isRunning && !this._isReconnecting) {
+          this._handleRithmicDisconnect();
+        }
+      }, 300000);
+    }
+  }
+  
+  /**
+   * Save credentials for reconnection
+   * @param {string} username
+   * @param {string} password
+   */
+  _saveCredentials(username, password) {
+    this._savedCredentials = { username, password };
   }
   
   /**
@@ -295,6 +439,9 @@ class DaemonServer extends EventEmitter {
    */
   async stop() {
     log.info('Stopping daemon...');
+    
+    // Stop health monitoring
+    this._stopHealthCheck();
     
     // Stop all algo sessions
     for (const [id, session] of this.algoSessions) {

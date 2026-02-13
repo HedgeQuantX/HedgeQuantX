@@ -59,6 +59,13 @@ function createHandlers(daemon) {
         name: daemon.rithmic.propfirm.name,
       };
       
+      // Save credentials for auto-reconnect
+      daemon._saveCredentials(username, password);
+      daemon._lastRithmicResponse = Date.now();
+      
+      // Start health monitoring
+      daemon._startHealthCheck();
+      
       // Save session for restore
       const { storage } = require('../session');
       storage.save([{
@@ -113,6 +120,14 @@ function createHandlers(daemon) {
         key: propfirmKey,
         name: daemon.rithmic.propfirm.name,
       };
+      
+      // Save credentials for auto-reconnect
+      daemon._saveCredentials(credentials.username, credentials.password);
+      daemon._lastRithmicResponse = Date.now();
+      
+      // Start health monitoring
+      daemon._startHealthCheck();
+      
       log.info('Session restored', { propfirm: daemon.propfirm.name });
     } else {
       daemon.rithmic = null;
@@ -129,6 +144,10 @@ function createHandlers(daemon) {
   }
   
   async function handleLogout(socket, id) {
+    // Stop health monitoring
+    daemon._stopHealthCheck();
+    daemon._savedCredentials = null;
+    
     if (daemon.rithmic) {
       await daemon.rithmic.disconnect();
       daemon.rithmic = null;
