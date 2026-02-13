@@ -47,6 +47,7 @@
     "src/api/",
     "src/config/",
     "src/lib/data.js",
+    "src/lib/hft/",
     "src/lib/smart-logs*.js",
     "src/lib/smart-logs-messages/",
     "src/lib/m/index.js",
