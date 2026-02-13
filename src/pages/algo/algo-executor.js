@@ -60,6 +60,11 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   let running = true, stopReason = null, startingPnL = null;
   let currentPosition = 0, pendingOrder = false, tickCount = 0, lastBias = 'FLAT';
   
+  // Clear any stale position data at startup
+  if (service.positions) {
+    service.positions.clear();
+  }
+  
   // HFT: Use CircularBuffer for O(1) tick storage (replaces O(n) shift())
   const recentTicksBuffer = new CircularBuffer(100);
   const recentSignalsBuffer = new CircularBuffer(10);
