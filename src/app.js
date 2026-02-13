@@ -179,17 +179,23 @@ const run = async () => {
     // First launch - show banner then try restore session
     await banner();
     
-    const spinner = ora({ text: 'LOADING DASHBOARD...', color: 'yellow' }).start();
+    const spinner = ora({ text: 'Restoring session...', color: 'cyan' }).start();
     
     const restored = await connections.restoreFromStorage();
 
     if (restored) {
-      currentService = connections.getAll()[0].service;
+      const conn = connections.getAll()[0];
+      currentService = conn.service;
+      const accountCount = currentService.accounts?.length || 0;
+      spinner.succeed(`Session restored: ${conn.propfirm} (${accountCount} accounts)`);
+      await new Promise(r => setTimeout(r, 500));
+      
+      const spinner2 = ora({ text: 'Loading dashboard...', color: 'yellow' }).start();
       await refreshStats();
-      // Store spinner globally - dashboard will stop it when ready to display
-      global.__hqxSpinner = spinner;
+      global.__hqxSpinner = spinner2;
     } else {
-      spinner.stop(); // Stop spinner - no session to restore
+      spinner.info('No saved session - please login');
+      await new Promise(r => setTimeout(r, 500));
       global.__hqxSpinner = null;
     }
 
