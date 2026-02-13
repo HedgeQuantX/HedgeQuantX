@@ -77,17 +77,46 @@ const center = (text, width) => {
 
 /**
  * Fit text to exact width (truncate or pad)
+ * Ensures output is EXACTLY width characters (visible)
  */
 const fitToWidth = (text, width) => {
   const plain = stripAnsi(text);
+  
   if (plain.length > width) {
-    let count = 0, cut = 0;
-    for (let i = 0; i < text.length && count < width - 3; i++) {
-      if (text[i] === '\x1B') { while (i < text.length && text[i] !== 'm') i++; }
-      else { count++; cut = i + 1; }
+    // Need to truncate - find cut point accounting for ANSI codes
+    let visibleCount = 0;
+    let cutIndex = 0;
+    let inAnsi = false;
+    
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === '\x1B') {
+        inAnsi = true;
+      } else if (inAnsi && text[i] === 'm') {
+        inAnsi = false;
+      } else if (!inAnsi) {
+        visibleCount++;
+        if (visibleCount >= width - 2) {
+          cutIndex = i + 1;
+          break;
+        }
+      }
+      cutIndex = i + 1;
     }
-    return text.substring(0, cut) + '...';
+    
+    // Truncate and add ".." (2 chars to stay within width)
+    const truncated = text.substring(0, cutIndex);
+    const truncatedPlain = stripAnsi(truncated);
+    const remaining = width - truncatedPlain.length;
+    
+    if (remaining >= 2) {
+      return truncated + '..' + ' '.repeat(remaining - 2);
+    } else if (remaining > 0) {
+      return truncated + ' '.repeat(remaining);
+    }
+    return truncated;
   }
+  
+  // Pad to exact width
   return text + ' '.repeat(width - plain.length);
 };
 
