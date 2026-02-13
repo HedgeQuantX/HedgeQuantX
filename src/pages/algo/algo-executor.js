@@ -119,30 +119,33 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   ui.addLog('system', 'Connecting to market data...');
   
   // Listen for position updates from Rithmic (external closes, manual trades)
+  // Only if service supports events (RithmicService or DaemonProxyService)
   const accId = account.rithmicAccountId || account.accountId;
-  service.on('positionUpdate', (pos) => {
-    // Match by account and symbol
-    const posSymbol = pos.contractId || pos.symbol || '';
-    const matchesSymbol = posSymbol.includes(contract.name) || posSymbol.includes(contractId) || 
-                          posSymbol === symbolCode || contractId.includes(posSymbol);
-    const matchesAccount = pos.accountId === accId || pos.accountId === account.accountId;
-    
-    if (matchesSymbol && matchesAccount) {
-      const qty = parseInt(pos.quantity) || 0;
-      if (!isNaN(qty) && Math.abs(qty) < 1000 && qty !== currentPosition) {
-        const oldPos = currentPosition;
-        currentPosition = qty;
-        if (qty === 0 && oldPos !== 0) {
-          ui.addLog('trade', `Position closed externally (was ${oldPos})`);
-          sessionLogger.log('POSITION', `External close: ${oldPos} -> 0`);
-          pendingOrder = false;  // Reset pending order flag
-        } else if (qty !== 0 && oldPos === 0) {
-          ui.addLog('trade', `Position opened externally: ${qty}`);
-          sessionLogger.log('POSITION', `External open: 0 -> ${qty}`);
+  if (typeof service.on === 'function') {
+    service.on('positionUpdate', (pos) => {
+      // Match by account and symbol
+      const posSymbol = pos.contractId || pos.symbol || '';
+      const matchesSymbol = posSymbol.includes(contract.name) || posSymbol.includes(contractId) || 
+                            posSymbol === symbolCode || contractId.includes(posSymbol);
+      const matchesAccount = pos.accountId === accId || pos.accountId === account.accountId;
+      
+      if (matchesSymbol && matchesAccount) {
+        const qty = parseInt(pos.quantity) || 0;
+        if (!isNaN(qty) && Math.abs(qty) < 1000 && qty !== currentPosition) {
+          const oldPos = currentPosition;
+          currentPosition = qty;
+          if (qty === 0 && oldPos !== 0) {
+            ui.addLog('trade', `Position closed externally (was ${oldPos})`);
+            sessionLogger.log('POSITION', `External close: ${oldPos} -> 0`);
+            pendingOrder = false;  // Reset pending order flag
+          } else if (qty !== 0 && oldPos === 0) {
+            ui.addLog('trade', `Position opened externally: ${qty}`);
+            sessionLogger.log('POSITION', `External open: 0 -> ${qty}`);
+          }
         }
       }
-    }
-  });
+    });
+  }
   
   strategy.on('signal', async (signal) => {
     const dir = signal.direction?.toUpperCase() || 'UNKNOWN';
