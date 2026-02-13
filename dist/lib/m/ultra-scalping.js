@@ -151,9 +151,18 @@ class HQXUltraScalpingStrategy extends EventEmitter {
     // Add tick to buffer
     let ticks = this.tickBuffer.get(contractId);
     ticks.push(tick);
+    
+    // Track total ticks for status log
+    this._totalTicks = (this._totalTicks || 0) + 1;
+    
+    // Emit status log every second
+    const now = Date.now();
+    if (!this._lastStatusLog || now - this._lastStatusLog >= 1000) {
+      this._lastStatusLog = now;
+      this._emitStatusLog(contractId, tick.price);
+    }
 
     // Check if we should form a new bar
-    const now = Date.now();
     const lastBar = this.lastBarTime.get(contractId);
     
     if (now - lastBar >= this.barIntervalMs && ticks.length > 0) {
@@ -170,6 +179,72 @@ class HQXUltraScalpingStrategy extends EventEmitter {
       }
     }
     return null;
+  }
+  
+  /**
+   * Emit status log with QUANT metrics
+   */
+  _emitStatusLog(contractId, currentPrice) {
+    const prices = this.priceBuffer.get(contractId) || [];
+    const volumes = this.volumeBuffer.get(contractId) || [];
+    const bars = this.barHistory.get(contractId) || [];
+    
+    if (prices.length < 20) return; // Not enough data yet
+    
+    // Compute current metrics
+    const zscore = computeZScore(prices);
+    const vpin = volumes.length >= 10 ? computeVPIN(volumes, this.vpinWindow) : 0;
+    const ofi = bars.length >= 10 ? computeOrderFlowImbalance(bars, this.ofiLookback) : 0;
+    
+    // Determine market state
+    const absZ = Math.abs(zscore);
+    let zState = 'normal';
+    if (absZ >= 2.0) zState = 'EXTREME';
+    else if (absZ >= 1.5) zState = 'HIGH';
+    else if (absZ >= 1.0) zState = 'building';
+    
+    // Determine direction bias
+    let bias = 'neutral';
+    if (zscore < -1.5 && ofi > 0.1) bias = 'LONG setup';
+    else if (zscore > 1.5 && ofi < -0.1) bias = 'SHORT setup';
+    else if (zscore < -1.0) bias = 'oversold';
+    else if (zscore > 1.0) bias = 'overbought';
+    
+    // Extract symbol
+    const sym = (contractId || '').replace(/[A-Z]\d+$/, '');
+    
+    // Build message based on state
+    let message;
+    if (!this.tradingEnabled) {
+      message = `[${sym}] ${currentPrice.toFixed(2)} | PAUSED (${this.lossStreak} losses) | Cooldown active`;
+    } else if (absZ >= 2.0) {
+      const dir = zscore < 0 ? 'LONG' : 'SHORT';
+      const ofiPct = (Math.abs(ofi) * 100).toFixed(0);
+      const ofiConfirm = (zscore < 0 && ofi > 0.15) || (zscore > 0 && ofi < -0.15);
+      if (ofiConfirm) {
+        message = `[${sym}] ${currentPrice.toFixed(2)} | Z: ${zscore.toFixed(1)}σ ${zState} | ${dir} | OFI ${ofiPct}% confirms`;
+      } else {
+        message = `[${sym}] ${currentPrice.toFixed(2)} | Z: ${zscore.toFixed(1)}σ ${zState} | ${dir} signal | OFI ${ofiPct}% pending`;
+      }
+    } else if (absZ >= 1.5) {
+      message = `[${sym}] ${currentPrice.toFixed(2)} | Z: ${zscore.toFixed(1)}σ ${zState} | ${bias} | Monitoring`;
+    } else if (absZ >= 1.0) {
+      message = `[${sym}] ${currentPrice.toFixed(2)} | Z: ${zscore.toFixed(1)}σ ${zState} | Awaiting extremity`;
+    } else {
+      // Normal state - show different context messages
+      const vpinPct = (vpin * 100).toFixed(0);
+      const contexts = [
+        `VPIN ${vpinPct}% | Mean reversion scan`,
+        `OFI balanced | Price discovery`,
+        `Z normalized | Statistical scan`,
+        `Tick flow stable | Edge detection`,
+        `Volatility normal | Alpha scan`,
+      ];
+      const ctx = contexts[Math.floor(Date.now() / 5000) % contexts.length];
+      message = `[${sym}] ${currentPrice.toFixed(2)} | Z: ${zscore.toFixed(1)}σ | ${ctx}`;
+    }
+    
+    this.emit('log', { type: 'info', message });
   }
 
   /**
