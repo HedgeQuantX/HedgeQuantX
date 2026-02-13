@@ -445,6 +445,11 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       if (Date.now() % 10000 < 2000) {
         const posResult = await service.getPositions(accId);
         if (posResult.success && posResult.positions) {
+          // Debug: log all positions
+          if (posResult.positions.length > 0) {
+            console.log('[Position] Raw positions:', JSON.stringify(posResult.positions));
+          }
+          
           const pos = posResult.positions.find(p => {
             const sym = p.contractId || p.symbol || '';
             return sym.includes(contract.name) || sym.includes(contractId);
@@ -452,6 +457,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
           if (pos && pos.quantity !== 0) {
             // Validate quantity is reasonable (prevent overflow values)
             const qty = parseInt(pos.quantity);
+            console.log('[Position] Found:', pos.symbol || pos.contractId, 'qty:', qty);
             if (!isNaN(qty) && Math.abs(qty) < 1000) {
               currentPosition = qty;
             }
