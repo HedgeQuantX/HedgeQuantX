@@ -197,69 +197,94 @@ class HQXUltraScalpingStrategy extends EventEmitter {
   }
   
   /**
-   * Emit status log with QUANT metrics
+   * Emit status log with QUANT metrics - shows exactly WHY we're not entering
+   * No repetition - only emits if message changed
    */
   _emitStatusLog(contractId, currentPrice) {
     const prices = this.priceBuffer.get(contractId) || [];
     const volumes = this.volumeBuffer.get(contractId) || [];
     const bars = this.barHistory.get(contractId) || [];
     
-    if (prices.length < 20) return; // Not enough data yet
-    
-    // Compute current metrics
-    const zscore = computeZScore(prices);
-    const vpin = volumes.length >= 10 ? computeVPIN(volumes, this.vpinWindow) : 0;
-    const ofi = bars.length >= 10 ? computeOrderFlowImbalance(bars, this.ofiLookback) : 0;
-    
-    // Determine market state
-    const absZ = Math.abs(zscore);
-    let zState = 'normal';
-    if (absZ >= 2.0) zState = 'EXTREME';
-    else if (absZ >= 1.5) zState = 'HIGH';
-    else if (absZ >= 1.0) zState = 'building';
-    
-    // Determine direction bias
-    let bias = 'neutral';
-    if (zscore < -1.5 && ofi > 0.1) bias = 'LONG setup';
-    else if (zscore > 1.5 && ofi < -0.1) bias = 'SHORT setup';
-    else if (zscore < -1.0) bias = 'oversold';
-    else if (zscore > 1.0) bias = 'overbought';
-    
     // Extract symbol
-    const sym = (contractId || '').replace(/[A-Z]\d+$/, '');
+    const sym = extractBaseSymbol(contractId);
+    const priceStr = currentPrice.toFixed(2);
     
-    // Build message based on state
     let message;
-    if (!this.tradingEnabled) {
-      message = `[${sym}] ${currentPrice.toFixed(2)} | PAUSED (${this.lossStreak} losses) | Cooldown active`;
-    } else if (absZ >= 2.0) {
-      const dir = zscore < 0 ? 'LONG' : 'SHORT';
-      const ofiPct = (Math.abs(ofi) * 100).toFixed(0);
-      const ofiConfirm = (zscore < 0 && ofi > 0.15) || (zscore > 0 && ofi < -0.15);
-      if (ofiConfirm) {
-        message = `[${sym}] ${currentPrice.toFixed(2)} | Z: ${zscore.toFixed(1)}σ ${zState} | ${dir} | OFI ${ofiPct}% confirms`;
-      } else {
-        message = `[${sym}] ${currentPrice.toFixed(2)} | Z: ${zscore.toFixed(1)}σ ${zState} | ${dir} signal | OFI ${ofiPct}% pending`;
-      }
-    } else if (absZ >= 1.5) {
-      message = `[${sym}] ${currentPrice.toFixed(2)} | Z: ${zscore.toFixed(1)}σ ${zState} | ${bias} | Monitoring`;
-    } else if (absZ >= 1.0) {
-      message = `[${sym}] ${currentPrice.toFixed(2)} | Z: ${zscore.toFixed(1)}σ ${zState} | Awaiting extremity`;
+    let state; // Used to detect state changes
+    
+    // Not enough data yet
+    if (prices.length < 20) {
+      const pct = Math.round((prices.length / 50) * 100);
+      state = `warmup-${Math.floor(pct / 10) * 10}`;
+      message = `[${sym}] ${priceStr} | Warming up... ${prices.length}/50 bars (${pct}%)`;
+    } else if (bars.length < 50) {
+      const pct = Math.round((bars.length / 50) * 100);
+      state = `building-${Math.floor(pct / 10) * 10}`;
+      message = `[${sym}] ${priceStr} | Building history... ${bars.length}/50 bars (${pct}%)`;
     } else {
-      // Normal state - show different context messages
+      // Compute current metrics
+      const zscore = computeZScore(prices);
+      const vpin = volumes.length >= 10 ? computeVPIN(volumes, this.vpinWindow) : 0;
+      const ofi = bars.length >= 10 ? computeOrderFlowImbalance(bars, this.ofiLookback) : 0;
+      const absZ = Math.abs(zscore);
+      const ofiPct = (ofi * 100).toFixed(0);
       const vpinPct = (vpin * 100).toFixed(0);
-      const contexts = [
-        `VPIN ${vpinPct}% | Mean reversion scan`,
-        `OFI balanced | Price discovery`,
-        `Z normalized | Statistical scan`,
-        `Tick flow stable | Edge detection`,
-        `Volatility normal | Alpha scan`,
-      ];
-      const ctx = contexts[Math.floor(Date.now() / 5000) % contexts.length];
-      message = `[${sym}] ${currentPrice.toFixed(2)} | Z: ${zscore.toFixed(1)}σ | ${ctx}`;
+      const zRounded = Math.round(zscore * 10) / 10; // Round to 0.1
+      
+      // Check cooldown
+      const now = Date.now();
+      const timeSinceLastSignal = now - this.lastSignalTime;
+      const cooldownRemaining = Math.max(0, this.signalCooldownMs - timeSinceLastSignal);
+      
+      // Trading disabled?
+      if (!this.tradingEnabled) {
+        state = 'paused';
+        message = `[${sym}] ${priceStr} | PAUSED - ${this.lossStreak} losses | Cooldown active`;
+      }
+      // In cooldown?
+      else if (cooldownRemaining > 0 && this.lastSignalTime > 0) {
+        const secs = Math.ceil(cooldownRemaining / 1000);
+        state = `cooldown-${secs}`;
+        message = `[${sym}] ${priceStr} | Cooldown ${secs}s | Z:${zRounded}σ OFI:${ofiPct}%`;
+      }
+      // VPIN toxic?
+      else if (vpin > this.vpinToxicThreshold) {
+        state = 'vpin-toxic';
+        message = `[${sym}] ${priceStr} | VPIN toxic ${vpinPct}% > 70% | No entry - informed traders active`;
+      }
+      else {
+        // Determine what's needed for entry
+        const zThreshold = 1.5;
+        const needMoreZ = absZ < zThreshold;
+        const direction = zscore < 0 ? 'LONG' : 'SHORT';
+        const ofiConfirms = (direction === 'LONG' && ofi > 0.15) || (direction === 'SHORT' && ofi < -0.15);
+        
+        // Z-score too low - main reason for no entry
+        if (needMoreZ) {
+          const needed = (zThreshold - absZ).toFixed(1);
+          const dir = zscore < 0 ? 'oversold' : zscore > 0 ? 'overbought' : 'neutral';
+          state = `zscore-low-${zRounded}-${ofiPct}`;
+          message = `[${sym}] ${priceStr} | Z:${zRounded}σ ${dir} | Need ${needed}σ more for signal | OFI:${ofiPct}%`;
+        }
+        // Z-score high enough but OFI doesn't confirm
+        else if (!ofiConfirms) {
+          const ofiNeedStr = direction === 'LONG' ? '>15%' : '<-15%';
+          state = `ofi-pending-${zRounded}-${ofiPct}`;
+          message = `[${sym}] ${priceStr} | Z:${zRounded}σ ${direction} ready | OFI:${ofiPct}% needs ${ofiNeedStr} to confirm`;
+        }
+        // All conditions met!
+        else {
+          state = `signal-${direction}`;
+          message = `[${sym}] ${priceStr} | Z:${zRounded}σ | OFI:${ofiPct}% | ${direction} SIGNAL CONDITIONS MET`;
+        }
+      }
     }
     
-    this.emit('log', { type: 'info', message });
+    // Only emit if state changed (no repetition)
+    if (state !== this._lastLogState) {
+      this._lastLogState = state;
+      this.emit('log', { type: 'info', message });
+    }
   }
 
   /**
