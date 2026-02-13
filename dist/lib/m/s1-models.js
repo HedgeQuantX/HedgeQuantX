@@ -13,18 +13,44 @@
 
 /**
  * MODEL 1: Z-SCORE MEAN REVERSION
+ * Matches Python backtest: calculates from first tick using cumulative method
  * @param {number[]} prices - Price array
  * @param {number} window - Lookback window
  * @returns {number} Z-Score value
  */
 function computeZScore(prices, window = 50) {
-  if (prices.length < window) return 0;
-  const recentPrices = prices.slice(-window);
-  const mean = recentPrices.reduce((a, b) => a + b, 0) / window;
-  const variance = recentPrices.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / window;
-  const std = Math.sqrt(variance);
+  if (prices.length === 0) return 0;
+
+  const currentPrice = prices[prices.length - 1];
+  
+  // Use all available prices (like Python backtest)
+  const availablePrices = prices.length < window ? prices : prices.slice(-window);
+  const n = availablePrices.length;
+  
+  // Calculate mean
+  const mean = availablePrices.reduce((a, b) => a + b, 0) / n;
+  
+  // Calculate variance (cumulative method like Python)
+  const sumSquares = availablePrices.reduce((sum, p) => sum + p * p, 0);
+  const variance = (sumSquares / n) - (mean * mean);
+  
+  // If we have enough data (100+), blend cumulative and rolling std (like Python)
+  let std;
+  if (prices.length >= 100) {
+    const cumulativeStd = Math.sqrt(Math.max(0, variance));
+    const recentPrices = prices.slice(-100);
+    const recentMean = recentPrices.reduce((a, b) => a + b, 0) / 100;
+    const recentVariance = recentPrices.reduce((sum, p) => sum + Math.pow(p - recentMean, 2), 0) / 100;
+    const rollingStd = Math.sqrt(recentVariance);
+    // Blend: 30% cumulative, 70% rolling (like Python)
+    std = cumulativeStd * 0.3 + rollingStd * 0.7;
+  } else {
+    std = Math.sqrt(Math.max(0, variance));
+  }
+
   if (std < 0.0001) return 0;
-  return (prices[prices.length - 1] - mean) / std;
+
+  return (currentPrice - mean) / std;
 }
 
 /**
