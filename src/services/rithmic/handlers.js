@@ -222,19 +222,20 @@ const handleNewOrderResponse = (service, data) => {
     debug('New order response:', JSON.stringify(res));
     
     // Emit as orderNotification for the placeOrder listener
-    if (res.basketId || res.orderId) {
-      const order = {
-        basketId: res.basketId || res.orderId,
-        accountId: res.accountId,
-        symbol: res.symbol,
-        exchange: res.exchange || 'CME',
-        status: res.rpCode?.[0] === '0' ? 2 : 5, // 2=Working, 5=Rejected
-        notifyType: res.rpCode?.[0] === '0' ? 1 : 0, // 1=Accepted
-        rpCode: res.rpCode,
-        userMsg: res.userMsg,
-      };
-      service.emit('orderNotification', order);
-    }
+    // Even if no basketId, emit for rejection handling
+    const isRejected = res.rpCode?.[0] !== '0';
+    const order = {
+      basketId: res.basketId || res.orderId || res.userMsg?.[0] || 'unknown',
+      accountId: res.accountId,
+      symbol: res.symbol,
+      exchange: res.exchange || 'CME',
+      status: isRejected ? 5 : 2, // 2=Working, 5=Rejected
+      notifyType: isRejected ? 0 : 1, // 1=Accepted
+      rpCode: res.rpCode,
+      rqHandlerRpCode: res.rqHandlerRpCode, // Also include request handler response code
+      userMsg: res.userMsg,
+    };
+    service.emit('orderNotification', order);
     
     // Also emit specific event
     service.emit('newOrderResponse', res);

@@ -145,18 +145,27 @@ const placeOrder = async (service, orderData) => {
             orderTag,
           });
         } else if (status === 5 || status === 6) {
-          // Extract rejection reason from rpCode[1] if available
+          // Extract rejection reason from rpCode[1] or rqHandlerRpCode[1]
           const rpCode = order.rpCode;
+          const rqCode = order.rqHandlerRpCode;
           let errorMsg = `Order rejected: status ${status}`;
+          
+          // Try rpCode first, then rqHandlerRpCode
           if (rpCode && Array.isArray(rpCode) && rpCode.length > 1 && rpCode[1]) {
-            errorMsg = `Order rejected: ${rpCode[1]}`;
+            errorMsg = `Rejected: ${rpCode[1]}`;
+          } else if (rqCode && Array.isArray(rqCode) && rqCode.length > 1 && rqCode[1]) {
+            errorMsg = `Rejected: ${rqCode[1]}`;
+          } else if (rpCode && Array.isArray(rpCode) && rpCode[0] && rpCode[0] !== '0') {
+            errorMsg = `Rejected: code ${rpCode[0]}`;
           }
+          
           resolve({
             success: false,
             error: errorMsg,
             orderId: order.basketId,
             orderTag,
             rpCode,
+            rqHandlerRpCode: rqCode,
           });
         }
       }
