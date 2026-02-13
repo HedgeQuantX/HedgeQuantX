@@ -125,8 +125,12 @@ const placeOrder = async (service, orderData) => {
     }, ORDER_TIMEOUTS.PLACE);
 
     const onNotification = (order) => {
-      // Match by symbol
-      if (order.symbol !== orderData.symbol) return;
+      // Match by orderTag (userMsg) or symbol
+      const orderUserMsg = order.userMsg?.[0] || '';
+      const matchesTag = orderUserMsg === orderTag;
+      const matchesSymbol = order.symbol === orderData.symbol;
+      
+      if (!matchesTag && !matchesSymbol) return;
       
       const notifyType = order.notifyType;
       
@@ -158,24 +162,26 @@ const placeOrder = async (service, orderData) => {
         return;
       }
       
-      // STATUS (notifyType 1) with basketId - Order accepted by gateway
-      if (notifyType === 1 && order.basketId) {
-        // For market orders, wait a bit more for fill notification
-        // For limit orders, this is success (working)
-        if (orderData.type === 2) {
-          // Market order - don't resolve yet, wait for fill
-          return;
-        }
+      // STATUS (notifyType 1) with rpCode=['0'] - Order accepted by gateway
+      // For market orders on Apex/Rithmic, the fill notification may not arrive
+      // via ORDER connection, so we consider gateway acceptance as success
+      if (notifyType === 1 && order.rpCode?.[0] === '0') {
         clearTimeout(timeout);
         service.removeListener('orderNotification', onNotification);
         resolve({
           success: true,
           orderId: order.basketId,
-          status: 2,
-          fillPrice: orderData.price,
-          filledQty: 0,
+          status: orderData.type === 2 ? 3 : 2, // 3=filled for market, 2=working for limit
+          fillPrice: orderData.price || 0,
+          filledQty: orderData.type === 2 ? orderData.size : 0,
           orderTag,
         });
+        return;
+      }
+      
+      // STATUS (notifyType 1) with basketId but no rpCode - order acknowledged, wait for more
+      if (notifyType === 1 && order.basketId && !order.rpCode) {
+        // Just an ACK, continue waiting
         return;
       }
     };

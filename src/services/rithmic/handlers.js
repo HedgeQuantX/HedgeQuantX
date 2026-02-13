@@ -215,40 +215,53 @@ const handleShowOrdersResponse = (service, data) => {
 
 /**
  * Handle new order response (template 313)
- * rpCode[0] = '0' means accepted, anything else = rejected by gateway
+ * 
+ * Rithmic sends TWO ResponseNewOrder messages:
+ * 1. First with basketId + rqHandlerRpCode: ["0"] = request handler accepted
+ * 2. Second with rpCode: ["0"] = gateway accepted
+ * 
+ * We only care about messages with rpCode (gateway response)
+ * If rpCode is missing, it's just an ACK from request handler - ignore rejection logic
  */
 const handleNewOrderResponse = (service, data) => {
   try {
     const res = proto.decode('ResponseNewOrder', data);
     
-    // Log full response for debugging
-    console.log('[Rithmic] ResponseNewOrder:', JSON.stringify(res));
+    // If no rpCode, this is just a request handler ACK - emit but don't judge
+    if (!res.rpCode || res.rpCode.length === 0) {
+      // First message with basketId - just store it
+      if (res.basketId) {
+        const order = {
+          basketId: res.basketId,
+          symbol: res.symbol,
+          exchange: res.exchange || 'CME',
+          notifyType: 1, // STATUS - order acknowledged
+          status: 1, // Pending
+          text: null,
+          rpCode: res.rqHandlerRpCode,
+          userMsg: res.userMsg,
+        };
+        service.emit('orderNotification', order);
+      }
+      service.emit('newOrderResponse', res);
+      return;
+    }
     
-    const isAccepted = res.rpCode?.[0] === '0';
+    // Second message with rpCode - this is the real gateway response
+    const isAccepted = res.rpCode[0] === '0';
     
-    // Build rejection reason from rpCode array
     let rejectReason = null;
-    if (!isAccepted && res.rpCode) {
-      // rpCode can be ['0'] for success or ['code', 'message', ...] for errors
-      // Join all parts after the code for the full message
+    if (!isAccepted) {
       const allCodes = Array.isArray(res.rpCode) ? res.rpCode : [res.rpCode];
-      const rqCodes = Array.isArray(res.rqHandlerRpCode) ? res.rqHandlerRpCode : [];
-      
-      // Get message from rpCode (skip first element which is the code)
       const rpMsg = allCodes.slice(1).join(' ').trim();
-      const rqMsg = rqCodes.slice(1).join(' ').trim();
       
-      // Use the message if available
       if (rpMsg) {
         rejectReason = rpMsg;
-      } else if (rqMsg) {
-        rejectReason = rqMsg;
       } else {
-        // Map numeric codes to messages
         const code = allCodes[0];
         const codeMap = {
           '1': 'Invalid request',
-          '2': 'Invalid account',
+          '2': 'Invalid account', 
           '3': 'Invalid symbol',
           '4': 'Invalid quantity',
           '5': 'Insufficient buying power',
@@ -259,8 +272,7 @@ const handleNewOrderResponse = (service, data) => {
         };
         rejectReason = codeMap[code] || `Gateway rejected (code: ${code})`;
       }
-      
-      console.log('[Rithmic] Order REJECTED:', rejectReason);
+      console.log('[Rithmic] Order REJECTED by gateway:', rejectReason);
     }
     
     const order = {
