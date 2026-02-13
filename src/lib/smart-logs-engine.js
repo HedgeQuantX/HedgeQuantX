@@ -15,22 +15,44 @@
 
 const chalk = require('chalk');
 
-// Color helpers for consistent styling
+// Rich color helpers for professional HF display
 const C = {
-  sym: (s) => chalk.cyan.bold(s),
-  price: (p) => chalk.white.bold(p),
-  long: (s) => chalk.green.bold(s),
-  short: (s) => chalk.red.bold(s),
-  bull: (s) => chalk.green(s),
-  bear: (s) => chalk.red(s),
-  val: (v) => chalk.blue(v),
-  valHigh: (v) => chalk.magenta.bold(v),
-  ok: (s) => chalk.green(s),
-  warn: (s) => chalk.yellow(s),
-  danger: (s) => chalk.red.bold(s),
-  dim: (s) => chalk.dim(s),
-  info: (s) => chalk.gray(s),
-  signal: (s) => chalk.yellow.bold(s),
+  // Symbol - bright cyan
+  sym: (s) => chalk.hex('#00FFFF').bold(s),
+  
+  // Price - bright white/yellow
+  price: (p) => chalk.hex('#FFFFFF').bold(p),
+  priceUp: (p) => chalk.hex('#00FF00').bold(p),
+  priceDown: (p) => chalk.hex('#FF4444').bold(p),
+  
+  // Direction
+  long: (s) => chalk.hex('#00FF00').bold(s),
+  short: (s) => chalk.hex('#FF4444').bold(s),
+  bull: (s) => chalk.hex('#00DD00')(s),
+  bear: (s) => chalk.hex('#FF6666')(s),
+  
+  // Values & metrics
+  val: (v) => chalk.hex('#00BFFF')(v),           // Deep sky blue
+  valHigh: (v) => chalk.hex('#FF00FF').bold(v),  // Magenta for extreme
+  zscore: (v) => chalk.hex('#FFD700')(v),        // Gold for Z-score
+  
+  // Status indicators
+  ok: (s) => chalk.hex('#00FF00')(s),
+  warn: (s) => chalk.hex('#FFA500').bold(s),     // Orange warning
+  danger: (s) => chalk.hex('#FF0000').bold(s),   // Red danger
+  
+  // Neutral/info
+  dim: (s) => chalk.hex('#888888')(s),
+  info: (s) => chalk.hex('#AAAAAA')(s),
+  muted: (s) => chalk.hex('#666666')(s),
+  
+  // Special states
+  signal: (s) => chalk.hex('#FFFF00').bold(s),   // Bright yellow signal
+  toxic: (s) => chalk.hex('#FF0000').bgHex('#330000').bold(s),
+  
+  // Labels
+  label: (s) => chalk.hex('#888888')(s),
+  separator: () => chalk.hex('#444444')('|'),
 };
 
 const CONFIG = { 
@@ -86,8 +108,9 @@ class SmartLogsEngine {
     const priceNum = state.price || 0;
     const lastPrice = this._lastPrice || priceNum;
     const priceDiff = priceNum - lastPrice;
-    const priceDir = priceDiff > 0.01 ? '▲' : priceDiff < -0.01 ? '▼' : '•';
-    const priceDirColor = priceDiff > 0 ? C.bull : priceDiff < 0 ? C.bear : C.dim;
+    const priceDir = priceDiff > 0.01 ? '▲' : priceDiff < -0.01 ? '▼' : '─';
+    const priceDirColor = priceDiff > 0 ? C.bull : priceDiff < 0 ? C.bear : C.muted;
+    const priceDisplay = priceDiff > 0 ? C.priceUp(price) : priceDiff < 0 ? C.priceDown(price) : C.price(price);
     this._lastPrice = priceNum;
     
     // Track tick velocity
@@ -100,9 +123,10 @@ class SmartLogsEngine {
     if (dataPoints < 50 || !price) {
       const pct = Math.min(100, Math.round((dataPoints / 50) * 100));
       const remaining = 50 - dataPoints;
+      const pctColor = pct < 50 ? C.warn : C.ok;
       return {
         type: 'system',
-        message: `[${C.sym(sym)}] ${price ? C.price(price) : '-.--'} | Calibrating ${C.val(pct + '%')} | ${remaining} samples to ready | +${tickVelocity}/s`,
+        message: `[${C.sym(sym)}] ${price ? C.price(price) : C.dim('-.--')} ${C.separator()} ${C.label('Calibrating')} ${pctColor(pct + '%')} ${C.separator()} ${C.val(remaining)} ${C.label('samples to ready')} ${C.separator()} ${C.dim('+' + tickVelocity + '/s')}`,
         logToSession: false
       };
     }
@@ -114,38 +138,46 @@ class SmartLogsEngine {
     const buyPctRound = Math.round(buyPct || 50);
     const deltaRound = Math.round(delta || 0);
     
-    // Z-Score color based on level
+    // Z-Score color based on level - more vivid
     const zColor = absZ >= CONFIG.Z_EXTREME ? C.valHigh : 
-                   absZ >= CONFIG.Z_HIGH ? C.warn : 
-                   absZ >= CONFIG.Z_BUILDING ? C.val : C.dim;
+                   absZ >= CONFIG.Z_HIGH ? C.signal : 
+                   absZ >= CONFIG.Z_BUILDING ? C.zscore : C.muted;
     const zStr = zColor(`${zScore.toFixed(2)}σ`);
     
-    // OFI color based on direction
-    const ofiColor = ofi > CONFIG.OFI_THRESHOLD ? C.bull : 
-                     ofi < -CONFIG.OFI_THRESHOLD ? C.bear : C.dim;
+    // OFI color based on direction - more vivid
+    const ofiColor = ofi > CONFIG.OFI_STRONG ? C.long :
+                     ofi > CONFIG.OFI_THRESHOLD ? C.bull : 
+                     ofi < -CONFIG.OFI_STRONG ? C.short :
+                     ofi < -CONFIG.OFI_THRESHOLD ? C.bear : C.muted;
     const ofiStr = ofiColor(`${ofi >= 0 ? '+' : ''}${ofiPct}%`);
     
-    // VPIN color based on toxicity
-    const vpinColor = vpin > CONFIG.VPIN_TOXIC ? C.danger : 
+    // VPIN color based on toxicity - more vivid
+    const vpinColor = vpin > CONFIG.VPIN_TOXIC ? C.toxic : 
                       vpin > CONFIG.VPIN_ELEVATED ? C.warn : C.ok;
     const vpinStr = vpinColor(`${vpinPct}%`);
     
-    // Delta (buy-sell imbalance) display
-    const deltaColor = deltaRound > 0 ? C.bull : deltaRound < 0 ? C.bear : C.dim;
+    // Delta (buy-sell imbalance) display - more vivid
+    const deltaAbs = Math.abs(deltaRound);
+    const deltaColor = deltaRound > 50 ? C.long : deltaRound > 0 ? C.bull : 
+                       deltaRound < -50 ? C.short : deltaRound < 0 ? C.bear : C.muted;
     const deltaStr = deltaColor(`${deltaRound > 0 ? '+' : ''}${deltaRound}`);
+    
+    // Buy percentage color
+    const buyColor = buyPctRound > 60 ? C.bull : buyPctRound < 40 ? C.bear : C.muted;
+    const buyStr = buyColor(`${buyPctRound}%`);
     
     // Active position - show position management with unique data
     if (position !== 0) {
       const isLong = position > 0;
-      const side = isLong ? C.long('LONG') : C.short('SHORT');
+      const side = isLong ? C.long('● LONG') : C.short('● SHORT');
       const flowFavor = (isLong && ofi > 0) || (!isLong && ofi < 0);
-      const flowLabel = flowFavor ? C.ok('aligned') : C.warn('adverse');
+      const flowLabel = flowFavor ? C.ok('✓ aligned') : C.warn('⚠ adverse');
       const exitClose = absZ < 0.5;
-      const exitInfo = exitClose ? C.warn('EXIT ZONE') : 'holding';
+      const exitInfo = exitClose ? C.warn('⚡ EXIT ZONE') : C.ok('holding');
       
       return {
         type: 'trade',
-        message: `[${C.sym(sym)}] ${side} ${priceDirColor(priceDir)} ${C.price(price)} | Z:${zStr} ${exitInfo} | Δ:${deltaStr} | Flow:${flowLabel}`,
+        message: `[${C.sym(sym)}] ${side} ${priceDirColor(priceDir)} ${priceDisplay} ${C.separator()} ${C.label('Z:')}${zStr} ${exitInfo} ${C.separator()} ${C.label('Δ:')}${deltaStr} ${C.separator()} ${flowLabel}`,
         logToSession: false
       };
     }
@@ -159,31 +191,31 @@ class SmartLogsEngine {
     
     // VPIN toxic - highest priority blocker
     if (vpin > CONFIG.VPIN_TOXIC) {
-      message = `[${C.sym(sym)}] ${priceDirColor(priceDir)} ${C.price(price)} | VPIN:${vpinStr} ${C.danger('TOXIC')} | Z:${zStr} | Δ:${deltaStr} | Hold`;
+      message = `[${C.sym(sym)}] ${priceDirColor(priceDir)} ${priceDisplay} ${C.separator()} ${C.label('VPIN:')}${vpinStr} ${C.toxic('☠ TOXIC')} ${C.separator()} ${C.label('Z:')}${zStr} ${C.separator()} ${C.label('Δ:')}${deltaStr} ${C.separator()} ${C.danger('NO ENTRY')}`;
       logType = 'risk';
     }
     // Z-Score extreme + OFI confirms = SIGNAL
     else if (absZ >= CONFIG.Z_EXTREME && 
              ((zScore < 0 && ofi > CONFIG.OFI_THRESHOLD) || (zScore > 0 && ofi < -CONFIG.OFI_THRESHOLD))) {
-      message = `[${C.sym(sym)}] ${priceDirColor(priceDir)} ${C.price(price)} | Z:${zStr} ${C.signal('EXTREME')} | OFI:${ofiStr} ${C.ok('✓')} | ${dirColor(direction)} SIGNAL`;
+      message = `[${C.sym(sym)}] ${priceDirColor(priceDir)} ${priceDisplay} ${C.separator()} ${C.label('Z:')}${zStr} ${C.signal('★ EXTREME')} ${C.separator()} ${C.label('OFI:')}${ofiStr} ${C.ok('✓')} ${C.separator()} ${dirColor('► ' + direction + ' SIGNAL')}`;
       logType = 'signal';
     }
     // Z-Score extreme but OFI doesn't confirm
     else if (absZ >= CONFIG.Z_EXTREME) {
-      const ofiNeed = zScore < 0 ? `need >${15}%` : `need <-${15}%`;
-      message = `[${C.sym(sym)}] ${priceDirColor(priceDir)} ${C.price(price)} | Z:${zStr} ${C.signal('!')} | OFI:${ofiStr} ${ofiNeed} | ${C.warn('pending')}`;
+      const ofiNeed = zScore < 0 ? C.dim('need >15%') : C.dim('need <-15%');
+      message = `[${C.sym(sym)}] ${priceDirColor(priceDir)} ${priceDisplay} ${C.separator()} ${C.label('Z:')}${zStr} ${C.signal('!')} ${C.separator()} ${C.label('OFI:')}${ofiStr} ${ofiNeed} ${C.separator()} ${C.warn('◐ PENDING')}`;
       logType = 'signal';
     }
     // Z-Score high - setup forming
     else if (absZ >= CONFIG.Z_HIGH) {
       const needed = (CONFIG.Z_EXTREME - absZ).toFixed(2);
-      message = `[${C.sym(sym)}] ${priceDirColor(priceDir)} ${C.price(price)} | Z:${zStr} +${needed}σ to signal | OFI:${ofiStr} | Δ:${deltaStr}`;
+      message = `[${C.sym(sym)}] ${priceDirColor(priceDir)} ${priceDisplay} ${C.separator()} ${C.label('Z:')}${zStr} ${C.val('+' + needed + 'σ')} ${C.label('to signal')} ${C.separator()} ${C.label('OFI:')}${ofiStr} ${C.separator()} ${C.label('Δ:')}${deltaStr}`;
     }
     // Z-Score building
     else if (absZ >= CONFIG.Z_BUILDING) {
       const needed = (CONFIG.Z_HIGH - absZ).toFixed(2);
-      const bias = zScore < 0 ? 'bid' : 'ask';
-      message = `[${C.sym(sym)}] ${priceDirColor(priceDir)} ${C.price(price)} | Z:${zStr} ${bias} pressure | +${needed}σ to setup | Δ:${deltaStr}`;
+      const bias = zScore < 0 ? C.bull('bid ↑') : C.bear('ask ↓');
+      message = `[${C.sym(sym)}] ${priceDirColor(priceDir)} ${priceDisplay} ${C.separator()} ${C.label('Z:')}${zStr} ${bias} ${C.separator()} ${C.val('+' + needed + 'σ')} ${C.label('to setup')} ${C.separator()} ${C.label('Δ:')}${deltaStr}`;
     }
     // Z-Score neutral - scanning
     else {
@@ -192,18 +224,18 @@ class SmartLogsEngine {
       let context;
       switch (infoType) {
         case 0:
-          context = `Δ:${deltaStr} | Buy:${buyPctRound}%`;
+          context = `${C.label('Δ:')}${deltaStr} ${C.separator()} ${C.label('Buy:')}${buyStr}`;
           break;
         case 1:
-          context = `VPIN:${vpinStr} | OFI:${ofiStr}`;
+          context = `${C.label('VPIN:')}${vpinStr} ${C.separator()} ${C.label('OFI:')}${ofiStr}`;
           break;
         case 2:
-          context = `${tickVelocity} ticks/s | Δ:${deltaStr}`;
+          context = `${C.val(tickVelocity)} ${C.label('ticks/s')} ${C.separator()} ${C.label('Δ:')}${deltaStr}`;
           break;
         default:
-          context = `OFI:${ofiStr} | Buy:${buyPctRound}%`;
+          context = `${C.label('OFI:')}${ofiStr} ${C.separator()} ${C.label('Buy:')}${buyStr}`;
       }
-      message = `[${C.sym(sym)}] ${priceDirColor(priceDir)} ${C.price(price)} | Z:${zStr} scanning | ${context}`;
+      message = `[${C.sym(sym)}] ${priceDirColor(priceDir)} ${priceDisplay} ${C.separator()} ${C.label('Z:')}${zStr} ${C.muted('scanning')} ${C.separator()} ${context}`;
     }
     
     return { type: logType, message, logToSession: logType === 'signal' };
