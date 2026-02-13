@@ -215,32 +215,34 @@ const handleShowOrdersResponse = (service, data) => {
 
 /**
  * Handle new order response (template 313)
+ * rpCode[0] = '0' means accepted, anything else = rejected by gateway
  */
 const handleNewOrderResponse = (service, data) => {
   try {
     const res = proto.decode('ResponseNewOrder', data);
-    debug('New order response:', JSON.stringify(res));
     
-    // Emit as orderNotification for the placeOrder listener
-    // Even if no basketId, emit for rejection handling
-    const isRejected = res.rpCode?.[0] !== '0';
+    const isAccepted = res.rpCode?.[0] === '0';
+    const rejectReason = res.rpCode?.[1] || res.rqHandlerRpCode?.[1] || 'Unknown';
+    
+    // Log rejection details for debugging
+    if (!isAccepted) {
+      console.log('[Rithmic] Order rejected:', rejectReason, '| rpCode:', res.rpCode, '| rqHandlerRpCode:', res.rqHandlerRpCode);
+    }
+    
     const order = {
-      basketId: res.basketId || res.orderId || res.userMsg?.[0] || 'unknown',
-      accountId: res.accountId,
+      basketId: res.basketId || null,
       symbol: res.symbol,
       exchange: res.exchange || 'CME',
-      status: isRejected ? 5 : 2, // 2=Working, 5=Rejected
-      notifyType: isRejected ? 0 : 1, // 1=Accepted
+      notifyType: isAccepted ? 1 : 6, // 1=STATUS (accepted), 6=REJECT
+      status: isAccepted ? 2 : 6,
+      text: isAccepted ? null : rejectReason,
       rpCode: res.rpCode,
-      rqHandlerRpCode: res.rqHandlerRpCode, // Also include request handler response code
       userMsg: res.userMsg,
     };
     service.emit('orderNotification', order);
-    
-    // Also emit specific event
     service.emit('newOrderResponse', res);
   } catch (e) {
-    debug('Error decoding ResponseNewOrder:', e.message);
+    console.error('Error decoding ResponseNewOrder:', e.message);
   }
 };
 
@@ -369,12 +371,31 @@ const handleAccountRmsInfo = (service, data) => {
 
 /**
  * Handle exchange order notification (fills/trades)
- * NotifyType: 5 = FILL
+ * NotifyType: 1=STATUS, 2=MODIFY, 3=CANCEL, 4=TRIGGER, 5=FILL, 6=REJECT
  */
 const handleExchangeNotification = (service, data) => {
   try {
     const res = proto.decode('ExchangeOrderNotification', data);
-    debug('Exchange notification:', res.notifyType, res.symbol);
+    debug('Exchange notification:', res.notifyType, res.symbol, res.status);
+    
+    // Emit orderNotification for placeOrder listener
+    // This is critical for order tracking
+    const orderNotif = {
+      basketId: res.basketId,
+      accountId: res.accountId,
+      symbol: res.symbol,
+      exchange: res.exchange || 'CME',
+      notifyType: res.notifyType, // 1=STATUS, 5=FILL, 6=REJECT
+      status: res.notifyType === 5 ? 3 : res.notifyType === 6 ? 6 : 2,
+      fillPrice: res.fillPrice ? parseFloat(res.fillPrice) : null,
+      fillSize: res.fillSize ? parseInt(res.fillSize) : null,
+      avgFillPrice: res.avgFillPrice ? parseFloat(res.avgFillPrice) : null,
+      totalFillSize: res.totalFillSize ? parseInt(res.totalFillSize) : null,
+      confirmedSize: res.confirmedSize ? parseInt(res.confirmedSize) : null,
+      text: res.text || res.reportText,
+      userMsg: res.userTag ? [res.userTag] : null,
+    };
+    service.emit('orderNotification', orderNotif);
     
     // notifyType 5 = FILL (trade executed)
     if (res.notifyType === 5 && res.fillPrice && res.fillSize) {

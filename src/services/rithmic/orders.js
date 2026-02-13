@@ -125,72 +125,83 @@ const placeOrder = async (service, orderData) => {
     }, ORDER_TIMEOUTS.PLACE);
 
     const onNotification = (order) => {
-      // HFT: Fast match by orderTag first (most specific)
-      const orderMatches = (order.userMsg && order.userMsg.includes(orderTag)) || 
-                          order.symbol === orderData.symbol;
+      // Match by symbol
+      if (order.symbol !== orderData.symbol) return;
       
-      if (orderMatches) {
+      const notifyType = order.notifyType;
+      
+      // FILL (notifyType 5) - Order executed
+      if (notifyType === 5) {
         clearTimeout(timeout);
         service.removeListener('orderNotification', onNotification);
-        
-        // HFT: Combined status check (2=Working, 3=Filled, 15=Complete)
-        const status = order.status;
-        if (status === 2 || status === 3 || order.notifyType === 15) {
-          resolve({
-            success: true,
-            orderId: order.basketId,
-            status,
-            fillPrice: order.avgFillPrice || orderData.price,
-            filledQty: order.totalFillSize || orderData.size,
-            orderTag,
-          });
-        } else if (status === 5 || status === 6) {
-          // Extract rejection reason from rpCode[1] or rqHandlerRpCode[1]
-          const rpCode = order.rpCode;
-          const rqCode = order.rqHandlerRpCode;
-          let errorMsg = `Order rejected: status ${status}`;
-          
-          // Try rpCode first, then rqHandlerRpCode
-          if (rpCode && Array.isArray(rpCode) && rpCode.length > 1 && rpCode[1]) {
-            errorMsg = `Rejected: ${rpCode[1]}`;
-          } else if (rqCode && Array.isArray(rqCode) && rqCode.length > 1 && rqCode[1]) {
-            errorMsg = `Rejected: ${rqCode[1]}`;
-          } else if (rpCode && Array.isArray(rpCode) && rpCode[0] && rpCode[0] !== '0') {
-            errorMsg = `Rejected: code ${rpCode[0]}`;
-          }
-          
-          resolve({
-            success: false,
-            error: errorMsg,
-            orderId: order.basketId,
-            orderTag,
-            rpCode,
-            rqHandlerRpCode: rqCode,
-          });
+        resolve({
+          success: true,
+          orderId: order.basketId,
+          status: 3,
+          fillPrice: order.avgFillPrice || order.fillPrice || orderData.price,
+          filledQty: order.totalFillSize || order.fillSize || orderData.size,
+          orderTag,
+        });
+        return;
+      }
+      
+      // REJECT (notifyType 6) - Order rejected
+      if (notifyType === 6) {
+        clearTimeout(timeout);
+        service.removeListener('orderNotification', onNotification);
+        resolve({
+          success: false,
+          error: order.text || 'Order rejected',
+          orderId: order.basketId,
+          orderTag,
+        });
+        return;
+      }
+      
+      // STATUS (notifyType 1) with basketId - Order accepted by gateway
+      if (notifyType === 1 && order.basketId) {
+        // For market orders, wait a bit more for fill notification
+        // For limit orders, this is success (working)
+        if (orderData.type === 2) {
+          // Market order - don't resolve yet, wait for fill
+          return;
         }
+        clearTimeout(timeout);
+        service.removeListener('orderNotification', onNotification);
+        resolve({
+          success: true,
+          orderId: order.basketId,
+          status: 2,
+          fillPrice: orderData.price,
+          filledQty: 0,
+          orderTag,
+        });
+        return;
       }
     };
 
     service.on('orderNotification', onNotification);
 
-    // HFT: Inline order request construction (no try-catch in hot path)
     const exchange = orderData.exchange || 'CME';
     
-    // Get trade route from cache
+    // CRITICAL: Get trade route - orders WILL BE REJECTED without it
     let tradeRoute = null;
     const routes = service.tradeRoutes;
     if (routes && routes.size > 0) {
       const routeInfo = routes.get(exchange);
-      tradeRoute = routeInfo ? routeInfo.tradeRoute : 
-                   routes.values().next().value?.tradeRoute || null;
+      tradeRoute = routeInfo?.tradeRoute || routes.values().next().value?.tradeRoute;
     }
     
-    // Warn if no trade route - Rithmic will reject the order
+    // FAIL FAST if no trade route
     if (!tradeRoute) {
-      DEBUG && console.log('[Orders] WARNING: No trade route for', exchange, '- order may be rejected');
+      clearTimeout(timeout);
+      service.removeListener('orderNotification', onNotification);
+      console.log('[Orders] ERROR: No trade route for', exchange);
+      resolve({ success: false, error: `No trade route for ${exchange}. Login may be incomplete.`, orderTag });
+      return;
     }
     
-    // HFT: Reuse template and mutate (faster than object spread)
+    // Build order request
     ORDER_REQUEST_TEMPLATE.userMsg[0] = orderTag;
     ORDER_REQUEST_TEMPLATE.fcmId = service.loginInfo.fcmId;
     ORDER_REQUEST_TEMPLATE.ibId = service.loginInfo.ibId;
