@@ -2,13 +2,18 @@
  * Rithmic Orders Module
  * Order placement, cancellation, and history
  * 
+ * HFT-GRADE OPTIMIZATIONS:
+ * - Pre-allocated order request template
+ * - Cached timestamp for order tags
+ * - Zero console.log in production path
+ * 
  * @module services/rithmic/orders
  */
 
 const { REQ } = require('./constants');
 const { sanitizeQuantity, MAX_SAFE_QUANTITY } = require('./protobuf-utils');
 
-// Debug mode - DISABLED to avoid polluting interactive UI
+// HFT: Debug mode completely disabled - no conditional checks in hot path
 const DEBUG = false;
 
 // Order status constants
@@ -64,37 +69,44 @@ function validateOrderData(orderData) {
   return { valid: true };
 }
 
+// HFT: Pre-allocated order request template to avoid object creation in hot path
+const ORDER_REQUEST_TEMPLATE = {
+  templateId: REQ.NEW_ORDER,
+  userMsg: [''],
+  fcmId: '',
+  ibId: '',
+  accountId: '',
+  symbol: '',
+  exchange: 'CME',
+  quantity: 0,
+  transactionType: 1,
+  duration: 1,
+  priceType: 1,
+  price: 0,
+  tradeRoute: null,
+  manualOrAuto: 2,
+};
+
+// HFT: Monotonic counter for order tags (faster than Date.now())
+let orderTagCounter = Date.now();
+
 /**
  * Place order via ORDER_PLANT and wait for confirmation
+ * HFT: Optimized for minimal latency
  * @param {RithmicService} service - The Rithmic service instance
  * @param {Object} orderData - Order parameters
  * @returns {Promise<{success: boolean, orderId?: string, error?: string}>}
  */
 const placeOrder = async (service, orderData) => {
-  // Check connection state
-  const connState = service.orderConn?.connectionState;
-  const wsState = service.orderConn?.ws?.readyState;
-  
-  if (DEBUG) {
-    console.log('[ORDER] Connection check:', { 
-      hasOrderConn: !!service.orderConn, 
-      connState, 
-      wsState,
-      hasLoginInfo: !!service.loginInfo 
-    });
-  }
-  
-  // Connection validation
-  if (!service.orderConn) {
-    return { success: false, error: 'ORDER_PLANT not connected' };
-  }
-  
-  if (!service.loginInfo) {
-    return { success: false, error: 'Not logged in - missing loginInfo' };
-  }
-  
-  if (connState !== 'LOGGED_IN') {
-    return { success: false, error: `ORDER_PLANT not logged in (state: ${connState})` };
+  // HFT: Fast connection validation (no intermediate variables)
+  if (!service.orderConn || !service.loginInfo || 
+      service.orderConn.connectionState !== 'LOGGED_IN') {
+    return { 
+      success: false, 
+      error: !service.orderConn ? 'ORDER_PLANT not connected' :
+             !service.loginInfo ? 'Not logged in' :
+             `ORDER_PLANT not logged in (state: ${service.orderConn.connectionState})`
+    };
   }
   
   // Validate order data
@@ -103,8 +115,8 @@ const placeOrder = async (service, orderData) => {
     return { success: false, error: validation.error };
   }
 
-  // Generate unique user message for tracking
-  const orderTag = `HQX-${Date.now()}`;
+  // HFT: Use monotonic counter for order tag (faster than Date.now())
+  const orderTag = `HQX-${++orderTagCounter}`;
 
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
@@ -113,8 +125,7 @@ const placeOrder = async (service, orderData) => {
     }, ORDER_TIMEOUTS.PLACE);
 
     const onNotification = (order) => {
-      // CRITICAL FIX: Match by orderTag (userMsg) first, then symbol as fallback
-      // This prevents race conditions when multiple orders for same symbol
+      // HFT: Fast match by orderTag first (most specific)
       const orderMatches = (order.userMsg && order.userMsg.includes(orderTag)) || 
                           order.symbol === orderData.symbol;
       
@@ -122,89 +133,56 @@ const placeOrder = async (service, orderData) => {
         clearTimeout(timeout);
         service.removeListener('orderNotification', onNotification);
         
-        // Check if order was accepted/filled
-        if (order.status === 2 || order.status === 3 || order.notifyType === 15) {
-          // Status 2 = Working, 3 = Filled, notifyType 15 = Complete
+        // HFT: Combined status check (2=Working, 3=Filled, 15=Complete)
+        const status = order.status;
+        if (status === 2 || status === 3 || order.notifyType === 15) {
           resolve({
             success: true,
             orderId: order.basketId,
-            status: order.status,
+            status,
             fillPrice: order.avgFillPrice || orderData.price,
             filledQty: order.totalFillSize || orderData.size,
-            orderTag: orderTag,
+            orderTag,
           });
-        } else if (order.status === 5 || order.status === 6) {
-          // Status 5 = Rejected, 6 = Cancelled
+        } else if (status === 5 || status === 6) {
           resolve({
             success: false,
-            error: `Order rejected: status ${order.status}`,
+            error: `Order rejected: status ${status}`,
             orderId: order.basketId,
-            orderTag: orderTag,
+            orderTag,
           });
         }
-        // Keep listening for other statuses
       }
     };
 
     service.on('orderNotification', onNotification);
 
-    try {
-      const exchange = orderData.exchange || 'CME';
-      
-      // Get trade route from cache (fetched during login)
-      // Trade route is REQUIRED by Rithmic - orders rejected without it
-      let tradeRoute = null;
-      if (service.tradeRoutes && service.tradeRoutes.size > 0) {
-        const routeInfo = service.tradeRoutes.get(exchange);
-        if (routeInfo) {
-          tradeRoute = routeInfo.tradeRoute;
-        } else {
-          // Fallback: use first available route
-          const firstRoute = service.tradeRoutes.values().next().value;
-          if (firstRoute) {
-            tradeRoute = firstRoute.tradeRoute;
-          }
-        }
-      }
-      
-      if (DEBUG) {
-        console.log('[ORDER] Trade route for', exchange, ':', tradeRoute);
-      }
-      
-      if (!tradeRoute) {
-        // No trade route available - order will likely fail
-        if (DEBUG) {
-          console.log('[ORDER] WARNING: No trade route available, order may be rejected');
-        }
-      }
-      
-      const orderRequest = {
-        templateId: REQ.NEW_ORDER,
-        userMsg: [orderTag],
-        fcmId: service.loginInfo.fcmId,
-        ibId: service.loginInfo.ibId,
-        accountId: orderData.accountId,
-        symbol: orderData.symbol,
-        exchange: exchange,
-        quantity: sanitizeQuantity(orderData.size),
-        transactionType: orderData.side === 0 ? 1 : 2, // 1=Buy, 2=Sell
-        duration: 1, // DAY
-        priceType: orderData.type === 2 ? 2 : 1, // 2=Market, 1=Limit
-        price: orderData.price || 0,
-        tradeRoute: tradeRoute, // REQUIRED by Rithmic
-        manualOrAuto: 2, // AUTO
-      };
-      
-      if (DEBUG) {
-        console.log('[ORDER] Sending RequestNewOrder:', JSON.stringify(orderRequest));
-      }
-      
-      service.orderConn.send('RequestNewOrder', orderRequest);
-    } catch (error) {
-      clearTimeout(timeout);
-      service.removeListener('orderNotification', onNotification);
-      resolve({ success: false, error: error.message });
+    // HFT: Inline order request construction (no try-catch in hot path)
+    const exchange = orderData.exchange || 'CME';
+    
+    // Get trade route from cache
+    let tradeRoute = null;
+    const routes = service.tradeRoutes;
+    if (routes && routes.size > 0) {
+      const routeInfo = routes.get(exchange);
+      tradeRoute = routeInfo ? routeInfo.tradeRoute : 
+                   routes.values().next().value?.tradeRoute || null;
     }
+    
+    // HFT: Reuse template and mutate (faster than object spread)
+    ORDER_REQUEST_TEMPLATE.userMsg[0] = orderTag;
+    ORDER_REQUEST_TEMPLATE.fcmId = service.loginInfo.fcmId;
+    ORDER_REQUEST_TEMPLATE.ibId = service.loginInfo.ibId;
+    ORDER_REQUEST_TEMPLATE.accountId = orderData.accountId;
+    ORDER_REQUEST_TEMPLATE.symbol = orderData.symbol;
+    ORDER_REQUEST_TEMPLATE.exchange = exchange;
+    ORDER_REQUEST_TEMPLATE.quantity = sanitizeQuantity(orderData.size);
+    ORDER_REQUEST_TEMPLATE.transactionType = orderData.side === 0 ? 1 : 2;
+    ORDER_REQUEST_TEMPLATE.priceType = orderData.type === 2 ? 2 : 1;
+    ORDER_REQUEST_TEMPLATE.price = orderData.price || 0;
+    ORDER_REQUEST_TEMPLATE.tradeRoute = tradeRoute;
+    
+    service.orderConn.send('RequestNewOrder', ORDER_REQUEST_TEMPLATE);
   });
 };
 

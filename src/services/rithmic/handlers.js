@@ -1,16 +1,42 @@
 /**
  * Rithmic Message Handlers
  * Handles ORDER_PLANT and PNL_PLANT messages
+ * 
+ * HFT-GRADE OPTIMIZATIONS:
+ * - Pre-allocated result objects
+ * - Minimal object creation in hot paths
+ * - No debug logging in production
  */
 
 const { proto, decodeAccountPnL, decodeInstrumentPnL } = require('./protobuf');
 const { RES, STREAM } = require('./constants');
 const { sanitizeQuantity } = require('./protobuf-utils');
 
-// Debug mode - DISABLED to avoid polluting interactive UI
-// Use session logs instead for debugging
+// HFT: Debug completely disabled - no function call overhead
 const DEBUG = false;
-const debug = (...args) => {};
+const debug = DEBUG ? (...args) => {} : () => {};
+
+// HFT: Pre-allocated objects for hot path handlers
+const _pnlDataTemplate = {
+  accountBalance: 0,
+  cashOnHand: 0,
+  marginBalance: 0,
+  openPositionPnl: 0,
+  closedPositionPnl: 0,
+  dayPnl: 0,
+};
+
+const _positionTemplate = {
+  accountId: '',
+  symbol: '',
+  exchange: 'CME',
+  quantity: 0,
+  averagePrice: 0,
+  openPnl: 0,
+  closedPnl: 0,
+  dayPnl: 0,
+  isSnapshot: false,
+};
 
 /**
  * Create ORDER_PLANT message handler
@@ -219,71 +245,84 @@ const handleNewOrderResponse = (service, data) => {
 
 /**
  * Handle account PnL update
+ * HFT: Optimized for minimal allocations
  */
 const handleAccountPnLUpdate = (service, data) => {
-  try {
-    const pnl = decodeAccountPnL(data);
-    debug('Decoded Account PNL:', JSON.stringify(pnl));
-    
-    if (pnl.accountId) {
-      const pnlData = {
-        accountBalance: parseFloat(pnl.accountBalance || 0),
-        cashOnHand: parseFloat(pnl.cashOnHand || 0),
-        marginBalance: parseFloat(pnl.marginBalance || 0),
-        openPositionPnl: parseFloat(pnl.openPositionPnl || 0),
-        closedPositionPnl: parseFloat(pnl.closedPositionPnl || 0),
-        dayPnl: parseFloat(pnl.dayPnl || 0),
+  const pnl = decodeAccountPnL(data);
+  
+  if (pnl.accountId) {
+    // HFT: Reuse cached object from Map or create once
+    let pnlData = service.accountPnL.get(pnl.accountId);
+    if (!pnlData) {
+      pnlData = {
+        accountBalance: 0,
+        cashOnHand: 0,
+        marginBalance: 0,
+        openPositionPnl: 0,
+        closedPositionPnl: 0,
+        dayPnl: 0,
       };
-      debug('Storing PNL for account:', pnl.accountId, pnlData);
       service.accountPnL.set(pnl.accountId, pnlData);
-      service.emit('pnlUpdate', pnl);
-    } else {
-      debug('No accountId in PNL response');
     }
-  } catch (e) {
-    debug('Error decoding Account PNL:', e.message);
+    
+    // HFT: Mutate existing object instead of creating new
+    pnlData.accountBalance = parseFloat(pnl.accountBalance || 0);
+    pnlData.cashOnHand = parseFloat(pnl.cashOnHand || 0);
+    pnlData.marginBalance = parseFloat(pnl.marginBalance || 0);
+    pnlData.openPositionPnl = parseFloat(pnl.openPositionPnl || 0);
+    pnlData.closedPositionPnl = parseFloat(pnl.closedPositionPnl || 0);
+    pnlData.dayPnl = parseFloat(pnl.dayPnl || 0);
+    
+    service.emit('pnlUpdate', pnl);
   }
 };
 
 /**
  * Handle instrument PnL update (positions)
+ * HFT: Optimized for minimal allocations - reuses position objects
  */
 const handleInstrumentPnLUpdate = (service, data) => {
-  try {
-    const pos = decodeInstrumentPnL(data);
-    if (pos.symbol && pos.accountId) {
-      const key = `${pos.accountId}:${pos.symbol}:${pos.exchange}`;
-      
-      // CRITICAL: Sanitize quantity to prevent overflow (18446744073709552000 bug)
-      const rawQty = pos.netQuantity || pos.openPositionQuantity || ((pos.buyQty || 0) - (pos.sellQty || 0));
-      const netQty = sanitizeQuantity(rawQty);
-      
-      if (netQty !== 0) {
-        service.positions.set(key, {
-          accountId: pos.accountId,
-          symbol: pos.symbol,
-          exchange: pos.exchange || 'CME',
-          quantity: netQty,
-          averagePrice: pos.avgOpenFillPrice || 0,
-          openPnl: parseFloat(pos.openPositionPnl || pos.dayOpenPnl || 0),
-          closedPnl: parseFloat(pos.closedPositionPnl || pos.dayClosedPnl || 0),
-          dayPnl: parseFloat(pos.dayPnl || 0),
-          isSnapshot: pos.isSnapshot || false,
-        });
-      } else {
-        service.positions.delete(key);
+  const pos = decodeInstrumentPnL(data);
+  
+  if (pos.symbol && pos.accountId) {
+    const key = `${pos.accountId}:${pos.symbol}:${pos.exchange || 'CME'}`;
+    
+    // CRITICAL: Sanitize quantity to prevent overflow (18446744073709552000 bug)
+    const rawQty = pos.netQuantity || pos.openPositionQuantity || ((pos.buyQty || 0) - (pos.sellQty || 0));
+    const netQty = sanitizeQuantity(rawQty);
+    
+    if (netQty !== 0) {
+      // HFT: Reuse existing position object or create once
+      let position = service.positions.get(key);
+      if (!position) {
+        position = {
+          accountId: '',
+          symbol: '',
+          exchange: 'CME',
+          quantity: 0,
+          averagePrice: 0,
+          openPnl: 0,
+          closedPnl: 0,
+          dayPnl: 0,
+          isSnapshot: false,
+        };
+        service.positions.set(key, position);
       }
       
-      // Only emit if position exists (not deleted)
-      const currentPos = service.positions.get(key);
-      if (currentPos) {
-        service.emit('positionUpdate', currentPos);
-      }
-    }
-  } catch (e) {
-    // Log decode errors for debugging (but don't pollute UI)
-    if (process.env.HQX_DEBUG === '1') {
-      console.error('[Handler] Position decode error:', e.message);
+      // HFT: Mutate existing object
+      position.accountId = pos.accountId;
+      position.symbol = pos.symbol;
+      position.exchange = pos.exchange || 'CME';
+      position.quantity = netQty;
+      position.averagePrice = pos.avgOpenFillPrice || 0;
+      position.openPnl = parseFloat(pos.openPositionPnl || pos.dayOpenPnl || 0);
+      position.closedPnl = parseFloat(pos.closedPositionPnl || pos.dayClosedPnl || 0);
+      position.dayPnl = parseFloat(pos.dayPnl || 0);
+      position.isSnapshot = pos.isSnapshot || false;
+      
+      service.emit('positionUpdate', position);
+    } else {
+      service.positions.delete(key);
     }
   }
 };

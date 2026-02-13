@@ -1,5 +1,10 @@
 /**
  * Algo Executor - Execution engine for algo modes with AI supervision
+ * 
+ * HFT-GRADE OPTIMIZATIONS:
+ * - CircularBuffer for O(1) tick storage (replaces O(n) shift())
+ * - Pre-allocated tick structure pool
+ * - Cached timestamp operations
  */
 const readline = require('readline');
 const { AlgoUI, renderSessionSummary } = require('./ui');
@@ -9,6 +14,7 @@ const { SupervisionEngine } = require('../../services/ai-supervision');
 const smartLogs = require('../../lib/smart-logs');
 const { createEngine: createLogsEngine } = require('../../lib/smart-logs-engine');
 const { sessionLogger } = require('../../services/session-logger');
+const { CircularBuffer, Float64CircularBuffer, timestampCache } = require('../../lib/hft');
 
 /**
  * Execute algo strategy with market data
@@ -54,7 +60,16 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   let running = true, stopReason = null, startingPnL = null;
   let currentPosition = 0, pendingOrder = false, tickCount = 0, lastBias = 'FLAT';
   
-  const aiContext = { recentTicks: [], recentSignals: [], recentTrades: [], maxTicks: 100 };
+  // HFT: Use CircularBuffer for O(1) tick storage (replaces O(n) shift())
+  const recentTicksBuffer = new CircularBuffer(100);
+  const recentSignalsBuffer = new CircularBuffer(10);
+  const recentTradesBuffer = new CircularBuffer(20);
+  const aiContext = { 
+    recentTicks: recentTicksBuffer,      // CircularBuffer - use .recent(n) to get array
+    recentSignals: recentSignalsBuffer,  // CircularBuffer
+    recentTrades: recentTradesBuffer,    // CircularBuffer
+    maxTicks: 100 
+  };
   
   const strategy = new StrategyClass({ tickSize });
   strategy.initialize(contractId, tickSize);
@@ -129,8 +144,8 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     let { direction, entry, stopLoss, takeProfit, confidence } = signal;
     let orderSize = contracts;
     
-    aiContext.recentSignals.push({ ...signal, timestamp: Date.now() });
-    if (aiContext.recentSignals.length > 10) aiContext.recentSignals.shift();
+    // HFT: O(1) push with automatic overflow handling
+    aiContext.recentSignals.push({ ...signal, timestamp: timestampCache.now() });
     
     const riskLog = smartLogs.getRiskCheckLog(true, `${direction.toUpperCase()} @ ${entry.toFixed(2)}`);
     ui.addLog('risk', `${riskLog.message} - ${riskLog.details}`);
@@ -139,12 +154,13 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     if (supervisionEnabled && supervisionEngine) {
       ui.addLog('analysis', 'AI analyzing signal...');
       
+      // HFT: Extract arrays from CircularBuffers for AI supervision
       const supervisionResult = await supervisionEngine.supervise({
         symbolId: symbolName,
         signal: { direction, entry, stopLoss, takeProfit, confidence, size: contracts },
-        recentTicks: aiContext.recentTicks,
-        recentSignals: aiContext.recentSignals,
-        recentTrades: aiContext.recentTrades,
+        recentTicks: aiContext.recentTicks.recent(aiContext.maxTicks),
+        recentSignals: aiContext.recentSignals.recent(10),
+        recentTrades: aiContext.recentTrades.recent(20),
         stats,
         config: { dailyTarget, maxRisk }
       });
@@ -228,7 +244,9 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   let lastPrice = null, lastBid = null, lastAsk = null;
   let ticksPerSecond = 0, lastTickSecond = Math.floor(Date.now() / 1000);
   let lastBiasLogSecond = 0, lastStateLogSecond = 0;
-  let buyVolume = 0, sellVolume = 0, lastTickTime = 0, tickLatencies = [];
+  // HFT: Float64CircularBuffer for O(1) latency statistics
+  let buyVolume = 0, sellVolume = 0, lastTickTime = 0;
+  const tickLatencies = new Float64CircularBuffer(20);
   let runningDelta = 0, runningBuyPct = 50; // For live logs
   
   marketFeed.on('tick', (tick) => {
@@ -250,8 +268,8 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       lastTickSecond = currentSecond;
     }
     
+    // HFT: O(1) push with automatic overflow handling (no shift needed)
     aiContext.recentTicks.push(tick);
-    if (aiContext.recentTicks.length > aiContext.maxTicks) aiContext.recentTicks.shift();
     
     const price = Number(tick.price) || Number(tick.tradePrice) || null;
     const bid = Number(tick.bid) || Number(tick.bidPrice) || null;
@@ -314,6 +332,7 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
     }
     
     // Calculate latency from Rithmic ssboe/usecs or inter-tick timing
+    // HFT: Use cached timestamp and Float64CircularBuffer for O(1) mean calculation
     if (tick.ssboe && tick.usecs !== undefined) {
       const tickTimeMs = (tick.ssboe * 1000) + Math.floor(tick.usecs / 1000);
       const latency = now - tickTimeMs;
@@ -322,8 +341,8 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
       const timeSinceLastTick = now - lastTickTime;
       if (timeSinceLastTick < 100) {
         tickLatencies.push(timeSinceLastTick);
-        if (tickLatencies.length > 20) tickLatencies.shift();
-        stats.latency = Math.round(tickLatencies.reduce((a, b) => a + b, 0) / tickLatencies.length);
+        // HFT: O(1) mean calculation (pre-computed running sum)
+        stats.latency = Math.round(tickLatencies.mean());
       }
     }
     lastTickTime = now;
