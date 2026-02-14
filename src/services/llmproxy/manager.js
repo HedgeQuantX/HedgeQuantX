@@ -205,7 +205,7 @@ class LLMProxyManager {
       const proc = spawn(pythonPath, [
         '-m', 'litellm',
         '--port', String(this.port),
-        '--host', '0.0.0.0'
+        '--host', '127.0.0.1'
       ], {
         cwd: LLMPROXY_DIR,
         env,

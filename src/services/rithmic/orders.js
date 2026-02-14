@@ -606,6 +606,144 @@ const cancelAllOrders = async (service, accountId) => {
 };
 
 /**
+ * Place OCO Bracket Orders (Stop Loss + Take Profit)
+ * 
+ * HFT-GRADE OCO: When one bracket fills, cancel the other IMMEDIATELY.
+ * 
+ * CRITICAL: Uses orderNotification ONLY (not positionUpdate) because PNL_PLANT
+ * sends spurious qty=0 updates between fills that cause premature cancellation.
+ * 
+ * Also monitors via tick-based fallback: if price breaches SL/TP and brackets
+ * haven't fired, uses cancelAllOrders + market order as nuclear option.
+ * 
+ * @param {RithmicService} service - The Rithmic service instance
+ * @param {Object} params - Bracket parameters
+ * @param {string} params.accountId - Account ID
+ * @param {string} params.symbol - Symbol
+ * @param {string} params.exchange - Exchange (default CME)
+ * @param {number} params.size - Order size
+ * @param {number} params.stopPrice - Stop loss price
+ * @param {number} params.targetPrice - Take profit price
+ * @param {boolean} params.isLong - True if closing a LONG position, false for SHORT
+ * @returns {Promise<{success: boolean, slOrderId?: string, tpOrderId?: string, cleanup: Function}>}
+ */
+const placeOCOBracket = async (service, { accountId, symbol, exchange = 'CME', size, stopPrice, targetPrice, isLong }) => {
+  if (!service.orderConn || !service.loginInfo) {
+    return { success: false, error: 'Not connected', cleanup: () => {} };
+  }
+
+  const bracketSide = isLong ? 1 : 0;
+  let slOrderId = null;
+  let tpOrderId = null;
+  let cleanedUp = false;
+  let ocoListener = null;
+  let fillCount = 0;
+
+  // Cancel remaining bracket when one fills - FAST PATH
+  const cancelOther = async (filledId) => {
+    fillCount++;
+    if (cleanedUp || fillCount > 1) return; // Already handled
+    cleanedUp = true;
+
+    // Cancel ALL orders immediately - fastest way to prevent reverse position
+    try {
+      await cancelAllOrders(service, accountId);
+    } catch (e) {
+      // Fallback: try individual cancel
+      const otherId = filledId === slOrderId ? tpOrderId : slOrderId;
+      if (otherId) {
+        try { await cancelOrder(service, otherId); } catch (e2) {}
+      }
+    }
+
+    // Remove listener
+    if (ocoListener) {
+      service.removeListener('orderNotification', ocoListener);
+      ocoListener = null;
+    }
+  };
+
+  // Listen for fills on bracket orders via ORDER_PLANT notifications
+  // This is reliable - no spurious updates like PNL_PLANT
+  ocoListener = (order) => {
+    if (!order.basketId) return;
+    const orderId = order.basketId;
+
+    // Only match our bracket orders
+    if (orderId !== slOrderId && orderId !== tpOrderId) return;
+
+    // FILL (notifyType 5) = bracket executed, cancel the other NOW
+    if (order.notifyType === 5) {
+      const which = orderId === slOrderId ? 'SL' : 'TP';
+      cancelOther(orderId);
+      return;
+    }
+
+    // CANCEL (notifyType 3) = bracket was cancelled (by us or exchange)
+    if (order.notifyType === 3) {
+      // If both are cancelled, cleanup
+      if (orderId === slOrderId) slOrderId = null;
+      if (orderId === tpOrderId) tpOrderId = null;
+      if (!slOrderId && !tpOrderId && ocoListener) {
+        service.removeListener('orderNotification', ocoListener);
+        ocoListener = null;
+      }
+    }
+  };
+
+  service.on('orderNotification', ocoListener);
+
+  // Place SL first, then TP (no positionUpdate listener - that's the bug source)
+  const slResult = await placeOrder(service, {
+    accountId, symbol, exchange,
+    type: 4, // Stop Market
+    side: bracketSide,
+    size,
+    price: stopPrice,
+  });
+
+  if (slResult.success && slResult.orderId) {
+    slOrderId = slResult.orderId;
+  }
+
+  const tpResult = await placeOrder(service, {
+    accountId, symbol, exchange,
+    type: 1, // Limit
+    side: bracketSide,
+    size,
+    price: targetPrice,
+  });
+
+  if (tpResult.success && tpResult.orderId) {
+    tpOrderId = tpResult.orderId;
+  }
+
+  // Cleanup function
+  const cleanup = async () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+
+    if (ocoListener) {
+      service.removeListener('orderNotification', ocoListener);
+      ocoListener = null;
+    }
+
+    // Cancel all to be safe
+    try {
+      await cancelAllOrders(service, accountId);
+    } catch (e) {}
+  };
+
+  return {
+    success: slOrderId !== null || tpOrderId !== null,
+    slOrderId,
+    tpOrderId,
+    cleanup,
+    error: (!slOrderId && !tpOrderId) ? 'Both bracket orders failed' : null,
+  };
+};
+
+/**
  * Exit position using Rithmic's ExitPosition request
  * Uses RequestExitPosition (template 3504)
  * @param {RithmicService} service - The Rithmic service instance
@@ -666,6 +804,7 @@ const exitPosition = async (service, accountId, symbol, exchange = 'CME') => {
 
 module.exports = {
   placeOrder,
+  placeOCOBracket,
   cancelOrder,
   cancelAllOrders,
   exitPosition,

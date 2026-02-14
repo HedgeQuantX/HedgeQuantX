@@ -118,7 +118,7 @@ const connections = {
   _sanitizeAccount(acc) {
     if (!acc || typeof acc !== 'object') return null;
     
-    // Get the real Rithmic account ID (text like "APEX-130042-63")
+    // Get the real Rithmic account ID (text like "PROPFIRM-XXXXXX-XX")
     const rithmicId = acc.rithmicAccountId || acc.accountId;
     if (!rithmicId) return null;
     

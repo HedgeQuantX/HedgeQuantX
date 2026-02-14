@@ -60,6 +60,9 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   let running = true, stopReason = null, startingPnL = null;
   let currentPosition = 0, pendingOrder = false, tickCount = 0, lastBias = 'FLAT';
   
+  // Track bracket orders for cleanup when position closes
+  let activeBrackets = { slOrderId: null, tpOrderId: null, entryPrice: null };
+  
   // Clear any stale position data at startup
   if (service.positions) {
     service.positions.clear();
@@ -123,11 +126,11 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
   }
   ui.addLog('system', 'Connecting to market data...');
   
-  // Listen for position updates from Rithmic (external closes, manual trades)
-  // Only if service supports events (RithmicService or DaemonProxyService)
+  // Listen for position updates from Rithmic (external closes, bracket fills)
+  // CRITICAL: Cancel orphan brackets when position closes to prevent reverse positions
   const accId = account.rithmicAccountId || account.accountId;
   if (typeof service.on === 'function') {
-    service.on('positionUpdate', (pos) => {
+    service.on('positionUpdate', async (pos) => {
       // Match by account and symbol
       const posSymbol = pos.contractId || pos.symbol || '';
       const matchesSymbol = posSymbol.includes(contract.name) || posSymbol.includes(contractId) || 
@@ -139,13 +142,33 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
         if (!isNaN(qty) && Math.abs(qty) < 1000 && qty !== currentPosition) {
           const oldPos = currentPosition;
           currentPosition = qty;
+          
           if (qty === 0 && oldPos !== 0) {
-            ui.addLog('trade', `Position closed externally (was ${oldPos})`);
-            sessionLogger.log('POSITION', `External close: ${oldPos} -> 0`);
-            pendingOrder = false;  // Reset pending order flag
+            // Position closed - CANCEL remaining bracket orders immediately
+            ui.addLog('trade', `Position closed (was ${oldPos})`);
+            sessionLogger.log('POSITION', `Close: ${oldPos} -> 0`);
+            pendingOrder = false;
+            
+            // Cancel orphan brackets to prevent reverse position
+            if (activeBrackets.slOrderId || activeBrackets.tpOrderId) {
+              try {
+                await service.cancelAllOrders(accId);
+                ui.addLog('system', 'Brackets cancelled');
+                sessionLogger.log('BRACKETS', 'Cancelled remaining brackets');
+              } catch (e) {
+                sessionLogger.log('BRACKETS', `Cancel error: ${e.message}`);
+              }
+              activeBrackets = { slOrderId: null, tpOrderId: null, entryPrice: null };
+            }
+            
+            stats.trades++;
           } else if (qty !== 0 && oldPos === 0) {
-            ui.addLog('trade', `Position opened externally: ${qty}`);
-            sessionLogger.log('POSITION', `External open: 0 -> ${qty}`);
+            ui.addLog('trade', `Position opened: ${qty}`);
+            sessionLogger.log('POSITION', `Open: 0 -> ${qty}`);
+          } else if (Math.sign(qty) !== Math.sign(oldPos)) {
+            // Position reversed - this shouldn't happen with proper bracket management
+            ui.addLog('error', `Position REVERSED: ${oldPos} -> ${qty}`);
+            sessionLogger.log('POSITION', `REVERSE: ${oldPos} -> ${qty}`);
           }
         }
       }
@@ -245,21 +268,31 @@ const executeAlgo = async ({ service, account, contract, config, strategy: strat
         ui.addLog('trade', entryLog.details);
         sessionLogger.trade('ENTRY', direction.toUpperCase(), entry, orderSize, orderResult.orderId);
         
-        // Bracket orders
+        // Bracket orders with OCO (One-Cancels-Other) logic
+        // When SL or TP fills, the other is automatically cancelled to prevent reverse positions
         if (stopLoss && takeProfit) {
-          await service.placeOrder({
+          activeBrackets.entryPrice = entry;
+          
+          const bracketResult = await service.placeOCOBracket({
             accountId: account.rithmicAccountId || account.accountId,
-            symbol: symbolCode, exchange: contract.exchange || 'CME',
-            type: 4, side: direction === 'long' ? 1 : 0,
-            size: orderSize, price: stopLoss
+            symbol: symbolCode,
+            exchange: contract.exchange || 'CME',
+            size: orderSize,
+            stopPrice: stopLoss,
+            targetPrice: takeProfit,
+            isLong: direction === 'long',
           });
-          await service.placeOrder({
-            accountId: account.rithmicAccountId || account.accountId,
-            symbol: symbolCode, exchange: contract.exchange || 'CME',
-            type: 1, side: direction === 'long' ? 1 : 0,
-            size: orderSize, price: takeProfit
-          });
-          ui.addLog('trade', `SL: ${stopLoss.toFixed(2)} | TP: ${takeProfit.toFixed(2)}`);
+          
+          if (bracketResult.success) {
+            activeBrackets.slOrderId = bracketResult.slOrderId;
+            activeBrackets.tpOrderId = bracketResult.tpOrderId;
+            activeBrackets.cleanup = bracketResult.cleanup;
+            ui.addLog('trade', `SL: ${stopLoss.toFixed(2)} | TP: ${takeProfit.toFixed(2)} (OCO)`);
+            sessionLogger.log('BRACKETS', `OCO SL=${bracketResult.slOrderId || 'FAIL'} TP=${bracketResult.tpOrderId || 'FAIL'}`);
+          } else {
+            ui.addLog('error', `Brackets failed: ${bracketResult.error}`);
+            sessionLogger.log('BRACKETS', `OCO failed: ${bracketResult.error}`);
+          }
         }
       } else {
         ui.addLog('error', `Order failed: ${orderResult.error}`);

@@ -371,6 +371,26 @@ const handleInstrumentPnLUpdate = (service, data) => {
       
       service.emit('positionUpdate', position);
     } else {
+      // Position closed - emit update with quantity 0 BEFORE deleting
+      const closedPosition = service.positions.get(key);
+      if (closedPosition) {
+        closedPosition.quantity = 0;
+        closedPosition.openPnl = 0;
+        service.emit('positionUpdate', closedPosition);
+      } else {
+        // Position wasn't tracked - emit minimal close event
+        service.emit('positionUpdate', {
+          accountId: pos.accountId,
+          symbol: pos.symbol,
+          exchange: pos.exchange || 'CME',
+          quantity: 0,
+          averagePrice: 0,
+          openPnl: 0,
+          closedPnl: 0,
+          dayPnl: 0,
+          isSnapshot: false,
+        });
+      }
       service.positions.delete(key);
     }
   }

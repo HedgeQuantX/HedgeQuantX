@@ -90,7 +90,7 @@ const VALIDATION = {
 
 // ==================== HQX SERVER (ULTRA LOW LATENCY) ====================
 const HQX_SERVER = {
-  DEFAULT_HOST: '173.212.223.75',
+  DEFAULT_HOST: process.env.HQX_HOST || null,
   DEFAULT_PORT: 3500,
   VERSION: 'v1',
   
@@ -118,7 +118,9 @@ const HQX_SERVER = {
   // >100ms = 250ms heartbeat
   
   get host() {
-    return process.env.HQX_HOST || this.DEFAULT_HOST;
+    const h = process.env.HQX_HOST || this.DEFAULT_HOST;
+    if (!h) throw new Error('HQX_HOST environment variable is required');
+    return h;
   },
   get port() {
     return parseInt(process.env.HQX_PORT, 10) || this.DEFAULT_PORT;
@@ -144,6 +146,39 @@ const DEBUG = {
   LOG_FILE: 'debug.log',
 };
 
+// ==================== PROXY ====================
+// Static residential proxy for prop firm connections (avoids VPN/datacenter blocks)
+// All credentials loaded from environment variables - NEVER hardcode
+const PROXY = {
+  /**
+   * Parse proxy config from env: HQX_PROXY_FR, HQX_PROXY_US, HQX_PROXY_UK
+   * Format: host:port:username:password
+   */
+  _parse(envVar) {
+    const val = process.env[envVar];
+    if (!val) return null;
+    const [host, port, username, password] = val.split(':');
+    if (!host || !port || !username || !password) return null;
+    return { host, port: parseInt(port, 10), username, password, type: 'socks5' };
+  },
+  get FRANCE() { return this._parse('HQX_PROXY_FR'); },
+  get US() { return this._parse('HQX_PROXY_US'); },
+  get UK() { return this._parse('HQX_PROXY_UK'); },
+  get active() {
+    if (process.env.HQX_PROXY_DISABLED === '1') return null;
+    // Try region-specific, then any available
+    const region = process.env.HQX_PROXY_REGION || 'FRANCE';
+    return this[region.toUpperCase()] || this.FRANCE || this.US || this.UK || null;
+  },
+  get url() {
+    // Direct URL override takes priority
+    if (process.env.HQX_PROXY_URL) return process.env.HQX_PROXY_URL;
+    const p = this.active;
+    if (!p) return null;
+    return `socks5://${p.username}:${p.password}@${p.host}:${p.port}`;
+  },
+};
+
 module.exports = {
   TIMEOUTS,
   RATE_LIMITS,
@@ -152,4 +187,5 @@ module.exports = {
   HQX_SERVER,
   CACHE,
   DEBUG,
+  PROXY,
 };

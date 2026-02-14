@@ -1,6 +1,8 @@
 /**
  * Rithmic Connection Manager
  * Handles WebSocket connection and heartbeat
+ * 
+ * Supports SOCKS5 proxy for static residential IP (avoids prop firm blocks)
  */
 
 const WebSocket = require('ws');
@@ -8,6 +10,23 @@ const EventEmitter = require('events');
 const os = require('os');
 const { proto } = require('./protobuf');
 const { REQ, RES, INFRA_TYPE } = require('./constants');
+const { PROXY } = require('../../config/settings');
+
+// Lazy load socks-proxy-agent (only when needed)
+let SocksProxyAgent = null;
+const getProxyAgent = () => {
+  if (!SocksProxyAgent) {
+    try {
+      SocksProxyAgent = require('socks-proxy-agent').SocksProxyAgent;
+    } catch (e) {
+      console.warn('[Rithmic] socks-proxy-agent not installed, proxy disabled');
+      return null;
+    }
+  }
+  const proxyUrl = PROXY.url;
+  if (!proxyUrl) return null;
+  return new SocksProxyAgent(proxyUrl);
+};
 
 /**
  * Get MAC address from network interfaces
@@ -43,6 +62,7 @@ class RithmicConnection extends EventEmitter {
 
   /**
    * Connect to Rithmic server
+   * Uses SOCKS5 proxy if configured (for static residential IP)
    */
   async connect(config) {
     this.config = config;
@@ -51,7 +71,20 @@ class RithmicConnection extends EventEmitter {
     await proto.load();
 
     return new Promise((resolve, reject) => {
-      this.ws = new WebSocket(config.uri, { rejectUnauthorized: false });
+      // Build WebSocket options
+      const wsOptions = { rejectUnauthorized: false };
+      
+      // Add SOCKS5 proxy agent if configured
+      const agent = getProxyAgent();
+      if (agent) {
+        wsOptions.agent = agent;
+        const proxyInfo = PROXY.active;
+        if (proxyInfo) {
+          console.log(`[Rithmic] Using proxy: ${proxyInfo.host}:${proxyInfo.port}`);
+        }
+      }
+      
+      this.ws = new WebSocket(config.uri, wsOptions);
 
       this.ws.on('open', () => {
         this.state = 'CONNECTED';

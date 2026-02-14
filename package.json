@@ -71,6 +71,7 @@
     "inquirer": "^8.2.6",
     "ora": "^5.4.1",
     "protobufjs": "^8.0.0",
+    "socks-proxy-agent": "^8.0.5",
     "tar": "^7.5.2",
     "uuid": "^9.0.1",
     "ws": "^8.18.3"

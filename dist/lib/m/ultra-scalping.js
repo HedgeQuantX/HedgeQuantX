@@ -86,7 +86,7 @@ class HQXUltraScalpingStrategy extends EventEmitter {
     
     // Z-Score Parameters (EXACT FROM PYTHON)
     this.zscoreLookback = 100;        // PYTHON: zscore_lookback: 100
-    this.zscoreEntryThreshold = 2.5;  // PYTHON: zscore_entry: 2.5
+    this.zscoreEntryThreshold = 2.0;  // Slightly lower for more signals on NQ
     this.zscoreExitThreshold = 0.5;   // PYTHON: zscore_exit: 0.5
     
     // Trade Parameters (EXACT FROM PYTHON)

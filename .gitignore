@@ -1,11 +1,26 @@
 node_modules/
 logs/
 *.log
-.env
 .DS_Store
 __pycache__/
 *.pyc
 .vscode/
+
+# Environment files (SECURITY - never commit secrets)
+.env
+.env.local
+.env.production
+.env.development
+api/.env
+api/.env.local
+api/.env.production
+web/.env
+web/.env.local
+web/.env.production
+web/.env.development
+# Allow .env.example templates (safe to commit)
+!.env.example
+!api/.env.example
 
 # Source (protected)
 src/lib/
@@ -15,9 +30,15 @@ scripts/
 
 # Test
 test-*.js
+TEST/
 
 # Config
 .config/
 
 # Private strategies (source code)
 private/
+
+# Project context (internal docs)
+.hqx-context/
+CLAUDE.md
+RULES.md
