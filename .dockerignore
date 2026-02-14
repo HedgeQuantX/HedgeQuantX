@@ -1,0 +1,15 @@
+node_modules/
+web/node_modules/
+web/dist/
+api/node_modules/
+.git/
+.hqx-context/
+CLAUDE.md
+RULES.md
+TEST/
+private/
+scripts/
+*.log
+.env
+.env.*
+!.env.example

@@ -1,9 +1,6 @@
-export const API_URL = import.meta.env.VITE_API_URL || '/api';
+export const API_URL = import.meta.env.VITE_API_URL || 'https://hedgequantx-production.up.railway.app/api';
 export const WS_URL =
-  import.meta.env.VITE_WS_URL ||
-  (typeof window !== 'undefined'
-    ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`
-    : 'ws://localhost:3001');
+  import.meta.env.VITE_WS_URL || 'wss://hedgequantx-production.up.railway.app';
 
 // Propfirms fetched from API at runtime - this is the fallback list
 export const PROPFIRMS = [

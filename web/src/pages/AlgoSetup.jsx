@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   ChevronRight, ChevronLeft, Rocket, Loader2, AlertCircle,
   Target, TrendingUp, Gauge, Wallet,
@@ -12,8 +11,7 @@ const STEPS = ['Account', 'Symbol', 'Strategy', 'Configure', 'Launch'];
 
 const POPULAR_SYMBOLS = ['ES', 'NQ', 'MES', 'MNQ', 'YM', 'RTY', 'CL', 'GC'];
 
-export default function AlgoSetup() {
-  const navigate = useNavigate();
+export default function AlgoSetup({ onNavigate }) {
   const { accounts } = useAuth();
 
   const [step, setStep] = useState(0);
@@ -80,7 +78,7 @@ export default function AlgoSetup() {
         dailyTarget: config.dailyTarget,
         maxRisk: config.maxRisk,
       });
-      navigate('/algo/live');
+      if (onNavigate) onNavigate('algo-live');
     } catch (err) {
       setError(err.message);
     } finally {
