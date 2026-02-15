@@ -33,7 +33,9 @@ async function request(endpoint, options = {}) {
       signal: controller.signal,
     });
 
-    if (response.status === 401) {
+    // 401 on authenticated requests = session expired → redirect to login
+    // 401 on /auth/login = bad credentials → let caller handle the error
+    if (response.status === 401 && !endpoint.startsWith('/auth/login')) {
       clearToken();
       window.location.href = '/';
       throw new Error('Unauthorized');

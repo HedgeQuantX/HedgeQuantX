@@ -54,10 +54,11 @@ router.post('/login', loginLimiter, async (req, res) => {
     const result = await service.login(username.trim(), password);
 
     if (!result.success) {
+      console.error('[Auth] Rithmic login rejected:', result.error || 'unknown reason');
       try { await service.disconnect(); } catch (_) {}
       return res.status(401).json({
         success: false,
-        error: 'Login failed. Check your credentials.',
+        error: result.error || 'Login failed. Check your credentials.',
       });
     }
 
@@ -81,8 +82,8 @@ router.post('/login', loginLimiter, async (req, res) => {
       accounts: result.accounts || [],
     });
   } catch (err) {
-    console.error('[Auth] Login error:', err.message);
-    res.status(500).json({ success: false, error: 'Internal server error' });
+    console.error('[Auth] Login error:', err.message, err.stack?.split('\n').slice(0, 3).join(' '));
+    res.status(500).json({ success: false, error: 'Connection to trading server failed. Try again.' });
   }
 });
 
