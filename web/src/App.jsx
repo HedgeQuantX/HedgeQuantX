@@ -8,6 +8,7 @@ import AlgoLive from './pages/AlgoLive';
 import Stats from './pages/Stats';
 import Positions from './pages/Positions';
 import { Loader2 } from 'lucide-react';
+import { LogoIcon } from './components/Logo';
 
 const TABS = {
   dashboard: Dashboard,
@@ -55,9 +56,9 @@ function LandingView({ onConnect }) {
     <div className="min-h-screen bg-bg-primary flex flex-col items-center justify-center p-4">
       <div className="text-center animate-fade-in">
         <div className="w-20 h-20 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center mx-auto mb-6">
-          <span className="text-accent font-bold text-3xl font-mono-nums">HQX</span>
+          <LogoIcon size={48} className="text-accent" />
         </div>
-        <h1 className="text-3xl font-bold text-gradient mb-2">HedgeQuantX</h1>
+        <h1 className="text-3xl font-bold text-gradient mb-2">HedgeQuant𝕏</h1>
         <p className="text-text-muted mb-8">Professional Algorithmic Trading Platform</p>
 
         <button

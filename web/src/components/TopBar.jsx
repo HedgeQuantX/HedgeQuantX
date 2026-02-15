@@ -2,6 +2,7 @@ import { LogOut, Wifi, WifiOff, Server } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { formatBalance } from '../utils/format';
 import { PROPFIRMS } from '../utils/constants';
+import { LogoIcon } from './Logo';
 
 export default function TopBar() {
   const { propfirm, accounts, logout } = useAuth();
@@ -14,11 +15,9 @@ export default function TopBar() {
     <header className="h-14 border-b border-border-default bg-bg-card flex items-center justify-between px-4 lg:px-6 shrink-0">
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-accent/20 flex items-center justify-center">
-            <span className="text-accent font-bold text-sm font-mono-nums">HQX</span>
-          </div>
+          <LogoIcon size={28} className="text-accent" />
           <span className="hidden sm:block text-sm font-semibold text-gradient">
-            HedgeQuantX
+            HedgeQuant𝕏
           </span>
         </div>
 

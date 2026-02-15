@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140">
+  <!-- HQ𝕏 Icon Mark - Abstract burst/starburst inspired by Edel Finance -->
+  <g transform="translate(70,70)" fill="#00e5ff">
+    <!-- 8 organic tapered petals radiating from center -->
+    <!-- Top -->
+    <path d="M0,-60 C5,-38 7,-20 0,-7 C-7,-20 -5,-38 0,-60Z"/>
+    <!-- Top-right -->
+    <path d="M42.4,-42.4 C27,-29 15,-17 5,-5 C-2,-19 14,-34 42.4,-42.4Z"/>
+    <!-- Right -->
+    <path d="M60,0 C38,5 20,7 7,0 C20,-7 38,-5 60,0Z"/>
+    <!-- Bottom-right -->
+    <path d="M42.4,42.4 C29,27 17,15 5,5 C19,-2 34,14 42.4,42.4Z"/>
+    <!-- Bottom -->
+    <path d="M0,60 C-5,38 -7,20 0,7 C7,20 5,38 0,60Z"/>
+    <!-- Bottom-left -->
+    <path d="M-42.4,42.4 C-27,29 -15,17 -5,5 C2,19 -14,34 -42.4,42.4Z"/>
+    <!-- Left -->
+    <path d="M-60,0 C-38,-5 -20,-7 -7,0 C-20,7 -38,5 -60,0Z"/>
+    <!-- Top-left -->
+    <path d="M-42.4,-42.4 C-29,-27 -17,-15 -5,-5 C-19,2 -34,-14 -42.4,-42.4Z"/>
+    <!-- Center dot -->
+    <circle cx="0" cy="0" r="5.5"/>
+  </g>
+</svg>

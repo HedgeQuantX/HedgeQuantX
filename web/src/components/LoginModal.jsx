@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { PROPFIRMS } from '../utils/constants';
+import { LogoIcon } from './Logo';
 
 const iconMap = {
   TrendingUp, Mountain, GraduationCap, Zap, Shield, Star, Target, Award,
@@ -47,9 +48,7 @@ export default function LoginModal({ onClose }) {
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border-default">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-accent/20 flex items-center justify-center">
-              <span className="text-accent font-bold text-sm font-mono-nums">HQX</span>
-            </div>
+            <LogoIcon size={28} className="text-accent" />
             <h2 className="text-sm font-semibold text-text-primary">
               {step === 1 ? 'Select Prop Firm' : `Connect to ${selectedFirm?.name}`}
             </h2>

@@ -62,6 +62,13 @@ body {
   color: var(--color-text-primary);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* Preserve case for inputs and code */
+input, textarea, .font-mono-nums, code, pre {
+  text-transform: none;
 }
 
 /* Glow effects */

@@ -26,7 +26,7 @@ export default function HQXScore({ score, grade }) {
 
   return (
     <div className="bg-bg-card border border-border-default rounded-lg p-6 flex flex-col items-center animate-slide-up">
-      <h3 className="text-sm font-medium text-text-primary mb-4">HQX Score</h3>
+      <h3 className="text-sm font-medium text-text-primary mb-4">HQ𝕏 Score</h3>
       <div className="relative w-32 h-32">
         <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
           <circle
