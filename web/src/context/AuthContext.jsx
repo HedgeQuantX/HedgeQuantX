@@ -7,7 +7,8 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [propfirm, setPropfirm] = useState(null);
   const [accounts, setAccounts] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [initializing, setInitializing] = useState(true); // Only for initial session check
+  const [loginLoading, setLoginLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const fetchAccounts = useCallback(async () => {
@@ -21,7 +22,7 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (propfirmId, username, password) => {
     setError(null);
-    setLoading(true);
+    setLoginLoading(true);
     try {
       const data = await auth.login(propfirmId, username, password);
       setUser(data.user || { username });
@@ -36,7 +37,7 @@ export function AuthProvider({ children }) {
       setError(err.message);
       return false;
     } finally {
-      setLoading(false);
+      setLoginLoading(false);
     }
   }, [fetchAccounts]);
 
@@ -60,9 +61,9 @@ export function AuthProvider({ children }) {
         .catch(() => {
           auth.logout();
         })
-        .finally(() => setLoading(false));
+        .finally(() => setInitializing(false));
     } else {
-      setLoading(false);
+      setInitializing(false);
     }
   }, [fetchAccounts]);
 
@@ -74,7 +75,8 @@ export function AuthProvider({ children }) {
         user,
         propfirm,
         accounts,
-        loading,
+        loading: initializing,
+        loginLoading,
         error,
         isAuthenticated,
         login,
