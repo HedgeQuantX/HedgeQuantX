@@ -66,8 +66,8 @@ body {
   letter-spacing: 0.02em;
 }
 
-/* Preserve case for inputs and code */
-input, textarea, .font-mono-nums, code, pre {
+/* Preserve case for inputs and code only */
+input, textarea, code, pre {
   text-transform: none;
 }
 
