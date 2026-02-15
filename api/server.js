@@ -30,6 +30,9 @@ const PORT = process.env.PORT || 3001;
 const app = express();
 const server = http.createServer(app);
 
+// Trust first proxy (Railway, Vercel, etc.) for correct client IP in rate limiting
+app.set('trust proxy', 1);
+
 // ---------------------------------------------------------------------------
 // Middleware
 // ---------------------------------------------------------------------------
