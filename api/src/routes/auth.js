@@ -9,20 +9,40 @@
 'use strict';
 
 const { Router } = require('express');
+const rateLimit = require('express-rate-limit');
 const { RithmicService } = require('../../../src/services/rithmic');
 const { sessionManager } = require('../services/session-manager');
 const { requireAuth, signToken } = require('../middleware/auth');
 
 const router = Router();
 
+// Strict rate limit on login: 5 attempts per 15 minutes per IP
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many login attempts. Try again later.' },
+});
+
 /**
  * POST /api/auth/login
  * Body: { propfirm, username, password }
  */
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   const { propfirm, username, password } = req.body;
 
-  if (!propfirm || !username || !password) {
+  // Type validation
+  if (typeof propfirm !== 'string' || typeof username !== 'string' || typeof password !== 'string') {
+    return res.status(400).json({ success: false, error: 'Invalid field types' });
+  }
+
+  // Length validation
+  if (propfirm.length > 64 || username.length > 128 || password.length > 256) {
+    return res.status(400).json({ success: false, error: 'Field exceeds maximum length' });
+  }
+
+  if (!propfirm.trim() || !username.trim() || !password.trim()) {
     return res.status(400).json({
       success: false,
       error: 'Missing required fields: propfirm, username, password',
@@ -30,45 +50,39 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    // Create a new RithmicService instance for this user
-    const service = new RithmicService(propfirm);
-
-    const result = await service.login(username, password);
+    const service = new RithmicService(propfirm.trim());
+    const result = await service.login(username.trim(), password);
 
     if (!result.success) {
-      // Cleanup on failure
       try { await service.disconnect(); } catch (_) {}
       return res.status(401).json({
         success: false,
-        error: result.error || 'Login failed',
+        error: 'Login failed. Check your credentials.',
       });
     }
 
-    // Store session
     const sessionId = sessionManager.create(service, {
-      propfirm,
-      username,
+      propfirm: propfirm.trim(),
+      username: username.trim(),
       accounts: result.accounts || [],
     });
 
-    // Update session accounts reference
     const session = sessionManager.get(sessionId);
     if (session) {
       session.accounts = result.accounts || [];
     }
 
-    // Sign JWT
-    const token = signToken(sessionId, propfirm, username);
+    const token = signToken(sessionId, propfirm.trim(), username.trim());
 
     res.json({
       success: true,
       token,
-      user: result.user || { userName: username },
+      user: result.user || { userName: username.trim() },
       accounts: result.accounts || [],
     });
   } catch (err) {
     console.error('[Auth] Login error:', err.message);
-    res.status(500).json({ success: false, error: 'Login failed: ' + err.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
@@ -81,7 +95,7 @@ router.post('/logout', requireAuth, async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('[Auth] Logout error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 

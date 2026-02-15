@@ -31,7 +31,7 @@ router.get('/', requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('[Contracts] Error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to fetch contracts' });
   }
 });
 
@@ -40,10 +40,13 @@ router.get('/', requireAuth, async (req, res) => {
  * Searches contracts by symbol or name
  */
 router.get('/search', requireAuth, async (req, res) => {
-  const query = req.query.q || '';
+  const query = String(req.query.q || '').trim();
 
   if (!query || query.length < 1) {
     return res.status(400).json({ success: false, error: 'Search query required (?q=...)' });
+  }
+  if (query.length > 20) {
+    return res.status(400).json({ success: false, error: 'Search query too long (max 20 chars)' });
   }
 
   try {
@@ -51,7 +54,7 @@ router.get('/search', requireAuth, async (req, res) => {
     res.json({ success: true, contracts: contracts || [] });
   } catch (err) {
     console.error('[Contracts] Search error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Search failed' });
   }
 });
 

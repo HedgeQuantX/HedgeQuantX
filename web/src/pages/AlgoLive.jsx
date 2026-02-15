@@ -9,7 +9,10 @@ import ExecutionLog from '../components/ExecutionLog';
 import { formatCurrency, formatPercent, formatTime } from '../utils/format';
 
 export default function AlgoLive({ onNavigate }) {
-  const navigate = (path) => onNavigate?.(path === '/algo' ? 'algo' : 'dashboard');
+  const navigate = useCallback(
+    (path) => onNavigate?.(path === '/algo' ? 'algo' : 'dashboard'),
+    [onNavigate],
+  );
 
   const [algoState, setAlgoState] = useState(null);
   const [pnl, setPnl] = useState(null);

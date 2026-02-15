@@ -24,11 +24,27 @@ const router = Router();
 router.post('/order', requireAuth, async (req, res) => {
   const { accountId, symbol, exchange, side, type, size, price } = req.body;
 
+  // Strict input validation for trading — invalid orders = real financial risk
   if (!accountId || !symbol || side === undefined || !type || !size) {
     return res.status(400).json({
       success: false,
       error: 'Missing required fields: accountId, symbol, side, type, size',
     });
+  }
+  if (typeof size !== 'number' || size < 1 || size > 100 || !Number.isInteger(size)) {
+    return res.status(400).json({ success: false, error: 'Invalid size (1-100 integer)' });
+  }
+  if (![0, 1].includes(side)) {
+    return res.status(400).json({ success: false, error: 'Invalid side (0=Buy, 1=Sell)' });
+  }
+  if (![1, 2, 3, 4].includes(type)) {
+    return res.status(400).json({ success: false, error: 'Invalid order type (1-4)' });
+  }
+  if (price !== undefined && price !== null && (typeof price !== 'number' || price < 0)) {
+    return res.status(400).json({ success: false, error: 'Invalid price' });
+  }
+  if (typeof symbol !== 'string' || symbol.length > 20) {
+    return res.status(400).json({ success: false, error: 'Invalid symbol' });
   }
 
   try {
@@ -43,7 +59,7 @@ router.post('/order', requireAuth, async (req, res) => {
     });
 
     if (!result.success) {
-      return res.status(400).json({ success: false, error: result.error });
+      return res.status(400).json({ success: false, error: result.error || 'Order rejected' });
     }
 
     res.json({
@@ -56,7 +72,7 @@ router.post('/order', requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('[Trading] Order error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Order execution failed' });
   }
 });
 
@@ -77,7 +93,7 @@ router.delete('/orders', requireAuth, async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('[Trading] Cancel error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to cancel orders' });
   }
 });
 
@@ -91,7 +107,7 @@ router.get('/positions', requireAuth, async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('[Trading] Positions error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to fetch positions' });
   }
 });
 
@@ -105,7 +121,7 @@ router.get('/orders', requireAuth, async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('[Trading] Get orders error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to fetch orders' });
   }
 });
 
@@ -126,7 +142,7 @@ router.post('/close', requireAuth, async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('[Trading] Close position error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to close position' });
   }
 });
 

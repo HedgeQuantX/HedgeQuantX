@@ -1,5 +1,7 @@
 import { API_URL, WS_URL } from '../utils/constants';
 
+const REQUEST_TIMEOUT_MS = 15000; // 15 second timeout on all requests
+
 function getToken() {
   return localStorage.getItem('hqx_token');
 }
@@ -20,23 +22,48 @@ async function request(endpoint, options = {}) {
     ...options.headers,
   };
 
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  // Abort controller for timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  if (response.status === 401) {
-    clearToken();
-    window.location.href = '/';
-    throw new Error('Unauthorized');
+  try {
+    const response = await fetch(`${API_URL}${endpoint}`, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+
+    if (response.status === 401) {
+      clearToken();
+      window.location.href = '/';
+      throw new Error('Unauthorized');
+    }
+
+    if (!response.ok) {
+      const ct = response.headers.get('content-type') || '';
+      if (ct.includes('application/json')) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || `HTTP ${response.status}`);
+      }
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    // Handle empty responses (204 No Content)
+    if (response.status === 204) return {};
+
+    const ct = response.headers.get('content-type') || '';
+    if (ct.includes('application/json')) {
+      return response.json();
+    }
+    return {};
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('Request timed out');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Request failed' }));
-    throw new Error(error.message || `HTTP ${response.status}`);
-  }
-
-  return response.json();
 }
 
 export const api = {
@@ -76,13 +103,17 @@ export class WsClient {
     if (this.ws?.readyState === WebSocket.OPEN) return;
 
     this.isIntentionallyClosed = false;
-    const token = getToken();
-    const url = token ? `${WS_URL}?token=${token}` : WS_URL;
 
     try {
-      this.ws = new WebSocket(url);
+      // Connect without token in URL — send as first message (more secure)
+      this.ws = new WebSocket(WS_URL);
 
       this.ws.onopen = () => {
+        // Authenticate via first message instead of URL query param
+        const token = getToken();
+        if (token) {
+          this.ws.send(JSON.stringify({ type: 'auth', token }));
+        }
         this.reconnectAttempts = 0;
         this.onStatusChange?.('connected');
       };
@@ -103,7 +134,8 @@ export class WsClient {
         }
       };
 
-      this.ws.onerror = () => {
+      this.ws.onerror = (err) => {
+        console.error('[WS] Connection error:', err);
         this.onStatusChange?.('error');
       };
     } catch {
@@ -113,7 +145,10 @@ export class WsClient {
   }
 
   scheduleReconnect() {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) return;
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      this.onStatusChange?.('failed'); // Signal permanent failure to UI
+      return;
+    }
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectAttempts++;
@@ -121,10 +156,18 @@ export class WsClient {
     }, delay);
   }
 
+  /** Manual reconnect (used by UI "Reconnect" button after max attempts) */
+  reconnect() {
+    this.reconnectAttempts = 0;
+    this.connect();
+  }
+
   send(type, payload = {}) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type, ...payload }));
+      return true;
     }
+    return false; // Let caller know message was not sent
   }
 
   disconnect() {

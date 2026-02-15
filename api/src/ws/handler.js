@@ -1,10 +1,8 @@
 /**
  * WebSocket Handler
  *
- * Streams real-time data to authenticated clients:
- *   tick, pnl, position, signal, trade, log, status
- *
- * Client connects with JWT token as query param: ws://host:3001?token=xxx
+ * Streams real-time data to authenticated clients.
+ * Auth: JWT via query param (?token=xxx) or first message ({ type: 'auth', token: 'xxx' })
  *
  * NO MOCK DATA - All data from Rithmic API via AlgoRunner / RithmicService.
  */
@@ -15,13 +13,13 @@ const { WebSocketServer } = require('ws');
 const { verifyToken } = require('../middleware/auth');
 const { sessionManager } = require('../services/session-manager');
 const { AlgoRunner } = require('../services/algo-runner');
-// CORS origin check handled by HTTP middleware, WS uses JWT auth only
+const { ALLOWED_ORIGINS } = require('../middleware/cors');
 
 /**
  * Send JSON to a WebSocket client (safe)
  */
 function wsSend(ws, data) {
-  if (ws.readyState === 1) { // OPEN
+  if (ws.readyState === 1) {
     try {
       ws.send(JSON.stringify(data));
     } catch (_) {}
@@ -29,23 +27,74 @@ function wsSend(ws, data) {
 }
 
 /**
+ * Validate algo config input (same checks as REST route)
+ */
+function validateAlgoConfig(config) {
+  if (!config) return 'Missing config';
+  if (!config.strategyId || typeof config.strategyId !== 'string') return 'Invalid strategyId';
+  if (!config.symbol || typeof config.symbol !== 'string' || config.symbol.length > 20) return 'Invalid symbol';
+  if (!config.accountId) return 'Missing accountId';
+  const size = config.size || 1;
+  if (typeof size !== 'number' || size < 1 || size > 100 || !Number.isInteger(size)) return 'Invalid size';
+  return null;
+}
+
+/**
  * Set up the WebSocket server on the HTTP server
  */
 function setupWebSocket(server) {
-  const wss = new WebSocketServer({ server, path: '/' });
+  const wss = new WebSocketServer({
+    server,
+    path: '/',
+    maxPayload: 4096, // 4KB max message size
+    verifyClient: (info) => {
+      const origin = info.origin || info.req.headers.origin;
+      if (!origin) return true; // Allow non-browser clients (curl, mobile apps)
+      return ALLOWED_ORIGINS.includes(origin);
+    },
+  });
 
   wss.on('connection', (ws, req) => {
     // Extract token from query string
     const url = new URL(req.url, 'http://localhost');
     const token = url.searchParams.get('token');
 
-    if (!token) {
-      wsSend(ws, { type: 'error', message: 'Missing token' });
-      ws.close(4001, 'Missing token');
-      return;
-    }
+    // If token provided in URL, authenticate immediately
+    if (token) {
+      authenticateAndSetup(ws, token);
+    } else {
+      // Wait for auth message as first message
+      ws.once('message', (raw) => {
+        let msg;
+        try {
+          msg = JSON.parse(raw.toString());
+        } catch (_) {
+          wsSend(ws, { type: 'error', message: 'Invalid JSON' });
+          ws.close(4001, 'Invalid auth message');
+          return;
+        }
+        if (msg.type === 'auth' && msg.token) {
+          authenticateAndSetup(ws, msg.token);
+        } else {
+          wsSend(ws, { type: 'error', message: 'First message must be auth' });
+          ws.close(4001, 'Missing auth');
+        }
+      });
 
-    // Verify JWT
+      // Auto-close if no auth within 5 seconds
+      const authTimeout = setTimeout(() => {
+        if (ws.readyState === 1) {
+          wsSend(ws, { type: 'error', message: 'Auth timeout' });
+          ws.close(4001, 'Auth timeout');
+        }
+      }, 5000);
+      ws._authTimeout = authTimeout;
+    }
+  });
+
+  function authenticateAndSetup(ws, token) {
+    if (ws._authTimeout) clearTimeout(ws._authTimeout);
+
     const payload = verifyToken(token);
     if (!payload) {
       wsSend(ws, { type: 'error', message: 'Invalid token' });
@@ -60,22 +109,20 @@ function setupWebSocket(server) {
       return;
     }
 
-    // Touch session
     session.lastActivity = Date.now();
-
     const sessionId = payload.sessionId;
-    console.log(`[WS] Client connected (session ${sessionId.slice(0, 8)})`);
+    const logId = sessionId.slice(0, 8);
 
-    wsSend(ws, { type: 'connected', sessionId: sessionId.slice(0, 8) });
+    console.log(`[WS] Client connected (session ${logId})`);
+    wsSend(ws, { type: 'connected', sessionId: logId });
 
     // -----------------------------------------------------------------------
-    // Attach AlgoRunner event forwarding if algo is running
+    // AlgoRunner event forwarding
     // -----------------------------------------------------------------------
     let boundListeners = [];
 
     const attachAlgoListeners = (runner) => {
       if (!runner) return;
-
       const events = ['tick', 'pnl', 'position', 'signal', 'trade', 'log', 'status'];
       for (const event of events) {
         const fn = (data) => wsSend(ws, { type: event, ...data });
@@ -91,13 +138,12 @@ function setupWebSocket(server) {
       boundListeners = [];
     };
 
-    // Attach to existing runner if any
     if (session.algoRunner) {
       attachAlgoListeners(session.algoRunner);
     }
 
     // -----------------------------------------------------------------------
-    // P&L streaming from PNL_PLANT (independent of algo)
+    // P&L streaming
     // -----------------------------------------------------------------------
     const pnlInterval = setInterval(() => {
       if (ws.readyState !== 1) return;
@@ -118,7 +164,7 @@ function setupWebSocket(server) {
           });
         }
       }
-    }, 2000); // Every 2 seconds
+    }, 2000);
 
     // -----------------------------------------------------------------------
     // Handle messages FROM client
@@ -143,23 +189,30 @@ function setupWebSocket(server) {
 
       switch (msg.type) {
         case 'subscribe': {
-          // Subscribe to market data via algo runner or standalone feed
-          wsSend(ws, { type: 'log', level: 'info', message: `Subscribe: ${msg.symbol}:${msg.exchange || 'CME'}`, timestamp: Date.now() });
+          wsSend(ws, {
+            type: 'log', level: 'info',
+            message: `Subscribe: ${msg.symbol}:${msg.exchange || 'CME'}`,
+            timestamp: Date.now(),
+          });
           break;
         }
 
         case 'algo.start': {
           const config = msg.config || msg;
+          const validationError = validateAlgoConfig(config);
+          if (validationError) {
+            wsSend(ws, { type: 'error', message: validationError });
+            break;
+          }
+
           detachAlgoListeners();
 
-          // Stop existing
           if (currentSession.algoRunner && currentSession.algoRunner.running) {
             await currentSession.algoRunner.stop();
           }
 
           const runner = new AlgoRunner(currentSession.service);
           currentSession.algoRunner = runner;
-
           attachAlgoListeners(runner);
 
           const result = await runner.start({
@@ -171,7 +224,7 @@ function setupWebSocket(server) {
           });
 
           if (!result.success) {
-            wsSend(ws, { type: 'error', message: result.error });
+            wsSend(ws, { type: 'error', message: result.error || 'Algo start failed' });
             currentSession.algoRunner = null;
             detachAlgoListeners();
           }
@@ -192,7 +245,8 @@ function setupWebSocket(server) {
         }
 
         default:
-          wsSend(ws, { type: 'error', message: `Unknown message type: ${msg.type}` });
+          // Don't echo unknown message types (info leak)
+          wsSend(ws, { type: 'error', message: 'Unknown message type' });
       }
     });
 
@@ -200,17 +254,17 @@ function setupWebSocket(server) {
     // Cleanup on disconnect
     // -----------------------------------------------------------------------
     ws.on('close', () => {
-      console.log(`[WS] Client disconnected (session ${sessionId.slice(0, 8)})`);
+      console.log(`[WS] Client disconnected (session ${logId})`);
       clearInterval(pnlInterval);
       detachAlgoListeners();
     });
 
     ws.on('error', (err) => {
-      console.error(`[WS] Error (session ${sessionId.slice(0, 8)}):`, err.message);
+      console.error(`[WS] Error (session ${logId}):`, err.message);
       clearInterval(pnlInterval);
       detachAlgoListeners();
     });
-  });
+  }
 
   console.log('[WS] WebSocket server initialized');
   return wss;

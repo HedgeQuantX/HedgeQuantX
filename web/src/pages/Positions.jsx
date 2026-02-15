@@ -31,7 +31,28 @@ export default function Positions() {
   };
 
   useEffect(() => {
-    fetchData();
+    let mounted = true;
+    const load = async () => {
+      try {
+        const results = await Promise.allSettled([
+          api.get('/trading/positions'),
+          api.get('/trading/orders'),
+        ]);
+        if (!mounted) return;
+        if (results[0].status === 'fulfilled') {
+          setPositions(results[0].value.positions || results[0].value || []);
+        }
+        if (results[1].status === 'fulfilled') {
+          setOrders(results[1].value.orders || results[1].value || []);
+        }
+      } catch {
+        // data unavailable
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    load();
+    return () => { mounted = false; };
   }, []);
 
   if (loading) {

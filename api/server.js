@@ -11,6 +11,8 @@ require('dotenv').config();
 
 const http = require('http');
 const express = require('express');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const { corsMiddleware } = require('./src/middleware/cors');
 const { setupWebSocket } = require('./src/ws/handler');
 const { sessionManager } = require('./src/services/session-manager');
@@ -32,8 +34,34 @@ const server = http.createServer(app);
 // Middleware
 // ---------------------------------------------------------------------------
 
+// Security headers
+app.use(helmet({
+  contentSecurityPolicy: false, // CSP managed by frontend
+  crossOriginEmbedderPolicy: false,
+}));
+
 app.use(corsMiddleware);
-app.use(express.json());
+app.use(express.json({ limit: '10kb' }));
+
+// Global rate limiter: 100 requests per minute per IP
+app.use(rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Rate limit exceeded' },
+}));
+
+// Reject non-JSON content types on mutation requests
+app.use((req, res, next) => {
+  if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+    const ct = req.headers['content-type'] || '';
+    if (!ct.includes('application/json')) {
+      return res.status(415).json({ success: false, error: 'Content-Type must be application/json' });
+    }
+  }
+  next();
+});
 
 // Request logging (minimal)
 app.use((req, _res, next) => {
@@ -80,8 +108,6 @@ const STRATEGIES = [
     id: 'ultra-scalping',
     name: 'HQX Scalping',
     description: '6 Mathematical Models (Z-Score, VPIN, Kyle Lambda, Kalman, Vol, OFI)',
-    winRate: 71.1,
-    profitFactor: 1.86,
     riskReward: '1:2',
     stopTicks: 8,
     targetTicks: 16,
@@ -90,8 +116,6 @@ const STRATEGIES = [
     id: 'hqx-2b',
     name: 'HQX-2B Liquidity Sweep',
     description: '2B Pattern with Liquidity Zone Sweeps',
-    winRate: 82.8,
-    profitFactor: 3.2,
     riskReward: '1:4',
     stopTicks: 10,
     targetTicks: 40,
@@ -106,12 +130,11 @@ app.get('/api/strategies', (_req, res) => {
   res.json({ success: true, strategies: STRATEGIES });
 });
 
-// Health check
+// Health check (no sensitive info)
 app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
     uptime: process.uptime(),
-    activeSessions: sessionManager.getActiveCount(),
     timestamp: Date.now(),
   });
 });

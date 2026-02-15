@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   TrendingUp, Mountain, GraduationCap, Zap, Shield, Star, Target, Award,
   Rocket, DollarSign, ArrowUpRight, Timer, Crown, BarChart3, ShieldCheck,
@@ -21,6 +21,21 @@ export default function LoginModal({ onClose }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const modalRef = useRef(null);
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
+  // Close on backdrop click
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget) onClose();
+  };
 
   const handleSelectFirm = (firm) => {
     setSelectedFirm(firm);
@@ -43,18 +58,28 @@ export default function LoginModal({ onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-bg-card border border-border-default rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slide-up">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="login-modal-title"
+      onClick={handleBackdropClick}
+    >
+      <div
+        ref={modalRef}
+        className="bg-bg-card border border-border-default rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slide-up"
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border-default">
           <div className="flex items-center gap-3">
             <LogoIcon size={28} className="text-accent" />
-            <h2 className="text-sm font-semibold text-text-primary">
+            <h2 id="login-modal-title" className="text-sm font-semibold text-text-primary">
               {step === 1 ? 'Select Prop Firm' : `Connect to ${selectedFirm?.name}`}
             </h2>
           </div>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="p-1.5 text-text-muted hover:text-text-primary rounded-lg hover:bg-bg-card-hover transition-colors cursor-pointer"
           >
             <X size={18} />

@@ -70,4 +70,4 @@ const verifyToken = (token) => {
   }
 };
 
-module.exports = { requireAuth, signToken, verifyToken, JWT_SECRET };
+module.exports = { requireAuth, signToken, verifyToken };

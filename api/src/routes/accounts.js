@@ -30,7 +30,7 @@ router.get('/', requireAuth, async (req, res) => {
     res.json({ success: true, accounts: result.accounts });
   } catch (err) {
     console.error('[Accounts] Error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to fetch accounts' });
   }
 });
 
@@ -59,7 +59,7 @@ router.get('/:id/pnl', requireAuth, (req, res) => {
     res.json({ success: true, accountId, ...pnl });
   } catch (err) {
     console.error('[Accounts] PnL error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to fetch P&L data' });
   }
 });
 

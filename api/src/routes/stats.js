@@ -107,7 +107,7 @@ router.get('/overview', requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('[Stats] Overview error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to fetch stats' });
   }
 });
 
@@ -129,7 +129,7 @@ router.get('/summary', requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('[Stats] Summary error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to fetch summary' });
   }
 });
 
@@ -169,7 +169,7 @@ router.get('/equity', requireAuth, async (req, res) => {
     res.json({ success: true, data: curve });
   } catch (err) {
     console.error('[Stats] Equity error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to fetch equity data' });
   }
 });
 
@@ -196,7 +196,7 @@ router.get('/trades', requireAuth, async (req, res) => {
     res.json({ success: true, trades: sorted, total: data.allTrades.length });
   } catch (err) {
     console.error('[Stats] Trades error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to fetch trades' });
   }
 });
 
@@ -239,7 +239,7 @@ router.get('/:accountId', requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('[Stats] Error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to fetch account stats' });
   }
 });
 
@@ -270,7 +270,7 @@ router.get('/:accountId/history', requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('[Stats] History error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to fetch trade history' });
   }
 });
 

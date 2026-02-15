@@ -102,19 +102,25 @@ class SessionManager {
   }
 
   /**
-   * Internal: clean up stale sessions
+   * Internal: clean up stale sessions (guarded against concurrent runs)
    */
   async _cleanup() {
-    const now = Date.now();
-    const expired = [];
-    for (const [id, session] of this.sessions) {
-      if (now - session.lastActivity > SESSION_TTL_MS) {
-        expired.push(id);
+    if (this._cleaningUp) return;
+    this._cleaningUp = true;
+    try {
+      const now = Date.now();
+      const expired = [];
+      for (const [id, session] of this.sessions) {
+        if (now - session.lastActivity > SESSION_TTL_MS) {
+          expired.push(id);
+        }
       }
-    }
-    for (const id of expired) {
-      console.log(`[Session] Expiring inactive session ${id.slice(0, 8)}`);
-      await this.destroy(id);
+      for (const id of expired) {
+        console.log(`[Session] Expiring inactive session ${id.slice(0, 8)}`);
+        await this.destroy(id);
+      }
+    } finally {
+      this._cleaningUp = false;
     }
   }
 }

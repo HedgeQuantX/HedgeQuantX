@@ -112,7 +112,7 @@ class AlgoRunner extends EventEmitter {
     } catch (err) {
       this._log('error', `Failed to start algo: ${err.message}`);
       await this._cleanupFeed();
-      return { success: false, error: err.message };
+      return { success: false, error: 'Failed to initialize algo strategy' };
     }
   }
 

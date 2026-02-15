@@ -54,7 +54,7 @@ router.post('/start', requireAuth, async (req, res) => {
     res.json({ success: true, status: runner.getStatus() });
   } catch (err) {
     console.error('[Algo] Start error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to start algo' });
   }
 });
 
@@ -72,7 +72,7 @@ router.post('/stop', requireAuth, async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('[Algo] Stop error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to stop algo' });
   }
 });
 

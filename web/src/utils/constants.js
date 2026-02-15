@@ -1,6 +1,7 @@
-export const API_URL = import.meta.env.VITE_API_URL || 'https://hedgequantx-production.up.railway.app/api';
-export const WS_URL =
-  import.meta.env.VITE_WS_URL || 'wss://hedgequantx-production.up.railway.app';
+// API URLs — set via VITE_API_URL / VITE_WS_URL env vars at build time.
+// Development fallback: localhost:3001
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+export const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3001';
 
 // Propfirms fetched from API at runtime - this is the fallback list
 export const PROPFIRMS = [
