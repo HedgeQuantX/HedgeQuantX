@@ -1,16 +1,17 @@
 /**
- * Algo Runner
+ * Algo Runner — Web equivalent of CLI algo-executor.js
  *
- * Manages algo execution per session.
- * Uses loadStrategy from HQX-CLI and MarketDataFeed for real-time ticks.
- * Emits events via EventEmitter (forwarded to WebSocket by ws/handler.js).
- *
- * Mirrors CLI algo-executor behavior:
- * - Strategy log forwarding (M1 log events → WS)
- * - SmartLogsEngine (1s interval via algo-smart-logs.js)
- * - Daily target/risk auto-stop
- * - Latency tracking
- * - Win/loss log types (fill_win, fill_loss, fill_buy, fill_sell)
+ * MUST mirror CLI behavior exactly:
+ * - strategy.initialize(contractId, tickSize, tickValue)
+ * - strategy.preloadBars() warmup
+ * - strategy.on('signal') event listener
+ * - positionUpdate listener (cancel orphan brackets on close)
+ * - pendingOrder guard
+ * - P&L polling from Rithmic cache (2s interval)
+ * - Tick processing: Number(tick.price) || Number(tick.tradePrice)
+ * - Latency: ssboe/usecs Rithmic timestamps
+ * - 5-step emergency flatten on stop
+ * - SmartLogsEngine 1s interval
  *
  * NO MOCK DATA - All data from Rithmic API.
  */
@@ -19,8 +20,8 @@
 
 const EventEmitter = require('events');
 const { startSmartLogs } = require('./algo-smart-logs');
+const { emergencyFlatten, startPnlPolling, checkAutoStop } = require('./algo-runner-stop');
 
-// CLI imports — lazy loaded, may not exist in all deploy environments
 let MarketDataFeed, loadStrategy;
 try {
   ({ MarketDataFeed } = require('../../../src/lib/data'));
@@ -41,25 +42,34 @@ class AlgoRunner extends EventEmitter {
     this.strategy = null;
     this.running = false;
 
+    // Position tracking (mirrors CLI currentPosition + pendingOrder)
     this.position = null;
+    this._currentPosition = 0; // Raw qty like CLI (positive=long, negative=short)
+    this._pendingOrder = false;
     this.bracketCleanup = null;
+    this._activeBrackets = { slOrderId: null, tpOrderId: null, entryPrice: null };
 
     this.stats = { trades: 0, wins: 0, losses: 0, totalPnl: 0, startTime: null, lastLatency: null };
     this.config = null;
+    this.tickInfo = null;
 
-    // Tick state for SmartLogsEngine
+    // Tick state (mirrors CLI variables)
     this._lastPrice = 0;
     this._tickCount = 0;
     this._runningDelta = 0;
     this._runningBuyPct = 50;
     this._currentBias = 'FLAT';
+    this._buyVolume = 0;
+    this._sellVolume = 0;
+    this._lastTickTime = 0;
+    this._lastBiasLogSecond = 0;
+
     this._stopSmartLogs = null;
+    this._pnlInterval = null;
+    this._positionUpdateHandler = null;
+    this._startingPnL = null;
   }
 
-  /**
-   * Start algo execution
-   * @param {Object} config - { strategyId, symbol, exchange, accountId, size, dailyTarget, maxRisk, accountName, propfirm }
-   */
   async start(config) {
     if (this.running) {
       this._log('warn', 'Algo already running');
@@ -82,51 +92,86 @@ class AlgoRunner extends EventEmitter {
     }
 
     try {
+      // --- Strategy init (CLI algo-executor lines 35-83) ---
       this._log('system', `Strategy: ${strategyId}`);
       const module = loadStrategy(strategyId);
       this.strategy = new module.M1();
+      this.tickInfo = getTickInfo(symbol);
+      this.strategy.initialize(symbol, this.tickInfo.tickSize, this.tickInfo.tickValue);
 
-      // Forward strategy log emissions (like CLI algo-executor line 103)
+      // Forward strategy log emissions (CLI line 103-112)
       this.strategy.on('log', (log) => {
         if (log.type === 'debug') return;
         this._log(log.type === 'info' ? 'analysis' : log.type || 'system', log.message);
       });
 
-      this.tickInfo = getTickInfo(symbol);
+      // Listen for signal events (CLI line 178) — primary signal path
+      this.strategy.on('signal', (signal) => {
+        if (!this._pendingOrder && this._currentPosition === 0) {
+          this._onSignal(signal);
+        }
+      });
 
-      // Initial system logs (mirrors CLI)
+      // Initial system logs (CLI lines 119-127)
       this._log('system', `Account: ${accountName || accountId}`);
       this._log('system', `Symbol: ${symbol} | Qty: ${size}`);
       if (dailyTarget || maxRisk) {
         this._log('risk', `Target: $${dailyTarget || 'N/A'} | Risk: $${maxRisk || 'N/A'}`);
       }
-      this._log('info', `Connecting market data feed for ${symbol}`);
+      this._log('system', 'Connecting to market data...');
 
       const creds = this.service.getRithmicCredentials();
       if (!creds) return { success: false, error: 'No Rithmic credentials - not logged in' };
+
+      // Clear stale position data (CLI line 67-69)
+      if (this.service.positions) this.service.positions.clear();
+
+      // --- positionUpdate listener (CLI lines 129-176) ---
+      this._setupPositionUpdateListener();
 
       await this.service.disconnectTicker();
       this.feed = new MarketDataFeed();
 
       this.feed.on('debug', (msg) => this._log('debug', `[Feed] ${msg}`));
       this.feed.on('error', (err) => this._log('error', `[Feed] ${err.message}`));
-      this.feed.on('connected', () => this._log('connected', 'Market data feed connected'));
+      this.feed.on('connected', () => { this._log('connected', 'Market data feed connected'); });
       this.feed.on('disconnected', () => {
         this._log('warn', 'Market data feed disconnected');
+        this._lastTickTime = 0;
         if (this.running) this._emitStatus();
       });
 
       await this.feed.connect(creds);
       await this.feed.subscribe(symbol, exchange);
 
+      // Preload historical bars (CLI lines 436-456)
+      if (this.strategy.preloadBars && this.feed.getHistoricalBars) {
+        try {
+          this._log('system', 'Loading warmup data...');
+          const histBars = await this.feed.getHistoricalBars(symbol, exchange, 30);
+          if (histBars && histBars.length > 0) {
+            this.strategy.preloadBars(symbol, histBars);
+            this._log('system', 'Reference data loaded — QUANT tick engine initializing...');
+          } else {
+            this._log('system', 'No history — warming up with live ticks...');
+          }
+        } catch (_) {
+          this._log('system', 'Warmup skipped — using live data');
+        }
+      }
+
       this.running = true;
       this.stats.startTime = Date.now();
+      this._lastTickTime = Date.now();
       this._log('ready', `Algo started: ${strategyId} on ${symbol} (${size} contracts)`);
 
       this.feed.on('tick', (tick) => this._onTick(tick));
       this._stopSmartLogs = startSmartLogs(this);
-      this._emitStatus();
 
+      // P&L polling (CLI lines 461-526) — every 2s
+      this._startPnlPolling();
+
+      this._emitStatus();
       return { success: true };
     } catch (err) {
       this._log('error', `Failed to start algo: ${err.message}`);
@@ -135,99 +180,11 @@ class AlgoRunner extends EventEmitter {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // STOP — delegates to algo-runner-stop.js (5-step emergency flatten)
+  // ---------------------------------------------------------------------------
   async stop(reason = 'manual') {
-    if (!this.running) return { success: true, message: 'Algo not running' };
-
-    this.running = false;
-    this._log('system', 'Stopping algo — killing all orders & positions...');
-
-    if (this._stopSmartLogs) { this._stopSmartLogs(); this._stopSmartLogs = null; }
-
-    // -----------------------------------------------------------------------
-    // STEP 1: Cancel ALL orders on the account (nuclear — not just brackets)
-    // -----------------------------------------------------------------------
-    const accountId = this.config?.accountId;
-    if (accountId) {
-      try {
-        await this.service.cancelAllOrders(accountId);
-        this._log('system', 'All orders cancelled');
-      } catch (err) {
-        this._log('error', `Cancel all orders failed: ${err.message}`);
-      }
-    }
-
-    // Clean up bracket listener regardless
-    if (this.bracketCleanup) {
-      try { await this.bracketCleanup(); } catch (_) {}
-      this.bracketCleanup = null;
-    }
-
-    // -----------------------------------------------------------------------
-    // STEP 2: Flatten ALL real positions from Rithmic (not just internal state)
-    // -----------------------------------------------------------------------
-    try {
-      const posResult = await this.service.getPositions();
-      const openPositions = (posResult.positions || []).filter((p) => p.quantity && p.quantity !== 0);
-
-      for (const pos of openPositions) {
-        const sym = pos.symbol;
-        const qty = Math.abs(pos.quantity);
-        const side = pos.quantity > 0 ? 'LONG' : 'SHORT';
-        this._log('system', `Flattening ${side} ${qty}x ${sym} @ market...`);
-
-        try {
-          // closePosition reads real position from service.positions and places market order
-          const closeResult = await this.service.closePosition(accountId, sym);
-          if (closeResult.success) {
-            this._log('system', `${sym} flattened`);
-          } else {
-            // Fallback: use Rithmic-native ExitPosition (template 3504)
-            this._log('warn', `closePosition failed for ${sym}, using exitPosition fallback...`);
-            await this.service.exitPosition(accountId, sym, pos.exchange || 'CME');
-            this._log('system', `${sym} exit sent via Rithmic`);
-          }
-        } catch (err) {
-          this._log('error', `Failed to flatten ${sym}: ${err.message}`);
-          // Last resort: exitPosition
-          try { await this.service.exitPosition(accountId, sym, pos.exchange || 'CME'); } catch (_) {}
-        }
-      }
-
-      if (openPositions.length === 0 && this.position) {
-        // Internal state says we have a position but Rithmic says flat — sync it
-        this._log('system', 'No open positions found on Rithmic — already flat');
-      }
-    } catch (err) {
-      this._log('error', `Failed to check positions: ${err.message}`);
-      // Fallback: try to close internal position if we know about it
-      if (this.position) {
-        try {
-          await this.service.closePosition(this.position.accountId, this.position.symbol);
-        } catch (_) {}
-      }
-    }
-
-    this.position = null;
-
-    // -----------------------------------------------------------------------
-    // STEP 3: Cleanup feed & emit summary
-    // -----------------------------------------------------------------------
-    await this._cleanupFeed();
-
-    const duration = Date.now() - (this.stats.startTime || Date.now());
-    const winRate = this.stats.trades > 0 ? ((this.stats.wins / this.stats.trades) * 100).toFixed(1) : '0.0';
-    this._log('system', `Algo stopped — ${reason.toUpperCase()}`);
-
-    this.emit('summary', {
-      reason, duration,
-      trades: this.stats.trades, wins: this.stats.wins, losses: this.stats.losses,
-      winRate: Number(winRate), pnl: this.stats.totalPnl,
-      target: this.config?.dailyTarget || null,
-    });
-
-    this._emitStatus();
-    this.emit('stopped', { reason, stats: { ...this.stats } });
-    return { success: true, stats: this.stats };
+    return emergencyFlatten(this, reason);
   }
 
   getStatus() {
@@ -238,52 +195,86 @@ class AlgoRunner extends EventEmitter {
   }
 
   // ---------------------------------------------------------------------------
-  // Tick processing
+  // Tick processing (mirrors CLI lines 316-413)
   // ---------------------------------------------------------------------------
-
   _onTick(tick) {
     if (!this.running || !this.strategy) return;
-    const price = tick.price;
-    if (!price) return;
 
-    if (tick.timestamp) this.stats.lastLatency = Math.max(0, Date.now() - tick.timestamp);
+    const now = Date.now();
+    const price = Number(tick.price) || Number(tick.tradePrice) || null;
+    if (!price || price <= 0) return;
 
-    this._lastPrice = price;
+    const bid = Number(tick.bid) || Number(tick.bidPrice) || null;
+    const ask = Number(tick.ask) || Number(tick.askPrice) || null;
+    const volume = Number(tick.volume) || Number(tick.size) || 1;
+
     this._tickCount++;
+    this._lastPrice = price;
+    this._lastTickTime = now;
 
-    if (tick.side === 'BUY' || tick.side === 0) {
-      this._runningDelta++;
-      this._runningBuyPct = Math.min(100, this._runningBuyPct + 0.1);
-    } else if (tick.side === 'SELL' || tick.side === 1) {
-      this._runningDelta--;
-      this._runningBuyPct = Math.max(0, this._runningBuyPct - 0.1);
+    // Log first tick (CLI line 352-354)
+    if (this._tickCount === 1) {
+      this._log('connected', `First tick @ ${price.toFixed(2)}`);
     }
 
+    // Buy/sell volume tracking (CLI lines 344-349)
+    if (tick.side === 'buy' || tick.side === 'BUY' || tick.aggressor === 1 || tick.side === 0) {
+      this._buyVolume += volume;
+    } else if (tick.side === 'sell' || tick.side === 'SELL' || tick.aggressor === 2 || tick.side === 1) {
+      this._sellVolume += volume;
+    } else if (this._lastPrice) {
+      if (price > this._lastPrice) this._buyVolume += volume;
+      else if (price < this._lastPrice) this._sellVolume += volume;
+    }
+
+    // Update bias every 30s (CLI lines 357-366)
+    const currentSecond = Math.floor(now / 1000);
+    if (currentSecond - this._lastBiasLogSecond >= 30 && this._tickCount > 1) {
+      this._lastBiasLogSecond = currentSecond;
+      const totalVol = this._buyVolume + this._sellVolume;
+      const buyPressure = totalVol > 0 ? (this._buyVolume / totalVol) * 100 : 50;
+      this._currentBias = buyPressure > 55 ? 'LONG' : buyPressure < 45 ? 'SHORT' : 'FLAT';
+      this._runningDelta = this._buyVolume - this._sellVolume;
+      this._runningBuyPct = buyPressure;
+      this._buyVolume = 0;
+      this._sellVolume = 0;
+    }
+
+    // Latency (CLI lines 398-412) — prefer ssboe/usecs from Rithmic
+    if (tick.ssboe && tick.usecs !== undefined) {
+      const tickTimeMs = (tick.ssboe * 1000) + Math.floor(tick.usecs / 1000);
+      const lat = now - tickTimeMs;
+      if (lat >= 0 && lat < 5000) this.stats.lastLatency = lat;
+    } else if (tick.timestamp) {
+      const lat = Math.max(0, now - tick.timestamp);
+      if (lat < 5000) this.stats.lastLatency = lat;
+    }
+
+    // Emit tick to WS
     this.emit('tick', {
-      price, bid: tick.bid || null, ask: tick.ask || null,
-      volume: tick.volume || 0, timestamp: tick.timestamp || Date.now(),
+      price, bid, ask, volume,
+      timestamp: tick.timestamp || now,
       latency: this.stats.lastLatency,
     });
 
+    // Process tick through strategy (CLI lines 388-396)
     try {
-      const signal = this.strategy.processTick({
-        contractId: this.config.symbol, price,
-        bid: tick.bid || price, ask: tick.ask || price,
-        volume: tick.volume || 0, size: tick.size || 0,
-        side: tick.side, timestamp: tick.timestamp || Date.now(),
+      this.strategy.processTick({
+        contractId: this.config.symbol, price, bid: bid || price, ask: ask || price,
+        volume, side: tick.side || tick.lastTradeSide || 'unknown',
+        timestamp: tick.timestamp || now,
       });
-      if (signal && signal.direction && !this.position) this._onSignal(signal);
+      // Signal handled via strategy.on('signal') — not return value
     } catch (err) {
       this._log('error', `Strategy error: ${err.message}`);
     }
   }
 
   // ---------------------------------------------------------------------------
-  // Signal & order execution
+  // Signal & order execution (mirrors CLI lines 178-306)
   // ---------------------------------------------------------------------------
-
   async _onSignal(signal) {
-    if (!this.running || this.position) return;
+    if (!this.running || this._pendingOrder || this._currentPosition !== 0) return;
 
     const { direction, entry, entryPrice, stopLoss, takeProfit, confidence } = signal;
     const entryPx = entry || entryPrice;
@@ -291,37 +282,58 @@ class AlgoRunner extends EventEmitter {
     const tp = takeProfit || signal.tp;
     const { symbol, exchange, accountId, size } = this.config;
 
-    this.emit('signal', { direction, entry: entryPx || null, sl: sl || null, tp: tp || null, confidence: confidence || null });
+    this.emit('signal', {
+      direction, entry: entryPx || null, sl: sl || null, tp: tp || null, confidence: confidence || null,
+    });
     this._log('signal', `Signal: ${direction.toUpperCase()} @ ${entryPx || 'MKT'} | SL=${sl} | TP=${tp} | conf=${((confidence || 0) * 100).toFixed(0)}%`);
 
-    const side = direction === 'long' ? 0 : 1;
-    const result = await this.service.placeOrder({ accountId, symbol, exchange, size, side, type: 2 });
+    // Place order (CLI line 251-261)
+    this._pendingOrder = true;
+    try {
+      const orderSide = direction === 'long' ? 0 : 1;
+      const result = await this.service.placeOrder({ accountId, symbol, exchange, size, side: orderSide, type: 2 });
 
-    if (!result.success) { this._log('error', `Entry order failed: ${result.error}`); return; }
-
-    const fillPrice = result.fillPrice || entryPx || 0;
-    this.position = { side: direction, qty: size, entryPrice: fillPrice, symbol, exchange, accountId, entryTime: Date.now(), orderId: result.orderId };
-
-    this.emit('position', { symbol, qty: direction === 'long' ? size : -size, side: direction, entryPrice: fillPrice, openPnl: 0 });
-    this._log(direction === 'long' ? 'fill_buy' : 'fill_sell', `Entered ${direction.toUpperCase()} ${size}x ${symbol} @ ${fillPrice}`);
-    this._log('trade', `SL: ${sl} | TP: ${tp} (OCO)`);
-    this._currentBias = direction === 'long' ? 'LONG' : 'SHORT';
-
-    if (sl && tp) {
-      const br = await this.service.placeOCOBracket({ accountId, symbol, exchange, size, stopPrice: sl, targetPrice: tp, isLong: direction === 'long' });
-      if (br.success) {
-        this.bracketCleanup = br.cleanup;
-        this._log('info', `Brackets placed: SL=${sl} TP=${tp}`);
-        this._monitorBracketFill(fillPrice, sl, tp, direction);
-      } else {
-        this._log('error', `Bracket failed: ${br.error}`);
+      if (!result.success) {
+        this._log('error', `Entry order failed: ${result.error}`);
+        this._pendingOrder = false;
+        return;
       }
+
+      // Update position (CLI line 264)
+      this._currentPosition = direction === 'long' ? size : -size;
+      const fillPrice = result.fillPrice || entryPx || 0;
+      this.position = { side: direction, qty: size, entryPrice: fillPrice, symbol, exchange, accountId, entryTime: Date.now(), orderId: result.orderId };
+
+      this.emit('position', { symbol, qty: this._currentPosition, side: direction, entryPrice: fillPrice, openPnl: 0 });
+      this._log(direction === 'long' ? 'fill_buy' : 'fill_sell', `Entered ${direction.toUpperCase()} ${size}x ${symbol} @ ${fillPrice}`);
+      this._currentBias = direction === 'long' ? 'LONG' : 'SHORT';
+
+      // Bracket orders with OCO (CLI lines 273-296)
+      if (sl && tp) {
+        this._activeBrackets.entryPrice = fillPrice;
+        const br = await this.service.placeOCOBracket({ accountId, symbol, exchange, size, stopPrice: sl, targetPrice: tp, isLong: direction === 'long' });
+        if (br.success) {
+          this._activeBrackets.slOrderId = br.slOrderId;
+          this._activeBrackets.tpOrderId = br.tpOrderId;
+          this.bracketCleanup = br.cleanup;
+          this._log('trade', `SL: ${sl} | TP: ${tp} (OCO)`);
+          this._monitorBracketFill(fillPrice, sl, tp, direction);
+        } else {
+          this._log('error', `Bracket failed: ${br.error}`);
+        }
+      }
+    } catch (err) {
+      this._log('error', `Order error: ${err.message}`);
     }
+    this._pendingOrder = false;
   }
 
+  // ---------------------------------------------------------------------------
+  // Bracket fill monitor
+  // ---------------------------------------------------------------------------
   _monitorBracketFill(entryPrice, sl, tp, direction) {
     const listener = (order) => {
-      if (!this.position) return;
+      if (this._currentPosition === 0) return;
       if (order.notifyType !== 5 || order.symbol !== this.config.symbol) return;
       const exitPrice = order.avgFillPrice || order.fillPrice || 0;
       if (!exitPrice) return;
@@ -329,23 +341,28 @@ class AlgoRunner extends EventEmitter {
       const priceDiff = direction === 'long' ? exitPrice - entryPrice : entryPrice - exitPrice;
       const ticks = priceDiff / this.tickInfo.tickSize;
       const pnl = ticks * this.tickInfo.tickValue * this.config.size;
-      const duration = Date.now() - this.position.entryTime;
+      const dur = Date.now() - (this.position?.entryTime || Date.now());
       const isWin = pnl > 0;
 
       this.stats.trades++;
       this.stats.totalPnl += pnl;
-      if (isWin) this.stats.wins++; else if (pnl < 0) this.stats.losses++;
+      if (isWin) this.stats.wins++;
+      else if (pnl < 0) this.stats.losses++;
 
-      this._log(isWin ? 'fill_win' : 'fill_loss', `${isWin ? 'WIN' : 'LOSS'} ${isWin ? '+' : ''}$${pnl.toFixed(2)} | ${direction.toUpperCase()} ${entryPrice} → ${exitPrice} (${ticks.toFixed(1)} ticks, ${(duration / 1000).toFixed(0)}s)`);
+      this._log(isWin ? 'fill_win' : 'fill_loss',
+        `${isWin ? 'WIN' : 'LOSS'} ${isWin ? '+' : ''}$${pnl.toFixed(2)} | ${direction.toUpperCase()} ${entryPrice} → ${exitPrice} (${ticks.toFixed(1)} ticks, ${(dur / 1000).toFixed(0)}s)`);
 
-      this.emit('trade', { direction, entry: entryPrice, exit: exitPrice, pnl, ticks: Math.round(ticks * 100) / 100, duration, isWin });
+      this.emit('trade', { direction, entry: entryPrice, exit: exitPrice, pnl, ticks: Math.round(ticks * 100) / 100, duration: dur, isWin });
       this.emit('pnl', { dayPnl: this.stats.totalPnl, openPnl: 0, closedPnl: this.stats.totalPnl });
 
       const winRate = this.stats.trades > 0 ? (this.stats.wins / this.stats.trades) * 100 : 0;
       this.emit('statsUpdate', { trades: this.stats.trades, wins: this.stats.wins, losses: this.stats.losses, winRate, totalPnl: this.stats.totalPnl, latency: this.stats.lastLatency });
 
       this.position = null;
+      this._currentPosition = 0;
+      this._pendingOrder = false;
       this.bracketCleanup = null;
+      this._activeBrackets = { slOrderId: null, tpOrderId: null, entryPrice: null };
       this._currentBias = 'FLAT';
       this.service.removeListener('orderNotification', listener);
       this._emitStatus();
@@ -357,18 +374,62 @@ class AlgoRunner extends EventEmitter {
     this.once('stopped', () => this.service.removeListener('orderNotification', listener));
   }
 
-  _checkAutoStop() {
-    if (!this.config) return;
-    const { dailyTarget, maxRisk } = this.config;
-    const pnl = this.stats.totalPnl;
-    if (dailyTarget && pnl >= dailyTarget) {
-      this._log('fill_win', `TARGET REACHED! +$${pnl.toFixed(2)}`);
-      this.stop('target');
-    } else if (maxRisk && pnl <= -maxRisk) {
-      this._log('fill_loss', `MAX RISK! -$${Math.abs(pnl).toFixed(2)}`);
-      this.stop('risk');
+  // ---------------------------------------------------------------------------
+  // positionUpdate listener (mirrors CLI lines 129-176)
+  // CRITICAL: Cancel orphan brackets when position closes externally
+  // ---------------------------------------------------------------------------
+  _setupPositionUpdateListener() {
+    const accId = this.config.accountId;
+    const symbol = this.config.symbol;
+
+    this._positionUpdateHandler = async (pos) => {
+      const posSymbol = pos.contractId || pos.symbol || '';
+      const matchesSymbol = posSymbol.includes(symbol) || symbol.includes(posSymbol);
+      const matchesAccount = pos.accountId === accId;
+      if (!matchesSymbol || !matchesAccount) return;
+
+      const qty = parseInt(pos.quantity) || 0;
+      if (isNaN(qty) || Math.abs(qty) >= 1000 || qty === this._currentPosition) return;
+
+      const oldPos = this._currentPosition;
+      this._currentPosition = qty;
+
+      if (qty === 0 && oldPos !== 0) {
+        // Position closed externally
+        this._log('trade', `Position closed (was ${oldPos})`);
+        this._pendingOrder = false;
+
+        // Cancel orphan brackets (CLI lines 153-161)
+        if (this._activeBrackets.slOrderId || this._activeBrackets.tpOrderId) {
+          try {
+            await this.service.cancelAllOrders(accId);
+            this._log('system', 'Brackets cancelled');
+          } catch (_) {}
+          this._activeBrackets = { slOrderId: null, tpOrderId: null, entryPrice: null };
+        }
+        this.stats.trades++;
+      } else if (qty !== 0 && oldPos === 0) {
+        this._log('trade', `Position opened: ${qty}`);
+      } else if (Math.sign(qty) !== Math.sign(oldPos)) {
+        this._log('error', `Position REVERSED: ${oldPos} -> ${qty}`);
+      }
+    };
+
+    if (typeof this.service.on === 'function') {
+      this.service.on('positionUpdate', this._positionUpdateHandler);
     }
   }
+
+  _removePositionUpdateListener() {
+    if (this._positionUpdateHandler && typeof this.service.removeListener === 'function') {
+      this.service.removeListener('positionUpdate', this._positionUpdateHandler);
+      this._positionUpdateHandler = null;
+    }
+  }
+
+  // P&L polling + auto-stop — delegated to algo-runner-stop.js
+  _startPnlPolling() { startPnlPolling(this); }
+  _checkAutoStop() { checkAutoStop(this); }
 
   async _cleanupFeed() {
     if (this.feed) { try { await this.feed.disconnect(); } catch (_) {} this.feed = null; }

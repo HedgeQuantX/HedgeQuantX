@@ -138,8 +138,18 @@ function setupWebSocket(server) {
           position: data.side ? (data.side === 'long' ? 'LONG' : data.side === 'short' ? 'SHORT' : 'FLAT') : 'FLAT',
           payload: data,
         }),
-        signal: (data) => ({ type: 'algo.event', payload: { ...data, kind: 'signal', timestamp: Date.now() } }),
-        trade: (data) => ({ type: 'algo.event', payload: { ...data, kind: 'trade', timestamp: Date.now() } }),
+        signal: (data) => ({
+          type: 'algo.event', payload: {
+            ...data, kind: 'signal', timestamp: Date.now(),
+            message: `Signal: ${(data.direction || '').toUpperCase()} @ ${data.entry || 'MKT'} | SL=${data.sl || 'N/A'} | TP=${data.tp || 'N/A'} | conf=${data.confidence != null ? (data.confidence * 100).toFixed(0) + '%' : 'N/A'}`,
+          },
+        }),
+        trade: (data) => ({
+          type: 'algo.event', payload: {
+            ...data, kind: 'trade', timestamp: Date.now(),
+            message: data.message || `${data.isWin ? 'WIN' : 'LOSS'} ${(data.direction || '').toUpperCase()} ${data.entry || ''} → ${data.exit || ''} | ${data.pnl != null ? (data.pnl >= 0 ? '+' : '') + '$' + data.pnl.toFixed(2) : ''}`,
+          },
+        }),
         log: (data) => ({ type: 'algo.event', payload: data }),
         smartlog: (data) => ({ type: 'algo.event', payload: { ...data, kind: 'smartlog' } }),
         statsUpdate: (data) => ({ type: 'algo.stats', payload: data }),

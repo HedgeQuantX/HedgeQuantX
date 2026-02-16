@@ -33,11 +33,22 @@ function startSmartLogs(runner) {
   const engine = new SmartLogsEngine(runner.config.strategyId, symbolCode);
 
   let lastSecond = 0;
+  let lastTickCount = 0;
+  let staleCount = 0;
   const interval = setInterval(() => {
     if (!runner.running) return;
     const now = Math.floor(Date.now() / 1000);
     if (now === lastSecond) return;
     lastSecond = now;
+
+    // Suppress duplicate logs when ticks are stale (feed disconnected or frozen)
+    if (runner._tickCount === lastTickCount) {
+      staleCount++;
+      if (staleCount > 3) return; // Only allow 3 stale logs, then suppress
+    } else {
+      staleCount = 0;
+      lastTickCount = runner._tickCount;
+    }
 
     const contractId = runner.config.symbol;
     const state = runner.strategy.getAnalysisState?.(contractId, runner._lastPrice);
