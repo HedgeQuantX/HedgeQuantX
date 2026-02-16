@@ -200,9 +200,10 @@ class AlgoRunner extends EventEmitter {
       timestamp: tick.timestamp || Date.now(),
     });
 
-    // Feed tick to strategy
+    // Feed tick to strategy — M1 uses processTick(tick) with contractId
     try {
-      const signal = this.strategy.onTick({
+      const signal = this.strategy.processTick({
+        contractId: this.config.symbol,
         price,
         bid: tick.bid || price,
         ask: tick.ask || price,
@@ -227,18 +228,21 @@ class AlgoRunner extends EventEmitter {
   async _onSignal(signal) {
     if (!this.running || this.position) return;
 
-    const { direction, entry, sl, tp, confidence } = signal;
+    const { direction, entry, entryPrice, stopLoss, takeProfit, confidence } = signal;
+    const entryPx = entry || entryPrice;
+    const sl = stopLoss || signal.sl;
+    const tp = takeProfit || signal.tp;
     const { symbol, exchange, accountId, size } = this.config;
 
     this.emit('signal', {
       direction,
-      entry: entry || null,
+      entry: entryPx || null,
       sl: sl || null,
       tp: tp || null,
       confidence: confidence || null,
     });
 
-    this._log('info', `Signal: ${direction} @ ${entry || 'MKT'} SL=${sl} TP=${tp} conf=${confidence}`);
+    this._log('info', `Signal: ${direction} @ ${entryPx || 'MKT'} SL=${sl} TP=${tp} conf=${(confidence * 100).toFixed(0)}%`);
 
     // Place entry order (market)
     const side = direction === 'long' ? 0 : 1; // 0=Buy, 1=Sell
