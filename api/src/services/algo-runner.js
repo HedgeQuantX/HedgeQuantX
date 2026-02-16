@@ -139,26 +139,79 @@ class AlgoRunner extends EventEmitter {
     if (!this.running) return { success: true, message: 'Algo not running' };
 
     this.running = false;
-    this._log('system', 'Stopping algo - cancelling orders...');
+    this._log('system', 'Stopping algo — killing all orders & positions...');
 
     if (this._stopSmartLogs) { this._stopSmartLogs(); this._stopSmartLogs = null; }
 
-    if (this.bracketCleanup) {
-      try { await this.bracketCleanup(); this._log('system', 'All pending orders cancelled'); } catch (_) {}
-      this.bracketCleanup = null;
-    }
-
-    if (this.position) {
-      this._log('system', `Flattening ${this.position.side} ${this.position.qty} @ market...`);
+    // -----------------------------------------------------------------------
+    // STEP 1: Cancel ALL orders on the account (nuclear — not just brackets)
+    // -----------------------------------------------------------------------
+    const accountId = this.config?.accountId;
+    if (accountId) {
       try {
-        await this.service.closePosition(this.position.accountId, this.position.symbol);
-        this._log('system', 'Position verified flat');
-        this.position = null;
+        await this.service.cancelAllOrders(accountId);
+        this._log('system', 'All orders cancelled');
       } catch (err) {
-        this._log('error', `Failed to flatten: ${err.message}`);
+        this._log('error', `Cancel all orders failed: ${err.message}`);
       }
     }
 
+    // Clean up bracket listener regardless
+    if (this.bracketCleanup) {
+      try { await this.bracketCleanup(); } catch (_) {}
+      this.bracketCleanup = null;
+    }
+
+    // -----------------------------------------------------------------------
+    // STEP 2: Flatten ALL real positions from Rithmic (not just internal state)
+    // -----------------------------------------------------------------------
+    try {
+      const posResult = await this.service.getPositions();
+      const openPositions = (posResult.positions || []).filter((p) => p.quantity && p.quantity !== 0);
+
+      for (const pos of openPositions) {
+        const sym = pos.symbol;
+        const qty = Math.abs(pos.quantity);
+        const side = pos.quantity > 0 ? 'LONG' : 'SHORT';
+        this._log('system', `Flattening ${side} ${qty}x ${sym} @ market...`);
+
+        try {
+          // closePosition reads real position from service.positions and places market order
+          const closeResult = await this.service.closePosition(accountId, sym);
+          if (closeResult.success) {
+            this._log('system', `${sym} flattened`);
+          } else {
+            // Fallback: use Rithmic-native ExitPosition (template 3504)
+            this._log('warn', `closePosition failed for ${sym}, using exitPosition fallback...`);
+            await this.service.exitPosition(accountId, sym, pos.exchange || 'CME');
+            this._log('system', `${sym} exit sent via Rithmic`);
+          }
+        } catch (err) {
+          this._log('error', `Failed to flatten ${sym}: ${err.message}`);
+          // Last resort: exitPosition
+          try { await this.service.exitPosition(accountId, sym, pos.exchange || 'CME'); } catch (_) {}
+        }
+      }
+
+      if (openPositions.length === 0 && this.position) {
+        // Internal state says we have a position but Rithmic says flat — sync it
+        this._log('system', 'No open positions found on Rithmic — already flat');
+      }
+    } catch (err) {
+      this._log('error', `Failed to check positions: ${err.message}`);
+      // Fallback: try to close internal position if we know about it
+      if (this.position) {
+        try {
+          await this.service.closePosition(this.position.accountId, this.position.symbol);
+        } catch (_) {}
+      }
+    }
+
+    this.position = null;
+
+    // -----------------------------------------------------------------------
+    // STEP 3: Cleanup feed & emit summary
+    // -----------------------------------------------------------------------
     await this._cleanupFeed();
 
     const duration = Date.now() - (this.stats.startTime || Date.now());
