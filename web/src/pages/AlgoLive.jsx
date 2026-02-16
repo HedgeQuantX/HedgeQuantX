@@ -200,7 +200,7 @@ export default function AlgoLive({ onNavigate, onAlgoEnd }) {
   };
   const posColor = position === 'LONG' ? 'text-accent' : position === 'SHORT' ? 'text-pink' : 'text-text-muted';
 
-  if (loading) return <div className="flex flex-col items-center justify-center h-64 gap-3"><Loader2 size={24} className="text-accent animate-spin" /><p className="text-sm text-text-muted">Loading algo live...</p></div>;
+  if (loading) return <div className="flex flex-col items-center justify-center h-full min-h-[60vh] gap-3"><Loader2 size={24} className="text-accent animate-spin" /><p className="text-sm text-text-muted">Loading algo live...</p></div>;
 
   // Session summary screen
   if (summary) return <SummaryScreen summary={summary} algoState={algoState} navigate={navigate} />;
