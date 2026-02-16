@@ -59,12 +59,9 @@ export default function AlgoSetup({ onNavigate }) {
     return () => { mounted = false; };
   }, [selectedSymbol]);
 
-  const popularSymbols = symbols.filter((s) =>
-    POPULAR_SYMBOLS.includes(typeof s === 'string' ? s : s.symbol)
-  );
-  const otherSymbols = symbols.filter((s) =>
-    !POPULAR_SYMBOLS.includes(typeof s === 'string' ? s : s.symbol)
-  );
+  const getBase = (s) => typeof s === 'string' ? s : (s.baseSymbol || s.symbol || s);
+  const popularSymbols = symbols.filter((s) => POPULAR_SYMBOLS.includes(getBase(s)));
+  const otherSymbols = symbols.filter((s) => !POPULAR_SYMBOLS.includes(getBase(s)));
 
   const handleLaunch = async () => {
     setLoading(true);

@@ -1,6 +1,6 @@
 import { API_URL, WS_URL } from '../utils/constants';
 
-const REQUEST_TIMEOUT_MS = 15000; // 15 second timeout on all requests
+const REQUEST_TIMEOUT_MS = 30000; // 30s timeout (Rithmic contract fetch can take ~15s)
 
 function getToken() {
   return localStorage.getItem('hqx_token');
