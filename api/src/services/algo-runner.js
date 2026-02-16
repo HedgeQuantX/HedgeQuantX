@@ -100,8 +100,10 @@ class AlgoRunner extends EventEmitter {
       this.strategy.initialize(symbol, this.tickInfo.tickSize, this.tickInfo.tickValue);
 
       // Forward strategy log emissions (CLI line 103-112)
+      // Suppress 'info'/'analysis' when SmartLogsEngine is active (avoids duplicate logs)
       this.strategy.on('log', (log) => {
         if (log.type === 'debug') return;
+        if (this._stopSmartLogs && (log.type === 'info' || log.type === 'analysis')) return;
         this._log(log.type === 'info' ? 'analysis' : log.type || 'system', log.message);
       });
 

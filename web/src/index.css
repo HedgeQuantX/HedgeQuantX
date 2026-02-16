@@ -63,12 +63,14 @@ body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   text-transform: uppercase;
+  font-weight: 600;
   letter-spacing: 0.02em;
 }
 
-/* Force uppercase on ALL elements (buttons, selects, etc. don't inherit) */
+/* Force uppercase + bold on ALL elements (buttons, selects don't inherit) */
 *, *::before, *::after {
   text-transform: inherit;
+  font-weight: inherit;
 }
 
 /* Preserve case for inputs, code, and monospace numbers only */

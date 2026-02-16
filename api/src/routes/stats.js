@@ -119,13 +119,14 @@ router.get('/summary', requireAuth, async (req, res) => {
   try {
     const data = await gatherAccountStats(req.service, req.session, 1);
 
+    const hasTrades = data.stats.totalTrades > 0;
     res.json({
       success: true,
       totalPnl: data.totalPnl,
       winRate: parseFloat(data.metrics.winRate) || null,
       tradesToday: data.stats.totalTrades,
-      bestTrade: data.stats.bestTrade,
-      worstTrade: data.stats.worstTrade,
+      bestTrade: hasTrades ? data.stats.bestTrade : null,
+      worstTrade: hasTrades ? data.stats.worstTrade : null,
     });
   } catch (err) {
     console.error('[Stats] Summary error:', err.message);
