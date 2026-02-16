@@ -17,7 +17,8 @@ function statusBadge(status) {
 
 export default function AccountCard({ account }) {
   const balance = Number(account.balance);
-  const pnl = Number(account.pnl);
+  const rawPnl = Number(account.pnl);
+  const pnl = isNaN(rawPnl) ? 0 : rawPnl;
   const isPositive = pnl >= 0;
 
   return (
@@ -56,6 +57,7 @@ export default function AccountCard({ account }) {
           ) : (
             <TrendingDown size={14} className="text-loss" />
           )}
+          <span className={`text-xs text-text-muted mr-1`}>Day P&L</span>
           <span className={`text-sm font-mono-nums font-medium ${pnlColor(pnl)}`}>
             {formatCurrency(pnl)}
           </span>

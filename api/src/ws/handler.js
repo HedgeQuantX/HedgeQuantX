@@ -190,7 +190,7 @@ function setupWebSocket(server) {
     }
 
     // -----------------------------------------------------------------------
-    // P&L streaming
+    // P&L streaming (every 2s from Rithmic PNL_PLANT cache)
     // -----------------------------------------------------------------------
     const pnlInterval = setInterval(() => {
       if (ws.readyState !== 1) return;
@@ -212,6 +212,73 @@ function setupWebSocket(server) {
         }
       }
     }, 2000);
+
+    // -----------------------------------------------------------------------
+    // Real-time position & order streaming via Rithmic events
+    // -----------------------------------------------------------------------
+    const positionUpdateHandler = () => {
+      if (ws.readyState !== 1) return;
+      const currentSession = sessionManager.get(sessionId);
+      if (!currentSession) return;
+      const svc = currentSession.service;
+
+      // Build positions with real P&L from both positions map AND PNL_PLANT cache
+      const posArr = Array.from(svc.positions.values())
+        .filter((p) => p.quantity !== 0)
+        .map((p) => {
+          // Position-level openPnl from Rithmic position updates
+          let posOpenPnl = p.openPnl || 0;
+
+          // If position-level P&L is 0, fall back to account-level PNL_PLANT cache
+          if (posOpenPnl === 0 && p.accountId) {
+            const accPnl = svc.getAccountPnL(p.accountId);
+            posOpenPnl = accPnl.openPnl || 0;
+          }
+
+          // Entry price: prefer position's averagePrice, fallback to algo runner's tracked entry
+          let entry = p.averagePrice || 0;
+          if (entry === 0 && currentSession.algoRunner?.position?.entryPrice) {
+            entry = currentSession.algoRunner.position.entryPrice;
+          }
+
+          return {
+            symbol: p.symbol || p.contractId || '',
+            side: p.quantity > 0 ? 'LONG' : p.quantity < 0 ? 'SHORT' : 'FLAT',
+            size: Math.abs(p.quantity || 0),
+            entry,
+            pnl: posOpenPnl,
+          };
+        });
+
+      wsSend(ws, { type: 'positions', positions: posArr });
+    };
+
+    const orderNotificationHandler = () => {
+      if (ws.readyState !== 1) return;
+      const currentSession = sessionManager.get(sessionId);
+      if (!currentSession) return;
+      // Fetch fresh orders on any order notification
+      currentSession.service.getOrders().then((result) => {
+        if (result.success) {
+          wsSend(ws, {
+            type: 'orders',
+            orders: (result.orders || []).map((o) => ({
+              id: o.orderId || o.id || null,
+              symbol: o.symbol || '',
+              side: o.side === 0 ? 'BUY' : 'SELL',
+              type: o.orderType || o.type || '',
+              qty: o.quantity || o.qty || 0,
+              price: o.price || o.limitPrice || o.stopPrice || 0,
+            })),
+          });
+        }
+      }).catch(() => {});
+    };
+
+    if (typeof session.service.on === 'function') {
+      session.service.on('positionUpdate', positionUpdateHandler);
+      session.service.on('orderNotification', orderNotificationHandler);
+    }
 
     // -----------------------------------------------------------------------
     // Handle messages FROM client
@@ -308,12 +375,20 @@ function setupWebSocket(server) {
       console.log(`[WS] Client disconnected (session ${logId})`);
       clearInterval(pnlInterval);
       detachAlgoListeners();
+      if (typeof session.service.removeListener === 'function') {
+        session.service.removeListener('positionUpdate', positionUpdateHandler);
+        session.service.removeListener('orderNotification', orderNotificationHandler);
+      }
     });
 
     ws.on('error', (err) => {
       console.error(`[WS] Error (session ${logId}):`, err.message);
       clearInterval(pnlInterval);
       detachAlgoListeners();
+      if (typeof session.service.removeListener === 'function') {
+        session.service.removeListener('positionUpdate', positionUpdateHandler);
+        session.service.removeListener('orderNotification', orderNotificationHandler);
+      }
     });
   }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import LoginModal from './components/LoginModal';
@@ -8,23 +8,46 @@ import AlgoLive from './pages/AlgoLive';
 import Stats from './pages/Stats';
 import { Loader2 } from 'lucide-react';
 import { LogoIcon } from './components/Logo';
-
-const TABS = {
-  dashboard: Dashboard,
-  algo: AlgoSetup,
-  'algo-live': AlgoLive,
-  stats: Stats,
-};
+import { api } from './api/client';
 
 export default function App() {
   const { isAuthenticated, loading } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [algoRunning, setAlgoRunning] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const checkedRef = useRef(false);
+
+  // Check algo status on mount & when authenticated (so returning to algo tab works)
+  useEffect(() => {
+    if (!isAuthenticated || checkedRef.current) return;
+    checkedRef.current = true;
+    api.get('/algo/status').then((data) => {
+      const status = data.status || data;
+      if (status.running) setAlgoRunning(true);
+    }).catch(() => {});
+  }, [isAuthenticated]);
+
+  const handleNavigate = useCallback((tab) => {
+    if (tab === 'algo-live') {
+      setAlgoRunning(true);
+      setActiveTab('algo');
+    } else if (tab === 'algo' || tab === 'dashboard' || tab === 'stats') {
+      setActiveTab(tab);
+    } else {
+      setActiveTab(tab);
+    }
+  }, []);
+
+  // When AlgoLive navigates back to setup (algo stopped / not running)
+  const handleAlgoEnd = useCallback(() => {
+    setAlgoRunning(false);
+  }, []);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-bg-primary flex items-center justify-center">
+      <div className="min-h-screen bg-bg-primary flex flex-col items-center justify-center gap-3">
         <Loader2 size={28} className="text-accent animate-spin" />
+        <p className="text-sm text-text-muted">Loading session...</p>
       </div>
     );
   }
@@ -39,12 +62,25 @@ export default function App() {
     );
   }
 
-  // Logged in — single page with tabs
-  const ActivePage = TABS[activeTab] || Dashboard;
+  // Determine which page to render
+  let ActivePage;
+  let pageProps = { onNavigate: handleNavigate };
+  if (activeTab === 'algo') {
+    if (algoRunning) {
+      ActivePage = AlgoLive;
+      pageProps.onAlgoEnd = handleAlgoEnd;
+    } else {
+      ActivePage = AlgoSetup;
+    }
+  } else if (activeTab === 'stats') {
+    ActivePage = Stats;
+  } else {
+    ActivePage = Dashboard;
+  }
 
   return (
-    <Layout activeTab={activeTab} onTabChange={setActiveTab}>
-      <ActivePage onNavigate={setActiveTab} />
+    <Layout activeTab={activeTab} onTabChange={handleNavigate}>
+      <ActivePage {...pageProps} />
     </Layout>
   );
 }

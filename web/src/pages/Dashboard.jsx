@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
-import { TrendingUp, Target, Activity, ArrowUpRight, ArrowDownRight, Loader2 } from 'lucide-react';
+import { TrendingUp, Target, Activity, ArrowUpRight, Loader2, Server, Wifi } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 import AccountCard from '../components/AccountCard';
 import StatCard from '../components/StatCard';
 import { formatCurrency, formatPercent } from '../utils/format';
+import { PROPFIRMS } from '../utils/constants';
 
 export default function Dashboard() {
-  const { accounts, fetchAccounts } = useAuth();
+  const { accounts, fetchAccounts, propfirm } = useAuth();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -34,50 +35,58 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex flex-col items-center justify-center h-64 gap-3">
         <Loader2 size={24} className="text-accent animate-spin" />
+        <p className="text-sm text-text-muted">Loading dashboard...</p>
       </div>
     );
   }
 
+  const firmInfo = PROPFIRMS.find((f) => f.id === propfirm);
+
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-xl font-bold text-text-primary">Dashboard</h1>
-        <p className="text-sm text-text-muted mt-0.5">Account overview & performance</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-text-primary">Dashboard</h1>
+          <p className="text-sm text-text-muted mt-0.5">Account overview & performance</p>
+        </div>
+        {firmInfo && (
+          <div className="flex items-center gap-2.5 px-4 py-2 rounded-lg bg-accent-dim border border-accent/20">
+            <Server size={14} className="text-accent" />
+            <span className="text-sm text-accent font-semibold">{firmInfo.name}</span>
+            <Wifi size={12} className="text-accent/60" />
+          </div>
+        )}
       </div>
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
           label="Total P&L"
-          value={stats?.totalPnl != null ? formatCurrency(stats.totalPnl) : 'N/A'}
+          value={formatCurrency(stats?.totalPnl ?? 0)}
           icon={TrendingUp}
-          color={stats?.totalPnl >= 0 ? 'text-profit' : 'text-loss'}
+          color={(stats?.totalPnl ?? 0) >= 0 ? 'text-profit' : 'text-loss'}
           mono
         />
         <StatCard
           label="Win Rate"
-          value={stats?.winRate != null ? formatPercent(stats.winRate) : 'N/A'}
+          value={stats?.winRate != null ? formatPercent(stats.winRate) : '0.0%'}
           icon={Target}
           color="text-accent"
           mono
         />
         <StatCard
           label="Trades Today"
-          value={stats?.tradesToday ?? 'N/A'}
+          value={stats?.tradesToday ?? 0}
           icon={Activity}
           color="text-text-primary"
           mono
         />
         <StatCard
           label="Best / Worst"
-          value={
-            stats?.bestTrade != null && stats?.worstTrade != null
-              ? `${formatCurrency(stats.bestTrade)} / ${formatCurrency(stats.worstTrade)}`
-              : 'N/A'
-          }
-          icon={stats?.bestTrade >= 0 ? ArrowUpRight : ArrowDownRight}
+          value={`${formatCurrency(stats?.bestTrade ?? 0)} / ${formatCurrency(stats?.worstTrade ?? 0)}`}
+          icon={ArrowUpRight}
           color="text-warning"
           mono
         />

@@ -24,10 +24,25 @@ router.get('/', requireAuth, async (req, res) => {
       return res.status(500).json({ success: false, error: result.error || 'Failed to fetch accounts' });
     }
 
-    // Update cached accounts in session
-    req.session.accounts = result.accounts;
+    // Enrich each account with real-time P&L from PNL_PLANT cache
+    // Backend returns 'profitAndLoss' but frontend reads 'pnl' — normalize here
+    const enriched = (result.accounts || []).map((acc) => {
+      const rithmicId = acc.rithmicAccountId || acc.accountId;
+      const pnlData = req.service.getAccountPnL(rithmicId);
+      const dayPnl = acc.profitAndLoss ?? pnlData.pnl ?? null;
+      return {
+        ...acc,
+        pnl: dayPnl,
+        openPnl: pnlData.openPnl ?? acc.openPnL ?? null,
+        closedPnl: pnlData.closedPnl ?? acc.todayPnL ?? null,
+        balance: acc.balance ?? pnlData.balance ?? null,
+      };
+    });
 
-    res.json({ success: true, accounts: result.accounts });
+    // Update cached accounts in session
+    req.session.accounts = enriched;
+
+    res.json({ success: true, accounts: enriched });
   } catch (err) {
     console.error('[Accounts] Error:', err.message);
     res.status(500).json({ success: false, error: 'Failed to fetch accounts' });

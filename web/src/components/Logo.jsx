@@ -1,18 +1,24 @@
 /**
- * HQ𝕏 Logo — 4-point sparkle star icon.
- * Matches Flaticon sparkle_8800631 style. Color via className (currentColor).
+ * HQ𝕏 Logo — 4-point sparkle star, rotated ~45deg.
+ * Thin elongated spikes with a rounded center. Color via className (currentColor).
  */
 export function LogoIcon({ size = 32, className = '' }) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
+      viewBox="0 0 512 512"
       width={size}
       height={size}
       className={className}
       fill="currentColor"
+      style={{ transform: 'scaleX(-1)' }}
     >
-      <path d="M12 1C12 1 13.5 7.5 15 9C16.5 10.5 23 12 23 12C23 12 16.5 13.5 15 15C13.5 16.5 12 23 12 23C12 23 10.5 16.5 9 15C7.5 13.5 1 12 1 12C1 12 7.5 10.5 9 9C10.5 7.5 12 1 12 1Z" />
+      <g transform="translate(256,256) rotate(-45)">
+        {/* Vertical spike — long */}
+        <path d="M0,-250 C12,-80 30,-30 30,0 C30,30 12,80 0,250 C-12,80 -30,30 -30,0 C-30,-30 -12,-80 0,-250Z" />
+        {/* Horizontal spike — shorter */}
+        <path d="M-180,0 C-60,-12 -25,-25 0,-25 C25,-25 60,-12 180,0 C60,12 25,25 0,25 C-25,25 -60,12 -180,0Z" />
+      </g>
     </svg>
   );
 }

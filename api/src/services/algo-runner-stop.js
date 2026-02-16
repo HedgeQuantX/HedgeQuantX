@@ -156,10 +156,14 @@ function startPnlPolling(runner) {
       const pnlData = runner.service.getAccountPnL(accId);
       if (pnlData && pnlData.pnl !== null && pnlData.pnl !== undefined && !isNaN(pnlData.pnl)) {
         if (runner._startingPnL === null) runner._startingPnL = pnlData.pnl;
-        const newPnl = pnlData.pnl - runner._startingPnL;
-        if (!isNaN(newPnl)) {
-          runner.stats.totalPnl = newPnl;
-          runner.emit('pnl', { dayPnl: newPnl, openPnl: 0, closedPnl: newPnl });
+        const sessionPnl = pnlData.pnl - runner._startingPnL;
+        if (!isNaN(sessionPnl)) {
+          runner.stats.totalPnl = sessionPnl;
+          runner.emit('pnl', {
+            dayPnl: sessionPnl,
+            openPnl: pnlData.openPnl || 0,
+            closedPnl: pnlData.closedPnl || 0,
+          });
         }
       }
 

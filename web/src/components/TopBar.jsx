@@ -1,32 +1,21 @@
-import { LogOut, Wifi, WifiOff, Server } from 'lucide-react';
+import { LogOut, Wifi, WifiOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { formatBalance } from '../utils/format';
-import { PROPFIRMS } from '../utils/constants';
 import { LogoIcon } from './Logo';
 
 export default function TopBar() {
-  const { propfirm, accounts, logout } = useAuth();
+  const { accounts, logout } = useAuth();
 
-  const firmInfo = PROPFIRMS.find((f) => f.id === propfirm);
   const totalBalance = accounts.reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
   const isConnected = accounts.length > 0;
 
   return (
     <header className="h-14 border-b border-border-default bg-bg-card flex items-center justify-between px-4 lg:px-6 shrink-0">
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <LogoIcon size={28} className="text-accent" />
-          <span className="hidden sm:block text-sm font-semibold text-gradient">
-            HedgeQuant𝕏
-          </span>
-        </div>
-
-        {firmInfo && (
-          <div className="hidden md:flex items-center gap-2 ml-4 px-3 py-1 rounded-full bg-accent-dim border border-accent/20">
-            <Server size={12} className="text-accent" />
-            <span className="text-xs text-accent font-medium">{firmInfo.name}</span>
-          </div>
-        )}
+      <div className="flex items-center gap-2">
+        <LogoIcon size={28} className="text-accent" />
+        <span className="hidden sm:block text-sm font-semibold text-gradient">
+          HedgeQuant𝕏
+        </span>
       </div>
 
       <div className="flex items-center gap-4">

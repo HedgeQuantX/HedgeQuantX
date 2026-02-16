@@ -113,20 +113,30 @@ router.get('/overview', requireAuth, async (req, res) => {
 
 /**
  * GET /api/stats/summary
- * Quick summary for Dashboard (lighter query)
+ * Quick summary for Dashboard
+ * - totalPnl: day P&L from PNL_PLANT cache
+ * - tradesToday: count from 1-day trade history
+ * - winRate / bestTrade / worstTrade: from 30-day history (so dashboard isn't empty)
  */
 router.get('/summary', requireAuth, async (req, res) => {
   try {
-    const data = await gatherAccountStats(req.service, req.session, 1);
+    // Two queries: 1-day for tradesToday, 30-day for overall stats
+    const [today, monthly] = await Promise.all([
+      gatherAccountStats(req.service, req.session, 1),
+      gatherAccountStats(req.service, req.session, 30),
+    ]);
 
-    const hasTrades = data.stats.totalTrades > 0;
+    const hasMonthlyTrades = monthly.stats.totalTrades > 0;
+    // bestTrade/worstTrade init to 0 in aggregateStats — only send if meaningful
+    const best = monthly.stats.bestTrade !== 0 ? monthly.stats.bestTrade : null;
+    const worst = monthly.stats.worstTrade !== 0 ? monthly.stats.worstTrade : null;
     res.json({
       success: true,
-      totalPnl: data.totalPnl,
-      winRate: parseFloat(data.metrics.winRate) || null,
-      tradesToday: data.stats.totalTrades,
-      bestTrade: hasTrades ? data.stats.bestTrade : null,
-      worstTrade: hasTrades ? data.stats.worstTrade : null,
+      totalPnl: today.totalPnl,
+      winRate: hasMonthlyTrades ? (parseFloat(monthly.metrics.winRate) || null) : null,
+      tradesToday: today.stats.totalTrades,
+      bestTrade: hasMonthlyTrades ? best : null,
+      worstTrade: hasMonthlyTrades ? worst : null,
     });
   } catch (err) {
     console.error('[Stats] Summary error:', err.message);
@@ -208,6 +218,41 @@ router.get('/trades', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[Stats] Trades error:', err.message);
     res.status(500).json({ success: false, error: 'Failed to fetch trades' });
+  }
+});
+
+/**
+ * GET /api/stats/calendar
+ * Daily P&L aggregated by date for calendar heatmap
+ */
+router.get('/calendar', requireAuth, async (req, res) => {
+  const days = parseInt(req.query.days, 10) || 90;
+
+  try {
+    const data = await gatherAccountStats(req.service, req.session, days);
+
+    // Group trades by date and sum P&L
+    const dailyMap = new Map();
+    for (const trade of data.allTrades) {
+      const ts = trade.exitTime || trade.entryTime || trade.timestamp || trade.time || trade.date;
+      if (!ts) continue;
+      const dateKey = new Date(ts).toISOString().slice(0, 10); // YYYY-MM-DD
+      const pnl = trade.pnl ?? trade.profitAndLoss ?? 0;
+      const prev = dailyMap.get(dateKey) || { pnl: 0, trades: 0, wins: 0 };
+      prev.pnl += pnl;
+      prev.trades += 1;
+      if (pnl > 0) prev.wins += 1;
+      dailyMap.set(dateKey, prev);
+    }
+
+    const calendar = Array.from(dailyMap.entries())
+      .map(([date, d]) => ({ date, pnl: Math.round(d.pnl * 100) / 100, trades: d.trades, wins: d.wins }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    res.json({ success: true, data: calendar });
+  } catch (err) {
+    console.error('[Stats] Calendar error:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch calendar data' });
   }
 });
 
