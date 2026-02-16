@@ -67,15 +67,25 @@ export default function AlgoSetup({ onNavigate }) {
     setLoading(true);
     setError(null);
     try {
-      await api.post('/algo/start', {
+      const res = await api.post('/algo/start', {
         accountId: selectedAccount.rithmicAccountId || selectedAccount.accountId || selectedAccount.id || selectedAccount.name,
         symbol: selectedSymbol,
         strategyId: selectedStrategy.id,
         size: config.contracts,
       });
-      if (onNavigate) onNavigate('algo-live');
+      // Only navigate if backend confirmed algo is running
+      if (res.success && res.status?.running) {
+        if (onNavigate) onNavigate('algo-live');
+      } else {
+        setError(res.error || 'Algo did not start. Check strategy availability.');
+      }
     } catch (err) {
-      setError(err.message);
+      // Session expired = needs re-login, show clear message
+      if (err.message === 'Session expired') {
+        setError('Session expired. Please disconnect and login again.');
+      } else {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }

@@ -64,14 +64,15 @@ export default function AlgoLive({ onNavigate }) {
     // Check if algo is running
     api.get('/algo/status')
       .then((data) => {
-        if (!data.running) {
+        const status = data.status || data;
+        if (!status.running) {
           navigate('/algo');
           return;
         }
-        setAlgoState(data);
-        setPnl(data.pnl ?? null);
-        setStats(data.stats || {});
-        setPosition(data.position || 'FLAT');
+        setAlgoState(status);
+        setPnl(status.pnl ?? null);
+        setStats(status.stats || {});
+        setPosition(status.position || 'FLAT');
         setLoading(false);
       })
       .catch(() => {
