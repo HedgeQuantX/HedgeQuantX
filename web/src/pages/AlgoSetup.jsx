@@ -68,12 +68,10 @@ export default function AlgoSetup({ onNavigate }) {
     setError(null);
     try {
       await api.post('/algo/start', {
-        accountId: selectedAccount.id,
+        accountId: selectedAccount.rithmicAccountId || selectedAccount.accountId || selectedAccount.id || selectedAccount.name,
         symbol: selectedSymbol,
         strategyId: selectedStrategy.id,
-        contracts: config.contracts,
-        dailyTarget: config.dailyTarget,
-        maxRisk: config.maxRisk,
+        size: config.contracts,
       });
       if (onNavigate) onNavigate('algo-live');
     } catch (err) {
@@ -139,12 +137,14 @@ export default function AlgoSetup({ onNavigate }) {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {accounts.map((acc) => (
+              {accounts.map((acc) => {
+                const accKey = acc.rithmicAccountId || acc.accountId || acc.id || acc.name;
+                return (
                 <button
-                  key={acc.id || acc.name}
+                  key={accKey}
                   onClick={() => setSelectedAccount(acc)}
                   className={`bg-bg-card border rounded-lg p-4 text-left transition-all cursor-pointer ${
-                    selectedAccount?.id === acc.id
+                    (selectedAccount?.rithmicAccountId || selectedAccount?.accountId) === (acc.rithmicAccountId || acc.accountId)
                       ? 'border-accent bg-accent/5'
                       : 'border-border-default hover:border-accent/30'
                   }`}
@@ -159,7 +159,8 @@ export default function AlgoSetup({ onNavigate }) {
                     </div>
                   </div>
                 </button>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
