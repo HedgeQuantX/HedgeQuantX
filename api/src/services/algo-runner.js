@@ -260,12 +260,12 @@ class AlgoRunner extends EventEmitter {
       return;
     }
 
-    const entryPrice = result.fillPrice || entry || 0;
+    const fillPrice = result.fillPrice || entryPx || 0;
 
     this.position = {
       side: direction,
       qty: size,
-      entryPrice,
+      entryPrice: fillPrice,
       symbol,
       exchange,
       accountId,
@@ -276,11 +276,11 @@ class AlgoRunner extends EventEmitter {
     this.emit('position', {
       symbol,
       qty: direction === 'long' ? size : -size,
-      entryPrice,
+      entryPrice: fillPrice,
       openPnl: 0,
     });
 
-    this._log('info', `Entered ${direction} ${size} @ ${entryPrice}`);
+    this._log('info', `Entered ${direction} ${size} @ ${fillPrice}`);
 
     // Place OCO bracket if SL and TP provided
     if (sl && tp) {
@@ -299,7 +299,7 @@ class AlgoRunner extends EventEmitter {
         this._log('info', `Brackets placed: SL=${sl} TP=${tp}`);
 
         // Listen for bracket fill to record trade
-        this._monitorBracketFill(entryPrice, sl, tp, direction);
+        this._monitorBracketFill(fillPrice, sl, tp, direction);
       } else {
         this._log('error', `Bracket failed: ${bracketResult.error}`);
       }
