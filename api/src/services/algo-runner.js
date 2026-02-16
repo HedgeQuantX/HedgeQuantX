@@ -14,9 +14,16 @@
 
 const EventEmitter = require('events');
 
-// CLI imports
-const { MarketDataFeed } = require('../../../src/lib/data');
-const { loadStrategy } = require('../../../src/lib/m');
+// CLI imports — lazy loaded, may not exist in all deploy environments
+let MarketDataFeed, loadStrategy;
+try {
+  ({ MarketDataFeed } = require('../../../src/lib/data'));
+  ({ loadStrategy } = require('../../../src/lib/m'));
+} catch (_) {
+  // Strategy source files not deployed — algo execution disabled
+  MarketDataFeed = null;
+  loadStrategy = null;
+}
 const { getTickInfo } = require('../../../src/services/rithmic/trades');
 
 class AlgoRunner extends EventEmitter {
@@ -64,6 +71,10 @@ class AlgoRunner extends EventEmitter {
     }
 
     this.config = { strategyId, symbol, exchange, accountId, size };
+
+    if (!MarketDataFeed || !loadStrategy) {
+      return { success: false, error: 'Strategy engine not available in this environment' };
+    }
 
     try {
       // Load strategy
