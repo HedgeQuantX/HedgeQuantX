@@ -119,7 +119,7 @@ export default function Positions() {
                     </span>
                   </td>
                   <td className="py-2 px-2 text-right font-mono-nums">
-                    {pos.size ?? pos.qty ?? 'N/A'}
+                    {pos.size ?? 'N/A'}
                   </td>
                   <td className="py-2 px-2 text-right font-mono-nums">
                     {formatNumber(pos.entry)}

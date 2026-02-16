@@ -37,7 +37,7 @@ export default function TradeTable({ trades = [], title = 'Recent Trades' }) {
               <td className="py-2 px-2">
                 <span
                   className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                    trade.side?.toUpperCase() === 'BUY'
+                    String(trade.side || '').toUpperCase() === 'LONG' || String(trade.side || '').toUpperCase() === 'BUY'
                       ? 'bg-accent-dim text-accent'
                       : 'bg-pink-dim text-pink'
                   }`}

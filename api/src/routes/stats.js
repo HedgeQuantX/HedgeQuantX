@@ -184,14 +184,24 @@ router.get('/trades', requireAuth, async (req, res) => {
   try {
     const data = await gatherAccountStats(req.service, req.session, days);
 
-    // Sort by most recent first
+    // Sort by most recent first and normalize field names for frontend
     const sorted = data.allTrades
       .sort((a, b) => {
-        const ta = new Date(a.timestamp || a.time || a.date || 0).getTime();
-        const tb = new Date(b.timestamp || b.time || b.date || 0).getTime();
+        const ta = a.exitTime || a.entryTime || new Date(a.timestamp || a.time || a.date || 0).getTime();
+        const tb = b.exitTime || b.entryTime || new Date(b.timestamp || b.time || b.date || 0).getTime();
         return tb - ta;
       })
-      .slice(0, limit);
+      .slice(0, limit)
+      .map((t) => ({
+        id: t.id || null,
+        symbol: t.symbol || null,
+        side: t.side === 1 ? 'LONG' : t.side === 2 ? 'SHORT' : (typeof t.side === 'string' ? t.side : null),
+        qty: t.quantity ?? null,
+        entry: t.entryPrice ?? null,
+        exit: t.exitPrice ?? null,
+        pnl: t.pnl ?? t.profitAndLoss ?? null,
+        date: t.exitTime || t.entryTime || t.timestamp || null,
+      }));
 
     res.json({ success: true, trades: sorted, total: data.allTrades.length });
   } catch (err) {
@@ -225,6 +235,18 @@ router.get('/:accountId', requireAuth, async (req, res) => {
     const metrics = calculateDerivedMetrics(stats, pnl?.balance || 0, pnl?.pnl || 0);
     const hqxResult = calculateHQXScore(stats, metrics, pnl?.balance || 0);
 
+    // Normalize trade fields for frontend consumption
+    const normalized = trades.slice(0, 50).map((t) => ({
+      id: t.id || null,
+      symbol: t.symbol || null,
+      side: t.side === 1 ? 'LONG' : t.side === 2 ? 'SHORT' : (typeof t.side === 'string' ? t.side : null),
+      qty: t.quantity ?? null,
+      entry: t.entryPrice ?? null,
+      exit: t.exitPrice ?? null,
+      pnl: t.pnl ?? t.profitAndLoss ?? null,
+      date: t.exitTime || t.entryTime || t.timestamp || null,
+    }));
+
     res.json({
       success: true,
       accountId,
@@ -235,7 +257,7 @@ router.get('/:accountId', requireAuth, async (req, res) => {
       hqxGrade: hqxResult.scoreGrade,
       hqxBreakdown: hqxResult.breakdown,
       currentPnl: pnl,
-      trades: trades.slice(0, 50),
+      trades: normalized,
     });
   } catch (err) {
     console.error('[Stats] Error:', err.message);

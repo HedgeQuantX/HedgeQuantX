@@ -104,7 +104,17 @@ router.delete('/orders', requireAuth, async (req, res) => {
 router.get('/positions', requireAuth, async (req, res) => {
   try {
     const result = await req.service.getPositions();
-    res.json(result);
+    // Normalize Rithmic field names to frontend-friendly format
+    const positions = (result.positions || []).map((pos) => ({
+      symbol: pos.symbol || null,
+      exchange: pos.exchange || null,
+      side: pos.side || null,
+      size: pos.quantity ?? null,
+      entry: pos.averagePrice ?? null,
+      pnl: pos.unrealizedPnl ?? null,
+      realizedPnl: pos.realizedPnl ?? null,
+    }));
+    res.json({ success: result.success, positions });
   } catch (err) {
     console.error('[Trading] Positions error:', err.message);
     res.status(500).json({ success: false, error: 'Failed to fetch positions' });
@@ -118,7 +128,19 @@ router.get('/positions', requireAuth, async (req, res) => {
 router.get('/orders', requireAuth, async (req, res) => {
   try {
     const result = await req.service.getOrders();
-    res.json(result);
+    // Normalize Rithmic field names to frontend-friendly format
+    const orders = (result.orders || []).map((order) => ({
+      id: order.orderId || null,
+      symbol: order.symbol || null,
+      exchange: order.exchange || null,
+      side: order.side || null,
+      type: order.orderType || null,
+      qty: order.quantity ?? null,
+      filled: order.filledQuantity ?? 0,
+      price: order.price ?? null,
+      status: order.status || null,
+    }));
+    res.json({ success: result.success, orders });
   } catch (err) {
     console.error('[Trading] Get orders error:', err.message);
     res.status(500).json({ success: false, error: 'Failed to fetch orders' });
