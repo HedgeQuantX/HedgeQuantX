@@ -16,10 +16,10 @@ const router = Router();
 
 /**
  * POST /api/algo/start
- * Body: { strategyId, symbol, exchange, accountId, size }
+ * Body: { strategyId, symbol, exchange, accountId, size, dailyTarget, maxRisk }
  */
 router.post('/start', requireAuth, async (req, res) => {
-  const { strategyId, symbol, exchange, accountId, size } = req.body;
+  const { strategyId, symbol, exchange, accountId, size, dailyTarget, maxRisk } = req.body;
 
   if (!strategyId || !symbol || !accountId) {
     return res.status(400).json({
@@ -34,6 +34,16 @@ router.post('/start', requireAuth, async (req, res) => {
       await req.session.algoRunner.stop();
     }
 
+    // Resolve account name and propfirm from the service
+    const accounts = req.service.accounts || [];
+    const matchedAccount = accounts.find((a) =>
+      (a.rithmicAccountId || a.accountId) === accountId ||
+      a.accountId === accountId ||
+      a.name === accountId
+    );
+    const accountName = matchedAccount?.name || accountId;
+    const propfirm = req.service.propfirm || req.service.platformName || null;
+
     // Create new algo runner
     const runner = new AlgoRunner(req.service);
     req.session.algoRunner = runner;
@@ -44,6 +54,10 @@ router.post('/start', requireAuth, async (req, res) => {
       exchange: exchange || 'CME',
       accountId,
       size: size || 1,
+      dailyTarget: dailyTarget || null,
+      maxRisk: maxRisk || null,
+      accountName,
+      propfirm,
     });
 
     if (!result.success) {

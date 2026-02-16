@@ -4,6 +4,9 @@
  * Streams real-time data to authenticated clients.
  * Auth: JWT via query param (?token=xxx) or first message ({ type: 'auth', token: 'xxx' })
  *
+ * Event mapping mirrors CLI algo-executor → ui.addLog() pipeline.
+ * All 17+ CLI log types forwarded to frontend.
+ *
  * NO MOCK DATA - All data from Rithmic API via AlgoRunner / RithmicService.
  */
 
@@ -125,27 +128,37 @@ function setupWebSocket(server) {
       if (!runner) return;
 
       // Map AlgoRunner events → frontend-expected event types
+      // Mirrors ALL CLI log types: system, connected, ready, signal, trade,
+      // fill_buy, fill_sell, fill_win, fill_loss, error, risk, analysis, etc.
       const eventMap = {
-        tick:     (data) => ({ type: 'algo.price', payload: data }),
-        pnl:     (data) => ({ type: 'algo.pnl', pnl: data.dayPnl, payload: data }),
-        position:(data) => ({
+        tick: (data) => ({ type: 'algo.price', payload: data }),
+        pnl: (data) => ({ type: 'algo.pnl', pnl: data.dayPnl, payload: data }),
+        position: (data) => ({
           type: 'algo.position',
-          position: data.side ? (data.side === 'long' ? 'LONG' : 'SHORT') : 'FLAT',
+          position: data.side ? (data.side === 'long' ? 'LONG' : data.side === 'short' ? 'SHORT' : 'FLAT') : 'FLAT',
           payload: data,
         }),
-        signal:  (data) => ({ type: 'algo.event', payload: { ...data, kind: 'signal', timestamp: Date.now() } }),
-        trade:   (data) => ({ type: 'algo.event', payload: { ...data, kind: 'trade', timestamp: Date.now() } }),
-        log:     (data) => ({ type: 'algo.event', payload: data }),
-        status:  (data) => ({
+        signal: (data) => ({ type: 'algo.event', payload: { ...data, kind: 'signal', timestamp: Date.now() } }),
+        trade: (data) => ({ type: 'algo.event', payload: { ...data, kind: 'trade', timestamp: Date.now() } }),
+        log: (data) => ({ type: 'algo.event', payload: data }),
+        smartlog: (data) => ({ type: 'algo.event', payload: { ...data, kind: 'smartlog' } }),
+        statsUpdate: (data) => ({ type: 'algo.stats', payload: data }),
+        summary: (data) => ({ type: 'algo.summary', payload: data }),
+        status: (data) => ({
           type: 'algo.state',
           payload: {
             ...data,
             strategy: runner.config?.strategyId,
             symbol: runner.config?.symbol,
             startedAt: runner.stats?.startTime,
+            contracts: runner.config?.size,
+            dailyTarget: runner.config?.dailyTarget,
+            maxRisk: runner.config?.maxRisk,
+            accountName: runner.config?.accountName,
+            propfirm: runner.config?.propfirm,
           },
         }),
-        stopped: () => ({ type: 'algo.stopped' }),
+        stopped: (data) => ({ type: 'algo.stopped', payload: data || {} }),
       };
 
       for (const [event, transform] of Object.entries(eventMap)) {
@@ -245,6 +258,10 @@ function setupWebSocket(server) {
             exchange: config.exchange || 'CME',
             accountId: config.accountId,
             size: config.size || 1,
+            dailyTarget: config.dailyTarget || null,
+            maxRisk: config.maxRisk || null,
+            accountName: config.accountName || null,
+            propfirm: config.propfirm || null,
           });
 
           if (!result.success) {

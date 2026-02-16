@@ -12,7 +12,7 @@ const STEPS = ['Account', 'Symbol', 'Strategy', 'Configure', 'Launch'];
 const POPULAR_SYMBOLS = ['ES', 'NQ', 'MES', 'MNQ', 'YM', 'RTY', 'CL', 'GC'];
 
 export default function AlgoSetup({ onNavigate }) {
-  const { accounts } = useAuth();
+  const { accounts, propfirm } = useAuth();
 
   const [step, setStep] = useState(0);
   const [selectedAccount, setSelectedAccount] = useState(null);
@@ -78,6 +78,8 @@ export default function AlgoSetup({ onNavigate }) {
         size: config.contracts,
         dailyTarget: config.dailyTarget,
         maxRisk: config.maxRisk,
+        accountName: selectedAccount.name || null,
+        propfirm: propfirm || null,
       });
       // Only navigate if backend confirmed algo is running
       if (res.success && res.status?.running) {
