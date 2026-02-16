@@ -150,21 +150,9 @@ class AlgoRunner extends EventEmitter {
 
       await this.feed.subscribe(symbol, exchange);
 
-      // Preload historical bars (CLI lines 436-456)
-      if (this.strategy.preloadBars && this.feed.getHistoricalBars) {
-        try {
-          this._log('system', 'Loading warmup data...');
-          const histBars = await this.feed.getHistoricalBars(symbol, exchange, 30);
-          if (histBars && histBars.length > 0) {
-            this.strategy.preloadBars(symbol, histBars);
-            this._log('system', 'Reference data loaded — QUANT tick engine initializing...');
-          } else {
-            this._log('system', 'No history — warming up with live ticks...');
-          }
-        } catch (_) {
-          this._log('system', 'Warmup skipped — using live data');
-        }
-      }
+      // Skip HISTORY_PLANT warmup — opening a 2nd connection kills TICKER_PLANT streaming
+      // on Rithmic Paper. Strategy warms up with live ticks instead.
+      this._log('system', 'Warming up with live ticks...');
 
       this._log('ready', `Algo started: ${strategyId} on ${symbol} (${size} contracts)`);
       this._stopSmartLogs = startSmartLogs(this);
