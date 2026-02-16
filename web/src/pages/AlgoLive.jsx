@@ -69,10 +69,22 @@ export default function AlgoLive({ onNavigate }) {
           navigate('/algo');
           return;
         }
-        setAlgoState(status);
-        setPnl(status.pnl ?? null);
+        // Normalize status for display
+        setAlgoState({
+          ...status,
+          strategy: status.config?.strategyId || null,
+          symbol: status.config?.symbol || null,
+          startedAt: status.stats?.startTime || null,
+          contracts: status.config?.size || null,
+        });
+        setPnl(status.stats?.totalPnl ?? null);
         setStats(status.stats || {});
-        setPosition(status.position || 'FLAT');
+        // Position from REST is object { side, qty, entryPrice } — normalize to string
+        if (status.position?.side) {
+          setPosition(status.position.side === 'long' ? 'LONG' : 'SHORT');
+        } else {
+          setPosition('FLAT');
+        }
         setLoading(false);
       })
       .catch(() => {
@@ -221,7 +233,7 @@ export default function AlgoLive({ onNavigate }) {
           <BarChart3 size={14} className="text-accent mx-auto mb-1" />
           <p className="text-xs text-text-muted mb-1">Contracts</p>
           <p className="text-sm font-mono-nums font-medium text-text-primary">
-            {stats.contracts ?? algoState?.contracts ?? 'N/A'}
+            {algoState?.contracts ?? algoState?.config?.size ?? 'N/A'}
           </p>
         </div>
       </div>

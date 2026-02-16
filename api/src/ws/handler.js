@@ -123,9 +123,33 @@ function setupWebSocket(server) {
 
     const attachAlgoListeners = (runner) => {
       if (!runner) return;
-      const events = ['tick', 'pnl', 'position', 'signal', 'trade', 'log', 'status'];
-      for (const event of events) {
-        const fn = (data) => wsSend(ws, { type: event, ...data });
+
+      // Map AlgoRunner events → frontend-expected event types
+      const eventMap = {
+        tick:     (data) => ({ type: 'algo.price', payload: data }),
+        pnl:     (data) => ({ type: 'algo.pnl', pnl: data.dayPnl, payload: data }),
+        position:(data) => ({
+          type: 'algo.position',
+          position: data.side ? (data.side === 'long' ? 'LONG' : 'SHORT') : 'FLAT',
+          payload: data,
+        }),
+        signal:  (data) => ({ type: 'algo.event', payload: { ...data, kind: 'signal', timestamp: Date.now() } }),
+        trade:   (data) => ({ type: 'algo.event', payload: { ...data, kind: 'trade', timestamp: Date.now() } }),
+        log:     (data) => ({ type: 'algo.event', payload: data }),
+        status:  (data) => ({
+          type: 'algo.state',
+          payload: {
+            ...data,
+            strategy: runner.config?.strategyId,
+            symbol: runner.config?.symbol,
+            startedAt: runner.stats?.startTime,
+          },
+        }),
+        stopped: () => ({ type: 'algo.stopped' }),
+      };
+
+      for (const [event, transform] of Object.entries(eventMap)) {
+        const fn = (data) => wsSend(ws, transform(data));
         runner.on(event, fn);
         boundListeners.push({ runner, event, fn });
       }

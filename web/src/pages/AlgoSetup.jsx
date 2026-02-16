@@ -16,8 +16,8 @@ export default function AlgoSetup({ onNavigate }) {
 
   const [step, setStep] = useState(0);
   const [selectedAccount, setSelectedAccount] = useState(null);
-  const [symbols, setSymbols] = useState([]);
-  const [selectedSymbol, setSelectedSymbol] = useState(null);
+  const [contracts, setContracts] = useState([]);
+  const [selectedContract, setSelectedContract] = useState(null);
   const [strategies, setStrategies] = useState([]);
   const [selectedStrategy, setSelectedStrategy] = useState(null);
   const [config, setConfig] = useState({
@@ -28,28 +28,32 @@ export default function AlgoSetup({ onNavigate }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Fetch symbols when account selected
+  // Fetch contracts when account selected
   useEffect(() => {
     if (!selectedAccount) return;
     let mounted = true;
     api.get('/contracts')
       .then((data) => {
-        const contracts = data.contracts || data || [];
-        // Extraire les symboles des contrats
-        const syms = contracts.map((c) => typeof c === 'string' ? c : (c.symbol || c.name || c));
-        if (mounted) setSymbols(syms);
+        const list = data.contracts || data || [];
+        // Normalize: ensure each entry is an object with symbol, baseSymbol, exchange
+        const normalized = list.map((c) =>
+          typeof c === 'string'
+            ? { symbol: c, baseSymbol: c.replace(/[A-Z]\d+$/, ''), exchange: 'CME' }
+            : { symbol: c.symbol || c.name || c, baseSymbol: c.baseSymbol || (c.symbol || '').replace(/[A-Z]\d+$/, ''), exchange: c.exchange || 'CME', name: c.name || null }
+        );
+        if (mounted) setContracts(normalized);
       })
       .catch(() => {
-        if (mounted) setSymbols([]);
+        if (mounted) setContracts([]);
       });
     return () => { mounted = false; };
   }, [selectedAccount]);
 
-  // Fetch strategies when symbol selected
+  // Fetch strategies when contract selected
   useEffect(() => {
-    if (!selectedSymbol) return;
+    if (!selectedContract) return;
     let mounted = true;
-    api.get(`/strategies?symbol=${selectedSymbol}`)
+    api.get(`/strategies?symbol=${selectedContract.symbol}`)
       .then((data) => {
         if (mounted) setStrategies(data.strategies || data || []);
       })
@@ -57,11 +61,10 @@ export default function AlgoSetup({ onNavigate }) {
         if (mounted) setStrategies([]);
       });
     return () => { mounted = false; };
-  }, [selectedSymbol]);
+  }, [selectedContract]);
 
-  const getBase = (s) => typeof s === 'string' ? s : (s.baseSymbol || s.symbol || s);
-  const popularSymbols = symbols.filter((s) => POPULAR_SYMBOLS.includes(getBase(s)));
-  const otherSymbols = symbols.filter((s) => !POPULAR_SYMBOLS.includes(getBase(s)));
+  const popularContracts = contracts.filter((c) => POPULAR_SYMBOLS.includes(c.baseSymbol));
+  const otherContracts = contracts.filter((c) => !POPULAR_SYMBOLS.includes(c.baseSymbol));
 
   const handleLaunch = async () => {
     setLoading(true);
@@ -69,9 +72,12 @@ export default function AlgoSetup({ onNavigate }) {
     try {
       const res = await api.post('/algo/start', {
         accountId: selectedAccount.rithmicAccountId || selectedAccount.accountId || selectedAccount.id || selectedAccount.name,
-        symbol: selectedSymbol,
+        symbol: selectedContract.symbol,
+        exchange: selectedContract.exchange || 'CME',
         strategyId: selectedStrategy.id,
         size: config.contracts,
+        dailyTarget: config.dailyTarget,
+        maxRisk: config.maxRisk,
       });
       // Only navigate if backend confirmed algo is running
       if (res.success && res.status?.running) {
@@ -80,7 +86,6 @@ export default function AlgoSetup({ onNavigate }) {
         setError(res.error || 'Algo did not start. Check strategy availability.');
       }
     } catch (err) {
-      // Session expired = needs re-login, show clear message
       if (err.message === 'Session expired') {
         setError('Session expired. Please disconnect and login again.');
       } else {
@@ -94,7 +99,7 @@ export default function AlgoSetup({ onNavigate }) {
   const canProceed = () => {
     switch (step) {
       case 0: return !!selectedAccount;
-      case 1: return !!selectedSymbol;
+      case 1: return !!selectedContract;
       case 2: return !!selectedStrategy;
       case 3: return config.contracts > 0;
       default: return false;
@@ -180,58 +185,52 @@ export default function AlgoSetup({ onNavigate }) {
       {step === 1 && (
         <div className="space-y-4">
           <h2 className="text-sm text-text-muted">Select a symbol</h2>
-          {symbols.length === 0 ? (
+          {contracts.length === 0 ? (
             <div className="bg-bg-card border border-border-default rounded-lg p-6 text-center">
               <Loader2 size={20} className="text-accent animate-spin mx-auto mb-2" />
               <p className="text-text-muted text-sm">Loading symbols...</p>
             </div>
           ) : (
             <>
-              {popularSymbols.length > 0 && (
+              {popularContracts.length > 0 && (
                 <div>
                   <p className="text-xs text-text-dim mb-2">Popular</p>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {popularSymbols.map((s) => {
-                      const sym = typeof s === 'string' ? s : s.symbol;
-                      return (
-                        <button
-                          key={sym}
-                          onClick={() => setSelectedSymbol(sym)}
-                          className={`bg-bg-card border rounded-lg p-3 text-center transition-all cursor-pointer ${
-                            selectedSymbol === sym
-                              ? 'border-accent bg-accent/5'
-                              : 'border-border-default hover:border-accent/30'
-                          }`}
-                        >
-                          <span className="text-sm font-mono-nums font-semibold text-text-primary">
-                            {sym}
-                          </span>
-                        </button>
-                      );
-                    })}
+                    {popularContracts.map((c) => (
+                      <button
+                        key={c.symbol}
+                        onClick={() => setSelectedContract(c)}
+                        className={`bg-bg-card border rounded-lg p-3 text-center transition-all cursor-pointer ${
+                          selectedContract?.symbol === c.symbol
+                            ? 'border-accent bg-accent/5'
+                            : 'border-border-default hover:border-accent/30'
+                        }`}
+                      >
+                        <span className="text-sm font-mono-nums font-semibold text-text-primary">
+                          {c.symbol}
+                        </span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}
-              {otherSymbols.length > 0 && (
+              {otherContracts.length > 0 && (
                 <div>
                   <p className="text-xs text-text-dim mb-2">All Symbols</p>
                   <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                    {otherSymbols.map((s) => {
-                      const sym = typeof s === 'string' ? s : s.symbol;
-                      return (
-                        <button
-                          key={sym}
-                          onClick={() => setSelectedSymbol(sym)}
-                          className={`bg-bg-card border rounded-lg p-2 text-center transition-all cursor-pointer text-xs ${
-                            selectedSymbol === sym
-                              ? 'border-accent bg-accent/5'
-                              : 'border-border-default hover:border-accent/30'
-                          }`}
-                        >
-                          <span className="font-mono-nums text-text-primary">{sym}</span>
-                        </button>
-                      );
-                    })}
+                    {otherContracts.map((c) => (
+                      <button
+                        key={c.symbol}
+                        onClick={() => setSelectedContract(c)}
+                        className={`bg-bg-card border rounded-lg p-2 text-center transition-all cursor-pointer text-xs ${
+                          selectedContract?.symbol === c.symbol
+                            ? 'border-accent bg-accent/5'
+                            : 'border-border-default hover:border-accent/30'
+                        }`}
+                      >
+                        <span className="font-mono-nums text-text-primary">{c.symbol}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}
@@ -269,7 +268,7 @@ export default function AlgoSetup({ onNavigate }) {
                       <Target size={14} className="text-accent mx-auto mb-1" />
                       <p className="text-xs text-text-muted">Win Rate</p>
                        <p className="text-sm font-mono-nums font-medium text-accent">
-                        {strat.winRate != null ? formatPercent(strat.winRate) : 'N/A'}
+                        {strat.winRate ?? 'N/A'}
                       </p>
                     </div>
                     <div className="text-center">
@@ -358,7 +357,7 @@ export default function AlgoSetup({ onNavigate }) {
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-text-muted">Symbol</span>
-              <span className="text-text-primary font-mono-nums font-medium">{selectedSymbol || 'N/A'}</span>
+              <span className="text-text-primary font-mono-nums font-medium">{selectedContract?.symbol || 'N/A'}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-text-muted">Strategy</span>

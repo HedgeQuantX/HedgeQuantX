@@ -160,6 +160,7 @@ class AlgoRunner extends EventEmitter {
     await this._cleanupFeed();
     this._log('info', 'Algo stopped');
     this._emitStatus();
+    this.emit('stopped');
 
     return { success: true, stats: this.stats };
   }

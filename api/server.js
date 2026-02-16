@@ -106,24 +106,28 @@ const PROPFIRMS = [
   { id: 'rithmic_paper', name: 'Rithmic Paper Trading', icon: '\u{1F4DD}' },
 ];
 
-const STRATEGIES = [
-  {
-    id: 'ultra-scalping',
-    name: 'HQX Scalping',
-    description: '6 Mathematical Models (Z-Score, VPIN, Kyle Lambda, Kalman, Vol, OFI)',
-    riskReward: '1:2',
-    stopTicks: 8,
-    targetTicks: 16,
-  },
-  {
-    id: 'hqx-2b',
-    name: 'HQX-2B Liquidity Sweep',
-    description: '2B Pattern with Liquidity Zone Sweeps',
-    riskReward: '1:4',
-    stopTicks: 10,
-    targetTicks: 40,
-  },
-];
+// Try to load strategy data from src/lib/m (has backtest stats)
+let STRATEGIES;
+try {
+  const { getAvailableStrategies } = require('../src/lib/m');
+  STRATEGIES = getAvailableStrategies().map((s) => ({
+    id: s.id,
+    name: s.name,
+    description: s.description,
+    riskReward: s.params?.riskReward || null,
+    stopTicks: s.params?.stopTicks || null,
+    targetTicks: s.params?.targetTicks || null,
+    winRate: s.backtest?.winRate || null,
+    profitFactor: null,
+    backtest: s.backtest || null,
+  }));
+} catch (_) {
+  // Fallback if strategy modules not available
+  STRATEGIES = [
+    { id: 'ultra-scalping', name: 'HQX Scalping', description: '6 Mathematical Models', riskReward: '1:2', stopTicks: 8, targetTicks: 16 },
+    { id: 'hqx-2b', name: 'HQX-2B Liquidity Sweep', description: '2B Pattern with Liquidity Zone Sweeps', riskReward: '1:4', stopTicks: 10, targetTicks: 40 },
+  ];
+}
 
 app.get('/api/propfirms', (_req, res) => {
   res.json({ success: true, propfirms: PROPFIRMS });
