@@ -50,21 +50,30 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    if (auth.isAuthenticated()) {
-      api.get('/auth/session')
-        .then((data) => {
-          const session = data.session || data;
-          setUser(session.user || { username: session.username });
-          setPropfirm(session.propfirm || null);
-          return fetchAccounts();
-        })
-        .catch(() => {
-          auth.logout();
-        })
-        .finally(() => setInitializing(false));
-    } else {
+    if (!auth.isAuthenticated()) {
       setInitializing(false);
+      return;
     }
+
+    // Restore session on mount.
+    // If backend session expired, the request() layer auto-reconnects
+    // using encrypted credentials before returning the response.
+    api.get('/auth/session')
+      .then((data) => {
+        const session = data.session || data;
+        setUser(session.user || { username: session.username });
+        setPropfirm(session.propfirm || null);
+        if (session.accounts?.length) {
+          setAccounts(session.accounts);
+        } else {
+          return fetchAccounts();
+        }
+      })
+      .catch(() => {
+        // Reconnect also failed — clear everything
+        auth.logout();
+      })
+      .finally(() => setInitializing(false));
   }, [fetchAccounts]);
 
   const isAuthenticated = !!user && auth.isAuthenticated();

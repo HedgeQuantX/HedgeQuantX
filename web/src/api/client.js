@@ -14,6 +14,66 @@ function clearToken() {
   localStorage.removeItem('hqx_token');
 }
 
+function getEncryptedCredentials() {
+  return localStorage.getItem('hqx_enc_creds');
+}
+
+function setEncryptedCredentials(creds) {
+  if (creds) {
+    localStorage.setItem('hqx_enc_creds', creds);
+  }
+}
+
+function clearEncryptedCredentials() {
+  localStorage.removeItem('hqx_enc_creds');
+}
+
+// Reconnect lock to prevent multiple simultaneous reconnect attempts
+let reconnectPromise = null;
+
+/**
+ * Attempt transparent reconnection to Rithmic when backend session is lost.
+ * Uses encrypted credentials stored during login.
+ * Returns true if reconnection succeeded, false otherwise.
+ * Deduplicates concurrent calls (only one reconnect at a time).
+ */
+async function attemptReconnect() {
+  // Deduplicate: if a reconnect is already in progress, wait for it
+  if (reconnectPromise) {
+    return reconnectPromise;
+  }
+
+  reconnectPromise = (async () => {
+    const encCreds = getEncryptedCredentials();
+    const token = getToken();
+    if (!encCreds || !token) return false;
+
+    try {
+      const response = await fetch(`${API_URL}/auth/reconnect`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ encryptedCredentials: encCreds }),
+      });
+
+      if (!response.ok) return false;
+
+      const data = await response.json();
+      return data.success === true;
+    } catch {
+      return false;
+    }
+  })();
+
+  try {
+    return await reconnectPromise;
+  } finally {
+    reconnectPromise = null;
+  }
+}
+
 async function request(endpoint, options = {}) {
   const token = getToken();
   const headers = {
@@ -33,12 +93,25 @@ async function request(endpoint, options = {}) {
       signal: controller.signal,
     });
 
-    // 401 on authenticated requests = session expired → redirect to login
-    // 401 on /auth/login = bad credentials → let caller handle the error
-    if (response.status === 401 && !endpoint.startsWith('/auth/login')) {
-      clearToken();
-      window.location.href = '/';
-      throw new Error('Unauthorized');
+    // 401 on authenticated requests = session expired → try reconnect first
+    // Skip reconnect for /auth/login and /auth/reconnect (would cause infinite loop)
+    if (response.status === 401 && !endpoint.startsWith('/auth/login') && !endpoint.startsWith('/auth/reconnect')) {
+      const encCreds = getEncryptedCredentials();
+      const currentToken = getToken();
+
+      if (encCreds && currentToken) {
+        // Try transparent reconnection
+        const reconnected = await attemptReconnect();
+        if (reconnected) {
+          // Retry the original request with same token (session restored)
+          clearTimeout(timeoutId);
+          return request(endpoint, options);
+        }
+      }
+
+      // Reconnect failed or no credentials — throw so caller can handle
+      // AuthContext.catch() will call auth.logout() to clear state
+      throw new Error('Session expired');
     }
 
     if (!response.ok) {
@@ -81,12 +154,19 @@ export const auth = {
     if (data.token) {
       setToken(data.token);
     }
+    // Store encrypted credentials for session persistence
+    if (data.encryptedCredentials) {
+      setEncryptedCredentials(data.encryptedCredentials);
+    }
     return data;
   },
   logout: () => {
     clearToken();
+    clearEncryptedCredentials();
   },
+  reconnect: attemptReconnect,
   getToken,
+  getEncryptedCredentials,
   isAuthenticated: () => !!getToken(),
 };
 
