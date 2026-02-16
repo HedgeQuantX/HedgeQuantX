@@ -94,9 +94,7 @@ class AlgoRunner extends EventEmitter {
       this.tickInfo = getTickInfo(symbol);
       this.strategy.initialize(symbol, this.tickInfo.tickSize, this.tickInfo.tickValue);
 
-      // Forward strategy log emissions (CLI line 103-112)
-      // When SmartLogsEngine is active, it produces all ANLZ/SIG/TRADE logs —
-      // suppress strategy's own info/analysis/signal to avoid duplicates.
+      // Forward strategy log emissions — suppress duplicates when SmartLogsEngine active
       this.strategy.on('log', (log) => {
         if (log.type === 'debug') return;
         if (this._stopSmartLogs && (log.type === 'info' || log.type === 'analysis' || log.type === 'signal')) return;
@@ -139,7 +137,9 @@ class AlgoRunner extends EventEmitter {
         if (this.running) this._emitStatus();
       });
 
+      console.log(`[AlgoRunner] Connecting TICKER_PLANT: gateway=${creds.gateway} system=${creds.systemName}`);
       await this.feed.connect(creds);
+      console.log(`[AlgoRunner] TICKER_PLANT connected, wsState=${this.feed.connection?.ws?.readyState}`);
 
       // CRITICAL: Attach tick listener + set running BEFORE subscribe
       // so first ticks arriving during subscribe are not lost
@@ -168,6 +168,12 @@ class AlgoRunner extends EventEmitter {
 
       this._log('ready', `Algo started: ${strategyId} on ${symbol} (${size} contracts)`);
       this._stopSmartLogs = startSmartLogs(this);
+
+      // Feed health check (10s) — diagnose silent disconnects
+      this._feedHealthInterval = setInterval(() => {
+        if (!this.running) return;
+        console.log(`[AlgoRunner] health: ${Math.round((Date.now() - this.stats.startTime) / 1000)}s ticks=${this._tickCount} ws=${this.feed?.connection?.ws?.readyState ?? -1}`);
+      }, 10000);
 
       // P&L polling (CLI lines 461-526) — every 2s
       this._startPnlPolling();
@@ -218,10 +224,8 @@ class AlgoRunner extends EventEmitter {
       this._log('connected', `First tick @ ${price.toFixed(2)}`);
     }
 
-    // Periodic tick count to backend console (every 500 ticks, then every 5000)
-    if (this._tickCount <= 10 || (this._tickCount <= 500 && this._tickCount % 100 === 0) || this._tickCount % 5000 === 0) {
-      console.log(`[AlgoRunner] tick#${this._tickCount} price=${price} type=${tick.type || 'unknown'}`);
-    }
+    // Tick count to console (first 10, then every 100/5000)
+    if (this._tickCount <= 10 || (this._tickCount <= 500 && this._tickCount % 100 === 0) || this._tickCount % 5000 === 0) console.log(`[AlgoRunner] tick#${this._tickCount} p=${price} t=${tick.type || '?'}`);
 
     // Buy/sell volume tracking (CLI lines 344-349)
     if (tick.side === 'buy' || tick.side === 'BUY' || tick.aggressor === 1 || tick.side === 0) {
@@ -457,6 +461,7 @@ class AlgoRunner extends EventEmitter {
   _checkAutoStop() { checkAutoStop(this); }
 
   async _cleanupFeed() {
+    if (this._feedHealthInterval) { clearInterval(this._feedHealthInterval); this._feedHealthInterval = null; }
     if (this.feed) { try { await this.feed.disconnect(); } catch (_) {} this.feed = null; }
   }
 
