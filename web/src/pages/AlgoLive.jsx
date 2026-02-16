@@ -5,7 +5,7 @@ import {
   AlertTriangle, Activity, User,
 } from 'lucide-react';
 import { WsClient, api } from '../api/client';
-import { formatCurrency, formatTime } from '../utils/format';
+import { formatCurrency, formatTime, formatNumber, pnlColor } from '../utils/format';
 import { getLogTag, getLogColor } from '../utils/log-types';
 
 function formatDuration(ms) {
@@ -45,10 +45,13 @@ export default function AlgoLive({ onNavigate }) {
   const [summary, setSummary] = useState(null);
   const [duration, setDuration] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [positions, setPositions] = useState([]);
+  const [orders, setOrders] = useState([]);
 
   const wsRef = useRef(null);
   const logRef = useRef(null);
   const durationRef = useRef(null);
+  const posInterval = useRef(null);
 
   useEffect(() => {
     if (!algoState?.startedAt) return;
@@ -122,6 +125,22 @@ export default function AlgoLive({ onNavigate }) {
     wsRef.current = ws;
     return () => { ws.disconnect(); if (durationRef.current) clearInterval(durationRef.current); };
   }, [handleWsMessage, navigate]);
+
+  // Poll positions & orders every 3s (real Rithmic data)
+  useEffect(() => {
+    const fetchPositions = () => {
+      Promise.allSettled([
+        api.get('/trading/positions'),
+        api.get('/trading/orders'),
+      ]).then(([posRes, ordRes]) => {
+        if (posRes.status === 'fulfilled') setPositions(posRes.value.positions || posRes.value || []);
+        if (ordRes.status === 'fulfilled') setOrders(ordRes.value.orders || ordRes.value || []);
+      }).catch(() => {});
+    };
+    fetchPositions();
+    posInterval.current = setInterval(fetchPositions, 3000);
+    return () => clearInterval(posInterval.current);
+  }, []);
 
   const handleStop = () => { setStopping(true); wsRef.current?.send('algo.stop'); api.post('/algo/stop').catch(() => {}); };
 
@@ -201,6 +220,60 @@ export default function AlgoLive({ onNavigate }) {
             <Stat icon={Clock} label="Duration" value={formatDuration(duration)} mono />
             <Stat icon={DollarSign} label="Connection" value="Rithmic" />
           </div>
+
+          {/* Open Positions */}
+          <div className="bg-bg-card border border-border-default rounded-lg p-3">
+            <h3 className="text-[10px] text-text-muted mb-2">
+              Open Positions {positions.length > 0 && `(${positions.length})`}
+            </h3>
+            {positions.length === 0 ? (
+              <p className="text-text-dim text-[10px]">No open positions</p>
+            ) : (
+              <div className="space-y-1.5">
+                {positions.map((pos, i) => (
+                  <div key={pos.id || i} className="flex items-center justify-between text-[11px] py-1 border-b border-border-subtle last:border-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono-nums text-text-primary">{pos.symbol || 'N/A'}</span>
+                      <span className={`px-1 py-px rounded text-[9px] ${pos.side?.toUpperCase() === 'LONG' || pos.side?.toUpperCase() === 'BUY' ? 'bg-accent-dim text-accent' : 'bg-pink-dim text-pink'}`}>
+                        {pos.side || 'N/A'}
+                      </span>
+                      <span className="font-mono-nums text-text-muted">{pos.size ?? 'N/A'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono-nums text-text-muted">{formatNumber(pos.entry)}</span>
+                      <span className={`font-mono-nums ${pnlColor(pos.pnl)}`}>{formatCurrency(pos.pnl)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Active Orders */}
+          {orders.length > 0 && (
+            <div className="bg-bg-card border border-border-default rounded-lg p-3">
+              <h3 className="text-[10px] text-text-muted mb-2">
+                Active Orders ({orders.length})
+              </h3>
+              <div className="space-y-1.5">
+                {orders.map((order, i) => (
+                  <div key={order.id || i} className="flex items-center justify-between text-[11px] py-1 border-b border-border-subtle last:border-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono-nums text-text-primary">{order.symbol || 'N/A'}</span>
+                      <span className={`px-1 py-px rounded text-[9px] ${order.side?.toUpperCase() === 'BUY' ? 'bg-accent-dim text-accent' : 'bg-pink-dim text-pink'}`}>
+                        {order.side || 'N/A'}
+                      </span>
+                      <span className="text-text-muted">{order.type || 'N/A'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono-nums text-text-muted">{order.qty ?? 'N/A'}</span>
+                      <span className="font-mono-nums text-text-primary">{formatNumber(order.price)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* RIGHT COLUMN — Execution Logs */}

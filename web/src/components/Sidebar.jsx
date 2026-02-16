@@ -2,14 +2,12 @@ import {
   LayoutDashboard,
   Bot,
   BarChart3,
-  ClipboardList,
 } from 'lucide-react';
 
 const navItems = [
   { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { id: 'algo', icon: Bot, label: 'Algo Trading' },
   { id: 'stats', icon: BarChart3, label: 'Stats' },
-  { id: 'positions', icon: ClipboardList, label: 'Positions' },
 ];
 
 export default function Sidebar({ activeTab, onTabChange }) {

@@ -6,7 +6,6 @@ import Dashboard from './pages/Dashboard';
 import AlgoSetup from './pages/AlgoSetup';
 import AlgoLive from './pages/AlgoLive';
 import Stats from './pages/Stats';
-import Positions from './pages/Positions';
 import { Loader2 } from 'lucide-react';
 import { LogoIcon } from './components/Logo';
 
@@ -15,7 +14,6 @@ const TABS = {
   algo: AlgoSetup,
   'algo-live': AlgoLive,
   stats: Stats,
-  positions: Positions,
 };
 
 export default function App() {
