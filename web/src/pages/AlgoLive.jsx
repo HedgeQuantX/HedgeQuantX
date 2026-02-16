@@ -209,7 +209,7 @@ export default function AlgoLive({ onNavigate }) {
           </div>
           <div className="flex items-center gap-3 text-xs text-text-muted flex-wrap">
             <span className="flex items-center gap-1"><Wifi size={12} className={wsStatus === 'connected' ? 'text-accent' : 'text-pink'} />{wsStatus}</span>
-            {algoState?.propfirm && <span className="flex items-center gap-1"><Shield size={12} className="text-accent" />{algoState.propfirm}</span>}
+            {algoState?.propfirm && <span className="flex items-center gap-1"><Shield size={12} className="text-accent" />{typeof algoState.propfirm === 'string' ? algoState.propfirm : algoState.propfirm?.name || 'N/A'}</span>}
             {price != null && <span className="flex items-center gap-1 font-mono-nums text-text-primary"><Activity size={12} className="text-accent" />{Number(price).toFixed(2)}</span>}
           </div>
         </div>

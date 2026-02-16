@@ -42,7 +42,8 @@ router.post('/start', requireAuth, async (req, res) => {
       a.name === accountId
     );
     const accountName = matchedAccount?.name || accountId;
-    const propfirm = req.service.propfirm || req.service.platformName || null;
+    const propfirmRaw = req.service.propfirm || req.service.platformName || null;
+    const propfirm = typeof propfirmRaw === 'string' ? propfirmRaw : propfirmRaw?.name || null;
 
     // Create new algo runner
     const runner = new AlgoRunner(req.service);
