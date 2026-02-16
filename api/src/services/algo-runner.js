@@ -126,6 +126,7 @@ class AlgoRunner extends EventEmitter {
       this._setupPositionUpdateListener();
 
       await this.service.disconnectTicker();
+      await new Promise(r => setTimeout(r, 1500)); // Wait for Rithmic to release TICKER_PLANT slot
       this.feed = new MarketDataFeed();
 
       this.feed.on('debug', (msg) => this._log('debug', `[Feed] ${msg}`));
