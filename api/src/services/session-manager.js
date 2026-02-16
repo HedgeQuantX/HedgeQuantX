@@ -5,15 +5,15 @@
  * Each web user gets their own RithmicService instance.
  *
  * - Map<sessionId, { service, accounts, propfirm, username, createdAt, lastActivity }>
- * - Cleans up inactive sessions after 30 minutes
+ * - Cleans up inactive sessions after 8 hours (aligned with JWT expiry)
  */
 
 'use strict';
 
 const { v4: uuidv4 } = require('uuid');
 
-const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes of inactivity
-const CLEANUP_INTERVAL_MS = 60 * 1000;  // Check every 60 seconds
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours of inactivity (aligned with JWT expiry)
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;  // Check every 5 minutes
 
 class SessionManager {
   constructor() {
