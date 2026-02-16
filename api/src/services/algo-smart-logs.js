@@ -69,6 +69,12 @@ function startSmartLogs(runner) {
     // Stale tick detection
     if (runner._tickCount === lastTickCount) {
       staleCount++;
+      // Log feed status when going stale (once at 5s, then every 30s)
+      if (staleCount === 5 || (staleCount > 5 && staleCount % 30 === 0)) {
+        const feedState = runner.feed?.connected ? 'connected' : 'disconnected';
+        const wsState = runner.feed?.connection?.ws?.readyState ?? -1;
+        console.log(`[SmartLogs] Feed stale: tickCount=${runner._tickCount} feedState=${feedState} wsReady=${wsState} stale=${staleCount}s`);
+      }
       if (staleCount > 5) return; // Feed dead, stop logging
     } else {
       staleCount = 0;
