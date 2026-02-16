@@ -218,6 +218,11 @@ class AlgoRunner extends EventEmitter {
       this._log('connected', `First tick @ ${price.toFixed(2)}`);
     }
 
+    // Periodic tick count to backend console (every 500 ticks, then every 5000)
+    if (this._tickCount <= 10 || (this._tickCount <= 500 && this._tickCount % 100 === 0) || this._tickCount % 5000 === 0) {
+      console.log(`[AlgoRunner] tick#${this._tickCount} price=${price} type=${tick.type || 'unknown'}`);
+    }
+
     // Buy/sell volume tracking (CLI lines 344-349)
     if (tick.side === 'buy' || tick.side === 'BUY' || tick.aggressor === 1 || tick.side === 0) {
       this._buyVolume += volume;
