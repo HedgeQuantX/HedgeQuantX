@@ -1,18 +1,6 @@
 /**
  * Algo Runner — Web equivalent of CLI algo-executor.js
- *
- * MUST mirror CLI behavior exactly:
- * - strategy.initialize(contractId, tickSize, tickValue)
- * - strategy.preloadBars() warmup
- * - strategy.on('signal') event listener
- * - positionUpdate listener (cancel orphan brackets on close)
- * - pendingOrder guard
- * - P&L polling from Rithmic cache (2s interval)
- * - Tick processing: Number(tick.price) || Number(tick.tradePrice)
- * - Latency: ssboe/usecs Rithmic timestamps
- * - 5-step emergency flatten on stop
- * - SmartLogsEngine 1s interval
- *
+ * Mirrors CLI: strategy init, signal/tick processing, OCO brackets, P&L polling, emergency flatten.
  * NO MOCK DATA - All data from Rithmic API.
  */
 
@@ -53,6 +41,10 @@ class AlgoRunner extends EventEmitter {
     this.config = null;
     this.tickInfo = null;
 
+    // Cooldown after position close to prevent immediate re-entry (ms)
+    this._lastCloseTime = 0;
+    this._closeCooldownMs = 2000;
+
     // Tick state (mirrors CLI variables)
     this._lastPrice = 0;
     this._tickCount = 0;
@@ -68,6 +60,9 @@ class AlgoRunner extends EventEmitter {
     this._pnlInterval = null;
     this._positionUpdateHandler = null;
     this._startingPnL = null;
+
+    // Buffer smartlog events for WS replay
+    this.on('smartlog', (data) => this._bufferSmartLog(data));
   }
 
   async start(config) {
@@ -145,6 +140,14 @@ class AlgoRunner extends EventEmitter {
       });
 
       await this.feed.connect(creds);
+
+      // CRITICAL: Attach tick listener + set running BEFORE subscribe
+      // so first ticks arriving during subscribe are not lost
+      this.running = true;
+      this.stats.startTime = Date.now();
+      this._lastTickTime = Date.now();
+      this.feed.on('tick', (tick) => this._onTick(tick));
+
       await this.feed.subscribe(symbol, exchange);
 
       // Preload historical bars (CLI lines 436-456)
@@ -163,12 +166,7 @@ class AlgoRunner extends EventEmitter {
         }
       }
 
-      this.running = true;
-      this.stats.startTime = Date.now();
-      this._lastTickTime = Date.now();
       this._log('ready', `Algo started: ${strategyId} on ${symbol} (${size} contracts)`);
-
-      this.feed.on('tick', (tick) => this._onTick(tick));
       this._stopSmartLogs = startSmartLogs(this);
 
       // P&L polling (CLI lines 461-526) — every 2s
@@ -279,6 +277,12 @@ class AlgoRunner extends EventEmitter {
   async _onSignal(signal) {
     if (!this.running || this._pendingOrder || this._currentPosition !== 0) return;
 
+    // Cooldown after bracket close — prevent re-entry while OCO cleanup processes
+    if (this._lastCloseTime && (Date.now() - this._lastCloseTime) < this._closeCooldownMs) {
+      this._log('risk', 'Cooldown active — waiting for bracket cleanup');
+      return;
+    }
+
     const { direction, entry, entryPrice, stopLoss, takeProfit, confidence } = signal;
     const entryPx = entry || entryPrice;
     const sl = stopLoss || signal.sl;
@@ -335,11 +339,13 @@ class AlgoRunner extends EventEmitter {
   // Bracket fill monitor
   // ---------------------------------------------------------------------------
   _monitorBracketFill(entryPrice, sl, tp, direction) {
+    let handled = false;
     const listener = (order) => {
-      if (this._currentPosition === 0) return;
+      if (handled || this._currentPosition === 0) return;
       if (order.notifyType !== 5 || order.symbol !== this.config.symbol) return;
       const exitPrice = order.avgFillPrice || order.fillPrice || 0;
       if (!exitPrice) return;
+      handled = true;
 
       const priceDiff = direction === 'long' ? exitPrice - entryPrice : entryPrice - exitPrice;
       const ticks = priceDiff / this.tickInfo.tickSize;
@@ -353,7 +359,7 @@ class AlgoRunner extends EventEmitter {
       else if (pnl < 0) this.stats.losses++;
 
       this._log(isWin ? 'fill_win' : 'fill_loss',
-        `${isWin ? 'WIN' : 'LOSS'} ${isWin ? '+' : ''}$${pnl.toFixed(2)} | ${direction.toUpperCase()} ${entryPrice} → ${exitPrice} (${ticks.toFixed(1)} ticks, ${(dur / 1000).toFixed(0)}s)`);
+        `${isWin ? 'WIN' : 'LOSS'} ${isWin ? '+' : ''}$${pnl.toFixed(2)} | ${direction.toUpperCase()} ${entryPrice} \u2192 ${exitPrice} (${ticks.toFixed(1)} ticks, ${(dur / 1000).toFixed(0)}s)`);
 
       this.emit('trade', { direction, entry: entryPrice, exit: exitPrice, pnl, ticks: Math.round(ticks * 100) / 100, duration: dur, isWin });
       this.emit('pnl', { dayPnl: this.stats.totalPnl, openPnl: 0, closedPnl: this.stats.totalPnl });
@@ -361,6 +367,8 @@ class AlgoRunner extends EventEmitter {
       const winRate = this.stats.trades > 0 ? (this.stats.wins / this.stats.trades) * 100 : 0;
       this.emit('statsUpdate', { trades: this.stats.trades, wins: this.stats.wins, losses: this.stats.losses, winRate, totalPnl: this.stats.totalPnl, latency: this.stats.lastLatency });
 
+      // Set cooldown BEFORE resetting position to prevent race with new signals
+      this._lastCloseTime = Date.now();
       this.position = null;
       this._currentPosition = 0;
       this._pendingOrder = false;
@@ -398,23 +406,32 @@ class AlgoRunner extends EventEmitter {
       this._currentPosition = qty;
 
       if (qty === 0 && oldPos !== 0) {
-        // Position closed externally
-        this._log('trade', `Position closed (was ${oldPos})`);
+        // If bracket monitor already handled this close (cooldown set), skip trade count
+        const alreadyHandled = this._lastCloseTime && (Date.now() - this._lastCloseTime) < 1000;
+        if (!alreadyHandled) {
+          this._log('trade', `Position closed (was ${oldPos})`);
+          this.stats.trades++;
+        }
         this._pendingOrder = false;
+        this._lastCloseTime = Date.now();
 
         // Cancel orphan brackets (CLI lines 153-161)
         if (this._activeBrackets.slOrderId || this._activeBrackets.tpOrderId) {
           try {
             await this.service.cancelAllOrders(accId);
-            this._log('system', 'Brackets cancelled');
+            if (!alreadyHandled) this._log('system', 'Brackets cancelled');
           } catch (_) {}
           this._activeBrackets = { slOrderId: null, tpOrderId: null, entryPrice: null };
         }
-        this.stats.trades++;
       } else if (qty !== 0 && oldPos === 0) {
         this._log('trade', `Position opened: ${qty}`);
       } else if (Math.sign(qty) !== Math.sign(oldPos)) {
-        this._log('error', `Position REVERSED: ${oldPos} -> ${qty}`);
+        // Position reversed — emergency: cancel all and flatten
+        this._log('error', `Position REVERSED: ${oldPos} -> ${qty} — cancelling all orders`);
+        try {
+          await this.service.cancelAllOrders(accId);
+        } catch (_) {}
+        this._activeBrackets = { slOrderId: null, tpOrderId: null, entryPrice: null };
       }
     };
 
@@ -457,6 +474,15 @@ class AlgoRunner extends EventEmitter {
     if (!this._logBuffer) this._logBuffer = [];
     if (this._logBuffer.length < 200) this._logBuffer.push(entry);
     this.emit('log', entry);
+  }
+
+  /**
+   * Buffer smartlog events for WS replay (smartlogs bypass _log)
+   */
+  _bufferSmartLog(data) {
+    if (!this._logBuffer) this._logBuffer = [];
+    const entry = { level: data.type || 'analysis', message: data.message, timestamp: data.timestamp || Date.now(), kind: 'smartlog' };
+    if (this._logBuffer.length < 200) this._logBuffer.push(entry);
   }
 }
 

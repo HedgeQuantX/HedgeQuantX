@@ -30,7 +30,7 @@ export default function AccountCard({ account }) {
           </div>
           <div>
             <p className="text-sm font-medium text-text-primary truncate max-w-[140px]">
-              {account.name || 'N/A'}
+              {account.name || '\u2014'}
             </p>
             <p className="text-xs text-text-muted">{account.id || ''}</p>
           </div>

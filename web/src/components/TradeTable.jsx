@@ -32,20 +32,22 @@ export default function TradeTable({ trades = [], title = 'Recent Trades' }) {
               className="border-b border-border-subtle hover:bg-bg-card-hover transition-colors"
             >
               <td className="py-2 px-2 font-mono-nums font-medium text-text-primary">
-                {trade.symbol || 'N/A'}
+                {trade.symbol || '\u2014'}
               </td>
               <td className="py-2 px-2">
                 <span
                   className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                    String(trade.side || '').toUpperCase() === 'LONG' || String(trade.side || '').toUpperCase() === 'BUY'
-                      ? 'bg-accent-dim text-accent'
-                      : 'bg-pink-dim text-pink'
+                    !trade.side
+                      ? 'bg-bg-card-hover text-text-muted'
+                      : String(trade.side).toUpperCase() === 'LONG' || String(trade.side).toUpperCase() === 'BUY'
+                        ? 'bg-accent-dim text-accent'
+                        : 'bg-pink-dim text-pink'
                   }`}
                 >
-                  {trade.side || 'N/A'}
+                  {trade.side || '\u2014'}
                 </span>
               </td>
-              <td className="py-2 px-2 text-right font-mono-nums">{trade.qty ?? 'N/A'}</td>
+              <td className="py-2 px-2 text-right font-mono-nums">{trade.qty ?? 0}</td>
               <td className="py-2 px-2 text-right font-mono-nums">
                 {formatNumber(trade.entry)}
               </td>

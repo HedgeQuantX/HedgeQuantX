@@ -100,6 +100,18 @@ export default function AlgoLive({ onNavigate, onAlgoEnd }) {
           setPrice(data.payload?.price ?? null);
           setLatency(data.payload?.latency ?? null);
           break;
+        case 'algo.replay': {
+          // Server sends full log buffer on WS connect — REPLACE events, don't append
+          const replayEvents = (data.events || [])
+            .filter((e) => e.level !== 'debug' && e.kind !== 'debug' && !(typeof e.message === 'string' && e.message.startsWith('[DBG]')))
+            .map((e) => ({
+              ...e,
+              message: typeof e.message === 'string' ? e.message : (e.message != null ? String(e.message) : ''),
+              timestamp: e.timestamp || Date.now(),
+            }));
+          setEvents(replayEvents);
+          break;
+        }
         case 'algo.event': {
           const evt = data.payload || data;
           // Filter out debug/DBG logs from frontend display

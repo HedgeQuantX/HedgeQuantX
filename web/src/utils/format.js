@@ -1,5 +1,5 @@
 export function formatCurrency(value, decimals = 2) {
-  if (value == null || isNaN(value)) return 'N/A';
+  if (value == null || isNaN(value)) return '+$0.00';
   const num = Number(value);
   const prefix = num >= 0 ? '+' : '';
   return `${prefix}$${Math.abs(num).toLocaleString('en-US', {
@@ -9,7 +9,7 @@ export function formatCurrency(value, decimals = 2) {
 }
 
 export function formatBalance(value, decimals = 2) {
-  if (value == null || isNaN(value)) return 'N/A';
+  if (value == null || isNaN(value)) return '$0.00';
   return `$${Number(value).toLocaleString('en-US', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
@@ -17,12 +17,12 @@ export function formatBalance(value, decimals = 2) {
 }
 
 export function formatPercent(value, decimals = 1) {
-  if (value == null || isNaN(value)) return 'N/A';
+  if (value == null || isNaN(value)) return '0.0%';
   return `${Number(value).toFixed(decimals)}%`;
 }
 
 export function formatTime(timestamp) {
-  if (!timestamp) return 'N/A';
+  if (!timestamp) return '\u2014';
   const date = new Date(timestamp);
   return date.toLocaleTimeString('en-US', {
     hour: '2-digit',
@@ -33,7 +33,7 @@ export function formatTime(timestamp) {
 }
 
 export function formatDate(timestamp) {
-  if (!timestamp) return 'N/A';
+  if (!timestamp) return '\u2014';
   const date = new Date(timestamp);
   return date.toLocaleDateString('en-US', {
     month: 'short',
@@ -43,12 +43,12 @@ export function formatDate(timestamp) {
 }
 
 export function formatDateTime(timestamp) {
-  if (!timestamp) return 'N/A';
+  if (!timestamp) return '\u2014';
   return `${formatDate(timestamp)} ${formatTime(timestamp)}`;
 }
 
 export function formatNumber(value, decimals = 2) {
-  if (value == null || isNaN(value)) return 'N/A';
+  if (value == null || isNaN(value)) return '0';
   return Number(value).toLocaleString('en-US', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,

@@ -130,8 +130,17 @@ function setupWebSocket(server) {
       // Map AlgoRunner events → frontend-expected event types
       // Mirrors ALL CLI log types: system, connected, ready, signal, trade,
       // fill_buy, fill_sell, fill_win, fill_loss, error, risk, analysis, etc.
+      // Throttle tick → price updates to max 4/sec (avoid WS flood → disconnect)
+      let lastPriceSendTime = 0;
+      const PRICE_THROTTLE_MS = 250;
+
       const eventMap = {
-        tick: (data) => ({ type: 'algo.price', payload: data }),
+        tick: (data) => {
+          const now = Date.now();
+          if (now - lastPriceSendTime < PRICE_THROTTLE_MS) return null; // skip
+          lastPriceSendTime = now;
+          return { type: 'algo.price', payload: data };
+        },
         pnl: (data) => ({ type: 'algo.pnl', pnl: data.dayPnl, payload: data }),
         position: (data) => ({
           type: 'algo.position',
@@ -141,7 +150,7 @@ function setupWebSocket(server) {
         signal: (data) => ({
           type: 'algo.event', payload: {
             ...data, kind: 'signal', timestamp: Date.now(),
-            message: `Signal: ${(data.direction || '').toUpperCase()} @ ${data.entry || 'MKT'} | SL=${data.sl || 'N/A'} | TP=${data.tp || 'N/A'} | conf=${data.confidence != null ? (data.confidence * 100).toFixed(0) + '%' : 'N/A'}`,
+            message: `Signal: ${(data.direction || '').toUpperCase()} @ ${data.entry || 'MKT'} | SL=${data.sl || '\u2014'} | TP=${data.tp || '\u2014'} | conf=${data.confidence != null ? (data.confidence * 100).toFixed(0) + '%' : '\u2014'}`,
           },
         }),
         trade: (data) => ({
@@ -172,7 +181,10 @@ function setupWebSocket(server) {
       };
 
       for (const [event, transform] of Object.entries(eventMap)) {
-        const fn = (data) => wsSend(ws, transform(data));
+        const fn = (data) => {
+          const msg = transform(data);
+          if (msg) wsSend(ws, msg);
+        };
         runner.on(event, fn);
         boundListeners.push({ runner, event, fn });
       }
@@ -188,12 +200,11 @@ function setupWebSocket(server) {
     if (session.algoRunner) {
       attachAlgoListeners(session.algoRunner);
 
-      // Replay buffered logs so WS clients connecting after algo start see history
+      // Replay buffered logs — send with replay flag so frontend replaces instead of appends
       const buffer = session.algoRunner._logBuffer;
       if (buffer && buffer.length > 0) {
-        for (const entry of buffer) {
-          wsSend(ws, { type: 'algo.event', payload: entry });
-        }
+        const replayEntries = buffer.map((entry) => ({ type: 'algo.event', payload: { ...entry, replay: true } }));
+        wsSend(ws, { type: 'algo.replay', events: replayEntries.map((e) => e.payload) });
       }
     }
 

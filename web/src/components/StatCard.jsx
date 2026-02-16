@@ -6,7 +6,7 @@ export default function StatCard({ label, value, icon: Icon, color = 'text-accen
         {Icon && <Icon size={16} className={color} />}
       </div>
       <p className={`text-lg font-semibold ${color} ${mono ? 'font-mono-nums' : ''}`}>
-        {value ?? 'N/A'}
+        {value ?? '\u2014'}
       </p>
     </div>
   );
