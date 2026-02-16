@@ -66,8 +66,13 @@ body {
   letter-spacing: 0.02em;
 }
 
-/* Preserve case for inputs and code only */
-input, textarea, code, pre {
+/* Force uppercase on ALL elements (buttons, selects, etc. don't inherit) */
+*, *::before, *::after {
+  text-transform: inherit;
+}
+
+/* Preserve case for inputs, code, and monospace numbers only */
+input, textarea, code, pre, .font-mono-nums {
   text-transform: none;
 }
 

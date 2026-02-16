@@ -275,9 +275,9 @@ export default function AlgoSetup({ onNavigate }) {
                     </div>
                     <div className="text-center">
                       <TrendingUp size={14} className="text-accent mx-auto mb-1" />
-                      <p className="text-xs text-text-muted">P. Factor</p>
+                      <p className="text-xs text-text-muted">Trades</p>
                       <p className="text-sm font-mono-nums font-medium text-text-primary">
-                        {strat.profitFactor ?? 'N/A'}
+                        {strat.backtest?.trades ?? 'N/A'}
                       </p>
                     </div>
                     <div className="text-center">

@@ -124,8 +124,8 @@ try {
 } catch (_) {
   // Fallback if strategy modules not available
   STRATEGIES = [
-    { id: 'ultra-scalping', name: 'HQX Scalping', description: '6 Mathematical Models', riskReward: '1:2', stopTicks: 8, targetTicks: 16 },
-    { id: 'hqx-2b', name: 'HQX-2B Liquidity Sweep', description: '2B Pattern with Liquidity Zone Sweeps', riskReward: '1:4', stopTicks: 10, targetTicks: 40 },
+    { id: 'ultra-scalping', name: 'HQX Scalping', description: '6 Mathematical Models', riskReward: '1:2', stopTicks: 8, targetTicks: 16, winRate: '71.1%', backtest: { pnl: '$2,012,373', winRate: '71.1%', trades: '146,685', period: 'Jan 2020 - Nov 2025' } },
+    { id: 'hqx-2b', name: 'HQX-2B Liquidity Sweep', description: '2B Pattern with Liquidity Zone Sweeps', riskReward: '1:4', stopTicks: 10, targetTicks: 40, winRate: '82.8%', backtest: { pnl: '$6,601,305', winRate: '82.8%', profitFactor: 3.26, trades: '100,220', period: 'Dec 2020 - Nov 2025' } },
   ];
 }
 
