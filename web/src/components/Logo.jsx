@@ -1,35 +1,18 @@
 /**
- * HQ𝕏 Logo - Abstract burst icon inspired by Edel Finance style.
- * Tilted ~15deg, organic thick petals, no outlines.
+ * HQ𝕏 Logo — 4-point sparkle star icon.
+ * Matches Flaticon sparkle_8800631 style. Color via className (currentColor).
  */
 export function LogoIcon({ size = 32, className = '' }) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 140 140"
+      viewBox="0 0 24 24"
       width={size}
       height={size}
       className={className}
+      fill="currentColor"
     >
-      <g transform="translate(70,70) rotate(-15)" fill="currentColor">
-        {/* 7 organic thick petals like Edel — asymmetric, flowing */}
-        {/* Top-left petal (large) */}
-        <path d="M-8,-8 C-15,-30 -18,-52 -6,-62 C4,-52 8,-30 4,-8Z" />
-        {/* Top-right petal */}
-        <path d="M8,-6 C22,-22 40,-38 52,-30 C42,-20 24,-10 6,-2Z" />
-        {/* Right petal (wide) */}
-        <path d="M8,2 C28,-4 50,-6 60,4 C50,14 28,10 8,6Z" />
-        {/* Bottom-right petal (large) */}
-        <path d="M6,8 C18,24 30,44 24,56 C14,46 6,28 2,8Z" />
-        {/* Bottom petal */}
-        <path d="M-2,8 C-6,30 -12,50 -22,56 C-24,44 -14,26 -6,8Z" />
-        {/* Left petal (large, flowing) */}
-        <path d="M-8,-2 C-30,6 -52,10 -62,2 C-52,-8 -30,-8 -8,-6Z" />
-        {/* Upper petal (narrow, accent) */}
-        <path d="M2,-8 C12,-26 26,-44 36,-42 C28,-30 14,-16 4,-6Z" />
-        {/* Center dot */}
-        <circle cx="0" cy="0" r="5" />
-      </g>
+      <path d="M12 1C12 1 13.5 7.5 15 9C16.5 10.5 23 12 23 12C23 12 16.5 13.5 15 15C13.5 16.5 12 23 12 23C12 23 10.5 16.5 9 15C7.5 13.5 1 12 1 12C1 12 7.5 10.5 9 9C10.5 7.5 12 1 12 1Z" />
     </svg>
   );
 }
