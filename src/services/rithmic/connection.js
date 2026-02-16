@@ -74,14 +74,18 @@ class RithmicConnection extends EventEmitter {
       // Build WebSocket options
       const wsOptions = { rejectUnauthorized: false };
       
-      // Add SOCKS5 proxy agent if configured
-      const agent = getProxyAgent();
-      if (agent) {
-        wsOptions.agent = agent;
-        const proxyInfo = PROXY.active;
-        if (proxyInfo) {
-          console.log(`[Rithmic] Using proxy: ${proxyInfo.host}:${proxyInfo.port}`);
+      // Add SOCKS5 proxy agent if configured (skip for streaming feeds)
+      if (!config.skipProxy) {
+        const agent = getProxyAgent();
+        if (agent) {
+          wsOptions.agent = agent;
+          const proxyInfo = PROXY.active;
+          if (proxyInfo) {
+            console.log(`[Rithmic] Using proxy: ${proxyInfo.host}:${proxyInfo.port}`);
+          }
         }
+      } else {
+        console.log('[Rithmic] Direct connection (no proxy)');
       }
       
       this.ws = new WebSocket(config.uri, wsOptions);
