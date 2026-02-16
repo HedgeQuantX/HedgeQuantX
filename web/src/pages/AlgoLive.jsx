@@ -58,21 +58,35 @@ export default function AlgoLive({ onNavigate }) {
   }, [algoState?.startedAt]);
 
   const handleWsMessage = useCallback((data) => {
-    switch (data.type) {
-      case 'algo.state':   setAlgoState(data.payload || data); break;
-      case 'algo.pnl':     setPnl(data.payload?.pnl ?? data.pnl); break;
-      case 'algo.stats':   setStats((prev) => ({ ...prev, ...(data.payload || data) })); break;
-      case 'algo.position': setPosition(data.payload?.position ?? data.position ?? 'FLAT'); break;
-      case 'algo.price':
-        setPrice(data.payload?.price ?? null);
-        setLatency(data.payload?.latency ?? null);
-        break;
-      case 'algo.event':   setEvents((prev) => [...prev.slice(-499), data.payload || data]); break;
-      case 'algo.summary': setSummary(data.payload || data); break;
-      case 'algo.stopped':
-        setTimeout(() => setStopping(false), 500);
-        break;
-      default: break;
+    try {
+      switch (data.type) {
+        case 'algo.state':   setAlgoState(data.payload || data); break;
+        case 'algo.pnl':     setPnl(data.payload?.pnl ?? data.pnl); break;
+        case 'algo.stats':   setStats((prev) => ({ ...prev, ...(data.payload || data) })); break;
+        case 'algo.position': setPosition(data.payload?.position ?? data.position ?? 'FLAT'); break;
+        case 'algo.price':
+          setPrice(data.payload?.price ?? null);
+          setLatency(data.payload?.latency ?? null);
+          break;
+        case 'algo.event': {
+          const evt = data.payload || data;
+          // Ensure event has at minimum a message string and timestamp
+          const safeEvt = {
+            ...evt,
+            message: typeof evt.message === 'string' ? evt.message : (evt.message != null ? String(evt.message) : null),
+            timestamp: evt.timestamp || Date.now(),
+          };
+          setEvents((prev) => [...prev.slice(-499), safeEvt]);
+          break;
+        }
+        case 'algo.summary': setSummary(data.payload || data); break;
+        case 'algo.stopped':
+          setTimeout(() => setStopping(false), 500);
+          break;
+        default: break;
+      }
+    } catch (err) {
+      console.error('[AlgoLive] WS message error:', err, data);
     }
   }, []);
 
