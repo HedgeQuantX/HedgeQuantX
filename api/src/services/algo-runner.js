@@ -447,9 +447,16 @@ class AlgoRunner extends EventEmitter {
   }
 
   _log(level, message) {
-    // Never send debug logs to frontend — they pollute the execution log
-    if (level === 'debug') return;
-    this.emit('log', { level, message, timestamp: Date.now() });
+    const entry = { level, message, timestamp: Date.now() };
+    // Debug logs → console only (not frontend)
+    if (level === 'debug') {
+      console.log(`[AlgoRunner][DBG] ${message}`);
+      return;
+    }
+    // Buffer logs so WS clients connecting after start can replay
+    if (!this._logBuffer) this._logBuffer = [];
+    if (this._logBuffer.length < 200) this._logBuffer.push(entry);
+    this.emit('log', entry);
   }
 }
 

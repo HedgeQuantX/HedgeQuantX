@@ -35,8 +35,8 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-3">
-        <Loader2 size={24} className="text-accent animate-spin" />
+      <div className="flex flex-col items-center justify-center h-full min-h-[60vh] gap-3">
+        <Loader2 size={28} className="text-accent animate-spin" />
         <p className="text-sm text-text-muted">Loading dashboard...</p>
       </div>
     );

@@ -187,6 +187,14 @@ function setupWebSocket(server) {
 
     if (session.algoRunner) {
       attachAlgoListeners(session.algoRunner);
+
+      // Replay buffered logs so WS clients connecting after algo start see history
+      const buffer = session.algoRunner._logBuffer;
+      if (buffer && buffer.length > 0) {
+        for (const entry of buffer) {
+          wsSend(ws, { type: 'algo.event', payload: entry });
+        }
+      }
     }
 
     // -----------------------------------------------------------------------

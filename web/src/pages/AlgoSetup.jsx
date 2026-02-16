@@ -1,15 +1,41 @@
 import { useState, useEffect } from 'react';
 import {
   ChevronRight, ChevronLeft, Rocket, Loader2, AlertCircle,
-  Target, TrendingUp, Gauge, Wallet,
+  Target, TrendingUp, Gauge, Wallet, DollarSign, Shield, Clock,
+  BarChart3, Zap,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
-import { formatPercent } from '../utils/format';
 
 const STEPS = ['Account', 'Symbol', 'Strategy', 'Configure', 'Launch'];
 
 const POPULAR_SYMBOLS = ['ES', 'NQ', 'MES', 'MNQ', 'YM', 'RTY', 'CL', 'GC'];
+
+// Contract descriptions — market standard names (same as CLI src/config/constants.js)
+const DESCRIPTIONS = {
+  ES: 'E-mini S&P 500', MES: 'Micro E-mini S&P 500',
+  NQ: 'E-mini Nasdaq 100', MNQ: 'Micro E-mini Nasdaq',
+  RTY: 'E-mini Russell 2000', M2K: 'Micro E-mini Russell',
+  YM: 'E-mini Dow $5', MYM: 'Micro E-mini Dow',
+  EMD: 'E-mini S&P MidCap', NKD: 'Nikkei 225',
+  GC: 'Gold (100oz)', MGC: 'Micro Gold (10oz)',
+  SI: 'Silver (5000oz)', SIL: 'Micro Silver',
+  HG: 'Copper', MHG: 'Micro Copper', PL: 'Platinum', PA: 'Palladium',
+  CL: 'Crude Oil WTI', MCL: 'Micro Crude Oil', NG: 'Natural Gas',
+  BZ: 'Brent Crude', RB: 'RBOB Gasoline', HO: 'Heating Oil',
+  '6E': 'Euro FX', M6E: 'Micro Euro', '6B': 'British Pound', M6B: 'Micro GBP',
+  '6A': 'Australian $', M6A: 'Micro AUD', '6J': 'Japanese Yen',
+  '6C': 'Canadian $', '6S': 'Swiss Franc', '6N': 'New Zealand $',
+  BTC: 'Bitcoin', MBT: 'Micro Bitcoin', ETH: 'Ether', MET: 'Micro Ether',
+  ZB: '30Y T-Bond', ZN: '10Y T-Note', ZF: '5Y T-Note', ZT: '2Y T-Note',
+  ZC: 'Corn', ZS: 'Soybeans', ZW: 'Wheat', ZM: 'Soybean Meal',
+  ZL: 'Soybean Oil', ZO: 'Oats',
+  LE: 'Live Cattle', HE: 'Lean Hogs', GF: 'Feeder Cattle',
+};
+
+function getDesc(c) {
+  return c.name || DESCRIPTIONS[c.baseSymbol] || c.baseSymbol;
+}
 
 export default function AlgoSetup({ onNavigate }) {
   const { accounts, propfirm } = useAuth();
@@ -35,7 +61,6 @@ export default function AlgoSetup({ onNavigate }) {
     api.get('/contracts')
       .then((data) => {
         const list = data.contracts || data || [];
-        // Normalize: ensure each entry is an object with symbol, baseSymbol, exchange
         const normalized = list.map((c) =>
           typeof c === 'string'
             ? { symbol: c, baseSymbol: c.replace(/[A-Z]\d+$/, ''), exchange: 'CME' }
@@ -43,9 +68,7 @@ export default function AlgoSetup({ onNavigate }) {
         );
         if (mounted) setContracts(normalized);
       })
-      .catch(() => {
-        if (mounted) setContracts([]);
-      });
+      .catch(() => { if (mounted) setContracts([]); });
     return () => { mounted = false; };
   }, [selectedAccount]);
 
@@ -54,12 +77,8 @@ export default function AlgoSetup({ onNavigate }) {
     if (!selectedContract) return;
     let mounted = true;
     api.get(`/strategies?symbol=${selectedContract.symbol}`)
-      .then((data) => {
-        if (mounted) setStrategies(data.strategies || data || []);
-      })
-      .catch(() => {
-        if (mounted) setStrategies([]);
-      });
+      .then((data) => { if (mounted) setStrategies(data.strategies || data || []); })
+      .catch(() => { if (mounted) setStrategies([]); });
     return () => { mounted = false; };
   }, [selectedContract]);
 
@@ -81,18 +100,13 @@ export default function AlgoSetup({ onNavigate }) {
         accountName: selectedAccount.name || null,
         propfirm: propfirm || null,
       });
-      // Only navigate if backend confirmed algo is running
       if (res.success && res.status?.running) {
         if (onNavigate) onNavigate('algo-live');
       } else {
         setError(res.error || 'Algo did not start. Check strategy availability.');
       }
     } catch (err) {
-      if (err.message === 'Session expired') {
-        setError('Session expired. Please disconnect and login again.');
-      } else {
-        setError(err.message);
-      }
+      setError(err.message === 'Session expired' ? 'Session expired. Please disconnect and login again.' : err.message);
     } finally {
       setLoading(false);
     }
@@ -119,32 +133,22 @@ export default function AlgoSetup({ onNavigate }) {
       <div className="flex items-center gap-2">
         {STEPS.map((label, i) => (
           <div key={label} className="flex items-center gap-2">
-            <div
-              className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium transition-colors ${
-                i === step
-                  ? 'bg-accent text-bg-primary'
-                  : i < step
-                  ? 'bg-accent/20 text-accent'
-                  : 'bg-bg-card border border-border-default text-text-dim'
-              }`}
-            >
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium transition-colors ${
+              i === step ? 'bg-accent text-bg-primary' : i < step ? 'bg-accent/20 text-accent' : 'bg-bg-card border border-border-default text-text-dim'
+            }`}>
               {i + 1}
             </div>
-            <span
-              className={`text-xs hidden sm:block ${
-                i === step ? 'text-text-primary font-medium' : 'text-text-dim'
-              }`}
-            >
+            <span className={`text-xs hidden sm:block ${i === step ? 'text-text-primary font-medium' : 'text-text-dim'}`}>
               {label}
             </span>
-            {i < STEPS.length - 1 && (
-              <ChevronRight size={14} className="text-text-dim" />
-            )}
+            {i < STEPS.length - 1 && <ChevronRight size={14} className="text-text-dim" />}
           </div>
         ))}
       </div>
 
-      {/* Step 0: Select Account */}
+      {/* ================================================================ */}
+      {/* Step 0: Select Account                                          */}
+      {/* ================================================================ */}
       {step === 0 && (
         <div className="space-y-3">
           <h2 className="text-sm text-text-muted">Select an account</h2>
@@ -156,26 +160,18 @@ export default function AlgoSetup({ onNavigate }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {accounts.map((acc) => {
                 const accKey = acc.rithmicAccountId || acc.accountId || acc.id || acc.name;
+                const sel = (selectedAccount?.rithmicAccountId || selectedAccount?.accountId) === (acc.rithmicAccountId || acc.accountId);
                 return (
-                <button
-                  key={accKey}
-                  onClick={() => setSelectedAccount(acc)}
-                  className={`bg-bg-card border rounded-lg p-4 text-left transition-all cursor-pointer ${
-                    (selectedAccount?.rithmicAccountId || selectedAccount?.accountId) === (acc.rithmicAccountId || acc.accountId)
-                      ? 'border-accent bg-accent/5'
-                      : 'border-border-default hover:border-accent/30'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Wallet size={18} className="text-accent" />
-                    <div>
-                      <p className="text-sm font-medium text-text-primary">{acc.name || 'N/A'}</p>
-                      <p className="text-xs text-text-muted font-mono-nums">
-                        ${Number(acc.balance || 0).toLocaleString()}
-                      </p>
+                  <button key={accKey} onClick={() => setSelectedAccount(acc)}
+                    className={`bg-bg-card border rounded-lg p-4 text-left transition-all cursor-pointer ${sel ? 'border-accent bg-accent/5' : 'border-border-default hover:border-accent/30'}`}>
+                    <div className="flex items-center gap-3">
+                      <Wallet size={18} className="text-accent" />
+                      <div>
+                        <p className="text-sm font-medium text-text-primary">{acc.name || '...'}</p>
+                        <p className="text-xs text-text-muted font-mono-nums">${Number(acc.balance || 0).toLocaleString()}</p>
+                      </div>
                     </div>
-                  </div>
-                </button>
+                  </button>
                 );
               })}
             </div>
@@ -183,13 +179,15 @@ export default function AlgoSetup({ onNavigate }) {
         </div>
       )}
 
-      {/* Step 1: Select Symbol */}
+      {/* ================================================================ */}
+      {/* Step 1: Select Symbol — with descriptions                       */}
+      {/* ================================================================ */}
       {step === 1 && (
         <div className="space-y-4">
           <h2 className="text-sm text-text-muted">Select a symbol</h2>
           {contracts.length === 0 ? (
-            <div className="bg-bg-card border border-border-default rounded-lg p-6 text-center">
-              <Loader2 size={20} className="text-accent animate-spin mx-auto mb-2" />
+            <div className="bg-bg-card border border-border-default rounded-lg p-6 flex flex-col items-center justify-center gap-2">
+              <Loader2 size={20} className="text-accent animate-spin" />
               <p className="text-text-muted text-sm">Loading symbols...</p>
             </div>
           ) : (
@@ -197,20 +195,14 @@ export default function AlgoSetup({ onNavigate }) {
               {popularContracts.length > 0 && (
                 <div>
                   <p className="text-xs text-text-dim mb-2">Popular</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {popularContracts.map((c) => (
-                      <button
-                        key={c.symbol}
-                        onClick={() => setSelectedContract(c)}
-                        className={`bg-bg-card border rounded-lg p-3 text-center transition-all cursor-pointer ${
-                          selectedContract?.symbol === c.symbol
-                            ? 'border-accent bg-accent/5'
-                            : 'border-border-default hover:border-accent/30'
-                        }`}
-                      >
-                        <span className="text-sm font-mono-nums font-semibold text-text-primary">
-                          {c.symbol}
-                        </span>
+                      <button key={c.symbol} onClick={() => setSelectedContract(c)}
+                        className={`bg-bg-card border rounded-lg p-3 text-left transition-all cursor-pointer flex items-center gap-3 ${
+                          selectedContract?.symbol === c.symbol ? 'border-accent bg-accent/5' : 'border-border-default hover:border-accent/30'
+                        }`}>
+                        <span className="text-sm font-mono-nums font-semibold text-accent w-[70px] shrink-0">{c.symbol}</span>
+                        <span className="text-xs text-text-muted truncate">{getDesc(c)}</span>
                       </button>
                     ))}
                   </div>
@@ -219,18 +211,14 @@ export default function AlgoSetup({ onNavigate }) {
               {otherContracts.length > 0 && (
                 <div>
                   <p className="text-xs text-text-dim mb-2">All Symbols</p>
-                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                     {otherContracts.map((c) => (
-                      <button
-                        key={c.symbol}
-                        onClick={() => setSelectedContract(c)}
-                        className={`bg-bg-card border rounded-lg p-2 text-center transition-all cursor-pointer text-xs ${
-                          selectedContract?.symbol === c.symbol
-                            ? 'border-accent bg-accent/5'
-                            : 'border-border-default hover:border-accent/30'
-                        }`}
-                      >
-                        <span className="font-mono-nums text-text-primary">{c.symbol}</span>
+                      <button key={c.symbol} onClick={() => setSelectedContract(c)}
+                        className={`bg-bg-card border rounded-lg px-3 py-2 text-left transition-all cursor-pointer flex items-center gap-2 ${
+                          selectedContract?.symbol === c.symbol ? 'border-accent bg-accent/5' : 'border-border-default hover:border-accent/30'
+                        }`}>
+                        <span className="text-xs font-mono-nums font-semibold text-text-primary w-[60px] shrink-0">{c.symbol}</span>
+                        <span className="text-[11px] text-text-dim truncate">{getDesc(c)}</span>
                       </button>
                     ))}
                   </div>
@@ -241,61 +229,64 @@ export default function AlgoSetup({ onNavigate }) {
         </div>
       )}
 
-      {/* Step 2: Select Strategy */}
+      {/* ================================================================ */}
+      {/* Step 2: Select Strategy — full backtest details                  */}
+      {/* ================================================================ */}
       {step === 2 && (
         <div className="space-y-3">
           <h2 className="text-sm text-text-muted">Select a strategy</h2>
           {strategies.length === 0 ? (
-            <div className="bg-bg-card border border-border-default rounded-lg p-6 text-center">
-              <Loader2 size={20} className="text-accent animate-spin mx-auto mb-2" />
+            <div className="bg-bg-card border border-border-default rounded-lg p-6 flex flex-col items-center justify-center gap-2">
+              <Loader2 size={20} className="text-accent animate-spin" />
               <p className="text-text-muted text-sm">Loading strategies...</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {strategies.map((strat) => (
-                <button
-                  key={strat.id}
-                  onClick={() => setSelectedStrategy(strat)}
-                  className={`bg-bg-card border rounded-lg p-5 text-left transition-all cursor-pointer ${
-                    selectedStrategy?.id === strat.id
-                      ? 'border-accent bg-accent/5'
-                      : 'border-border-default hover:border-accent/30'
-                  }`}
-                >
-                  <p className="text-sm font-semibold text-text-primary mb-3">
-                    {strat.name || 'N/A'}
-                  </p>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="text-center">
-                      <Target size={14} className="text-accent mx-auto mb-1" />
-                      <p className="text-xs text-text-muted">Win Rate</p>
-                       <p className="text-sm font-mono-nums font-medium text-accent">
-                        {strat.winRate ?? 'N/A'}
-                      </p>
+            <div className="space-y-3">
+              {strategies.map((strat) => {
+                const sel = selectedStrategy?.id === strat.id;
+                const bt = strat.backtest || {};
+                return (
+                  <button key={strat.id} onClick={() => setSelectedStrategy(strat)}
+                    className={`w-full bg-bg-card border rounded-lg p-5 text-left transition-all cursor-pointer ${
+                      sel ? 'border-accent bg-accent/5' : 'border-border-default hover:border-accent/30'
+                    }`}>
+                    {/* Header: name + description */}
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <p className="text-sm font-semibold text-text-primary">{strat.name || '...'}</p>
+                        {strat.description && (
+                          <p className="text-[11px] text-text-dim mt-0.5">{strat.description}</p>
+                        )}
+                      </div>
+                      {sel && <div className="w-2 h-2 rounded-full bg-accent shrink-0 mt-1" />}
                     </div>
-                    <div className="text-center">
-                      <TrendingUp size={14} className="text-accent mx-auto mb-1" />
-                      <p className="text-xs text-text-muted">Trades</p>
-                      <p className="text-sm font-mono-nums font-medium text-text-primary">
-                        {strat.backtest?.trades ?? 'N/A'}
-                      </p>
+
+                    {/* Main stats row */}
+                    <div className="grid grid-cols-4 gap-3 mb-3">
+                      <StratStat icon={Target} label="Win Rate" value={strat.winRate || bt.winRate || '—'} cls="text-accent" />
+                      <StratStat icon={BarChart3} label="Trades" value={bt.trades || '—'} />
+                      <StratStat icon={Gauge} label="R:R" value={strat.riskReward || '—'} cls="text-warning" />
+                      <StratStat icon={DollarSign} label="Backtest P&L" value={bt.pnl || '—'} cls="text-accent" />
                     </div>
-                    <div className="text-center">
-                      <Gauge size={14} className="text-accent mx-auto mb-1" />
-                      <p className="text-xs text-text-muted">R:R</p>
-                      <p className="text-sm font-mono-nums font-medium text-text-primary">
-                        {strat.riskReward ?? 'N/A'}
-                      </p>
+
+                    {/* Secondary stats row */}
+                    <div className="grid grid-cols-4 gap-3 pt-2 border-t border-border-subtle">
+                      <StratStat icon={Shield} label="Stop" value={strat.stopTicks ? `${strat.stopTicks} ticks` : '—'} cls="text-pink" />
+                      <StratStat icon={Zap} label="Target" value={strat.targetTicks ? `${strat.targetTicks} ticks` : '—'} cls="text-accent" />
+                      <StratStat icon={TrendingUp} label="Profit Factor" value={bt.profitFactor || '—'} />
+                      <StratStat icon={Clock} label="Period" value={bt.period || '—'} small />
                     </div>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
       )}
 
-      {/* Step 3: Configure */}
+      {/* ================================================================ */}
+      {/* Step 3: Configure                                               */}
+      {/* ================================================================ */}
       {step === 3 && (
         <div className="space-y-5">
           <h2 className="text-sm text-text-muted">Configure parameters</h2>
@@ -303,81 +294,45 @@ export default function AlgoSetup({ onNavigate }) {
             <div>
               <div className="flex justify-between items-center mb-2">
                 <label className="text-sm text-text-primary">Contracts</label>
-                <span className="text-sm font-mono-nums text-accent font-semibold">
-                  {config.contracts}
-                </span>
+                <span className="text-sm font-mono-nums text-accent font-semibold">{config.contracts}</span>
               </div>
-              <input
-                type="range"
-                min="1"
-                max="10"
-                value={config.contracts}
+              <input type="range" min="1" max="10" value={config.contracts}
                 onChange={(e) => setConfig({ ...config, contracts: Number(e.target.value) })}
-                className="w-full accent-accent"
-              />
+                className="w-full accent-accent" />
               <div className="flex justify-between text-xs text-text-dim mt-1">
-                <span>1</span>
-                <span>10</span>
+                <span>1</span><span>10</span>
               </div>
             </div>
-
             <div>
-              <label className="block text-sm text-text-primary mb-1.5">
-                Daily Target ($)
-              </label>
-              <input
-                type="number"
-                value={config.dailyTarget}
+              <label className="block text-sm text-text-primary mb-1.5">Daily Target ($)</label>
+              <input type="number" value={config.dailyTarget}
                 onChange={(e) => setConfig({ ...config, dailyTarget: Number(e.target.value) })}
-                className="w-full bg-bg-primary border border-border-default rounded-lg px-4 py-2.5 text-sm font-mono-nums text-text-primary focus:outline-none focus:border-accent/50 transition-colors"
-              />
+                className="w-full bg-bg-primary border border-border-default rounded-lg px-4 py-2.5 text-sm font-mono-nums text-text-primary focus:outline-none focus:border-accent/50 transition-colors" />
             </div>
-
             <div>
-              <label className="block text-sm text-text-primary mb-1.5">
-                Max Risk ($)
-              </label>
-              <input
-                type="number"
-                value={config.maxRisk}
+              <label className="block text-sm text-text-primary mb-1.5">Max Risk ($)</label>
+              <input type="number" value={config.maxRisk}
                 onChange={(e) => setConfig({ ...config, maxRisk: Number(e.target.value) })}
-                className="w-full bg-bg-primary border border-border-default rounded-lg px-4 py-2.5 text-sm font-mono-nums text-text-primary focus:outline-none focus:border-accent/50 transition-colors"
-              />
+                className="w-full bg-bg-primary border border-border-default rounded-lg px-4 py-2.5 text-sm font-mono-nums text-text-primary focus:outline-none focus:border-accent/50 transition-colors" />
             </div>
           </div>
         </div>
       )}
 
-      {/* Step 4: Launch */}
+      {/* ================================================================ */}
+      {/* Step 4: Review & Launch                                         */}
+      {/* ================================================================ */}
       {step === 4 && (
         <div className="space-y-4">
           <h2 className="text-sm text-text-muted">Review & Launch</h2>
           <div className="bg-bg-card border border-border-default rounded-lg p-5 space-y-3">
-            <div className="flex justify-between text-sm">
-              <span className="text-text-muted">Account</span>
-              <span className="text-text-primary font-medium">{selectedAccount?.name || 'N/A'}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-text-muted">Symbol</span>
-              <span className="text-text-primary font-mono-nums font-medium">{selectedContract?.symbol || 'N/A'}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-text-muted">Strategy</span>
-              <span className="text-text-primary font-medium">{selectedStrategy?.name || 'N/A'}</span>
-            </div>
+            <ReviewRow label="Account" value={selectedAccount?.name || '...'} />
+            <ReviewRow label="Symbol" value={`${selectedContract?.symbol || '...'} — ${getDesc(selectedContract || {})}`} mono />
+            <ReviewRow label="Strategy" value={selectedStrategy?.name || '...'} />
             <div className="border-t border-border-default my-2" />
-            <div className="flex justify-between text-sm">
-              <span className="text-text-muted">Contracts</span>
-              <span className="text-text-primary font-mono-nums">{config.contracts}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-text-muted">Daily Target</span>
-              <span className="text-accent font-mono-nums">${config.dailyTarget}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-text-muted">Max Risk</span>
-              <span className="text-pink font-mono-nums">${config.maxRisk}</span>
-            </div>
+            <ReviewRow label="Contracts" value={config.contracts} mono />
+            <ReviewRow label="Daily Target" value={`$${config.dailyTarget}`} cls="text-accent" mono />
+            <ReviewRow label="Max Risk" value={`$${config.maxRisk}`} cls="text-pink" mono />
           </div>
 
           {error && (
@@ -387,21 +342,12 @@ export default function AlgoSetup({ onNavigate }) {
             </div>
           )}
 
-          <button
-            onClick={handleLaunch}
-            disabled={loading}
-            className="w-full bg-accent hover:bg-accent/90 text-bg-primary font-bold py-4 rounded-lg text-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 cursor-pointer"
-          >
+          <button onClick={handleLaunch} disabled={loading}
+            className="w-full bg-accent hover:bg-accent/90 text-bg-primary font-bold py-4 rounded-lg text-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 cursor-pointer">
             {loading ? (
-              <>
-                <Loader2 size={22} className="animate-spin" />
-                Launching...
-              </>
+              <><Loader2 size={22} className="animate-spin" />Launching...</>
             ) : (
-              <>
-                <Rocket size={22} />
-                LAUNCH
-              </>
+              <><Rocket size={22} />LAUNCH</>
             )}
           </button>
         </div>
@@ -410,24 +356,37 @@ export default function AlgoSetup({ onNavigate }) {
       {/* Navigation */}
       {step < 4 && (
         <div className="flex items-center justify-between">
-          <button
-            onClick={() => setStep(step - 1)}
-            disabled={step === 0}
-            className="flex items-center gap-1 px-4 py-2 text-sm text-text-muted hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
-          >
-            <ChevronLeft size={16} />
-            Back
+          <button onClick={() => setStep(step - 1)} disabled={step === 0}
+            className="flex items-center gap-1 px-4 py-2 text-sm text-text-muted hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer">
+            <ChevronLeft size={16} />Back
           </button>
-          <button
-            onClick={() => setStep(step + 1)}
-            disabled={!canProceed()}
-            className="flex items-center gap-1 px-5 py-2 bg-accent/10 text-accent text-sm font-medium rounded-lg border border-accent/20 hover:bg-accent/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
-          >
-            Next
-            <ChevronRight size={16} />
+          <button onClick={() => setStep(step + 1)} disabled={!canProceed()}
+            className="flex items-center gap-1 px-5 py-2 bg-accent/10 text-accent text-sm font-medium rounded-lg border border-accent/20 hover:bg-accent/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer">
+            Next<ChevronRight size={16} />
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/* Strategy stat cell — reusable */
+function StratStat({ icon: Icon, label, value, cls = 'text-text-primary', small }) {
+  return (
+    <div className="text-center">
+      <Icon size={12} className="text-accent mx-auto mb-0.5" />
+      <p className="text-[9px] text-text-dim leading-none mb-0.5">{label}</p>
+      <p className={`${small ? 'text-[10px]' : 'text-xs'} font-mono-nums font-medium ${cls} leading-tight`}>{value}</p>
+    </div>
+  );
+}
+
+/* Review row — launch step */
+function ReviewRow({ label, value, cls = 'text-text-primary', mono }) {
+  return (
+    <div className="flex justify-between text-sm">
+      <span className="text-text-muted">{label}</span>
+      <span className={`${cls} font-medium ${mono ? 'font-mono-nums' : ''}`}>{value}</span>
     </div>
   );
 }
