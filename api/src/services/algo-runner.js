@@ -390,6 +390,9 @@ class AlgoRunner extends EventEmitter {
       const matchesAccount = pos.accountId === accId;
       if (!matchesSymbol || !matchesAccount) return;
 
+      // Ignore spurious PNL_PLANT updates while placing brackets
+      if (this._pendingOrder) return;
+
       const qty = parseInt(pos.quantity) || 0;
       if (isNaN(qty) || Math.abs(qty) >= 1000 || qty === this._currentPosition) return;
 

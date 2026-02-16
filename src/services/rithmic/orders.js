@@ -124,13 +124,18 @@ const placeOrder = async (service, orderData) => {
       resolve({ success: false, error: 'Order timeout - no confirmation received', orderTag });
     }, ORDER_TIMEOUTS.PLACE);
 
+    let knownBasketId = null;
+
     const onNotification = (order) => {
-      // Match by orderTag (userMsg) or symbol
+      // Match by orderTag (primary) or basketId (learned from first response)
+      // NEVER match by symbol alone — causes cross-order false positives
       const orderUserMsg = order.userMsg?.[0] || '';
       const matchesTag = orderUserMsg === orderTag;
-      const matchesSymbol = order.symbol === orderData.symbol;
-      
-      if (!matchesTag && !matchesSymbol) return;
+      const matchesBasket = knownBasketId && order.basketId === knownBasketId;
+      if (!matchesTag && !matchesBasket) return;
+
+      // Learn basketId from first matching response
+      if (!knownBasketId && order.basketId) knownBasketId = order.basketId;
       
       const notifyType = order.notifyType;
       
