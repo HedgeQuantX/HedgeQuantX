@@ -88,6 +88,19 @@ function RadarChart({ breakdown, color }) {
 }
 
 export default function HQXScore({ score, grade, breakdown }) {
+  // No data — show empty state, no chart
+  if (score == null && grade == null) {
+    return (
+      <div className="bg-bg-card border border-border-default rounded-lg p-5 animate-slide-up">
+        <h3 className="text-sm font-medium text-text-primary mb-4">HQ𝕏 Score</h3>
+        <div className="flex flex-col items-center justify-center py-8">
+          <span className="text-3xl font-bold font-mono-nums text-text-dim">—</span>
+          <p className="text-xs text-text-dim mt-2">No trading data available</p>
+        </div>
+      </div>
+    );
+  }
+
   const pct = score != null ? Math.min(Math.max(score, 0), 100) : 0;
   const radius = 38;
   const circumference = 2 * Math.PI * radius;
@@ -121,7 +134,7 @@ export default function HQXScore({ score, grade, breakdown }) {
                 {grade ?? '—'}
               </span>
               <span className="text-[10px] text-text-muted font-mono-nums">
-                {score != null ? `${score}/100` : '0/100'}
+                {score != null ? `${score}/100` : '—'}
               </span>
             </div>
           </div>

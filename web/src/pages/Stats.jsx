@@ -229,6 +229,7 @@ export default function Stats() {
   const s = stats || {};
   const wr = s.winRate != null ? Number(s.winRate) : 0;
   const pf = s.profitFactor != null ? Number(s.profitFactor) : 0;
+  const hasTrades = (s.totalTrades ?? 0) > 0;
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -274,7 +275,7 @@ export default function Stats() {
 
       {/* HQX Score Radar + Performance Metrics — side by side */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-5">
-        <HQXScore score={s.hqxScore ?? 0} grade={s.hqxGrade ?? 'F'} breakdown={s.hqxBreakdown} />
+        <HQXScore score={hasTrades ? s.hqxScore : null} grade={hasTrades ? s.hqxGrade : null} breakdown={hasTrades ? s.hqxBreakdown : null} />
 
         {/* Performance Metrics */}
         <div className="bg-bg-card border border-border-default rounded-lg p-5">
