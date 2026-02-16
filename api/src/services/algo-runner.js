@@ -19,8 +19,9 @@ let MarketDataFeed, loadStrategy;
 try {
   ({ MarketDataFeed } = require('../../../src/lib/data'));
   ({ loadStrategy } = require('../../../src/lib/m'));
-} catch (_) {
-  // Strategy source files not deployed — algo execution disabled
+  console.log('[AlgoRunner] Strategy modules loaded successfully');
+} catch (err) {
+  console.error('[AlgoRunner] Failed to load strategy modules:', err.message);
   MarketDataFeed = null;
   loadStrategy = null;
 }
@@ -73,6 +74,7 @@ class AlgoRunner extends EventEmitter {
     this.config = { strategyId, symbol, exchange, accountId, size };
 
     if (!MarketDataFeed || !loadStrategy) {
+      console.error('[AlgoRunner] Cannot start: MarketDataFeed=%s, loadStrategy=%s', !!MarketDataFeed, !!loadStrategy);
       return { success: false, error: 'Strategy engine not available in this environment' };
     }
 
