@@ -90,7 +90,7 @@ function LandingView({ onConnect }) {
     <div className="min-h-screen bg-bg-primary flex flex-col items-center justify-center p-4">
       <div className="text-center animate-fade-in">
         <LogoIcon size={80} className="text-accent mx-auto mb-6" />
-        <h1 className="text-3xl font-bold text-gradient mb-2">HedgeQuant𝕏</h1>
+        <h1 className="text-3xl font-bold mb-2"><span className="text-accent">HedgeQuant</span><span className="text-pink">𝕏</span></h1>
         <p className="text-[10px] text-white mb-8 tracking-[0.25em]">Prop Futures Algo-Trading</p>
 
         <button
