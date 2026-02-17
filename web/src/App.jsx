@@ -99,7 +99,7 @@ function LandingView({ onConnect }) {
           onClick={onConnect}
           className="bg-accent hover:bg-accent/90 text-bg-primary font-bold py-3 px-10 rounded-lg text-lg transition-colors cursor-pointer"
         >
-          Connect to Prop Firm
+          Login
         </button>
       </div>
     </div>
