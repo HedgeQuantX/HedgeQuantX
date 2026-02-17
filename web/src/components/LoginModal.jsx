@@ -67,27 +67,28 @@ export default function LoginModal({ onClose }) {
     >
       <div
         ref={modalRef}
-        className="bg-bg-card border border-border-default rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slide-up"
+        className="bg-bg-primary/80 backdrop-blur-xl rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slide-up"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border-default">
-          <div className="flex items-center gap-3">
-            <LogoIcon size={28} className="text-accent" />
-            <h2 id="login-modal-title" className="text-sm font-semibold text-text-primary">
-              {step === 1 ? 'Select Prop Firm' : `Connect to ${selectedFirm?.name}`}
-            </h2>
-          </div>
+        {/* Header — large logo, no border */}
+        <div className="flex flex-col items-center pt-8 pb-2 relative">
           <button
             onClick={onClose}
             aria-label="Close"
-            className="p-1.5 text-text-muted hover:text-text-primary rounded-lg hover:bg-bg-card-hover transition-colors cursor-pointer"
+            className="absolute top-4 right-4 p-1.5 text-text-muted hover:text-text-primary rounded-lg hover:bg-bg-card-hover transition-colors cursor-pointer"
           >
             <X size={18} />
           </button>
+          <LogoIcon size={64} className="text-accent mb-3" />
+          <h2 id="login-modal-title" className="text-lg font-bold text-text-primary">
+            {step === 1 ? 'Select Prop Firm' : `Connect to ${selectedFirm?.name}`}
+          </h2>
+          <p className="text-xs text-text-muted mt-1">
+            {step === 1 ? 'Choose your trading platform' : 'Enter your credentials'}
+          </p>
         </div>
 
         {/* Content */}
-        <div className="p-5">
+        <div className="p-5 pt-4">
           {/* Step 1: Prop Firm Grid */}
           {step === 1 && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
