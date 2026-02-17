@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: 'Clonoid';
+  src: url('/fonts/clonoid-bold.woff2') format('woff2'),
+       url('/fonts/clonoid-bold.woff') format('woff');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
   /* Background */
   --color-bg-primary: #060818;
