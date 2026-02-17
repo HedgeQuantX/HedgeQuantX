@@ -89,7 +89,7 @@ function LandingView({ onConnect }) {
   return (
     <div className="min-h-screen bg-bg-primary flex flex-col items-center justify-center p-4">
       <div className="text-center animate-fade-in">
-        <LogoIcon size={120} className="text-accent mx-auto mb-6" />
+        <LogoIcon size={120} className="text-white mx-auto mb-6" />
         <h1 className="text-7xl font-bold text-accent mb-3" style={{ fontFamily: 'Clonoid, sans-serif' }}>HQX</h1>
         <p className="text-[10px] text-white mb-8 tracking-[0.2em]">Prop Futures Algo-Trading</p>
 
