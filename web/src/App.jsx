@@ -89,11 +89,9 @@ function LandingView({ onConnect }) {
   return (
     <div className="min-h-screen bg-bg-primary flex flex-col items-center justify-center p-4">
       <div className="text-center animate-fade-in">
-        <div className="w-20 h-20 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center mx-auto mb-6">
-          <LogoIcon size={48} className="text-accent" />
-        </div>
+        <LogoIcon size={80} className="text-accent mx-auto mb-6" />
         <h1 className="text-3xl font-bold text-gradient mb-2">HedgeQuant𝕏</h1>
-        <p className="text-xs text-text-muted mb-8 tracking-[0.35em]">Prop Futures Algo-Trading</p>
+        <p className="text-[10px] text-text-muted mb-8 tracking-[0.35em]">Prop Futures Algo-Trading</p>
 
         <button
           onClick={onConnect}
