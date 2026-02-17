@@ -90,7 +90,7 @@ function LandingView({ onConnect }) {
     <div className="min-h-screen bg-bg-primary flex flex-col items-center justify-center p-4">
       <div className="text-center animate-fade-in">
         <LogoIcon size={120} className="text-accent mx-auto mb-6" />
-        <h1 className="text-5xl font-bold mb-2" style={{ fontFamily: 'Clonoid, sans-serif' }}><span className="text-accent">HQ</span><span className="text-pink">𝕏</span></h1>
+        <h1 className="text-5xl font-bold text-accent mb-2" style={{ fontFamily: 'Clonoid, sans-serif' }}>HQX</h1>
         <p className="text-[10px] text-white mb-8 tracking-[0.25em]">Prop Futures Algo-Trading</p>
 
         <button
