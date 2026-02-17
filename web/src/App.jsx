@@ -93,7 +93,7 @@ function LandingView({ onConnect }) {
           <LogoIcon size={48} className="text-accent" />
         </div>
         <h1 className="text-3xl font-bold text-gradient mb-2">HedgeQuant𝕏</h1>
-        <p className="text-text-muted mb-8">Professional Algorithmic Trading Platform</p>
+        <p className="text-text-muted mb-8">Prop Futures Algo-Trading</p>
 
         <button
           onClick={onConnect}
@@ -101,21 +101,6 @@ function LandingView({ onConnect }) {
         >
           Connect to Prop Firm
         </button>
-
-        <div className="grid grid-cols-3 gap-6 mt-12 max-w-md mx-auto">
-          <div className="text-center">
-            <p className="text-2xl font-mono-nums font-bold text-accent">6</p>
-            <p className="text-xs text-text-muted mt-1">Math Models</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-mono-nums font-bold text-warning">16+</p>
-            <p className="text-xs text-text-muted mt-1">Prop Firms</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-mono-nums font-bold text-pink">HFT</p>
-            <p className="text-xs text-text-muted mt-1">Grade Speed</p>
-          </div>
-        </div>
       </div>
     </div>
   );
