@@ -95,7 +95,7 @@ function LandingView({ onConnect }) {
 
         <button
           onClick={onConnect}
-          className="bg-accent hover:bg-accent/90 text-bg-primary font-semibold py-2 px-8 rounded-lg text-sm transition-colors cursor-pointer"
+          className="bg-warning hover:bg-warning/90 text-bg-primary font-semibold py-2 px-8 rounded-lg text-sm transition-colors cursor-pointer"
         >
           Login
         </button>
