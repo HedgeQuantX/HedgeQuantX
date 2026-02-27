@@ -30,18 +30,28 @@ function clearEncryptedCredentials() {
 
 // Reconnect lock to prevent multiple simultaneous reconnect attempts
 let reconnectPromise = null;
+let lastReconnectAttempt = 0;
+const RECONNECT_COOLDOWN_MS = 15000; // 15s cooldown between reconnect attempts
 
 /**
  * Attempt transparent reconnection to Rithmic when backend session is lost.
  * Uses encrypted credentials stored during login.
  * Returns true if reconnection succeeded, false otherwise.
  * Deduplicates concurrent calls (only one reconnect at a time).
+ * Enforces a 15s cooldown to avoid spamming Rithmic (1 session per user).
  */
 async function attemptReconnect() {
   // Deduplicate: if a reconnect is already in progress, wait for it
   if (reconnectPromise) {
     return reconnectPromise;
   }
+
+  // Cooldown: don't retry too fast — Rithmic needs time to release the slot
+  const now = Date.now();
+  if (now - lastReconnectAttempt < RECONNECT_COOLDOWN_MS) {
+    return false;
+  }
+  lastReconnectAttempt = now;
 
   reconnectPromise = (async () => {
     const encCreds = getEncryptedCredentials();

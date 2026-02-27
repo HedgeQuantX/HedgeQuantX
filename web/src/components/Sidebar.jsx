@@ -14,7 +14,7 @@ export default function Sidebar({ activeTab, onTabChange }) {
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex flex-col w-16 lg:w-52 border-r border-border-default bg-bg-card p-3 gap-1 shrink-0">
+      <aside className="hidden md:flex flex-col w-16 lg:w-52 border-r border-border-default bg-bg-primary p-3 gap-1 shrink-0">
         {navItems.map((item) => (
           <button
             key={item.id}
@@ -32,7 +32,7 @@ export default function Sidebar({ activeTab, onTabChange }) {
       </aside>
 
       {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-bg-card border-t border-border-default flex items-center justify-around px-2 py-2">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-bg-primary border-t border-border-default flex items-center justify-around px-2 py-2">
         {navItems.map((item) => (
           <button
             key={item.id}

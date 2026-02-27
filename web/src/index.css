@@ -87,6 +87,18 @@ input, textarea, code, pre, .font-mono-nums {
   text-transform: none;
 }
 
+/* Override browser autofill background (Chrome, Safari, Edge) */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px var(--color-bg-primary) inset !important;
+  box-shadow: 0 0 0 1000px var(--color-bg-primary) inset !important;
+  -webkit-text-fill-color: var(--color-text-primary) !important;
+  caret-color: var(--color-text-primary);
+  transition: background-color 5000s ease-in-out 0s;
+}
+
 /* Glow effects */
 .glow-cyan {
   box-shadow: 0 0 20px #00e5ff33, 0 0 60px #00e5ff11;
@@ -126,6 +138,24 @@ input, textarea, code, pre, .font-mono-nums {
 @keyframes slide-up {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes step-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes step-out-reverse {
+  from { opacity: 0; transform: translateX(-24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.animate-step-in {
+  animation: step-in 0.3s ease-out;
+}
+
+.animate-step-back {
+  animation: step-out-reverse 0.3s ease-out;
 }
 
 @keyframes fade-in {

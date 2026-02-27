@@ -3,7 +3,7 @@ import Sidebar from './Sidebar';
 
 export default function Layout({ activeTab, onTabChange, children }) {
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
+    <div className="h-screen flex flex-col overflow-hidden bg-bg-primary">
       <TopBar />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar activeTab={activeTab} onTabChange={onTabChange} />

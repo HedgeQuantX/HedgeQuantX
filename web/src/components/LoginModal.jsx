@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   TrendingUp, Mountain, GraduationCap, Zap, Shield, Star, Target, Award,
   Rocket, DollarSign, ArrowUpRight, Timer, Crown, BarChart3, ShieldCheck,
+  Globe2, Store, Gem, Sprout, FileText,
   Settings, Loader2, AlertCircle, ChevronLeft, Lock, User, X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -10,13 +11,15 @@ import { LogoIcon } from './Logo';
 
 const iconMap = {
   TrendingUp, Mountain, GraduationCap, Zap, Shield, Star, Target, Award,
-  Rocket, DollarSign, ArrowUpRight, Timer, Crown, BarChart3, ShieldCheck, Settings,
+  Rocket, DollarSign, ArrowUpRight, Timer, Crown, BarChart3, ShieldCheck,
+  Globe2, Store, Gem, Sprout, FileText, Settings,
 };
 
 export default function LoginModal({ onClose }) {
   const { login, error, setError } = useAuth();
 
   const [step, setStep] = useState(1);
+  const [stepDir, setStepDir] = useState('forward');
   const [selectedFirm, setSelectedFirm] = useState(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -40,7 +43,14 @@ export default function LoginModal({ onClose }) {
   const handleSelectFirm = (firm) => {
     setSelectedFirm(firm);
     setError(null);
+    setStepDir('forward');
     setStep(2);
+  };
+
+  const handleBack = () => {
+    setStepDir('back');
+    setStep(1);
+    setError(null);
   };
 
   const handleLogin = async (e) => {
@@ -82,16 +92,16 @@ export default function LoginModal({ onClose }) {
           <h2 id="login-modal-title" className="text-lg font-bold text-text-primary">
             {step === 1 ? 'Select Prop Firm' : `Connect to ${selectedFirm?.name}`}
           </h2>
-          <p className="text-xs text-text-muted mt-1">
-            {step === 1 ? 'Choose your trading platform' : 'Enter your credentials'}
-          </p>
+          {step === 2 && (
+            <p className="text-xs text-text-muted mt-1">Enter your credentials</p>
+          )}
         </div>
 
         {/* Content */}
         <div className="p-5 pt-4">
           {/* Step 1: Prop Firm Grid */}
           {step === 1 && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div key="step1" className={`grid grid-cols-2 sm:grid-cols-4 gap-3 ${stepDir === 'back' ? 'animate-step-back' : 'animate-step-in'}`}>
               {PROPFIRMS.map((firm) => {
                 const Icon = iconMap[firm.icon] || Settings;
                 return (
@@ -114,9 +124,9 @@ export default function LoginModal({ onClose }) {
 
           {/* Step 2: Credentials */}
           {step === 2 && selectedFirm && (
-            <div className="max-w-sm mx-auto">
+            <div key="step2" className="max-w-sm mx-auto animate-step-in">
               <button
-                onClick={() => { setStep(1); setError(null); }}
+                onClick={handleBack}
                 className="flex items-center gap-1 text-xs text-text-muted hover:text-accent transition-colors mb-4 cursor-pointer"
               >
                 <ChevronLeft size={14} />
@@ -163,7 +173,7 @@ export default function LoginModal({ onClose }) {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-accent hover:bg-accent/90 text-bg-primary font-semibold py-2.5 rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full bg-warning hover:bg-warning/90 text-bg-primary font-semibold py-1.5 rounded-md text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {loading ? (
                     <>

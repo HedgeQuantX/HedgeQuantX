@@ -173,16 +173,25 @@ server.listen(PORT, () => {
   console.log(`  WebSocket: ws://localhost:${PORT}\n`);
 });
 
-// Graceful shutdown
+// Graceful shutdown — cleanly logout from Rithmic before container dies
+// Critical: Rithmic Paper allows only 1 session per user.
+// If we don't logout cleanly, the slot stays occupied for 5-10 min.
 const shutdown = async () => {
-  console.log('\nShutting down...');
-  await sessionManager.destroyAll();
+  console.log('\n[Shutdown] Graceful shutdown initiated...');
+  try {
+    await sessionManager.destroyAll();
+    console.log('[Shutdown] All Rithmic sessions disconnected');
+  } catch (err) {
+    console.error('[Shutdown] Error disconnecting sessions:', err.message);
+  }
+  // Wait 2s for Rithmic to process the logout before killing the process
+  await new Promise((r) => setTimeout(r, 2000));
   server.close(() => {
-    console.log('Server closed');
+    console.log('[Shutdown] Server closed');
     process.exit(0);
   });
-  // Force exit after 5s
-  setTimeout(() => process.exit(1), 5000);
+  // Force exit after 8s total
+  setTimeout(() => process.exit(1), 8000);
 };
 
 process.on('SIGINT', shutdown);

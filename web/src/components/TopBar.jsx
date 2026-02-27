@@ -10,7 +10,7 @@ export default function TopBar() {
   const isConnected = accounts.length > 0;
 
   return (
-    <header className="h-14 border-b border-border-default bg-bg-card flex items-center justify-between px-4 lg:px-6 shrink-0">
+    <header className="h-14 border-b border-border-default bg-bg-primary flex items-center justify-between px-4 lg:px-6 shrink-0">
       <div className="flex items-center gap-2">
         <LogoIcon size={28} className="text-accent" />
         <span className="hidden sm:block text-sm font-semibold text-gradient">

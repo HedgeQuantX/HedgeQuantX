@@ -26,11 +26,29 @@ const loginLimiter = rateLimit({
   message: { success: false, error: 'Too many login attempts. Try again later.' },
 });
 
+// Permission denied cooldown — Rithmic Paper allows 1 session per user.
+// After "permission denied", block ALL login attempts for 10 min to let the slot expire.
+// Every new attempt resets Rithmic's timeout, so we MUST stop trying.
+let permissionDeniedUntil = 0;
+const PERMISSION_DENIED_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
+
 /**
  * POST /api/auth/login
  * Body: { propfirm, username, password }
  */
 router.post('/login', loginLimiter, async (req, res) => {
+  // Block if in permission-denied cooldown
+  const now = Date.now();
+  if (now < permissionDeniedUntil) {
+    const remainSec = Math.ceil((permissionDeniedUntil - now) / 1000);
+    const remainMin = Math.ceil(remainSec / 60);
+    console.log(`[Auth] Login blocked — permission denied cooldown (${remainMin}min remaining)`);
+    return res.status(429).json({
+      success: false,
+      error: `Session slot occupied. Wait ${remainMin} min before retrying.`,
+    });
+  }
+
   const { propfirm, username, password } = req.body;
 
   // Type validation
@@ -57,11 +75,25 @@ router.post('/login', loginLimiter, async (req, res) => {
     if (!result.success) {
       console.error('[Auth] Rithmic login rejected:', result.error || 'unknown reason');
       try { await service.disconnect(); } catch (_) {}
+
+      // If permission denied, activate cooldown to stop hammering Rithmic
+      if (result.error && result.error.toLowerCase().includes('permission denied')) {
+        permissionDeniedUntil = Date.now() + PERMISSION_DENIED_COOLDOWN_MS;
+        console.log(`[Auth] Permission denied cooldown activated — no login attempts for 10 min`);
+        return res.status(429).json({
+          success: false,
+          error: 'Session slot occupied. Wait 10 min before retrying.',
+        });
+      }
+
       return res.status(401).json({
         success: false,
         error: result.error || 'Login failed. Check your credentials.',
       });
     }
+
+    // Success — clear any cooldown
+    permissionDeniedUntil = 0;
 
     const sessionId = sessionManager.create(service, {
       propfirm: propfirm.trim(),
@@ -106,6 +138,17 @@ router.post('/login', loginLimiter, async (req, res) => {
  * are still valid on the client side.
  */
 router.post('/reconnect', loginLimiter, async (req, res) => {
+  // Block if in permission-denied cooldown (same as /login)
+  const now = Date.now();
+  if (now < permissionDeniedUntil) {
+    const remainMin = Math.ceil((permissionDeniedUntil - now) / 60000);
+    console.log(`[Auth] Reconnect blocked — permission denied cooldown (${remainMin}min remaining)`);
+    return res.status(429).json({
+      success: false,
+      error: `Session slot occupied. Wait ${remainMin} min before retrying.`,
+    });
+  }
+
   const { encryptedCredentials } = req.body;
 
   // Validate input
@@ -154,6 +197,13 @@ router.post('/reconnect', loginLimiter, async (req, res) => {
     if (!result.success) {
       console.error('[Auth] Reconnect login rejected:', result.error || 'unknown');
       try { await service.disconnect(); } catch (_) {}
+
+      // Activate cooldown on permission denied
+      if (result.error && result.error.toLowerCase().includes('permission denied')) {
+        permissionDeniedUntil = Date.now() + PERMISSION_DENIED_COOLDOWN_MS;
+        console.log(`[Auth] Permission denied cooldown activated from reconnect — 10 min`);
+      }
+
       return res.status(401).json({
         success: false,
         error: 'Reconnection failed. Please login again.',

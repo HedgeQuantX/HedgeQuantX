@@ -90,12 +90,12 @@ function LandingView({ onConnect }) {
     <div className="min-h-screen bg-bg-primary flex flex-col items-center justify-center p-4">
       <div className="text-center animate-fade-in">
         <LogoIcon size={120} className="text-accent mx-auto mb-6" />
-        <h1 className="text-[3.2rem] font-bold text-white mb-3" style={{ fontFamily: 'Clonoid, sans-serif' }}>HQX</h1>
-        <p className="text-[10px] text-white mb-8 tracking-[0.2em]">Prop Futures Algo-Trading</p>
+        <h1 className="text-[1.1rem] font-bold text-white mb-2 tracking-[0.35em]" style={{ fontFamily: "'Rajdhani', sans-serif" }}>HEDGEQUANTX</h1>
+        <p className="text-[9px] text-white mb-8 tracking-[0.18em]">Prop Futures Algo-Trading</p>
 
         <button
           onClick={onConnect}
-          className="bg-warning hover:bg-warning/90 text-bg-primary font-semibold py-2 px-8 rounded-lg text-sm transition-colors cursor-pointer"
+          className="bg-warning hover:bg-warning/90 text-bg-primary font-semibold py-1.5 px-6 rounded-md text-xs transition-colors cursor-pointer"
         >
           Login
         </button>
