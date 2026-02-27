@@ -15,9 +15,9 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [algoRunning, setAlgoRunning] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
-  const [wsStatus, setWsStatus] = useState('disconnected');
   const checkedRef = useRef(false);
 
+  // Check algo status on mount & when authenticated (so returning to algo tab works)
   useEffect(() => {
     if (!isAuthenticated || checkedRef.current) return;
     checkedRef.current = true;
@@ -31,25 +31,28 @@ export default function App() {
     if (tab === 'algo-live') {
       setAlgoRunning(true);
       setActiveTab('algo');
+    } else if (tab === 'algo' || tab === 'dashboard' || tab === 'stats') {
+      setActiveTab(tab);
     } else {
       setActiveTab(tab);
     }
   }, []);
 
-  const handleAlgoEnd = useCallback(() => setAlgoRunning(false), []);
+  // When AlgoLive navigates back to setup (algo stopped / not running)
+  const handleAlgoEnd = useCallback(() => {
+    setAlgoRunning(false);
+  }, []);
 
   if (loading) {
     return (
       <div className="min-h-screen bg-bg-primary flex flex-col items-center justify-center gap-3">
-        <div className="relative">
-          <LogoIcon size={28} className="text-accent animate-glow" />
-        </div>
-        <Loader2 size={14} className="text-accent/40 animate-spin" />
-        <span className="text-[8px] text-text-dim tracking-widest">INITIALIZING TERMINAL...</span>
+        <Loader2 size={28} className="text-accent animate-spin" />
+        <p className="text-sm text-text-muted">Loading session...</p>
       </div>
     );
   }
 
+  // Not logged in — show login modal over landing
   if (!isAuthenticated) {
     return (
       <>
@@ -59,6 +62,7 @@ export default function App() {
     );
   }
 
+  // Determine which page to render
   let ActivePage;
   let pageProps = { onNavigate: handleNavigate };
   if (activeTab === 'algo') {
@@ -75,7 +79,7 @@ export default function App() {
   }
 
   return (
-    <Layout activeTab={activeTab} onTabChange={handleNavigate} wsStatus={wsStatus}>
+    <Layout activeTab={activeTab} onTabChange={handleNavigate}>
       <ActivePage {...pageProps} />
     </Layout>
   );
@@ -83,24 +87,18 @@ export default function App() {
 
 function LandingView({ onConnect }) {
   return (
-    <div className="min-h-screen bg-bg-primary flex flex-col items-center justify-center scanline">
-      <div className="text-center animate-fade-in space-y-5">
-        <LogoIcon size={80} className="text-accent mx-auto animate-glow" />
-        <div>
-          <h1 className="text-lg font-bold text-white tracking-[0.35em]">HEDGEQUANTX</h1>
-          <p className="text-[8px] text-text-muted tracking-[0.25em] mt-1">ALGORITHMIC FUTURES TRADING TERMINAL</p>
-        </div>
-        <button onClick={onConnect}
-          className="btn-primary px-8 py-2 text-[10px] cursor-pointer">
-          CONNECT TO GATEWAY
+    <div className="min-h-screen bg-bg-primary flex flex-col items-center justify-center p-4">
+      <div className="text-center animate-fade-in">
+        <LogoIcon size={120} className="text-accent mx-auto mb-6" />
+        <h1 className="text-[1.1rem] font-bold text-white mb-2 tracking-[0.35em]" style={{ fontFamily: "'Rajdhani', sans-serif" }}>HEDGEQUANTX</h1>
+        <p className="text-[9px] text-white mb-8 tracking-[0.18em]">Prop Futures Algo-Trading</p>
+
+        <button
+          onClick={onConnect}
+          className="bg-warning hover:bg-warning/90 text-bg-primary font-semibold py-1.5 px-6 rounded-md text-xs transition-colors cursor-pointer"
+        >
+          Login
         </button>
-        <div className="flex items-center gap-4 justify-center text-[7px] text-text-dim pt-2">
-          <span>RITHMIC PROTOCOL</span>
-          <span>•</span>
-          <span>16 PROP FIRMS</span>
-          <span>•</span>
-          <span>SUB-MS EXECUTION</span>
-        </div>
       </div>
     </div>
   );
