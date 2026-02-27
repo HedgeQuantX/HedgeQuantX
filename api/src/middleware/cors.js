@@ -1,5 +1,6 @@
 /**
  * CORS Configuration
+ * Whitelisted origins for HQX Web API
  */
 
 'use strict';
@@ -7,6 +8,7 @@
 const cors = require('cors');
 
 const ALLOWED_ORIGINS = [
+  'https://hqx.hedgequantx.com',
   'https://hedgequantx.com',
   'https://www.hedgequantx.com',
   'http://localhost:5173',
@@ -15,7 +17,6 @@ const ALLOWED_ORIGINS = [
 
 const corsMiddleware = cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (curl, server-to-server, etc.)
     if (!origin) return callback(null, true);
     if (ALLOWED_ORIGINS.includes(origin)) {
       return callback(null, true);

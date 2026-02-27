@@ -213,19 +213,19 @@ const placeOrder = async (service, orderData) => {
     }
     
     // Build order request
-    ORDER_REQUEST_TEMPLATE.userMsg[0] = orderTag;
-    ORDER_REQUEST_TEMPLATE.fcmId = service.loginInfo.fcmId;
-    ORDER_REQUEST_TEMPLATE.ibId = service.loginInfo.ibId;
-    ORDER_REQUEST_TEMPLATE.accountId = orderData.accountId;
-    ORDER_REQUEST_TEMPLATE.symbol = orderData.symbol;
-    ORDER_REQUEST_TEMPLATE.exchange = exchange;
-    ORDER_REQUEST_TEMPLATE.quantity = sanitizeQuantity(orderData.size);
-    ORDER_REQUEST_TEMPLATE.transactionType = orderData.side === 0 ? 1 : 2;
-    ORDER_REQUEST_TEMPLATE.priceType = orderData.type === 2 ? 2 : 1;
-    ORDER_REQUEST_TEMPLATE.price = orderData.price || 0;
-    ORDER_REQUEST_TEMPLATE.tradeRoute = tradeRoute;
+    const orderReq = { ...ORDER_REQUEST_TEMPLATE, userMsg: [orderTag] };
+    orderReq.fcmId = service.loginInfo.fcmId;
+    orderReq.ibId = service.loginInfo.ibId;
+    orderReq.accountId = orderData.accountId;
+    orderReq.symbol = orderData.symbol;
+    orderReq.exchange = exchange;
+    orderReq.quantity = sanitizeQuantity(orderData.size);
+    orderReq.transactionType = orderData.side === 0 ? 1 : 2;
+    orderReq.priceType = orderData.type === 2 ? 2 : 1;
+    orderReq.price = orderData.price || 0;
+    orderReq.tradeRoute = tradeRoute;
     
-    service.orderConn.send('RequestNewOrder', ORDER_REQUEST_TEMPLATE);
+    service.orderConn.send('RequestNewOrder', orderReq);
   });
 };
 
